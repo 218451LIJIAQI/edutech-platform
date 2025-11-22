@@ -1,0 +1,374 @@
+// Prisma Schema for Edutech Platform
+// This schema defines the complete database structure
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ================================
+// ENUMS
+// ================================
+
+enum UserRole {
+  STUDENT
+  TEACHER
+  ADMIN
+}
+
+enum VerificationStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum LessonType {
+  LIVE
+  RECORDED
+  HYBRID
+}
+
+enum PaymentStatus {
+  PENDING
+  COMPLETED
+  FAILED
+  REFUNDED
+}
+
+enum ReportStatus {
+  OPEN
+  UNDER_REVIEW
+  RESOLVED
+  DISMISSED
+}
+
+enum ReportType {
+  QUALITY_ISSUE
+  INAPPROPRIATE_CONTENT
+  FRAUD
+  TECHNICAL_ISSUE
+  OTHER
+}
+
+enum LiveSessionStatus {
+  SCHEDULED
+  ONGOING
+  COMPLETED
+  CANCELLED
+}
+
+// ================================
+// USER MANAGEMENT
+// ================================
+
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  password  String
+  firstName String   @map("first_name")
+  lastName  String   @map("last_name")
+  role      UserRole @default(STUDENT)
+  avatar    String?
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  teacherProfile  TeacherProfile?
+  enrollments     Enrollment[]
+  reviewsGiven    Review[]         @relation("ReviewsGiven")
+  reviewsReceived Review[]         @relation("ReviewsReceived")
+  reportsSubmitted Report[]        @relation("ReportsSubmitted")
+  reportsAgainst   Report[]        @relation("ReportsAgainst")
+  payments        Payment[]
+  notifications   Notification[]
+
+  @@map("users")
+}
+
+// ================================
+// TEACHER PROFILES & VERIFICATION
+// ================================
+
+model TeacherProfile {
+  id          String  @id @default(uuid())
+  userId      String  @unique @map("user_id")
+  bio         String?
+  headline    String?
+  hourlyRate  Float?  @map("hourly_rate")
+  totalStudents Int   @default(0) @map("total_students")
+  averageRating Float @default(0) @map("average_rating")
+  totalEarnings Float @default(0) @map("total_earnings")
+  isVerified    Boolean @default(false) @map("is_verified")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  user          User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  verifications TeacherVerification[]
+  courses       Course[]
+  certifications Certification[]
+
+  @@map("teacher_profiles")
+}
+
+model TeacherVerification {
+  id              String             @id @default(uuid())
+  teacherProfileId String            @map("teacher_profile_id")
+  documentType    String             @map("document_type") // e.g., "teaching_certificate", "degree", "id_card"
+  documentUrl     String             @map("document_url")
+  status          VerificationStatus @default(PENDING)
+  reviewedBy      String?            @map("reviewed_by")
+  reviewNotes     String?            @map("review_notes")
+  submittedAt     DateTime           @default(now()) @map("submitted_at")
+  reviewedAt      DateTime?          @map("reviewed_at")
+
+  // Relations
+  teacherProfile TeacherProfile @relation(fields: [teacherProfileId], references: [id], onDelete: Cascade)
+
+  @@map("teacher_verifications")
+}
+
+model Certification {
+  id               String   @id @default(uuid())
+  teacherProfileId String   @map("teacher_profile_id")
+  title            String
+  issuer           String
+  issueDate        DateTime @map("issue_date")
+  expiryDate       DateTime? @map("expiry_date")
+  credentialId     String?  @map("credential_id")
+  credentialUrl    String?  @map("credential_url")
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  // Relations
+  teacherProfile TeacherProfile @relation(fields: [teacherProfileId], references: [id], onDelete: Cascade)
+
+  @@map("certifications")
+}
+
+// ================================
+// COURSE & LESSON MANAGEMENT
+// ================================
+
+model Course {
+  id               String   @id @default(uuid())
+  teacherProfileId String   @map("teacher_profile_id")
+  title            String
+  description      String
+  category         String
+  thumbnail        String?
+  previewVideoUrl  String?  @map("preview_video_url")
+  isPublished      Boolean  @default(false) @map("is_published")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  teacherProfile TeacherProfile  @relation(fields: [teacherProfileId], references: [id], onDelete: Cascade)
+  lessons        Lesson[]
+  packages       LessonPackage[]
+  materials      Material[]
+
+  @@map("courses")
+}
+
+model Lesson {
+  id          String     @id @default(uuid())
+  courseId    String     @map("course_id")
+  title       String
+  description String?
+  type        LessonType
+  duration    Int?       // in minutes
+  videoUrl    String?    @map("video_url")
+  orderIndex  Int        @map("order_index")
+  isFree      Boolean    @default(false) @map("is_free") // For preview lessons
+  createdAt   DateTime   @default(now()) @map("created_at")
+  updatedAt   DateTime   @updatedAt @map("updated_at")
+
+  // Relations
+  course       Course        @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  liveSessions LiveSession[]
+
+  @@map("lessons")
+}
+
+model LessonPackage {
+  id          String   @id @default(uuid())
+  courseId    String   @map("course_id")
+  name        String
+  description String?
+  price       Float
+  discount    Float?   @default(0)
+  finalPrice  Float    @map("final_price")
+  duration    Int?     // validity in days
+  maxStudents Int?     @map("max_students") // for live sessions
+  features    Json?    // JSON array of features
+  isActive    Boolean  @default(true) @map("is_active")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  course      Course       @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  enrollments Enrollment[]
+  payments    Payment[]
+
+  @@map("lesson_packages")
+}
+
+// ================================
+// ENROLLMENT & PAYMENT
+// ================================
+
+model Enrollment {
+  id              String    @id @default(uuid())
+  userId          String    @map("user_id")
+  packageId       String    @map("package_id")
+  enrolledAt      DateTime  @default(now()) @map("enrolled_at")
+  expiresAt       DateTime? @map("expires_at")
+  progress        Int       @default(0) // percentage
+  completedLessons Int      @default(0) @map("completed_lessons")
+  isActive        Boolean   @default(true) @map("is_active")
+
+  // Relations
+  user    User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  package LessonPackage @relation(fields: [packageId], references: [id], onDelete: Cascade)
+  review  Review?
+
+  @@unique([userId, packageId])
+  @@map("enrollments")
+}
+
+model Payment {
+  id                String        @id @default(uuid())
+  userId            String        @map("user_id")
+  packageId         String        @map("package_id")
+  amount            Float
+  platformCommission Float        @map("platform_commission")
+  teacherEarning    Float         @map("teacher_earning")
+  currency          String        @default("USD")
+  stripePaymentId   String?       @unique @map("stripe_payment_id")
+  status            PaymentStatus @default(PENDING)
+  paidAt            DateTime?     @map("paid_at")
+  createdAt         DateTime      @default(now()) @map("created_at")
+
+  // Relations
+  user    User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  package LessonPackage @relation(fields: [packageId], references: [id], onDelete: Cascade)
+
+  @@map("payments")
+}
+
+// ================================
+// REVIEWS & RATINGS
+// ================================
+
+model Review {
+  id           String   @id @default(uuid())
+  enrollmentId String   @unique @map("enrollment_id")
+  reviewerId   String   @map("reviewer_id") // student
+  teacherId    String   @map("teacher_id")
+  rating       Int      // 1-5
+  comment      String?
+  isPublished  Boolean  @default(true) @map("is_published")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  enrollment Enrollment @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  reviewer   User       @relation("ReviewsGiven", fields: [reviewerId], references: [id], onDelete: Cascade)
+  teacher    User       @relation("ReviewsReceived", fields: [teacherId], references: [id], onDelete: Cascade)
+
+  @@map("reviews")
+}
+
+// ================================
+// REPORTS & COMPLAINTS
+// ================================
+
+model Report {
+  id          String       @id @default(uuid())
+  reporterId  String       @map("reporter_id")
+  reportedId  String       @map("reported_id") // teacher being reported
+  type        ReportType
+  description String
+  status      ReportStatus @default(OPEN)
+  resolution  String?
+  createdAt   DateTime     @default(now()) @map("created_at")
+  resolvedAt  DateTime?    @map("resolved_at")
+
+  // Relations
+  reporter User @relation("ReportsSubmitted", fields: [reporterId], references: [id], onDelete: Cascade)
+  reported User @relation("ReportsAgainst", fields: [reportedId], references: [id], onDelete: Cascade)
+
+  @@map("reports")
+}
+
+// ================================
+// MATERIALS & RESOURCES
+// ================================
+
+model Material {
+  id          String   @id @default(uuid())
+  courseId    String   @map("course_id")
+  title       String
+  description String?
+  fileUrl     String   @map("file_url")
+  fileType    String   @map("file_type") // pdf, doc, video, etc.
+  fileSize    Int      @map("file_size") // in bytes
+  isDownloadable Boolean @default(true) @map("is_downloadable")
+  uploadedAt  DateTime @default(now()) @map("uploaded_at")
+
+  // Relations
+  course Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
+
+  @@map("materials")
+}
+
+// ================================
+// LIVE SESSIONS
+// ================================
+
+model LiveSession {
+  id          String            @id @default(uuid())
+  lessonId    String            @map("lesson_id")
+  title       String
+  description String?
+  scheduledAt DateTime          @map("scheduled_at")
+  startedAt   DateTime?         @map("started_at")
+  endedAt     DateTime?         @map("ended_at")
+  duration    Int?              // in minutes
+  meetingUrl  String?           @map("meeting_url") // external meeting link
+  roomId      String?           @unique @map("room_id") // internal room identifier
+  maxParticipants Int?          @map("max_participants")
+  status      LiveSessionStatus @default(SCHEDULED)
+  recordingUrl String?          @map("recording_url")
+  createdAt   DateTime          @default(now()) @map("created_at")
+
+  // Relations
+  lesson Lesson @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+
+  @@map("live_sessions")
+}
+
+// ================================
+// NOTIFICATIONS
+// ================================
+
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  title     String
+  message   String
+  type      String   // e.g., "enrollment", "payment", "review", "report"
+  isRead    Boolean  @default(false) @map("is_read")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("notifications")
+}
+

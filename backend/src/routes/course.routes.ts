@@ -1,0 +1,123 @@
+import { Router } from 'express';
+import { UserRole } from '@prisma/client';
+import courseController from '../controllers/course.controller';
+import { authenticate, authorize, optionalAuth } from '../middleware/auth';
+import { validate } from '../middleware/validate';
+import {
+  createCourseValidation,
+  updateCourseValidation,
+  createLessonValidation,
+  updateLessonValidation,
+  createPackageValidation,
+  updatePackageValidation,
+  uploadMaterialValidation,
+  getCoursesValidation,
+} from '../validators/course.validator';
+
+const router = Router();
+
+/**
+ * Course Routes
+ */
+
+// Public routes
+router.get(
+  '/',
+  validate(getCoursesValidation),
+  courseController.getAllCourses
+);
+
+router.get('/categories/all', courseController.getCategories);
+
+router.get('/:id', optionalAuth, courseController.getCourseById);
+
+// Teacher-only routes - Course Management
+router.post(
+  '/',
+  authenticate,
+  authorize(UserRole.TEACHER),
+  validate(createCourseValidation),
+  courseController.createCourse
+);
+
+router.put(
+  '/:id',
+  authenticate,
+  authorize(UserRole.TEACHER),
+  validate(updateCourseValidation),
+  courseController.updateCourse
+);
+
+router.delete(
+  '/:id',
+  authenticate,
+  authorize(UserRole.TEACHER),
+  courseController.deleteCourse
+);
+
+// Lesson Management
+router.post(
+  '/:id/lessons',
+  authenticate,
+  authorize(UserRole.TEACHER),
+  validate(createLessonValidation),
+  courseController.createLesson
+);
+
+router.put(
+  '/lessons/:id',
+  authenticate,
+  authorize(UserRole.TEACHER),
+  validate(updateLessonValidation),
+  courseController.updateLesson
+);
+
+router.delete(
+  '/lessons/:id',
+  authenticate,
+  authorize(UserRole.TEACHER),
+  courseController.deleteLesson
+);
+
+// Package Management
+router.post(
+  '/:id/packages',
+  authenticate,
+  authorize(UserRole.TEACHER),
+  validate(createPackageValidation),
+  courseController.createPackage
+);
+
+router.put(
+  '/packages/:id',
+  authenticate,
+  authorize(UserRole.TEACHER),
+  validate(updatePackageValidation),
+  courseController.updatePackage
+);
+
+router.delete(
+  '/packages/:id',
+  authenticate,
+  authorize(UserRole.TEACHER),
+  courseController.deletePackage
+);
+
+// Material Management
+router.post(
+  '/:id/materials',
+  authenticate,
+  authorize(UserRole.TEACHER),
+  validate(uploadMaterialValidation),
+  courseController.uploadMaterial
+);
+
+router.delete(
+  '/materials/:id',
+  authenticate,
+  authorize(UserRole.TEACHER),
+  courseController.deleteMaterial
+);
+
+export default router;
+

@@ -1,0 +1,71 @@
+# Dependencies
+node_modules/
+*/node_modules/
+package-lock.json
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+backend/.env
+frontend/.env
+
+# Build outputs
+dist/
+build/
+*/dist/
+*/build/
+frontend/dist/
+backend/dist/
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+backend/logs/
+*.log.*
+
+# OS files
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+
+# IDE
+.vscode/
+.idea/
+*.sublime-*
+*.code-workspace
+
+# Testing
+coverage/
+.nyc_output/
+*/coverage/
+
+# Prisma
+backend/prisma/migrations/*_migration.sql
+backend/prisma/dev.db
+backend/prisma/dev.db-journal
+
+# Uploads
+backend/uploads/*
+!backend/uploads/.gitkeep
+uploads/*
+
+# Temporary files
+*.tmp
+*.temp
+.cache/
+.parcel-cache/
+
+# Docker
+.dockerignore
+
+# Misc
+.env.production
+.vercel
+*.pem
