@@ -621,11 +621,15 @@ class AdminService {
 
   /**
    * Get recent platform activities
+   * Note: Do NOT split the limit across categories; fetch up to `limit` from each
+   * and combine, then slice to preserve true recency order across all types.
    */
   async getRecentActivities(limit: number = 20) {
-    const [recentUsers, recentCourses, recentEnrollments, recentReports] = await Promise.all([
+    const take = Math.max(1, Math.min(limit, 50));
+
+    const [recentUsers, recentCourses, recentEnrollments, recentReports, recentPayments] = await Promise.all([
       prisma.user.findMany({
-        take: limit / 4,
+        take,
         orderBy: { createdAt: 'desc' },
         select: {
           id: true,
@@ -636,7 +640,7 @@ class AdminService {
         },
       }),
       prisma.course.findMany({
-        take: limit / 4,
+        take,
         orderBy: { createdAt: 'desc' },
         select: {
           id: true,
@@ -655,7 +659,7 @@ class AdminService {
         },
       }),
       prisma.enrollment.findMany({
-        take: limit / 4,
+        take,
         orderBy: { enrolledAt: 'desc' },
         select: {
           id: true,
@@ -678,7 +682,7 @@ class AdminService {
         },
       }),
       prisma.report.findMany({
-        take: limit / 4,
+        take,
         orderBy: { createdAt: 'desc' },
         select: {
           id: true,
@@ -691,6 +695,18 @@ class AdminService {
               lastName: true,
             },
           },
+        },
+      }),
+      prisma.payment.findMany({
+        where: { status: PaymentStatus.COMPLETED },
+        take,
+        orderBy: { paidAt: 'desc' },
+        select: {
+          id: true,
+          amount: true,
+          paidAt: true,
+          user: { select: { firstName: true, lastName: true } },
+          package: { select: { course: { select: { title: true } } } },
         },
       }),
     ]);
@@ -717,7 +733,14 @@ class AdminService {
         data: r,
         timestamp: r.createdAt,
       })),
-    ].sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime()).slice(0, limit);
+      ...recentPayments.map((p) => ({
+        type: 'payment_completed',
+        data: p,
+        timestamp: p.paidAt,
+      })),
+    ]
+      .sort((a, b) => new Date(b.timestamp as any).getTime() - new Date(a.timestamp as any).getTime())
+      .slice(0, limit);
 
     return activities;
   }

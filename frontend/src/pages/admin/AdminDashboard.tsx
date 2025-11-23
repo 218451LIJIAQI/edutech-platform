@@ -24,6 +24,18 @@ const AdminDashboard = () => {
 
   useEffect(() => {
     fetchDashboardData();
+
+    // lightweight polling for recent activities to keep the feed in sync
+    const interval = setInterval(async () => {
+      try {
+        const latest = await adminService.getRecentActivities(30);
+        setActivities(latest);
+      } catch (e) {
+        // silent fail for background refresh
+      }
+    }, 20000);
+
+    return () => clearInterval(interval);
   }, []);
 
   const fetchDashboardData = async () => {
@@ -31,7 +43,7 @@ const AdminDashboard = () => {
     try {
       const [statsData, activitiesData] = await Promise.all([
         adminService.getStats(),
-        adminService.getRecentActivities(15),
+        adminService.getRecentActivities(30),
       ]);
       setStats(statsData);
       setActivities(activitiesData);
@@ -112,6 +124,8 @@ const AdminDashboard = () => {
         return '🎓';
       case 'report_submitted':
         return '⚠️';
+      case 'payment_completed':
+        return '💳';
       default:
         return '📌';
     }
@@ -127,6 +141,8 @@ const AdminDashboard = () => {
         return `${activity.data.user.firstName} enrolled in "${activity.data.package.course.title}"`;
       case 'report_submitted':
         return `New ${activity.data.type.replace('_', ' ').toLowerCase()} report submitted`;
+      case 'payment_completed':
+        return `${activity.data.user.firstName} purchased "${activity.data.package.course.title}" for ${formatCurrency(activity.data.amount)}`;
       default:
         return 'Activity recorded';
     }
