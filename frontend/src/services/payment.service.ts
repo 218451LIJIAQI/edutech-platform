@@ -10,6 +10,20 @@ export const paymentService = {
   /**
    * Create payment intent
    */
+  // Create cart payment intent (multi-course checkout)
+  createCartPaymentIntent: async (): Promise<{
+    payment: Payment;
+    clientSecret: string | null;
+    order: {
+      id: string;
+      orderNo: string;
+      amount: number;
+    };
+  }> => {
+    const response = await api.post<ApiResponse<any>>('/payments/cart/create-intent');
+    return response.data.data!;
+  },
+
   createPaymentIntent: async (packageId: string): Promise<{
     payment: Payment;
     clientSecret: string | null;
@@ -31,14 +45,8 @@ export const paymentService = {
   confirmPayment: async (
     paymentId: string,
     stripePaymentId?: string
-  ): Promise<{
-    payment: Payment;
-    enrollment: Enrollment;
-  }> => {
-    const response = await api.post<ApiResponse<{
-      payment: Payment;
-      enrollment: Enrollment;
-    }>>('/payments/confirm', {
+  ): Promise<any> => {
+    const response = await api.post<ApiResponse<any>>('/payments/confirm', {
       paymentId,
       stripePaymentId,
     });
@@ -72,6 +80,26 @@ export const paymentService = {
       totalEarnings: number;
       payments: PaymentWithDetails[];
     }>>('/payments/teacher/earnings');
+    return response.data.data!;
+  },
+
+  /**
+   * Get teacher earnings grouped by course (Teacher only)
+   */
+  getTeacherEarningsByCourse: async (): Promise<{
+    totalEarnings: number;
+    totalCourses: number;
+    totalStudents: number;
+    courseEarnings: Array<{
+      courseId: string;
+      courseTitle: string;
+      totalEarnings: number;
+      totalStudents: number;
+      payments: PaymentWithDetails[];
+    }>;
+    recentPayments: PaymentWithDetails[];
+  }> => {
+    const response = await api.get<ApiResponse<any>>('/payments/teacher/earnings-by-course');
     return response.data.data!;
   },
 };

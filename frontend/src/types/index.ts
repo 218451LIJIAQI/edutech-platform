@@ -8,6 +8,12 @@ export enum UserRole {
   ADMIN = 'ADMIN',
 }
 
+export enum CourseType {
+  LIVE = 'LIVE',       // Online live sessions
+  RECORDED = 'RECORDED', // Pre-recorded video courses
+  HYBRID = 'HYBRID',     // Mix of live and recorded
+}
+
 export enum LessonType {
   LIVE = 'LIVE',
   RECORDED = 'RECORDED',
@@ -25,6 +31,21 @@ export enum PaymentStatus {
   COMPLETED = 'COMPLETED',
   FAILED = 'FAILED',
   REFUNDED = 'REFUNDED',
+}
+
+export enum OrderStatus {
+  PENDING = 'PENDING',
+  PAID = 'PAID',
+  CANCELLED = 'CANCELLED',
+  REFUNDED = 'REFUNDED',
+  FAILED = 'FAILED',
+}
+
+export enum RefundStatus {
+  PENDING = 'PENDING',
+  APPROVED = 'APPROVED',
+  REJECTED = 'REJECTED',
+  COMPLETED = 'COMPLETED',
 }
 
 export enum ReportType {
@@ -86,6 +107,7 @@ export interface Course {
   title: string;
   description: string;
   category: string;
+  courseType: CourseType; // LIVE, RECORDED, or HYBRID
   thumbnail?: string;
   previewVideoUrl?: string;
   isPublished: boolean;
@@ -139,7 +161,7 @@ export interface Enrollment {
 export interface Payment {
   id: string;
   userId: string;
-  packageId: string;
+  packageId?: string; // optional for order payments
   amount: number;
   platformCommission: number;
   teacherEarning: number;
@@ -147,6 +169,60 @@ export interface Payment {
   status: PaymentStatus;
   paidAt?: string;
   createdAt: string;
+}
+
+// Cart
+export interface CartItem {
+  id: string;
+  userId: string;
+  packageId: string;
+  quantity: number;
+  addedAt: string;
+  package?: LessonPackage & { course?: Course };
+}
+
+export interface CartSummary {
+  items: CartItem[];
+  totalAmount: number;
+  currency: string;
+}
+
+// Orders
+export interface OrderItem {
+  id: string;
+  orderId: string;
+  packageId: string;
+  price: number;
+  discount?: number;
+  finalPrice: number;
+  package?: LessonPackage & { course?: Course };
+}
+
+export interface Order {
+  id: string;
+  orderNo: string;
+  userId: string;
+  status: OrderStatus;
+  totalAmount: number;
+  currency: string;
+  createdAt: string;
+  paidAt?: string;
+  canceledAt?: string;
+  cancelReason?: string;
+  refundedAt?: string;
+  refundAmount?: number;
+  refundReason?: string;
+  items?: OrderItem[];
+}
+
+export interface Refund {
+  id: string;
+  orderId: string;
+  amount: number;
+  reason?: string;
+  status: RefundStatus;
+  createdAt: string;
+  processedAt?: string;
 }
 
 export interface Review {

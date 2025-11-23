@@ -17,9 +17,10 @@ class UploadController {
     }
 
     const file = req.file;
-    const folder = req.body.folder || 'general';
+    // Use actual stored subfolder based on fieldname ('file' by default)
+    const folder = file.fieldname || 'file';
 
-    // Generate public URL
+    // Generate public URL that matches storage location
     const fileUrl = `/uploads/${folder}/${file.filename}`;
 
     res.status(200).json({

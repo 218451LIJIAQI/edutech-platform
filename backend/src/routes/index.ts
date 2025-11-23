@@ -36,6 +36,13 @@ router.use('/reviews', reviewRoutes);
 router.use('/reports', reportRoutes);
 router.use('/upload', uploadRoutes);
 router.use('/notifications', notificationRoutes);
+
+// New routes
+import cartRoutes from './cart.routes';
+import ordersRoutes from './orders.routes';
+router.use('/cart', cartRoutes);
+router.use('/orders', ordersRoutes);
+
 router.use('/admin', adminRoutes);
 
 export default router;

@@ -10,19 +10,24 @@ import {
   PlayCircle,
   FileText,
   DollarSign,
+  Edit,
+  Download,
+  FileIcon,
 } from 'lucide-react';
-import { Course, Lesson, LessonPackage, LessonType } from '@/types';
+import { Course, Lesson, LessonPackage, Material, LessonType, CourseType } from '@/types';
 import courseService from '@/services/course.service';
 import uploadService from '@/services/upload.service';
 import FileUpload from '@/components/common/FileUpload';
 import LessonModal from '@/components/teacher/LessonModal';
 import PackageModal from '@/components/teacher/PackageModal';
+import MaterialModal from '@/components/teacher/MaterialModal';
 import toast from 'react-hot-toast';
 
 interface CourseFormData {
   title: string;
   description: string;
   category: string;
+  courseType: CourseType;
   thumbnail?: string;
   previewVideoUrl?: string;
 }
@@ -39,17 +44,24 @@ const CreateCoursePage = () => {
   const [course, setCourse] = useState<Course | null>(null);
   const [lessons, setLessons] = useState<Lesson[]>([]);
   const [packages, setPackages] = useState<LessonPackage[]>([]);
+  const [materials, setMaterials] = useState<Material[]>([]);
   const [activeTab, setActiveTab] = useState<'basic' | 'lessons' | 'packages' | 'materials'>(
     'basic'
   );
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [thumbnailFile, setThumbnailFile] = useState<File | null>(null);
+  const [thumbnailType, setThumbnailType] = useState<'upload' | 'link'>('upload');
+  const [thumbnailLink, setThumbnailLink] = useState('');
   const [previewVideoFile, setPreviewVideoFile] = useState<File | null>(null);
+  const [previewVideoType, setPreviewVideoType] = useState<'upload' | 'link'>('upload');
+  const [previewVideoLink, setPreviewVideoLink] = useState('');
   const [showLessonModal, setShowLessonModal] = useState(false);
   const [showPackageModal, setShowPackageModal] = useState(false);
+  const [showMaterialModal, setShowMaterialModal] = useState(false);
   const [editingLessonId, setEditingLessonId] = useState<string | undefined>();
   const [editingPackageId, setEditingPackageId] = useState<string | undefined>();
+  const [editingMaterialId, setEditingMaterialId] = useState<string | undefined>();
 
   const {
     register,
@@ -71,13 +83,35 @@ const CreateCoursePage = () => {
       setCourse(data);
       setLessons(data.lessons || []);
       setPackages(data.packages || []);
+      setMaterials(data.materials || []);
 
       // Populate form
       setValue('title', data.title);
       setValue('description', data.description);
       setValue('category', data.category);
+      setValue('courseType', data.courseType);
       setValue('thumbnail', data.thumbnail);
       setValue('previewVideoUrl', data.previewVideoUrl);
+      
+      // Determine thumbnail type
+      if (data.thumbnail) {
+        const isExternalLink = data.thumbnail.startsWith('http://') || 
+                               data.thumbnail.startsWith('https://');
+        if (isExternalLink) {
+          setThumbnailType('link');
+          setThumbnailLink(data.thumbnail);
+        }
+      }
+      
+      // Determine preview video type
+      if (data.previewVideoUrl) {
+        const isExternalLink = data.previewVideoUrl.startsWith('http://') || 
+                               data.previewVideoUrl.startsWith('https://');
+        if (isExternalLink) {
+          setPreviewVideoType('link');
+          setPreviewVideoLink(data.previewVideoUrl);
+        }
+      }
     } catch (error) {
       console.error('Failed to fetch course:', error);
       toast.error('Failed to load course');
@@ -89,21 +123,43 @@ const CreateCoursePage = () => {
   const onSubmit = async (data: CourseFormData) => {
     setIsSaving(true);
     try {
-      // Upload files if selected
-      if (thumbnailFile) {
+      // Handle thumbnail based on selected type
+      if (thumbnailType === 'upload' && thumbnailFile) {
         data.thumbnail = await uploadService.uploadThumbnail(thumbnailFile);
+      } else if (thumbnailType === 'link' && thumbnailLink.trim()) {
+        data.thumbnail = thumbnailLink.trim();
       }
-      if (previewVideoFile) {
+      
+      // Handle preview video based on selected type
+      if (previewVideoType === 'upload' && previewVideoFile) {
         toast.info('Uploading preview video...');
         data.previewVideoUrl = await uploadService.uploadVideo(previewVideoFile);
+      } else if (previewVideoType === 'link' && previewVideoLink.trim()) {
+        data.previewVideoUrl = previewVideoLink.trim();
+      }
+
+      // Remove empty strings to avoid validation errors
+      const cleanData: any = {
+        title: data.title,
+        description: data.description,
+        category: data.category,
+        courseType: data.courseType || CourseType.RECORDED,
+      };
+
+      // Only add optional fields if they have values
+      if (data.thumbnail) {
+        cleanData.thumbnail = data.thumbnail;
+      }
+      if (data.previewVideoUrl) {
+        cleanData.previewVideoUrl = data.previewVideoUrl;
       }
 
       let savedCourse: Course;
       if (isEditMode) {
-        savedCourse = await courseService.updateCourse(courseId!, data);
+        savedCourse = await courseService.updateCourse(courseId!, cleanData);
         toast.success('Course updated successfully!');
       } else {
-        savedCourse = await courseService.createCourse(data);
+        savedCourse = await courseService.createCourse(cleanData);
         toast.success('Course created successfully!');
       }
 
@@ -111,9 +167,12 @@ const CreateCoursePage = () => {
       if (!isEditMode) {
         navigate(`/teacher/courses/${savedCourse.id}/edit`);
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to save course:', error);
-      toast.error('Failed to save course');
+      const errorMessage = error.response?.data?.message || error.response?.data?.errors 
+        ? Object.values(error.response.data.errors).flat().join(', ')
+        : 'Failed to save course';
+      toast.error(errorMessage);
     } finally {
       setIsSaving(false);
     }
@@ -176,6 +235,28 @@ const CreateCoursePage = () => {
       fetchCourse();
     } catch (error) {
       toast.error('Failed to delete package');
+    }
+  };
+
+  const handleAddMaterial = () => {
+    setEditingMaterialId(undefined);
+    setShowMaterialModal(true);
+  };
+
+  const handleEditMaterial = (materialId: string) => {
+    setEditingMaterialId(materialId);
+    setShowMaterialModal(true);
+  };
+
+  const handleDeleteMaterial = async (materialId: string) => {
+    if (!confirm('Are you sure you want to delete this material?')) return;
+
+    try {
+      await courseService.deleteMaterial(materialId);
+      toast.success('Material deleted successfully!');
+      fetchCourse();
+    } catch (error) {
+      toast.error('Failed to delete material');
     }
   };
 
@@ -265,9 +346,19 @@ const CreateCoursePage = () => {
                 </label>
                 <input
                   type="text"
-                  {...register('title', { required: 'Title is required' })}
+                  {...register('title', { 
+                    required: 'Title is required',
+                    minLength: {
+                      value: 5,
+                      message: 'Title must be at least 5 characters'
+                    },
+                    maxLength: {
+                      value: 200,
+                      message: 'Title must not exceed 200 characters'
+                    }
+                  })}
                   className="input"
-                  placeholder="Enter course title"
+                  placeholder="Enter course title (minimum 5 characters)"
                 />
                 {errors.title && (
                   <p className="text-red-600 text-sm mt-1">{errors.title.message}</p>
@@ -279,10 +370,20 @@ const CreateCoursePage = () => {
                   Description *
                 </label>
                 <textarea
-                  {...register('description', { required: 'Description is required' })}
+                  {...register('description', { 
+                    required: 'Description is required',
+                    minLength: {
+                      value: 20,
+                      message: 'Description must be at least 20 characters'
+                    },
+                    maxLength: {
+                      value: 2000,
+                      message: 'Description must not exceed 2000 characters'
+                    }
+                  })}
                   rows={6}
                   className="input"
-                  placeholder="Describe your course, what students will learn, prerequisites, etc."
+                  placeholder="Describe your course, what students will learn, prerequisites, etc. (minimum 20 characters)"
                 />
                 {errors.description && (
                   <p className="text-red-600 text-sm mt-1">{errors.description.message}</p>
@@ -312,30 +413,209 @@ const CreateCoursePage = () => {
                 )}
               </div>
 
+              {/* Course Type - Platform's Key Feature */}
               <div>
-                <FileUpload
-                  label="Course Thumbnail"
-                  accept="image/*"
-                  maxSize={5}
-                  onFileSelect={setThumbnailFile}
-                  preview={true}
-                />
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Course Type * 
+                  <span className="ml-2 text-xs font-normal text-primary-600">
+                    ⭐ Platform Feature
+                  </span>
+                </label>
+                <select
+                  {...register('courseType', { required: 'Course type is required' })}
+                  className="input"
+                  defaultValue={CourseType.RECORDED}
+                >
+                  <option value="">Select course type</option>
+                  <option value={CourseType.LIVE}>
+                    🔴 Live Sessions - Real-time online classes with students
+                  </option>
+                  <option value={CourseType.RECORDED}>
+                    📹 Recorded - Pre-recorded video lessons students can watch anytime
+                  </option>
+                  <option value={CourseType.HYBRID}>
+                    🎯 Hybrid - Mix of live sessions and recorded content
+                  </option>
+                </select>
+                {errors.courseType && (
+                  <p className="text-red-600 text-sm mt-1">{errors.courseType.message}</p>
+                )}
                 <p className="text-xs text-gray-500 mt-1">
-                  Recommended: 1280x720px, PNG or JPG
+                  This is a key differentiator of our platform - clearly showing students whether they'll attend live classes or watch recorded videos.
                 </p>
               </div>
 
               <div>
-                <FileUpload
-                  label="Preview Video (Optional)"
-                  accept="video/*"
-                  maxSize={100}
-                  onFileSelect={setPreviewVideoFile}
-                  preview={true}
-                />
-                <p className="text-xs text-gray-500 mt-1">
-                  A short preview video to attract students (max 100MB)
-                </p>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Course Thumbnail (Optional)
+                </label>
+                
+                {/* Thumbnail Type Selection */}
+                <div className="flex space-x-4 mb-4">
+                  <label className="flex items-center space-x-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      value="upload"
+                      checked={thumbnailType === 'upload'}
+                      onChange={(e) => {
+                        setThumbnailType(e.target.value as 'upload');
+                        setThumbnailLink('');
+                      }}
+                      className="form-radio text-primary-600"
+                    />
+                    <span className="text-sm">Upload Image File</span>
+                  </label>
+                  <label className="flex items-center space-x-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      value="link"
+                      checked={thumbnailType === 'link'}
+                      onChange={(e) => {
+                        setThumbnailType(e.target.value as 'link');
+                        setThumbnailFile(null);
+                      }}
+                      className="form-radio text-primary-600"
+                    />
+                    <span className="text-sm">Image URL Link</span>
+                  </label>
+                </div>
+
+                {/* Upload File Option */}
+                {thumbnailType === 'upload' && (
+                  <>
+                    <FileUpload
+                      label=""
+                      accept="image/*"
+                      maxSize={5}
+                      onFileSelect={setThumbnailFile}
+                      preview={true}
+                    />
+                    <p className="text-xs text-gray-500 mt-1">
+                      Recommended: 1280x720px, PNG or JPG (max 5MB)
+                    </p>
+                  </>
+                )}
+
+                {/* Image Link Option */}
+                {thumbnailType === 'link' && (
+                  <>
+                    <input
+                      type="url"
+                      value={thumbnailLink}
+                      onChange={(e) => setThumbnailLink(e.target.value)}
+                      placeholder="https://example.com/image.jpg"
+                      className="input"
+                    />
+                    <p className="text-xs text-gray-500 mt-1">
+                      Paste an image URL (JPEG, PNG, WebP, etc.)
+                    </p>
+                    {thumbnailLink && (
+                      <div className="mt-2">
+                        <p className="text-xs font-medium text-gray-700 mb-1">Preview:</p>
+                        <div className="w-full max-w-xs aspect-video bg-gray-100 rounded-lg overflow-hidden">
+                          <img 
+                            src={thumbnailLink} 
+                            alt="Thumbnail preview" 
+                            className="w-full h-full object-cover"
+                            onError={() => toast.error('Failed to load image')}
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Preview Video (Optional)
+                </label>
+                
+                {/* Video Type Selection */}
+                <div className="flex space-x-4 mb-4">
+                  <label className="flex items-center space-x-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      value="upload"
+                      checked={previewVideoType === 'upload'}
+                      onChange={(e) => {
+                        setPreviewVideoType(e.target.value as 'upload');
+                        setPreviewVideoLink('');
+                      }}
+                      className="form-radio text-primary-600"
+                    />
+                    <span className="text-sm">Upload Video File</span>
+                  </label>
+                  <label className="flex items-center space-x-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      value="link"
+                      checked={previewVideoType === 'link'}
+                      onChange={(e) => {
+                        setPreviewVideoType(e.target.value as 'link');
+                        setPreviewVideoFile(null);
+                      }}
+                      className="form-radio text-primary-600"
+                    />
+                    <span className="text-sm">Video Link (YouTube, Vimeo, etc.)</span>
+                  </label>
+                </div>
+
+                {/* Upload File Option */}
+                {previewVideoType === 'upload' && (
+                  <>
+                    <FileUpload
+                      label=""
+                      accept="video/*"
+                      maxSize={100}
+                      onFileSelect={setPreviewVideoFile}
+                      preview={true}
+                    />
+                    <p className="text-xs text-gray-500 mt-1">
+                      Upload a video file (max 100MB). Supported formats: MP4, WebM, MOV
+                    </p>
+                  </>
+                )}
+
+                {/* Video Link Option */}
+                {previewVideoType === 'link' && (
+                  <>
+                    <input
+                      type="url"
+                      value={previewVideoLink}
+                      onChange={(e) => setPreviewVideoLink(e.target.value)}
+                      placeholder="https://www.youtube.com/watch?v=... or https://vimeo.com/..."
+                      className="input"
+                    />
+                    <p className="text-xs text-gray-500 mt-1">
+                      Paste a video URL from YouTube, Vimeo, or direct video link
+                    </p>
+                    {previewVideoLink && (
+                      <div className="mt-2">
+                        <p className="text-xs font-medium text-gray-700 mb-1">Preview:</p>
+                        <div className="aspect-video bg-gray-100 rounded-lg overflow-hidden">
+                          {previewVideoLink.includes('youtube.com') || previewVideoLink.includes('youtu.be') ? (
+                            <iframe
+                              src={previewVideoLink.replace('watch?v=', 'embed/').replace('youtu.be/', 'youtube.com/embed/')}
+                              className="w-full h-full"
+                              allowFullScreen
+                              title="Preview"
+                            />
+                          ) : previewVideoLink.includes('vimeo.com') ? (
+                            <iframe
+                              src={previewVideoLink.replace('vimeo.com/', 'player.vimeo.com/video/')}
+                              className="w-full h-full"
+                              allowFullScreen
+                              title="Preview"
+                            />
+                          ) : (
+                            <video src={previewVideoLink} controls className="w-full h-full" />
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )}
               </div>
 
               <div className="flex items-center justify-end space-x-4">
@@ -521,18 +801,71 @@ const CreateCoursePage = () => {
                 <div>
                   <div className="flex items-center justify-between mb-6">
                     <h2 className="text-xl font-bold">Course Materials</h2>
-                    <button className="btn-primary">
+                    <button onClick={handleAddMaterial} className="btn-primary">
                       <Plus className="w-4 h-4 mr-2" />
                       Upload Material
                     </button>
                   </div>
-                  <div className="text-center py-12 bg-gray-50 rounded-lg">
-                    <Upload className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-                    <p className="text-gray-600 mb-4">No materials uploaded yet</p>
-                    <p className="text-sm text-gray-500">
-                      Upload PDFs, documents, or other resources for your students
-                    </p>
-                  </div>
+
+                  {materials.length === 0 ? (
+                    <div className="text-center py-12 bg-gray-50 rounded-lg">
+                      <Upload className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+                      <p className="text-gray-600 mb-4">No materials uploaded yet</p>
+                      <p className="text-sm text-gray-500 mb-6">
+                        Upload PDFs, documents, or other resources for your students
+                      </p>
+                      <button onClick={handleAddMaterial} className="btn-primary">
+                        Upload Your First Material
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {materials.map((material) => (
+                        <div
+                          key={material.id}
+                          className="flex items-center justify-between p-4 bg-gray-50 rounded-lg"
+                        >
+                          <div className="flex items-center space-x-4 flex-1">
+                            <FileIcon className="w-6 h-6 text-blue-600" />
+                            <div className="flex-1">
+                              <h3 className="font-medium">{material.title}</h3>
+                              {material.description && (
+                                <p className="text-sm text-gray-600">{material.description}</p>
+                              )}
+                              <div className="flex items-center space-x-2 text-xs text-gray-500 mt-1">
+                                <span className="badge-sm">{material.fileType}</span>
+                                {material.fileSize && (
+                                  <span>{(material.fileSize / 1024 / 1024).toFixed(2)} MB</span>
+                                )}
+                                {material.isDownloadable && (
+                                  <span className="flex items-center space-x-1">
+                                    <Download className="w-3 h-3" />
+                                    Downloadable
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                          <div className="flex items-center space-x-2">
+                            <button
+                              type="button"
+                              onClick={() => handleEditMaterial(material.id)}
+                              className="btn-sm btn-outline"
+                            >
+                              <Edit className="w-4 h-4" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteMaterial(material.id)}
+                              className="btn-sm text-red-600 hover:bg-red-50"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -554,6 +887,15 @@ const CreateCoursePage = () => {
             courseId={course.id}
             packageId={editingPackageId}
             onClose={() => setShowPackageModal(false)}
+            onSuccess={fetchCourse}
+          />
+        )}
+
+        {showMaterialModal && course && (
+          <MaterialModal
+            courseId={course.id}
+            materialId={editingMaterialId}
+            onClose={() => setShowMaterialModal(false)}
             onSuccess={fetchCourse}
           />
         )}

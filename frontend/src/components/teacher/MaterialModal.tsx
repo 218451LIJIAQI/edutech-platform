@@ -1,88 +1,106 @@
 import { useState } from 'react';
 import { X } from 'lucide-react';
 import { useForm } from 'react-hook-form';
-import { LessonType } from '@/types';
 import courseService from '@/services/course.service';
 import uploadService from '@/services/upload.service';
 import toast from 'react-hot-toast';
 
-interface LessonModalProps {
+interface MaterialModalProps {
   courseId: string;
-  lessonId?: string;
+  materialId?: string;
   onClose: () => void;
   onSuccess: () => void;
 }
 
-interface LessonFormData {
+interface MaterialFormData {
   title: string;
   description: string;
-  type: LessonType;
-  duration: number | string;
-  isFree: boolean;
+  isDownloadable: boolean;
 }
 
-const LessonModal: React.FC<LessonModalProps> = ({
+const MaterialModal: React.FC<MaterialModalProps> = ({
   courseId,
-  lessonId,
+  materialId,
   onClose,
   onSuccess,
 }) => {
-  const isEditMode = !!lessonId;
+  const isEditMode = !!materialId;
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [videoFile, setVideoFile] = useState<File | null>(null);
-  const [videoType, setVideoType] = useState<'upload' | 'link'>('upload');
-  const [videoLink, setVideoLink] = useState('');
+  const [materialFile, setMaterialFile] = useState<File | null>(null);
+  const [materialType, setMaterialType] = useState<'upload' | 'link'>('upload');
+  const [materialLink, setMaterialLink] = useState('');
   const [uploadProgress, setUploadProgress] = useState(0);
 
   const {
     register,
     handleSubmit,
     formState: { errors },
-  } = useForm<LessonFormData>({
+  } = useForm<MaterialFormData>({
     defaultValues: {
-      type: LessonType.RECORDED,
-      isFree: false,
-      duration: 30,
+      isDownloadable: true,
     },
   });
 
-  const onSubmit = async (data: LessonFormData) => {
+  const onSubmit = async (data: MaterialFormData) => {
     setIsSubmitting(true);
     try {
-      let videoUrl = '';
+      let fileUrl = '';
+      let fileType = '';
+      let fileSize = 0;
 
-      // Handle video based on selected type
-      if (videoType === 'upload' && videoFile) {
-        toast.info('Uploading video...');
-        videoUrl = await uploadService.uploadVideo(videoFile, setUploadProgress);
-      } else if (videoType === 'link' && videoLink.trim()) {
-        videoUrl = videoLink.trim();
+      // Handle file based on selected type
+      if (materialType === 'upload' && materialFile) {
+        toast.info('Uploading material...');
+        const uploadResult = await uploadService.uploadDocument(materialFile);
+        fileUrl = uploadResult.url;
+        fileType = uploadResult.mimeType || 'application/octet-stream';
+        fileSize = uploadResult.size;
+      } else if (materialType === 'link' && materialLink.trim()) {
+        fileUrl = materialLink.trim();
+        // Try to determine file type from URL
+        const urlParts = fileUrl.split('.');
+        const extension = urlParts[urlParts.length - 1].toLowerCase();
+        
+        const mimeTypes: { [key: string]: string } = {
+          'pdf': 'application/pdf',
+          'doc': 'application/msword',
+          'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+          'xls': 'application/vnd.ms-excel',
+          'xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+          'ppt': 'application/vnd.ms-powerpoint',
+          'pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+          'zip': 'application/zip',
+          'txt': 'text/plain',
+        };
+        
+        fileType = mimeTypes[extension] || 'application/octet-stream';
+        fileSize = 0; // Unknown for external links
+      } else {
+        toast.error('Please upload a file or provide a link');
+        setIsSubmitting(false);
+        return;
       }
 
-      // Convert duration to number if it's a string
-      const duration = typeof data.duration === 'string' 
-        ? parseInt(data.duration, 10) 
-        : data.duration;
-
-      const lessonData = {
+      const materialData = {
         ...data,
-        duration,
-        videoUrl: videoUrl || undefined,
+        fileUrl,
+        fileType,
+        fileSize,
       };
 
       if (isEditMode) {
-        await courseService.updateLesson(lessonId, lessonData);
-        toast.success('Lesson updated successfully!');
+        await courseService.updateMaterial(materialId, materialData);
+        toast.success('Material updated successfully!');
       } else {
-        await courseService.createLesson(courseId, lessonData);
-        toast.success('Lesson created successfully!');
+        await courseService.uploadMaterial(courseId, materialData);
+        toast.success('Material uploaded successfully!');
       }
 
       onSuccess();
       onClose();
     } catch (error: any) {
-      console.error('Failed to save lesson:', error);
-      const errorMessage = error.response?.data?.message || 'Failed to save lesson';
+      console.error('Failed to save material:', error);
+      const errorMessage = error.response?.data?.message || 'Failed to save material';
       toast.error(errorMessage);
     } finally {
       setIsSubmitting(false);
@@ -95,7 +113,7 @@ const LessonModal: React.FC<LessonModalProps> = ({
       <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
         <div className="sticky top-0 bg-white border-b px-6 py-4 flex items-center justify-between">
           <h2 className="text-xl font-bold">
-            {isEditMode ? 'Edit Lesson' : 'Create New Lesson'}
+            {isEditMode ? 'Edit Material' : 'Upload Material'}
           </h2>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
             <X className="w-6 h-6" />
@@ -106,13 +124,13 @@ const LessonModal: React.FC<LessonModalProps> = ({
           {/* Title */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              Lesson Title *
+              Material Title *
             </label>
             <input
               type="text"
               {...register('title', { required: 'Title is required' })}
               className="input"
-              placeholder="e.g., Introduction to JavaScript"
+              placeholder="e.g., Lecture Notes, Slides, Homework"
             />
             {errors.title && (
               <p className="text-red-600 text-sm mt-1">{errors.title.message}</p>
@@ -128,85 +146,54 @@ const LessonModal: React.FC<LessonModalProps> = ({
               {...register('description')}
               rows={3}
               className="input"
-              placeholder="Describe what students will learn in this lesson"
+              placeholder="Describe what this material contains"
             />
           </div>
 
-          {/* Type */}
+          {/* Material Type Selection */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              Lesson Type *
+              Material Source *
             </label>
-            <select {...register('type')} className="input">
-              <option value={LessonType.RECORDED}>Recorded Video</option>
-              <option value={LessonType.LIVE}>Live Session</option>
-              <option value={LessonType.HYBRID}>Hybrid</option>
-            </select>
-          </div>
-
-          {/* Duration */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Duration (minutes) *
-            </label>
-            <input
-              type="number"
-              {...register('duration', { required: 'Duration is required', min: 1 })}
-              className="input"
-              placeholder="30"
-            />
-            {errors.duration && (
-              <p className="text-red-600 text-sm mt-1">{errors.duration.message}</p>
-            )}
-          </div>
-
-          {/* Video */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Video (Optional)
-            </label>
-            
-            {/* Video Type Selection */}
             <div className="flex space-x-4 mb-4">
               <label className="flex items-center space-x-2 cursor-pointer">
                 <input
                   type="radio"
                   value="upload"
-                  checked={videoType === 'upload'}
+                  checked={materialType === 'upload'}
                   onChange={(e) => {
-                    setVideoType(e.target.value as 'upload');
-                    setVideoLink('');
+                    setMaterialType(e.target.value as 'upload');
+                    setMaterialLink('');
                   }}
                   className="form-radio text-primary-600"
                 />
-                <span className="text-sm">Upload Video File</span>
+                <span className="text-sm">Upload File</span>
               </label>
               <label className="flex items-center space-x-2 cursor-pointer">
                 <input
                   type="radio"
                   value="link"
-                  checked={videoType === 'link'}
+                  checked={materialType === 'link'}
                   onChange={(e) => {
-                    setVideoType(e.target.value as 'link');
-                    setVideoFile(null);
+                    setMaterialType(e.target.value as 'link');
+                    setMaterialFile(null);
                   }}
                   className="form-radio text-primary-600"
                 />
-                <span className="text-sm">Video Link</span>
+                <span className="text-sm">External Link</span>
               </label>
             </div>
 
             {/* Upload File Option */}
-            {videoType === 'upload' && (
+            {materialType === 'upload' && (
               <>
                 <input
                   type="file"
-                  accept="video/*"
-                  onChange={(e) => setVideoFile(e.target.files?.[0] || null)}
+                  onChange={(e) => setMaterialFile(e.target.files?.[0] || null)}
                   className="input"
                 />
                 <p className="text-xs text-gray-500 mt-1">
-                  Upload a video file (max 100MB). Supported formats: MP4, WebM, MOV
+                  Supported formats: PDF, DOC, DOCX, XLS, XLSX, PPT, PPTX, ZIP, TXT (max 50MB)
                 </p>
                 {uploadProgress > 0 && uploadProgress < 100 && (
                   <div className="mt-2">
@@ -225,33 +212,33 @@ const LessonModal: React.FC<LessonModalProps> = ({
               </>
             )}
 
-            {/* Video Link Option */}
-            {videoType === 'link' && (
+            {/* Link Option */}
+            {materialType === 'link' && (
               <>
                 <input
                   type="url"
-                  value={videoLink}
-                  onChange={(e) => setVideoLink(e.target.value)}
-                  placeholder="https://www.youtube.com/watch?v=... or direct video link"
+                  value={materialLink}
+                  onChange={(e) => setMaterialLink(e.target.value)}
+                  placeholder="https://example.com/document.pdf"
                   className="input"
                 />
                 <p className="text-xs text-gray-500 mt-1">
-                  Paste a video URL from YouTube, Vimeo, or direct video link
+                  Paste a direct link to the material (PDF, DOC, etc.)
                 </p>
               </>
             )}
           </div>
 
-          {/* Is Free */}
+          {/* Is Downloadable */}
           <div className="flex items-center">
             <input
               type="checkbox"
-              id="isFree"
-              {...register('isFree')}
+              id="isDownloadable"
+              {...register('isDownloadable')}
               className="mr-2"
             />
-            <label htmlFor="isFree" className="text-sm text-gray-700">
-              Make this lesson free (preview)
+            <label htmlFor="isDownloadable" className="text-sm text-gray-700">
+              Allow students to download this material
             </label>
           </div>
 
@@ -269,12 +256,12 @@ const LessonModal: React.FC<LessonModalProps> = ({
               {isSubmitting ? (
                 <>
                   <div className="spinner mr-2"></div>
-                  Saving...
+                  Uploading...
                 </>
               ) : isEditMode ? (
-                'Update Lesson'
+                'Update Material'
               ) : (
-                'Create Lesson'
+                'Upload Material'
               )}
             </button>
           </div>
@@ -284,5 +271,5 @@ const LessonModal: React.FC<LessonModalProps> = ({
   );
 };
 
-export default LessonModal;
+export default MaterialModal;
 

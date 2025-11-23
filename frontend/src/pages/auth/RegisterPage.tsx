@@ -48,7 +48,23 @@ const RegisterPage = () => {
         password: formData.password,
         role: formData.role,
       });
-      navigate('/');
+      
+      // Redirect based on user role
+      const userRole = useAuthStore.getState().user?.role;
+      
+      switch (userRole) {
+        case UserRole.ADMIN:
+          navigate('/admin');
+          break;
+        case UserRole.TEACHER:
+          navigate('/teacher');
+          break;
+        case UserRole.STUDENT:
+          navigate('/student');
+          break;
+        default:
+          navigate('/');
+      }
     } catch (err: any) {
       setError(err.response?.data?.message || 'Registration failed. Please try again.');
     } finally {

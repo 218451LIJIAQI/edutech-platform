@@ -54,12 +54,13 @@ class CourseController {
    */
   createCourse = asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user!.id;
-    const { title, description, category, thumbnail, previewVideoUrl } = req.body;
+    const { title, description, category, courseType, thumbnail, previewVideoUrl } = req.body;
 
     const course = await courseService.createCourse(userId, {
       title,
       description,
       category,
+      courseType,
       thumbnail,
       previewVideoUrl,
     });
@@ -78,13 +79,14 @@ class CourseController {
   updateCourse = asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user!.id;
     const { id } = req.params;
-    const { title, description, category, thumbnail, previewVideoUrl, isPublished } =
+    const { title, description, category, courseType, thumbnail, previewVideoUrl, isPublished } =
       req.body;
 
     const course = await courseService.updateCourse(userId, id, {
       title,
       description,
       category,
+      courseType,
       thumbnail,
       previewVideoUrl,
       isPublished,
@@ -294,6 +296,32 @@ class CourseController {
   });
 
   /**
+   * Update material
+   * PUT /api/courses/materials/:id
+   */
+  updateMaterial = asyncHandler(async (req: Request, res: Response) => {
+    const userId = req.user!.id;
+    const { id } = req.params;
+    const { title, description, fileUrl, fileType, fileSize, isDownloadable } =
+      req.body;
+
+    const material = await courseService.updateMaterial(userId, id, {
+      title,
+      description,
+      fileUrl,
+      fileType,
+      fileSize,
+      isDownloadable,
+    });
+
+    res.status(200).json({
+      status: 'success',
+      message: 'Material updated successfully',
+      data: material,
+    });
+  });
+
+  /**
    * Delete material
    * DELETE /api/courses/materials/:id
    */
@@ -306,6 +334,21 @@ class CourseController {
     res.status(200).json({
       status: 'success',
       message: result.message,
+    });
+  });
+
+  /**
+   * Get teacher's own courses
+   * GET /api/courses/my-courses
+   */
+  getMyCourses = asyncHandler(async (req: Request, res: Response) => {
+    const userId = req.user!.id;
+
+    const courses = await courseService.getTeacherCourses(userId);
+
+    res.status(200).json({
+      status: 'success',
+      data: courses,
     });
   });
 

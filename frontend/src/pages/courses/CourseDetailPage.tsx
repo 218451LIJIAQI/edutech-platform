@@ -3,9 +3,11 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useCourseStore } from '@/store/courseStore';
 import { useAuthStore } from '@/store/authStore';
 import { formatCurrency, formatDuration } from '@/utils/helpers';
-import { BookOpen, Clock, Star, Users, CheckCircle, PlayCircle } from 'lucide-react';
+import { CourseType } from '@/types';
+import { BookOpen, Clock, Star, Users, CheckCircle, PlayCircle, Video, Radio } from 'lucide-react';
 import toast from 'react-hot-toast';
 import paymentService from '@/services/payment.service';
+import UniversalVideoPlayer from '@/components/common/UniversalVideoPlayer';
 
 /**
  * Course Detail Page
@@ -18,6 +20,16 @@ const CourseDetailPage = () => {
   const { isAuthenticated } = useAuthStore();
   const [selectedPackage, setSelectedPackage] = useState<string | null>(null);
   const [isPurchasing, setIsPurchasing] = useState(false);
+
+  const handleOpenLesson = (lessonId: string) => {
+    if (!isEnrolled) {
+      toast.error('Please select a package to start learning');
+      document.getElementById('packages-section')?.scrollIntoView({ behavior: 'smooth' });
+      return;
+    }
+    if (!id) return;
+    navigate(`/courses/${id}/learn`);
+  };
 
   useEffect(() => {
     if (id) {
@@ -37,10 +49,15 @@ const CourseDetailPage = () => {
       return;
     }
 
+    if (!id) {
+      toast.error('Course ID is missing');
+      return;
+    }
+
     setIsPurchasing(true);
     try {
       // Redirect to secure checkout page
-      navigate(`/courses/${courseId}/checkout/${selectedPackage}`);
+      navigate(`/courses/${id}/checkout/${selectedPackage}`);
     } catch (error: any) {
       toast.error(error.response?.data?.message || 'Failed to initiate purchase');
     } finally {
@@ -80,8 +97,29 @@ const CourseDetailPage = () => {
       <div className="bg-gradient-to-r from-primary-600 to-primary-800 text-white py-12">
         <div className="container mx-auto px-4">
           <div className="max-w-4xl">
-            <div className="flex items-center space-x-2 mb-4">
+            <div className="flex items-center flex-wrap gap-2 mb-4">
               <span className="badge bg-primary-400 text-white">{currentCourse.category}</span>
+              
+              {/* Course Type - Platform Feature */}
+              {currentCourse.courseType === CourseType.LIVE && (
+                <span className="badge bg-red-500 text-white flex items-center gap-1">
+                  <Radio className="w-3 h-3" />
+                  Live Sessions
+                </span>
+              )}
+              {currentCourse.courseType === CourseType.RECORDED && (
+                <span className="badge bg-blue-500 text-white flex items-center gap-1">
+                  <Video className="w-3 h-3" />
+                  Recorded Course
+                </span>
+              )}
+              {currentCourse.courseType === CourseType.HYBRID && (
+                <span className="badge bg-purple-500 text-white flex items-center gap-1">
+                  <PlayCircle className="w-3 h-3" />
+                  Hybrid (Live + Recorded)
+                </span>
+              )}
+              
               {isEnrolled && (
                 <span className="badge bg-green-500 text-white">Enrolled</span>
               )}
@@ -119,9 +157,11 @@ const CourseDetailPage = () => {
             {currentCourse.previewVideoUrl && (
               <div className="card">
                 <h3 className="text-xl font-semibold mb-4">Course Preview</h3>
-                <div className="aspect-video bg-gray-200 rounded-lg flex items-center justify-center">
-                  <PlayCircle className="w-16 h-16 text-gray-400" />
-                </div>
+                <UniversalVideoPlayer 
+                  src={currentCourse.previewVideoUrl}
+                  poster={currentCourse.thumbnail}
+                  title={currentCourse.title}
+                />
               </div>
             )}
 
@@ -133,7 +173,10 @@ const CourseDetailPage = () => {
                   {currentCourse.lessons.map((lesson, index) => (
                     <div
                       key={lesson.id}
-                      className="flex items-center justify-between p-4 bg-gray-50 rounded-lg"
+                      onClick={() => handleOpenLesson(lesson.id)}
+                      className={`flex items-center justify-between p-4 rounded-lg ${isEnrolled ? 'bg-gray-50 hover:bg-gray-100 cursor-pointer' : 'bg-gray-50'}`}
+                      role="button"
+                      tabIndex={0}
                     >
                       <div className="flex items-center space-x-3">
                         <div className="w-8 h-8 bg-primary-100 text-primary-600 rounded-full flex items-center justify-center font-semibold">
@@ -197,60 +240,90 @@ const CourseDetailPage = () => {
 
           {/* Sidebar - Packages */}
           <div className="lg:col-span-1">
-            <div className="sticky top-4 space-y-4">
+            <div id="packages-section" className="sticky top-4 space-y-4">
               {currentCourse.packages && currentCourse.packages.length > 0 ? (
                 <>
                   {currentCourse.packages.map((pkg) => (
                     <div
                       key={pkg.id}
-                      className={`card cursor-pointer transition-all ${
+                      className={`card transition-all ${
                         selectedPackage === pkg.id
                           ? 'ring-2 ring-primary-600 shadow-lg'
                           : 'hover:shadow-lg'
                       }`}
-                      onClick={() => setSelectedPackage(pkg.id)}
                     >
-                      <div className="mb-4">
-                        <h4 className="text-lg font-semibold mb-2">{pkg.name}</h4>
-                        {pkg.description && (
-                          <p className="text-sm text-gray-600 mb-3">{pkg.description}</p>
+                      <div
+                        className="cursor-pointer"
+                        onClick={() => setSelectedPackage(pkg.id)}
+                      >
+                        <div className="mb-4">
+                          <h4 className="text-lg font-semibold mb-2">{pkg.name}</h4>
+                          {pkg.description && (
+                            <p className="text-sm text-gray-600 mb-3">{pkg.description}</p>
+                          )}
+                        </div>
+
+                        <div className="mb-4">
+                          <div className="flex items-baseline space-x-2">
+                            {pkg.discount && pkg.discount > 0 ? (
+                              <>
+                                <span className="text-3xl font-bold text-primary-600">
+                                  {formatCurrency(pkg.finalPrice)}
+                                </span>
+                                <span className="text-lg text-gray-400 line-through">
+                                  {formatCurrency(pkg.price)}
+                                </span>
+                              </>
+                            ) : (
+                              <span className="text-3xl font-bold text-primary-600">
+                                {formatCurrency(pkg.price)}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        {pkg.features && Array.isArray(pkg.features) && (
+                          <ul className="space-y-2 mb-4">
+                            {pkg.features.map((feature, index) => (
+                              <li key={index} className="flex items-start space-x-2 text-sm">
+                                <CheckCircle className="w-4 h-4 text-green-600 mt-0.5 flex-shrink-0" />
+                                <span>{feature}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+
+                        {pkg.duration && (
+                          <p className="text-sm text-gray-600 mb-4">
+                            Access for {pkg.duration} days
+                          </p>
                         )}
                       </div>
 
-                      <div className="mb-4">
-                        <div className="flex items-baseline space-x-2">
-                          {pkg.discount && pkg.discount > 0 ? (
-                            <>
-                              <span className="text-3xl font-bold text-primary-600">
-                                {formatCurrency(pkg.finalPrice)}
-                              </span>
-                              <span className="text-lg text-gray-400 line-through">
-                                {formatCurrency(pkg.price)}
-                              </span>
-                            </>
-                          ) : (
-                            <span className="text-3xl font-bold text-primary-600">
-                              {formatCurrency(pkg.price)}
-                            </span>
-                          )}
+                      {!isEnrolled && (
+                        <div className="flex items-center gap-2 mt-2">
+                          <button
+                            onClick={() => setSelectedPackage(pkg.id)}
+                            className="btn-outline flex-1"
+                          >
+                            Select
+                          </button>
+                          <button
+                            onClick={async () => {
+                              try {
+                                const { default: cartService } = await import('@/services/cart.service');
+                                await cartService.addItem(pkg.id);
+                                setSelectedPackage(pkg.id);
+                                toast.success('Added to cart');
+                              } catch (e: any) {
+                                toast.error(e?.response?.data?.message || 'Failed to add to cart');
+                              }
+                            }}
+                            className="btn-primary flex-1"
+                          >
+                            Add to Cart
+                          </button>
                         </div>
-                      </div>
-
-                      {pkg.features && Array.isArray(pkg.features) && (
-                        <ul className="space-y-2 mb-4">
-                          {pkg.features.map((feature, index) => (
-                            <li key={index} className="flex items-start space-x-2 text-sm">
-                              <CheckCircle className="w-4 h-4 text-green-600 mt-0.5 flex-shrink-0" />
-                              <span>{feature}</span>
-                            </li>
-                          ))}
-                        </ul>
-                      )}
-
-                      {pkg.duration && (
-                        <p className="text-sm text-gray-600 mb-4">
-                          Access for {pkg.duration} days
-                        </p>
                       )}
                     </div>
                   ))}
@@ -275,7 +348,7 @@ const CourseDetailPage = () => {
                           Processing...
                         </>
                       ) : (
-                        <>Purchase Course</>
+                        <>Purchase Now</>
                       )}
                     </button>
                   )}

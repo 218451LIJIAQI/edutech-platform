@@ -66,11 +66,24 @@ api.interceptors.response.use(
     }
 
     // Handle other errors
-    const errorMessage =
-      error.response?.data?.message || 'An error occurred. Please try again.';
+    const status = error.response?.status;
+    let errorMessage = error.response?.data?.message || 'An error occurred. Please try again.';
     
-    // Don't show toast for validation errors (they're handled in forms)
-    if (error.response?.status !== 400) {
+    // Customize error messages based on status code
+    if (status === 429) {
+      errorMessage = 'Too many requests. Please wait a moment and try again.';
+      toast.error(errorMessage, { duration: 4000 });
+    } else if (status === 403) {
+      errorMessage = 'You do not have permission to perform this action.';
+      toast.error(errorMessage);
+    } else if (status === 404) {
+      errorMessage = 'The requested resource was not found.';
+      toast.error(errorMessage);
+    } else if (status === 500) {
+      errorMessage = 'Server error. Please try again later.';
+      toast.error(errorMessage);
+    } else if (status && status !== 400) {
+      // Don't show toast for validation errors (400 - they're handled in forms)
       toast.error(errorMessage);
     }
 

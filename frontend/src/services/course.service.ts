@@ -40,6 +40,14 @@ export const courseService = {
   },
 
   /**
+   * Get teacher's own courses (Teacher only)
+   */
+  getMyCourses: async (): Promise<Course[]> => {
+    const response = await api.get<ApiResponse<Course[]>>('/courses/my-courses');
+    return response.data.data!;
+  },
+
+  /**
    * Create a new course (Teacher only)
    */
   createCourse: async (data: Partial<Course>): Promise<Course> => {
@@ -126,6 +134,17 @@ export const courseService = {
   uploadMaterial: async (courseId: string, data: Partial<Material>): Promise<Material> => {
     const response = await api.post<ApiResponse<Material>>(
       `/courses/${courseId}/materials`,
+      data
+    );
+    return response.data.data!;
+  },
+
+  /**
+   * Update material (Teacher only)
+   */
+  updateMaterial: async (materialId: string, data: Partial<Material>): Promise<Material> => {
+    const response = await api.put<ApiResponse<Material>>(
+      `/courses/materials/${materialId}`,
       data
     );
     return response.data.data!;

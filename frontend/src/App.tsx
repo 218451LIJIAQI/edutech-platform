@@ -20,6 +20,10 @@ import MyCoursesPage from './pages/student/MyCoursesPage';
 import CourseLearningPage from './pages/student/CourseLearningPage';
 import CheckoutPage from './pages/student/CheckoutPage';
 import ReviewCoursePage from './pages/student/ReviewCoursePage';
+import CartPage from './pages/student/CartPage';
+import CartCheckoutPage from './pages/student/CartCheckoutPage';
+import OrdersPage from './pages/student/OrdersPage';
+import OrderDetailPage from './pages/student/OrderDetailPage';
 import LiveSessionPage from './pages/student/LiveSessionPage';
 import TeacherDashboard from './pages/teacher/TeacherDashboard';
 import ManageCoursesPage from './pages/teacher/ManageCoursesPage';
@@ -32,6 +36,9 @@ import CoursesManagement from './pages/admin/CoursesManagement';
 import ReportsManagement from './pages/admin/ReportsManagement';
 import ProfilePage from './pages/ProfilePage';
 import NotFoundPage from './pages/NotFoundPage';
+import HelpCenterPage from './pages/HelpCenterPage';
+import TermsOfServicePage from './pages/TermsOfServicePage';
+import PrivacyPolicyPage from './pages/PrivacyPolicyPage';
 
 /**
  * Main App Component
@@ -67,6 +74,9 @@ function App() {
         <Route path="/courses/:id" element={<CourseDetailPage />} />
         <Route path="/teachers" element={<TeachersPage />} />
         <Route path="/teachers/:id" element={<TeacherProfilePage />} />
+        <Route path="/help" element={<HelpCenterPage />} />
+        <Route path="/terms" element={<TermsOfServicePage />} />
+        <Route path="/privacy" element={<PrivacyPolicyPage />} />
 
         {/* Protected Student routes */}
         <Route
@@ -106,6 +116,40 @@ function App() {
           element={
             <PrivateRoute allowedRoles={[UserRole.STUDENT]}>
               <ReviewCoursePage />
+            </PrivateRoute>
+          }
+        />
+
+        {/* Cart and Orders (Student) */}
+        <Route
+          path="/cart"
+          element={
+            <PrivateRoute allowedRoles={[UserRole.STUDENT]}>
+              <CartPage />
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path="/cart/checkout"
+          element={
+            <PrivateRoute allowedRoles={[UserRole.STUDENT]}>
+              <CartCheckoutPage />
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path="/orders"
+          element={
+            <PrivateRoute allowedRoles={[UserRole.STUDENT]}>
+              <OrdersPage />
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path="/orders/:id"
+          element={
+            <PrivateRoute allowedRoles={[UserRole.STUDENT]}>
+              <OrderDetailPage />
             </PrivateRoute>
           }
         />

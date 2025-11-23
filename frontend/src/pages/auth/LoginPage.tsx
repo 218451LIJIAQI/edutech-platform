@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '@/store/authStore';
+import { UserRole } from '@/types';
 import { BookOpen } from 'lucide-react';
 
 /**
@@ -12,7 +13,7 @@ const LoginPage = () => {
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
-  const { login } = useAuthStore();
+  const { login, user } = useAuthStore();
   const navigate = useNavigate();
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -22,7 +23,23 @@ const LoginPage = () => {
 
     try {
       await login({ email, password });
-      navigate('/');
+      
+      // Redirect based on user role
+      const userRole = useAuthStore.getState().user?.role;
+      
+      switch (userRole) {
+        case UserRole.ADMIN:
+          navigate('/admin');
+          break;
+        case UserRole.TEACHER:
+          navigate('/teacher');
+          break;
+        case UserRole.STUDENT:
+          navigate('/student');
+          break;
+        default:
+          navigate('/');
+      }
     } catch (err: any) {
       setError(err.response?.data?.message || 'Login failed. Please try again.');
     } finally {

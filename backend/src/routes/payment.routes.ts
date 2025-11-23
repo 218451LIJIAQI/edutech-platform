@@ -11,7 +11,9 @@ const router = Router();
  * Payment Routes
  */
 
-// Student routes
+// More specific routes first (before /:id)
+
+// Student routes - POST endpoints
 router.post(
   '/create-intent',
   authenticate,
@@ -24,6 +26,14 @@ router.post(
       .withMessage('Invalid package ID'),
   ]),
   paymentController.createPaymentIntent
+);
+
+// Cart checkout intent
+router.post(
+  '/cart/create-intent',
+  authenticate,
+  authorize(UserRole.STUDENT),
+  paymentController.createCartPaymentIntent
 );
 
 router.post(
@@ -44,6 +54,22 @@ router.post(
   paymentController.confirmPayment
 );
 
+// Teacher routes - must come before /:id routes
+router.get(
+  '/teacher/earnings',
+  authenticate,
+  authorize(UserRole.TEACHER),
+  paymentController.getTeacherEarnings
+);
+
+router.get(
+  '/teacher/earnings-by-course',
+  authenticate,
+  authorize(UserRole.TEACHER),
+  paymentController.getTeacherEarningsByCourse
+);
+
+// Student routes - GET endpoints
 router.get(
   '/my-payments',
   authenticate,
@@ -51,19 +77,12 @@ router.get(
   paymentController.getMyPayments
 );
 
+// Generic routes - must come last
 router.get(
   '/:id',
   authenticate,
   authorize(UserRole.STUDENT),
   paymentController.getPaymentById
-);
-
-// Teacher routes
-router.get(
-  '/teacher/earnings',
-  authenticate,
-  authorize(UserRole.TEACHER),
-  paymentController.getTeacherEarnings
 );
 
 // Admin routes

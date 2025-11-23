@@ -11,6 +11,7 @@ import {
   createPackageValidation,
   updatePackageValidation,
   uploadMaterialValidation,
+  updateMaterialValidation,
   getCoursesValidation,
 } from '../validators/course.validator';
 
@@ -18,6 +19,7 @@ const router = Router();
 
 /**
  * Course Routes
+ * Note: More specific routes (like /my-courses) must come BEFORE generic routes (like /:id)
  */
 
 // Public routes
@@ -29,6 +31,15 @@ router.get(
 
 router.get('/categories/all', courseController.getCategories);
 
+// Teacher's own courses - MUST come before /:id
+router.get(
+  '/my-courses',
+  authenticate,
+  authorize(UserRole.TEACHER),
+  courseController.getMyCourses
+);
+
+// Generic course by ID route - MUST come last
 router.get('/:id', optionalAuth, courseController.getCourseById);
 
 // Teacher-only routes - Course Management
@@ -110,6 +121,14 @@ router.post(
   authorize(UserRole.TEACHER),
   validate(uploadMaterialValidation),
   courseController.uploadMaterial
+);
+
+router.put(
+  '/materials/:id',
+  authenticate,
+  authorize(UserRole.TEACHER),
+  validate(updateMaterialValidation),
+  courseController.updateMaterial
 );
 
 router.delete(

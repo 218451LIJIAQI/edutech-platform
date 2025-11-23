@@ -25,6 +25,21 @@ class PaymentController {
   });
 
   /**
+   * Create cart payment intent
+   * POST /api/payments/cart/create-intent
+   */
+  createCartPaymentIntent = asyncHandler(async (req: Request, res: Response) => {
+    const userId = req.user!.id;
+    const result = await paymentService.createCartPaymentIntent(userId);
+
+    res.status(201).json({
+      status: 'success',
+      message: 'Cart payment intent created successfully',
+      data: result,
+    });
+  });
+
+  /**
    * Confirm payment
    * POST /api/payments/confirm
    */
@@ -79,6 +94,21 @@ class PaymentController {
     const userId = req.user!.id;
 
     const result = await paymentService.getTeacherEarnings(userId);
+
+    res.status(200).json({
+      status: 'success',
+      data: result,
+    });
+  });
+
+  /**
+   * Get teacher's earnings grouped by course
+   * GET /api/payments/teacher/earnings-by-course
+   */
+  getTeacherEarningsByCourse = asyncHandler(async (req: Request, res: Response) => {
+    const userId = req.user!.id;
+
+    const result = await paymentService.getTeacherEarningsByCourse(userId);
 
     res.status(200).json({
       status: 'success',

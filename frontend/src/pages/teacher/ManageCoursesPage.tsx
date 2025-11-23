@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Plus, Edit, Trash2, Eye, EyeOff, Users } from 'lucide-react';
+import { Plus, Edit, Trash2, Eye, EyeOff, Users, Video, Radio, PlayCircle } from 'lucide-react';
 import courseService from '@/services/course.service';
-import { Course } from '@/types';
+import { Course, CourseType } from '@/types';
 import { formatCurrency } from '@/utils/helpers';
 import toast from 'react-hot-toast';
 
@@ -22,10 +22,8 @@ const ManageCoursesPage = () => {
   const fetchMyCourses = async () => {
     setIsLoading(true);
     try {
-      // In a real app, there would be a separate endpoint for teacher's courses
-      // For now, we'll use the general endpoint
-      const result = await courseService.getAllCourses({});
-      setCourses(result.courses || []);
+      const courses = await courseService.getMyCourses();
+      setCourses(courses);
     } catch (error) {
       console.error('Failed to fetch courses:', error);
       toast.error('Failed to load courses');
@@ -100,7 +98,7 @@ const ManageCoursesPage = () => {
               <div className="flex items-start justify-between">
                 {/* Course Info */}
                 <div className="flex-1">
-                  <div className="flex items-center space-x-3 mb-2">
+                  <div className="flex items-center flex-wrap gap-2 mb-2">
                     <h3 className="text-xl font-semibold">{course.title}</h3>
                     {course.isPublished ? (
                       <span className="badge-success">Published</span>
@@ -108,6 +106,26 @@ const ManageCoursesPage = () => {
                       <span className="badge-warning">Draft</span>
                     )}
                     <span className="badge-primary">{course.category}</span>
+                    
+                    {/* Course Type */}
+                    {course.courseType === CourseType.LIVE && (
+                      <span className="badge bg-red-100 text-red-700 flex items-center gap-1">
+                        <Radio className="w-3 h-3" />
+                        Live
+                      </span>
+                    )}
+                    {course.courseType === CourseType.RECORDED && (
+                      <span className="badge bg-blue-100 text-blue-700 flex items-center gap-1">
+                        <Video className="w-3 h-3" />
+                        Recorded
+                      </span>
+                    )}
+                    {course.courseType === CourseType.HYBRID && (
+                      <span className="badge bg-purple-100 text-purple-700 flex items-center gap-1">
+                        <PlayCircle className="w-3 h-3" />
+                        Hybrid
+                      </span>
+                    )}
                   </div>
 
                   <p className="text-gray-600 mb-4 line-clamp-2">

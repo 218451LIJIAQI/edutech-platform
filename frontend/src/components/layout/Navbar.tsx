@@ -1,5 +1,5 @@
 import { Link, useNavigate } from 'react-router-dom';
-import { BookOpen, User, LogOut, LayoutDashboard } from 'lucide-react';
+import { BookOpen, User, LogOut, LayoutDashboard, ShoppingCart, Receipt } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
 import { UserRole } from '@/types';
 import NotificationCenter from '../common/NotificationCenter';
@@ -62,6 +62,26 @@ const Navbar = () => {
               <>
                 {/* Notification Center */}
                 <NotificationCenter />
+                
+                {/* Student quick links */}
+                {user?.role === UserRole.STUDENT && (
+                  <>
+                    <Link
+                      to="/cart"
+                      className="flex items-center space-x-1 text-gray-700 hover:text-primary-600 transition"
+                    >
+                      <ShoppingCart className="w-5 h-5" />
+                      <span className="hidden md:inline">Cart</span>
+                    </Link>
+                    <Link
+                      to="/orders"
+                      className="flex items-center space-x-1 text-gray-700 hover:text-primary-600 transition"
+                    >
+                      <Receipt className="w-5 h-5" />
+                      <span className="hidden md:inline">Orders</span>
+                    </Link>
+                  </>
+                )}
                 
                 <Link
                   to={getDashboardLink()}

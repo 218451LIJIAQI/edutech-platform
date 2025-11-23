@@ -1,4 +1,4 @@
-import { LessonType } from '@prisma/client';
+import { LessonType, CourseType } from '@prisma/client';
 import prisma from '../config/database';
 import {
   NotFoundError,
@@ -201,6 +201,7 @@ class CourseService {
       title: string;
       description: string;
       category: string;
+      courseType?: CourseType;
       thumbnail?: string;
       previewVideoUrl?: string;
     }
@@ -246,6 +247,7 @@ class CourseService {
       title?: string;
       description?: string;
       category?: string;
+      courseType?: CourseType;
       thumbnail?: string;
       previewVideoUrl?: string;
       isPublished?: boolean;
@@ -523,6 +525,40 @@ class CourseService {
   }
 
   /**
+   * Update material
+   */
+  async updateMaterial(
+    userId: string,
+    materialId: string,
+    data: {
+      title?: string;
+      description?: string;
+      fileUrl?: string;
+      fileType?: string;
+      fileSize?: number;
+      isDownloadable?: boolean;
+    }
+  ) {
+    const material = await prisma.material.findUnique({
+      where: { id: materialId },
+      include: { course: true },
+    });
+
+    if (!material) {
+      throw new NotFoundError('Material not found');
+    }
+
+    await this.validateCourseOwnership(userId, material.courseId);
+
+    const updated = await prisma.material.update({
+      where: { id: materialId },
+      data,
+    });
+
+    return updated;
+  }
+
+  /**
    * Delete material
    */
   async deleteMaterial(userId: string, materialId: string) {
@@ -542,6 +578,91 @@ class CourseService {
     });
 
     return { message: 'Material deleted successfully' };
+  }
+
+  /**
+   * Get teacher's own courses
+   */
+  async getTeacherCourses(userId: string) {
+    const teacherProfile = await prisma.teacherProfile.findUnique({
+      where: { userId },
+    });
+
+    if (!teacherProfile) {
+      throw new NotFoundError('Teacher profile not found');
+    }
+
+    const courses = await prisma.course.findMany({
+      where: {
+        teacherProfileId: teacherProfile.id,
+      },
+      include: {
+        teacherProfile: {
+          include: {
+            user: {
+              select: {
+                id: true,
+                firstName: true,
+                lastName: true,
+                avatar: true,
+              },
+            },
+          },
+        },
+        packages: {
+          select: {
+            id: true,
+            name: true,
+            finalPrice: true,
+            discount: true,
+          },
+        },
+        lessons: {
+          select: {
+            id: true,
+            title: true,
+            type: true,
+            duration: true,
+          },
+        },
+        materials: {
+          select: {
+            id: true,
+            title: true,
+          },
+        },
+        _count: {
+          select: {
+            lessons: true,
+            materials: true,
+          },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    // Add enrollment counts for each course
+    const coursesWithEnrollments = await Promise.all(
+      courses.map(async (course) => {
+        const enrollmentCount = await prisma.enrollment.count({
+          where: {
+            package: {
+              courseId: course.id,
+            },
+          },
+        });
+
+        return {
+          ...course,
+          _count: {
+            ...course._count,
+            enrollments: enrollmentCount,
+          },
+        };
+      })
+    );
+
+    return coursesWithEnrollments;
   }
 
   /**

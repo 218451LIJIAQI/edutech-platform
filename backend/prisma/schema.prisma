@@ -23,7 +23,9 @@ enum UserRole {
 enum VerificationStatus {
   PENDING
   APPROVED
-  REJECTED
+  REJEC  LIVE // Online live sessions
+  RECORDED // Pre-recorded video courses
+  HYBRID // Mix of live and recorded
 }
 
 enum LessonType {
@@ -37,6 +39,14 @@ enum PaymentStatus {
   COMPLETED
   FAILED
   REFUNDED
+}
+
+enum OrderStatus {
+  PENDING
+  PAID
+  CANCELLED
+  REFUNDED
+  FAILED
 }
 
 enum ReportStatus {
@@ -61,6 +71,13 @@ enum LiveSessionStatus {
   CANCELLED
 }
 
+enum RefundStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  COMPLETED
+}
+
 // ================================
 // USER MANAGEMENT
 // ================================
@@ -78,14 +95,16 @@ model User {
   updatedAt DateTime @updatedAt @map("updated_at")
 
   // Relations
-  teacherProfile  TeacherProfile?
-  enrollments     Enrollment[]
-  reviewsGiven    Review[]         @relation("ReviewsGiven")
-  reviewsReceived Review[]         @relation("ReviewsReceived")
+  teacherProfile   TeacherProfile?
+  enrollments      Enrollment[]
+  reviewsGiven     Review[]        @relation("ReviewsGiven")
+  reviewsReceived  Review[]        @relation("ReviewsReceived")
   reportsSubmitted Report[]        @relation("ReportsSubmitted")
   reportsAgainst   Report[]        @relation("ReportsAgainst")
-  payments        Payment[]
-  notifications   Notification[]
+  payments         Payment[]
+  notifications    Notification[]
+  cartItems        CartItem[]
+  orders           Order[]
 
   @@map("users")
 }
@@ -95,56 +114,54 @@ model User {
 // ================================
 
 model TeacherProfile {
-  id          String  @id @default(uuid())
-  userId      String  @unique @map("user_id")
-  bio         String?
-  headline    String?
-  hourlyRate  Float?  @map("hourly_rate")
-  totalStudents Int   @default(0) @map("total_students")
-  averageRating Float @default(0) @map("average_rating")
-  totalEarnings Float @default(0) @map("total_earnings")
-  isVerified    Boolean @default(false) @map("is_verified")
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
+  id            String   @id @default(uuid())
+  userId        String   @unique @map("user_id")
+  bio           String?
+  headline      String?
+  hourlyRate    Float?   @map("hourly_rate")
+  totalStudents Int      @default(0) @map("total_students")
+  averageRating Float    @default(0) @map("average_rating")
+  totalEarnings Float    @default(0) @map("total_earnings")
+  isVerified    Boolean  @default(false) @map("is_verified")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
 
   // Relations
-  user          User                @relation(fields: [userId], references: [id], onDelete: Cascade)
-  verifications TeacherVerification[]
-  courses       Course[]
+  user           User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  verifications  TeacherVerification[]
+  courses        Course[]
   certifications Certification[]
 
   @@map("teacher_profiles")
 }
 
 model TeacherVerification {
-  id              String             @id @default(uuid())
-  teacherProfileId String            @map("teacher_profile_id")
-  documentType    String             @map("document_type") // e.g., "teaching_certificate", "degree", "id_card"
-  documentUrl     String             @map("document_url")
-  status          VerificationStatus @default(PENDING)
-  reviewedBy      String?            @map("reviewed_by")
-  reviewNotes     String?            @map("review_notes")
-  submittedAt     DateTime           @default(now()) @map("submitted_at")
-  reviewedAt      DateTime?          @map("reviewed_at")
+  id               String             @id @default(uuid())
+  teacherProfileId String             @map("teacher_profile_id")
+  documentType     String             @map("document_type")
+  documentUrl      String             @map("document_url")
+  status           VerificationStatus @default(PENDING)
+  reviewedBy       String?            @map("reviewed_by")
+  reviewNotes      String?            @map("review_notes")
+  submittedAt      DateTime           @default(now()) @map("submitted_at")
+  reviewedAt       DateTime?          @map("reviewed_at")
 
-  // Relations
   teacherProfile TeacherProfile @relation(fields: [teacherProfileId], references: [id], onDelete: Cascade)
 
   @@map("teacher_verifications")
 }
 
 model Certification {
-  id               String   @id @default(uuid())
-  teacherProfileId String   @map("teacher_profile_id")
+  id               String    @id @default(uuid())
+  teacherProfileId String    @map("teacher_profile_id")
   title            String
   issuer           String
-  issueDate        DateTime @map("issue_date")
+  issueDate        DateTime  @map("issue_date")
   expiryDate       DateTime? @map("expiry_date")
-  credentialId     String?  @map("credential_id")
-  credentialUrl    String?  @map("credential_url")
-  createdAt        DateTime @default(now()) @map("created_at")
+  credentialId     String?   @map("credential_id")
+  credentialUrl    String?   @map("credential_url")
+  createdAt        DateTime  @default(now()) @map("created_at")
 
-  // Relations
   teacherProfile TeacherProfile @relation(fields: [teacherProfileId], references: [id], onDelete: Cascade)
 
   @@map("certifications")
@@ -155,18 +172,18 @@ model Certification {
 // ================================
 
 model Course {
-  id               String   @id @default(uuid())
-  teacherProfileId String   @map("teacher_profile_id")
+  id               String     @id @default(uuid())
+  teacherProfileId String     @map("teacher_profile_id")
   title            String
   description      String
   category         String
+  courseType       CourseType @default(RECORDED) @map("course_type")
   thumbnail        String?
-  previewVideoUrl  String?  @map("preview_video_url")
-  isPublished      Boolean  @default(false) @map("is_published")
-  createdAt        DateTime @default(now()) @map("created_at")
-  updatedAt        DateTime @updatedAt @map("updated_at")
+  previewVideoUrl  String?    @map("preview_video_url")
+  isPublished      Boolean    @default(false) @map("is_published")
+  createdAt        DateTime   @default(now()) @map("created_at")
+  updatedAt        DateTime   @updatedAt @map("updated_at")
 
-  // Relations
   teacherProfile TeacherProfile  @relation(fields: [teacherProfileId], references: [id], onDelete: Cascade)
   lessons        Lesson[]
   packages       LessonPackage[]
@@ -181,14 +198,13 @@ model Lesson {
   title       String
   description String?
   type        LessonType
-  duration    Int?       // in minutes
+  duration    Int?
   videoUrl    String?    @map("video_url")
   orderIndex  Int        @map("order_index")
-  isFree      Boolean    @default(false) @map("is_free") // For preview lessons
+  isFree      Boolean    @default(false) @map("is_free")
   createdAt   DateTime   @default(now()) @map("created_at")
   updatedAt   DateTime   @updatedAt @map("updated_at")
 
-  // Relations
   course       Course        @relation(fields: [courseId], references: [id], onDelete: Cascade)
   liveSessions LiveSession[]
 
@@ -203,17 +219,18 @@ model LessonPackage {
   price       Float
   discount    Float?   @default(0)
   finalPrice  Float    @map("final_price")
-  duration    Int?     // validity in days
-  maxStudents Int?     @map("max_students") // for live sessions
-  features    Json?    // JSON array of features
+  duration    Int?
+  maxStudents Int?     @map("max_students")
+  features    Json?
   isActive    Boolean  @default(true) @map("is_active")
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
 
-  // Relations
   course      Course       @relation(fields: [courseId], references: [id], onDelete: Cascade)
   enrollments Enrollment[]
   payments    Payment[]
+  cartItems   CartItem[]
+  orderItems  OrderItem[]
 
   @@map("lesson_packages")
 }
@@ -223,42 +240,119 @@ model LessonPackage {
 // ================================
 
 model Enrollment {
-  id              String    @id @default(uuid())
-  userId          String    @map("user_id")
-  packageId       String    @map("package_id")
-  enrolledAt      DateTime  @default(now()) @map("enrolled_at")
-  expiresAt       DateTime? @map("expires_at")
-  progress        Int       @default(0) // percentage
-  completedLessons Int      @default(0) @map("completed_lessons")
-  isActive        Boolean   @default(true) @map("is_active")
+  id               String    @id @default(uuid())
+  userId           String    @map("user_id")
+  packageId        String    @map("package_id")
+  enrolledAt       DateTime  @default(now()) @map("enrolled_at")
+  expiresAt        DateTime? @map("expires_at")
+  progress         Int       @default(0)
+  completedLessons Int       @default(0) @map("completed_lessons")
+  isActive         Boolean   @default(true) @map("is_active")
 
-  // Relations
-  user    User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  /// ⬇⬇⬇ 只修改了这里：去掉 ?，因为 packageId 是必填
   package LessonPackage @relation(fields: [packageId], references: [id], onDelete: Cascade)
-  review  Review?
+  /// ⬆⬆⬆
+
+  review Review?
 
   @@unique([userId, packageId])
   @@map("enrollments")
 }
 
 model Payment {
-  id                String        @id @default(uuid())
-  userId            String        @map("user_id")
-  packageId         String        @map("package_id")
-  amount            Float
-  platformCommission Float        @map("platform_commission")
-  teacherEarning    Float         @map("teacher_earning")
-  currency          String        @default("USD")
-  stripePaymentId   String?       @unique @map("stripe_payment_id")
-  status            PaymentStatus @default(PENDING)
-  paidAt            DateTime?     @map("paid_at")
-  createdAt         DateTime      @default(now()) @map("created_at")
+  id                 String        @id @default(uuid())
+  userId             String        @map("user_id")
+  packageId          String?       @map("package_id")
+  orderId            String?       @unique @map("order_id")
+  amount             Float
+  platformCommission Float         @map("platform_commission")
+  teacherEarning     Float         @map("teacher_earning")
+  currency           String        @default("USD")
+  stripePaymentId    String?       @unique @map("stripe_payment_id")
+  status             PaymentStatus @default(PENDING)
+  paidAt             DateTime?     @map("paid_at")
+  createdAt          DateTime      @default(now()) @map("created_at")
 
-  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  /// ⬇⬇⬇ 只修改了这里：必须是可选（加 ?）
+  package LessonPackage? @relation(fields: [packageId], references: [id], onDelete: Cascade)
+  /// ⬆⬆⬆
+
+  order Order? @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@map("payments")
+}
+
+// ================================
+// CART & ORDERS
+// ================================
+
+model CartItem {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  packageId String   @map("package_id")
+  quantity  Int      @default(1)
+  addedAt   DateTime @default(now()) @map("added_at")
+
   user    User          @relation(fields: [userId], references: [id], onDelete: Cascade)
   package LessonPackage @relation(fields: [packageId], references: [id], onDelete: Cascade)
 
-  @@map("payments")
+  @@unique([userId, packageId])
+  @@map("cart_items")
+}
+
+model Order {
+  id           String      @id @default(uuid())
+  orderNo      String      @unique @map("order_no")
+  userId       String      @map("user_id")
+  status       OrderStatus @default(PENDING)
+  totalAmount  Float
+  currency     String      @default("USD")
+  createdAt    DateTime    @default(now()) @map("created_at")
+  paidAt       DateTime?   @map("paid_at")
+  canceledAt   DateTime?   @map("canceled_at")
+  cancelReason String?     @map("cancel_reason")
+  refundedAt   DateTime?   @map("refunded_at")
+  refundAmount Float?      @map("refund_amount")
+  refundReason String?     @map("refund_reason")
+
+  user    User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  items   OrderItem[]
+  payment Payment?
+  refunds Refund[]
+
+  @@map("orders")
+}
+
+model OrderItem {
+  id         String @id @default(uuid())
+  orderId    String @map("order_id")
+  packageId  String @map("package_id")
+  price      Float
+  discount   Float? @default(0)
+  finalPrice Float  @map("final_price")
+
+  order   Order         @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  package LessonPackage @relation(fields: [packageId], references: [id], onDelete: Cascade)
+
+  @@map("order_items")
+}
+
+model Refund {
+  id          String       @id @default(uuid())
+  orderId     String       @map("order_id")
+  amount      Float
+  reason      String?
+  status      RefundStatus @default(PENDING)
+  createdAt   DateTime     @default(now()) @map("created_at")
+  processedAt DateTime?    @map("processed_at")
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@map("refunds")
 }
 
 // ================================
@@ -268,15 +362,14 @@ model Payment {
 model Review {
   id           String   @id @default(uuid())
   enrollmentId String   @unique @map("enrollment_id")
-  reviewerId   String   @map("reviewer_id") // student
+  reviewerId   String   @map("reviewer_id")
   teacherId    String   @map("teacher_id")
-  rating       Int      // 1-5
+  rating       Int
   comment      String?
   isPublished  Boolean  @default(true) @map("is_published")
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @updatedAt @map("updated_at")
 
-  // Relations
   enrollment Enrollment @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
   reviewer   User       @relation("ReviewsGiven", fields: [reviewerId], references: [id], onDelete: Cascade)
   teacher    User       @relation("ReviewsReceived", fields: [teacherId], references: [id], onDelete: Cascade)
@@ -291,7 +384,7 @@ model Review {
 model Report {
   id          String       @id @default(uuid())
   reporterId  String       @map("reporter_id")
-  reportedId  String       @map("reported_id") // teacher being reported
+  reportedId  String       @map("reported_id")
   type        ReportType
   description String
   status      ReportStatus @default(OPEN)
@@ -299,7 +392,6 @@ model Report {
   createdAt   DateTime     @default(now()) @map("created_at")
   resolvedAt  DateTime?    @map("resolved_at")
 
-  // Relations
   reporter User @relation("ReportsSubmitted", fields: [reporterId], references: [id], onDelete: Cascade)
   reported User @relation("ReportsAgainst", fields: [reportedId], references: [id], onDelete: Cascade)
 
@@ -307,21 +399,20 @@ model Report {
 }
 
 // ================================
-// MATERIALS & RESOURCES
+// MATERIALS
 // ================================
 
 model Material {
-  id          String   @id @default(uuid())
-  courseId    String   @map("course_id")
-  title       String
-  description String?
-  fileUrl     String   @map("file_url")
-  fileType    String   @map("file_type") // pdf, doc, video, etc.
-  fileSize    Int      @map("file_size") // in bytes
-  isDownloadable Boolean @default(true) @map("is_downloadable")
-  uploadedAt  DateTime @default(now()) @map("uploaded_at")
+  id             String   @id @default(uuid())
+  courseId       String   @map("course_id")
+  title          String
+  description    String?
+  fileUrl        String   @map("file_url")
+  fileType       String   @map("file_type")
+  fileSize       Int      @map("file_size")
+  isDownloadable Boolean  @default(true) @map("is_downloadable")
+  uploadedAt     DateTime @default(now()) @map("uploaded_at")
 
-  // Relations
   course Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
 
   @@map("materials")
@@ -332,43 +423,48 @@ model Material {
 // ================================
 
 model LiveSession {
-  id          String            @id @default(uuid())
-  lessonId    String            @map("lesson_id")
-  title       String
-  description String?
-  scheduledAt DateTime          @map("scheduled_at")
-  startedAt   DateTime?         @map("started_at")
+  id              String            @id @default(uuid())
+  lessonId        String            @map("lesson_id")
+  title           String
+  description     String?
+  scheduledAt     DateTime          @map("scheduled_at")
+  startedAt       DateTime?         @map("started_at")
+  endedAt         DateTime?         @map("ended_at")
+  duration        Int?
+  meetingUrl      String?           @map("meeting_url")
+  roomId          String?           @unique @map("room_id")
+  maxParticipants Int?              @map("max_participants")
+  status          LiveSessionStatus @default(SCHEDULED)
+  recordingUrl    String?           @map("recording_url")
+  createdAt       DateTime          @default(now()) @map("created_at")
+         @map("started_at")
   endedAt     DateTime?         @map("ended_at")
-  duration    Int?              // in minutes
-  meetingUrl  String?           @map("meeting_url") // external meeting link
-  roomId      String?           @unique @map("room_id") // internal room identifier
+  duration    Int?
+  meetingUrl  String?           @map("meeting_url")
+  roomId      String?           @unique @map("room_id")
   maxParticipants Int?          @map("max_participants")
   status      LiveSessionStatus @default(SCHEDULED)
   recordingUrl String?          @map("recording_url")
   createdAt   DateTime          @default(now()) @map("created_at")
 
-  // Relations
   lesson Lesson @relation(fields: [lessonId], references: [id], onDelete: Cascade)
 
   @@map("live_sessions")
 }
 
 // ================================
-// NOTIFICATIONS
-// ================================
+// NOTIFICATIONS// ================================
 
 model Notification {
   id        String   @id @default(uuid())
   userId    String   @map("user_id")
   title     String
   message   String
-  type      String   // e.g., "enrollment", "payment", "review", "report"
+  type      String
   isRead    Boolean  @default(false) @map("is_read")
   createdAt DateTime @default(now()) @map("created_at")
 
-  // Relations
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("notifications")
 }
-

@@ -25,17 +25,41 @@ export const createCourseValidation = [
     .notEmpty()
     .withMessage('Course category is required'),
 
+  body('courseType')
+    .optional()
+    .trim()
+    .isIn(['LIVE', 'RECORDED', 'HYBRID'])
+    .withMessage('Course type must be LIVE, RECORDED, or HYBRID'),
+
   body('thumbnail')
     .optional()
     .trim()
-    .isURL()
-    .withMessage('Thumbnail must be a valid URL'),
+    .custom((value) => {
+      if (!value) return true;
+      // Allow both full URLs and relative paths
+      const isUrl = /^https?:\/\/.+/.test(value);
+      const isRelativePath = value.startsWith('/');
+      if (!isUrl && !isRelativePath) {
+        throw new Error('Thumbnail must be a valid URL or path');
+      }
+      return true;
+    })
+    .withMessage('Thumbnail must be a valid URL or file path'),
 
   body('previewVideoUrl')
     .optional()
     .trim()
-    .isURL()
-    .withMessage('Preview video URL must be a valid URL'),
+    .custom((value) => {
+      if (!value) return true;
+      // Allow both full URLs and relative paths
+      const isUrl = /^https?:\/\/.+/.test(value);
+      const isRelativePath = value.startsWith('/');
+      if (!isUrl && !isRelativePath) {
+        throw new Error('Preview video URL must be a valid URL or path');
+      }
+      return true;
+    })
+    .withMessage('Preview video URL must be a valid URL or file path'),
 ];
 
 export const updateCourseValidation = [
@@ -53,17 +77,41 @@ export const updateCourseValidation = [
 
   body('category').optional().trim().notEmpty().withMessage('Category cannot be empty'),
 
+  body('courseType')
+    .optional()
+    .trim()
+    .isIn(['LIVE', 'RECORDED', 'HYBRID'])
+    .withMessage('Course type must be LIVE, RECORDED, or HYBRID'),
+
   body('thumbnail')
     .optional()
     .trim()
-    .isURL()
-    .withMessage('Thumbnail must be a valid URL'),
+    .custom((value) => {
+      if (!value) return true;
+      // Allow both full URLs and relative paths
+      const isUrl = /^https?:\/\/.+/.test(value);
+      const isRelativePath = value.startsWith('/');
+      if (!isUrl && !isRelativePath) {
+        throw new Error('Thumbnail must be a valid URL or path');
+      }
+      return true;
+    })
+    .withMessage('Thumbnail must be a valid URL or file path'),
 
   body('previewVideoUrl')
     .optional()
     .trim()
-    .isURL()
-    .withMessage('Preview video URL must be a valid URL'),
+    .custom((value) => {
+      if (!value) return true;
+      // Allow both full URLs and relative paths
+      const isUrl = /^https?:\/\/.+/.test(value);
+      const isRelativePath = value.startsWith('/');
+      if (!isUrl && !isRelativePath) {
+        throw new Error('Preview video URL must be a valid URL or path');
+      }
+      return true;
+    })
+    .withMessage('Preview video URL must be a valid URL or file path'),
 
   body('isPublished')
     .optional()
@@ -99,8 +147,16 @@ export const createLessonValidation = [
   body('videoUrl')
     .optional()
     .trim()
-    .isURL()
-    .withMessage('Video URL must be a valid URL'),
+    .custom((value) => {
+      if (!value) return true;
+      const isUrl = /^https?:\/\/.+/.test(value);
+      const isRelativePath = value.startsWith('/');
+      if (!isUrl && !isRelativePath) {
+        throw new Error('Video URL must be a valid URL or path');
+      }
+      return true;
+    })
+    .withMessage('Video URL must be a valid URL or file path'),
 
   body('isFree')
     .optional()
@@ -241,8 +297,16 @@ export const uploadMaterialValidation = [
     .trim()
     .notEmpty()
     .withMessage('File URL is required')
-    .isURL()
-    .withMessage('File URL must be a valid URL'),
+    .custom((value) => {
+      if (!value) return true;
+      const isUrl = /^https?:\/\/.+/.test(value);
+      const isRelativePath = value.startsWith('/');
+      if (!isUrl && !isRelativePath) {
+        throw new Error('File URL must be a valid URL or path');
+      }
+      return true;
+    })
+    .withMessage('File URL must be a valid URL or file path'),
 
   body('fileType')
     .trim()
@@ -252,8 +316,52 @@ export const uploadMaterialValidation = [
   body('fileSize')
     .notEmpty()
     .withMessage('File size is required')
-    .isInt({ min: 1 })
-    .withMessage('File size must be a positive integer'),
+    .isInt({ min: 0 })
+    .withMessage('File size must be a non-negative integer'),
+
+  body('isDownloadable')
+    .optional()
+    .isBoolean()
+    .withMessage('isDownloadable must be a boolean'),
+];
+
+export const updateMaterialValidation = [
+  body('title')
+    .optional()
+    .trim()
+    .isLength({ max: 200 })
+    .withMessage('Title must not exceed 200 characters'),
+
+  body('description')
+    .optional()
+    .trim()
+    .isLength({ max: 500 })
+    .withMessage('Description must not exceed 500 characters'),
+
+  body('fileUrl')
+    .optional()
+    .trim()
+    .custom((value) => {
+      if (!value) return true;
+      const isUrl = /^https?:\/\/.+/.test(value);
+      const isRelativePath = value.startsWith('/');
+      if (!isUrl && !isRelativePath) {
+        throw new Error('File URL must be a valid URL or path');
+      }
+      return true;
+    })
+    .withMessage('File URL must be a valid URL or file path'),
+
+  body('fileType')
+    .optional()
+    .trim()
+    .notEmpty()
+    .withMessage('File type cannot be empty'),
+
+  body('fileSize')
+    .optional()
+    .isInt({ min: 0 })
+    .withMessage('File size must be a non-negative integer'),
 
   body('isDownloadable')
     .optional()

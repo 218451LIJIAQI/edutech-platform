@@ -14,10 +14,10 @@ interface PackageModalProps {
 interface PackageFormData {
   name: string;
   description: string;
-  price: number;
-  discount: number;
-  duration: number;
-  maxStudents: number;
+  price: number | string;
+  discount: number | string;
+  duration: number | string;
+  maxStudents: number | string;
 }
 
 const PackageModal: React.FC<PackageModalProps> = ({
@@ -68,8 +68,18 @@ const PackageModal: React.FC<PackageModalProps> = ({
 
     setIsSubmitting(true);
     try {
+      // Convert string values to numbers
+      const price = typeof data.price === 'string' ? parseFloat(data.price) : data.price;
+      const discount = typeof data.discount === 'string' ? parseFloat(data.discount) : data.discount;
+      const duration = typeof data.duration === 'string' ? parseInt(data.duration, 10) : data.duration;
+      const maxStudents = typeof data.maxStudents === 'string' ? parseInt(data.maxStudents, 10) : data.maxStudents;
+
       const packageData = {
         ...data,
+        price,
+        discount,
+        duration,
+        maxStudents,
         features,
       };
 
@@ -83,9 +93,10 @@ const PackageModal: React.FC<PackageModalProps> = ({
 
       onSuccess();
       onClose();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to save package:', error);
-      toast.error('Failed to save package');
+      const errorMessage = error.response?.data?.message || 'Failed to save package';
+      toast.error(errorMessage);
     } finally {
       setIsSubmitting(false);
     }

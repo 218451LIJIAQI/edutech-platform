@@ -1,32 +1,98 @@
 import { Link } from 'react-router-dom';
-import { BookOpen, Users, Award, TrendingUp } from 'lucide-react';
+import { BookOpen, Users, Award, TrendingUp, ArrowRight } from 'lucide-react';
+import { useAuthStore } from '@/store/authStore';
+import { UserRole } from '@/types';
 
 /**
  * Home Page Component
  * Landing page of the application
  */
 const HomePage = () => {
+  const { user, isAuthenticated } = useAuthStore();
+
+  const getDashboardLink = () => {
+    if (!user) return '/';
+    switch (user.role) {
+      case UserRole.STUDENT:
+        return '/student';
+      case UserRole.TEACHER:
+        return '/teacher';
+      case UserRole.ADMIN:
+        return '/admin';
+      default:
+        return '/';
+    }
+  };
+
+  const getDashboardLabel = () => {
+    if (!user) return 'Dashboard';
+    switch (user.role) {
+      case UserRole.STUDENT:
+        return 'My Learning Dashboard';
+      case UserRole.TEACHER:
+        return 'Teaching Dashboard';
+      case UserRole.ADMIN:
+        return 'Admin Dashboard';
+      default:
+        return 'Dashboard';
+    }
+  };
+
   return (
     <div>
       {/* Hero Section */}
       <section className="bg-gradient-to-r from-primary-600 to-primary-800 text-white py-20">
         <div className="container mx-auto px-4">
           <div className="max-w-3xl">
-            <h1 className="text-5xl font-bold mb-6">
-              Learn Anywhere, Anytime with Expert Teachers
-            </h1>
-            <p className="text-xl mb-8 text-primary-100">
-              Connect with certified teachers for live and recorded lessons. Get personalized
-              education tailored to your needs.
-            </p>
-            <div className="flex flex-wrap gap-4">
-              <Link to="/courses" className="btn bg-white text-primary-600 hover:bg-gray-100 btn-lg">
-                Browse Courses
-              </Link>
-              <Link to="/register" className="btn btn-outline border-white text-white hover:bg-white hover:text-primary-600 btn-lg">
-                Become a Teacher
-              </Link>
-            </div>
+            {isAuthenticated ? (
+              <>
+                <h1 className="text-5xl font-bold mb-6">
+                  Welcome back, {user?.firstName}!
+                </h1>
+                <p className="text-xl mb-8 text-primary-100">
+                  {user?.role === UserRole.STUDENT && "Continue your learning journey with our expert teachers."}
+                  {user?.role === UserRole.TEACHER && "Manage your courses and connect with your students."}
+                  {user?.role === UserRole.ADMIN && "Oversee the platform and manage users and courses."}
+                </p>
+                <div className="flex flex-wrap gap-4">
+                  <Link 
+                    to={getDashboardLink()} 
+                    className="btn bg-white text-primary-600 hover:bg-gray-100 btn-lg inline-flex items-center gap-2"
+                  >
+                    Go to {getDashboardLabel()}
+                    <ArrowRight className="w-5 h-5" />
+                  </Link>
+                  {user?.role === UserRole.STUDENT && (
+                    <Link to="/courses" className="btn btn-outline border-white text-white hover:bg-white hover:text-primary-600 btn-lg">
+                      Browse Courses
+                    </Link>
+                  )}
+                  {user?.role === UserRole.TEACHER && (
+                    <Link to="/teacher/courses/new" className="btn btn-outline border-white text-white hover:bg-white hover:text-primary-600 btn-lg">
+                      Create New Course
+                    </Link>
+                  )}
+                </div>
+              </>
+            ) : (
+              <>
+                <h1 className="text-5xl font-bold mb-6">
+                  Learn Anywhere, Anytime with Expert Teachers
+                </h1>
+                <p className="text-xl mb-8 text-primary-100">
+                  Connect with certified teachers for live and recorded lessons. Get personalized
+                  education tailored to your needs.
+                </p>
+                <div className="flex flex-wrap gap-4">
+                  <Link to="/courses" className="btn bg-white text-primary-600 hover:bg-gray-100 btn-lg">
+                    Browse Courses
+                  </Link>
+                  <Link to="/register" className="btn btn-outline border-white text-white hover:bg-white hover:text-primary-600 btn-lg">
+                    Become a Teacher
+                  </Link>
+                </div>
+              </>
+            )}
           </div>
         </div>
       </section>

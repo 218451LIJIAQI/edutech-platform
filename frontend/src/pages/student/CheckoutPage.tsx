@@ -15,9 +15,10 @@ import toast from 'react-hot-toast';
 import { formatCurrency } from '@/utils/helpers';
 
 // Initialize Stripe
-const stripePublicKey =
-  (import.meta as any).env?.VITE_STRIPE_PUBLIC_KEY || 'pk_test_placeholder';
+const { VITE_STRIPE_PUBLISHABLE_KEY, VITE_STRIPE_PUBLIC_KEY, VITE_ENABLE_PAYMENT_MOCK } = (import.meta as any).env || {};
+const stripePublicKey = VITE_STRIPE_PUBLISHABLE_KEY || VITE_STRIPE_PUBLIC_KEY || 'pk_test_placeholder';
 const stripePromise = loadStripe(stripePublicKey);
+const enableMockPayment = (String(VITE_ENABLE_PAYMENT_MOCK).toLowerCase() === 'true');
 
 /**
  * Checkout Form Component - Handles the actual payment
@@ -38,11 +39,6 @@ const CheckoutForm = ({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!stripe || !elements) {
-      toast.error('Stripe has not loaded yet. Please try again.');
-      return;
-    }
-
     if (!cardName.trim()) {
       toast.error('Please enter cardholder name');
       return;
@@ -53,51 +49,67 @@ const CheckoutForm = ({
       return;
     }
 
-    const cardElement = elements.getElement(CardElement);
-    if (!cardElement) {
-      toast.error('Card information is missing');
-      return;
-    }
-
     setIsProcessing(true);
 
     try {
-      // Step 1: Create payment intent on backend
       const loadingToast = toast.loading('Preparing payment...');
-      const paymentIntent = await paymentService.createPaymentIntent(
-        selectedPackage.id
-      );
+      const paymentIntent = await paymentService.createPaymentIntent(selectedPackage.id);
 
-      if (!paymentIntent.clientSecret) {
+      if (enableMockPayment || !paymentIntent.clientSecret) {
+        // Simulate processing animation and success
+        toast.loading('Processing payment...', { id: loadingToast });
+        await new Promise((r) => setTimeout(r, 1200));
+        // Confirm payment on backend without Stripe payment id
+        await paymentService.confirmPayment(paymentIntent.payment.id);
         toast.dismiss(loadingToast);
-        throw new Error('Failed to initialize payment');
+        toast.success('Payment successful!');
+        onSuccess();
+        return;
       }
 
-      // Step 2: Confirm payment with Stripe
+      // Real Stripe flow
+      if (!paymentIntent.clientSecret) {
+        toast.dismiss(loadingToast);
+        toast.error('Payment system is not properly configured. Please contact support.');
+        setIsProcessing(false);
+        return;
+      }
+
+      if (!stripe || !elements) {
+        toast.dismiss(loadingToast);
+        toast.error('Payment system is not available. Please refresh the page and try again.');
+        setIsProcessing(false);
+        return;
+      }
+
+      const cardElement = elements.getElement(CardElement);
+      if (!cardElement) {
+        toast.dismiss(loadingToast);
+        toast.error('Card information is missing');
+        setIsProcessing(false);
+        return;
+      }
+
       toast.loading('Processing payment...', { id: loadingToast });
-      const { error, paymentIntent: confirmedPayment } =
-        await stripe.confirmCardPayment(paymentIntent.clientSecret, {
+      const { error, paymentIntent: confirmedPayment } = await stripe.confirmCardPayment(
+        paymentIntent.clientSecret,
+        {
           payment_method: {
             card: cardElement,
-            billing_details: {
-              name: cardName,
-            },
+            billing_details: { name: cardName },
           },
-        });
+        }
+      );
 
       if (error) {
-        throw new Error(error.message);
+        throw new Error(error.message || 'Card payment failed');
       }
 
       if (!confirmedPayment || confirmedPayment.status !== 'succeeded') {
-        throw new Error('Payment was not successful');
+        throw new Error('Payment was not successful. Please try again.');
       }
 
-      // Step 3: Confirm payment on backend
-      await paymentService.confirmPayment(
-        paymentIntent.payment.id,
-        confirmedPayment.id
-      );
+      await paymentService.confirmPayment(paymentIntent.payment.id, confirmedPayment.id);
 
       toast.dismiss(loadingToast);
       toast.success('Payment successful!');
@@ -127,33 +139,39 @@ const CheckoutForm = ({
         />
       </div>
 
-      {/* Card Element */}
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-2">
-          Card Information *
-        </label>
-        <div className="border border-gray-300 rounded-lg p-3 bg-white">
-          <CardElement
-            options={{
-              style: {
-                base: {
-                  fontSize: '16px',
-                  color: '#424770',
-                  '::placeholder': {
-                    color: '#aab7c4',
+      {/* Card Element (hidden in mock mode) */}
+      {enableMockPayment ? (
+        <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 text-sm text-gray-700">
+          Mock payment is enabled. No card details required.
+        </div>
+      ) : (
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Card Information *
+          </label>
+          <div className="border border-gray-300 rounded-lg p-3 bg-white">
+            <CardElement
+              options={{
+                style: {
+                  base: {
+                    fontSize: '16px',
+                    color: '#424770',
+                    '::placeholder': {
+                      color: '#aab7c4',
+                    },
+                  },
+                  invalid: {
+                    color: '#9e2146',
                   },
                 },
-                invalid: {
-                  color: '#9e2146',
-                },
-              },
-            }}
-          />
+              }}
+            />
+          </div>
+          <p className="text-xs text-gray-500 mt-1">
+            Card information is securely processed by Stripe
+          </p>
         </div>
-        <p className="text-xs text-gray-500 mt-1">
-          Card information is securely processed by Stripe
-        </p>
-      </div>
+      )}
 
       {/* Terms */}
       <div className="flex items-start">
@@ -194,7 +212,7 @@ const CheckoutForm = ({
       {/* Submit Button */}
       <button
         type="submit"
-        disabled={!stripe || isProcessing}
+        disabled={(!enableMockPayment && !stripe) || isProcessing}
         className="btn-primary w-full text-lg py-4 disabled:opacity-50 disabled:cursor-not-allowed"
       >
         {isProcessing ? (
@@ -289,12 +307,14 @@ const CheckoutPage = () => {
           </p>
           <div className="space-y-2">
             <button
+              type="button"
               onClick={() => navigate(`/courses/${courseId}/learn`)}
               className="btn-primary w-full"
             >
               Start Learning
             </button>
             <button
+              type="button"
               onClick={() => navigate('/student/courses')}
               className="btn-outline w-full"
             >

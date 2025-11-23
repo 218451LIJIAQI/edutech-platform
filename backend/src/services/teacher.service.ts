@@ -391,44 +391,22 @@ class TeacherService {
   async getTeacherStats(userId: string) {
     const teacherProfile = await prisma.teacherProfile.findUnique({
       where: { userId },
-      include: {
-        courses: {
-          include: {
-            packages: {
-              include: {
-                enrollments: true,
-                payments: {
-                  where: { status: 'COMPLETED' },
-                },
-              },
-            },
-          },
-        },
-      },
     });
 
     if (!teacherProfile) {
       throw new NotFoundError('Teacher profile not found');
     }
 
-    // Calculate statistics
-    let totalEnrollments = 0;
-    let totalRevenue = 0;
-    let totalCourses = teacherProfile.courses.length;
-
-    teacherProfile.courses.forEach((course) => {
-      course.packages.forEach((pkg) => {
-        totalEnrollments += pkg.enrollments.length;
-        pkg.payments.forEach((payment) => {
-          totalRevenue += payment.teacherEarning;
-        });
-      });
-    });
+    // Compute counts efficiently via aggregate queries
+    const [totalCourses, totalEnrollments] = await Promise.all([
+      prisma.course.count({ where: { teacherProfileId: teacherProfile.id } }),
+      prisma.enrollment.count({ where: { package: { course: { teacherProfileId: teacherProfile.id } } } }),
+    ]);
 
     return {
       totalCourses,
       totalEnrollments,
-      totalRevenue,
+      totalRevenue: teacherProfile.totalEarnings,
       averageRating: teacherProfile.averageRating,
       totalStudents: teacherProfile.totalStudents,
       isVerified: teacherProfile.isVerified,
