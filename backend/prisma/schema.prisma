@@ -23,9 +23,13 @@ enum UserRole {
 enum VerificationStatus {
   PENDING
   APPROVED
-  REJEC  LIVE // Online live sessions
-  RECORDED // Pre-recorded video courses
-  HYBRID // Mix of live and recorded
+  REJECTED
+}
+
+enum CourseType {
+  LIVE       // Online live sessions
+  RECORDED   // Pre-recorded video courses
+  HYBRID     // Mix of live and recorded
 }
 
 enum LessonType {
@@ -249,11 +253,8 @@ model Enrollment {
   completedLessons Int       @default(0) @map("completed_lessons")
   isActive         Boolean   @default(true) @map("is_active")
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  /// ⬇⬇⬇ 只修改了这里：去掉 ?，因为 packageId 是必填
+  user    User          @relation(fields: [userId], references: [id], onDelete: Cascade)
   package LessonPackage @relation(fields: [packageId], references: [id], onDelete: Cascade)
-  /// ⬆⬆⬆
 
   review Review?
 
@@ -275,13 +276,9 @@ model Payment {
   paidAt             DateTime?     @map("paid_at")
   createdAt          DateTime      @default(now()) @map("created_at")
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  /// ⬇⬇⬇ 只修改了这里：必须是可选（加 ?）
-  package LessonPackage? @relation(fields: [packageId], references: [id], onDelete: Cascade)
-  /// ⬆⬆⬆
-
-  order Order? @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  user    User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  package LessonPackage?  @relation(fields: [packageId], references: [id], onDelete: Cascade)
+  order   Order?          @relation(fields: [orderId], references: [id], onDelete: Cascade)
 
   @@map("payments")
 }
@@ -437,15 +434,6 @@ model LiveSession {
   status          LiveSessionStatus @default(SCHEDULED)
   recordingUrl    String?           @map("recording_url")
   createdAt       DateTime          @default(now()) @map("created_at")
-         @map("started_at")
-  endedAt     DateTime?         @map("ended_at")
-  duration    Int?
-  meetingUrl  String?           @map("meeting_url")
-  roomId      String?           @unique @map("room_id")
-  maxParticipants Int?          @map("max_participants")
-  status      LiveSessionStatus @default(SCHEDULED)
-  recordingUrl String?          @map("recording_url")
-  createdAt   DateTime          @default(now()) @map("created_at")
 
   lesson Lesson @relation(fields: [lessonId], references: [id], onDelete: Cascade)
 
@@ -453,7 +441,8 @@ model LiveSession {
 }
 
 // ================================
-// NOTIFICATIONS// ================================
+// NOTIFICATIONS
+// ================================
 
 model Notification {
   id        String   @id @default(uuid())

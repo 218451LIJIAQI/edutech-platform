@@ -141,8 +141,12 @@ const AdminDashboard = () => {
         return `${activity.data.user.firstName} enrolled in "${activity.data.package.course.title}"`;
       case 'report_submitted':
         return `New ${activity.data.type.replace('_', ' ').toLowerCase()} report submitted`;
-      case 'payment_completed':
-        return `${activity.data.user.firstName} purchased "${activity.data.package.course.title}" for ${formatCurrency(activity.data.amount)}`;
+      case 'payment_completed': {
+        const buyer = [activity?.data?.user?.firstName, activity?.data?.user?.lastName].filter(Boolean).join(' ') || 'Someone';
+        const courseTitle = activity?.data?.package?.course?.title || 'a course';
+        const amount = typeof activity?.data?.amount === 'number' ? formatCurrency(activity.data.amount) : '';
+        return `${buyer} purchased "${courseTitle}"${amount ? ` for ${amount}` : ''}`;
+      }
       default:
         return 'Activity recorded';
     }
