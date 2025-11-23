@@ -1,0 +1,22 @@
+---
+pid: 32484
+cwd: |
+  C:\Users\jkeuk\Desktop\edutech-platform\frontend
+active_command: npm run dev
+last_command: |
+  cd C:\Users\jkeuk\Desktop\edutech-platform\frontend
+last_exit_code: 0
+---
+PS C:\Users\jkeuk\Desktop\edutech-platform> cd C:\Users\jkeuk\Desktop\edutech-platform\frontend
+PS C:\Users\jkeuk\Desktop\edutech-platform\frontend> npm run dev
+
+> edutech-frontend@1.0.0 dev
+> vite
+
+
+  VITE v5.4.21  ready in 180 ms
+
+  ➜  Local:   http://localhost:5173/
+  ➜  Network: use --host to expose
+  ➜  press h + enter to show help
+
