@@ -39,6 +39,11 @@ import NotFoundPage from './pages/NotFoundPage';
 import HelpCenterPage from './pages/HelpCenterPage';
 import TermsOfServicePage from './pages/TermsOfServicePage';
 import PrivacyPolicyPage from './pages/PrivacyPolicyPage';
+// Community (Student)
+import CommunityHomePage from './pages/community/CommunityHomePage';
+import CreatePostPage from './pages/community/CreatePostPage';
+import PostDetailPage from './pages/community/PostDetailPage';
+import CommunityUserProfilePage from './pages/community/CommunityUserProfilePage';
 
 /**
  * Main App Component
@@ -61,7 +66,7 @@ function App() {
     };
 
     initAuth();
-  }, []);
+  }, [isAuthenticated, fetchProfile]);
 
   return (
     <Routes>
@@ -77,6 +82,40 @@ function App() {
         <Route path="/help" element={<HelpCenterPage />} />
         <Route path="/terms" element={<TermsOfServicePage />} />
         <Route path="/privacy" element={<PrivacyPolicyPage />} />
+
+        {/* Community - Student only */}
+        <Route
+          path="/community"
+          element={
+            <PrivateRoute allowedRoles={[UserRole.STUDENT]}>
+              <CommunityHomePage />
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path="/community/create"
+          element={
+            <PrivateRoute allowedRoles={[UserRole.STUDENT]}>
+              <CreatePostPage />
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path="/community/post/:id"
+          element={
+            <PrivateRoute allowedRoles={[UserRole.STUDENT]}>
+              <PostDetailPage />
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path="/community/user/:userId"
+          element={
+            <PrivateRoute allowedRoles={[UserRole.STUDENT]}>
+              <CommunityUserProfilePage />
+            </PrivateRoute>
+          }
+        />
 
         {/* Protected Student routes */}
         <Route

@@ -154,149 +154,149 @@ const UsersManagement = () => {
           </div>
         </div>
 
-      {/* Users Table */}
-      <div className="card overflow-hidden shadow-lg">
-        {isLoading ? (
-          <div className="flex items-center justify-center py-16">
-            <div className="flex flex-col items-center space-y-4">
-              <div className="spinner"></div>
-              <p className="text-gray-600 font-medium">Loading users...</p>
+        {/* Users Table */}
+        <div className="card overflow-hidden shadow-lg">
+          {isLoading ? (
+            <div className="flex items-center justify-center py-16">
+              <div className="flex flex-col items-center space-y-4">
+                <div className="spinner"></div>
+                <p className="text-gray-600 font-medium">Loading users...</p>
+              </div>
             </div>
-          </div>
-        ) : users.length === 0 ? (
-          <div className="text-center py-16">
-            <Users className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-            <h3 className="text-xl font-bold text-gray-900 mb-2">No users found</h3>
-            <p className="text-gray-600">Try adjusting your filters</p>
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-gradient-to-r from-gray-50 to-gray-100 border-b-2 border-gray-200">
-                <tr>
-                  <th className="px-6 py-4 text-left font-bold text-gray-900">
-                    User
-                  </th>
-                  <th className="px-6 py-4 text-left font-bold text-gray-900">
-                    Role
-                  </th>
-                  <th className="px-6 py-4 text-left font-bold text-gray-900">
-                    Status
-                  </th>
-                  <th className="px-6 py-4 text-left font-bold text-gray-900">
-                    Stats
-                  </th>
-                  <th className="px-6 py-4 text-left font-bold text-gray-900">
-                    Joined
-                  </th>
-                  <th className="px-6 py-4 text-right font-bold text-gray-900">
-                    Actions
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {users.map((user) => (
-                  <tr key={user.id} className="hover:bg-gradient-to-r hover:from-gray-50 hover:to-gray-100 transition-all">
-                    <td className="px-6 py-5 whitespace-nowrap">
-                      <div className="flex items-center space-x-4">
-                        <img
-                          src={user.avatar || `https://ui-avatars.com/api/?name=${user.firstName}+${user.lastName}`}
-                          alt={`${user.firstName} ${user.lastName}`}
-                          className="w-12 h-12 rounded-full shadow-md"
-                        />
-                        <div>
-                          <div className="text-sm font-bold text-gray-900">
-                            {user.firstName} {user.lastName}
-                          </div>
-                          <div className="text-sm text-gray-600">{user.email}</div>
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-6 py-5 whitespace-nowrap">
-                      <span className={`badge ${getRoleBadgeColor(user.role).replace('bg-', 'bg-gradient-to-r from-').replace('text-', 'text-')}`}>
-                        {user.role}
-                      </span>
-                    </td>
-                    <td className="px-6 py-5 whitespace-nowrap">
-                      <span className={`badge ${
-                        user.isActive ? 'badge-success' : 'badge-danger'
-                      }`}>
-                        {user.isActive ? 'Active' : 'Inactive'}
-                      </span>
-                    </td>
-                    <td className="px-6 py-5 whitespace-nowrap text-sm">
-                      {user.role === 'TEACHER' && user.teacherProfile ? (
-                        <div className="space-y-1">
-                          <div className="font-medium text-gray-700">{user.teacherProfile.totalStudents} students</div>
-                          <div className="text-primary-600 font-bold">⭐ {user.teacherProfile.averageRating.toFixed(1)}</div>
-                        </div>
-                      ) : user.role === 'STUDENT' ? (
-                        <div className="font-medium text-gray-700">
-                          {(user as User & { _count?: { enrollments?: number } })._count?.enrollments || 0} enrollments
-                        </div>
-                      ) : (
-                        <span className="text-gray-400">-</span>
-                      )}
-                    </td>
-                    <td className="px-6 py-5 whitespace-nowrap text-sm text-gray-600">
-                      {new Date(user.createdAt).toLocaleDateString()}
-                    </td>
-                    <td className="px-6 py-5 whitespace-nowrap text-right">
-                      <div className="flex items-center justify-end space-x-2">
-                        <button
-                          onClick={() => handleToggleStatus(user.id, user.isActive)}
-                          className={`p-3 rounded-xl transition-all ${
-                            user.isActive
-                              ? 'text-red-600 hover:bg-red-50'
-                              : 'text-green-600 hover:bg-green-50'
-                          }`}
-                          title={user.isActive ? 'Deactivate' : 'Activate'}
-                        >
-                          {user.isActive ? <XCircle className="w-5 h-5" /> : <CheckCircle className="w-5 h-5" />}
-                        </button>
-                        {user.role !== 'ADMIN' && (
-                          <button
-                            onClick={() => handleDeleteUser(user.id)}
-                            className="p-3 text-red-600 hover:bg-red-50 rounded-xl transition-all"
-                            title="Delete user"
-                          >
-                            <Trash2 className="w-5 h-5" />
-                          </button>
-                        )}
-                      </div>
-                    </td>
+          ) : users.length === 0 ? (
+            <div className="text-center py-16">
+              <Users className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+              <h3 className="text-xl font-bold text-gray-900 mb-2">No users found</h3>
+              <p className="text-gray-600">Try adjusting your filters</p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead className="bg-gradient-to-r from-gray-50 to-gray-100 border-b-2 border-gray-200">
+                  <tr>
+                    <th className="px-6 py-4 text-left font-bold text-gray-900">
+                      User
+                    </th>
+                    <th className="px-6 py-4 text-left font-bold text-gray-900">
+                      Role
+                    </th>
+                    <th className="px-6 py-4 text-left font-bold text-gray-900">
+                      Status
+                    </th>
+                    <th className="px-6 py-4 text-left font-bold text-gray-900">
+                      Stats
+                    </th>
+                    <th className="px-6 py-4 text-left font-bold text-gray-900">
+                      Joined
+                    </th>
+                    <th className="px-6 py-4 text-right font-bold text-gray-900">
+                      Actions
+                    </th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {users.map((user) => (
+                    <tr key={user.id} className="hover:bg-gradient-to-r hover:from-gray-50 hover:to-gray-100 transition-all">
+                      <td className="px-6 py-5 whitespace-nowrap">
+                        <div className="flex items-center space-x-4">
+                          <img
+                            src={user.avatar || `https://ui-avatars.com/api/?name=${user.firstName}+${user.lastName}`}
+                            alt={`${user.firstName} ${user.lastName}`}
+                            className="w-12 h-12 rounded-full shadow-md"
+                          />
+                          <div>
+                            <div className="text-sm font-bold text-gray-900">
+                              {user.firstName} {user.lastName}
+                            </div>
+                            <div className="text-sm text-gray-600">{user.email}</div>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-6 py-5 whitespace-nowrap">
+                        <span className={`badge ${getRoleBadgeColor(user.role).replace('bg-', 'bg-gradient-to-r from-').replace('text-', 'text-')}`}>
+                          {user.role}
+                        </span>
+                      </td>
+                      <td className="px-6 py-5 whitespace-nowrap">
+                        <span className={`badge ${
+                          user.isActive ? 'badge-success' : 'badge-danger'
+                        }`}>
+                          {user.isActive ? 'Active' : 'Inactive'}
+                        </span>
+                      </td>
+                      <td className="px-6 py-5 whitespace-nowrap text-sm">
+                        {user.role === 'TEACHER' && user.teacherProfile ? (
+                          <div className="space-y-1">
+                            <div className="font-medium text-gray-700">{user.teacherProfile.totalStudents} students</div>
+                            <div className="text-primary-600 font-bold">⭐ {user.teacherProfile.averageRating.toFixed(1)}</div>
+                          </div>
+                        ) : user.role === 'STUDENT' ? (
+                          <div className="font-medium text-gray-700">
+                            {(user as User & { _count?: { enrollments?: number } })._count?.enrollments || 0} enrollments
+                          </div>
+                        ) : (
+                          <span className="text-gray-400">-</span>
+                        )}
+                      </td>
+                      <td className="px-6 py-5 whitespace-nowrap text-sm text-gray-600">
+                        {new Date(user.createdAt).toLocaleDateString()}
+                      </td>
+                      <td className="px-6 py-5 whitespace-nowrap text-right">
+                        <div className="flex items-center justify-end space-x-2">
+                          <button
+                            onClick={() => handleToggleStatus(user.id, user.isActive)}
+                            className={`p-3 rounded-xl transition-all ${
+                              user.isActive
+                                ? 'text-red-600 hover:bg-red-50'
+                                : 'text-green-600 hover:bg-green-50'
+                            }`}
+                            title={user.isActive ? 'Deactivate' : 'Activate'}
+                          >
+                            {user.isActive ? <XCircle className="w-5 h-5" /> : <CheckCircle className="w-5 h-5" />}
+                          </button>
+                          {user.role !== 'ADMIN' && (
+                            <button
+                              onClick={() => handleDeleteUser(user.id)}
+                              className="p-3 text-red-600 hover:bg-red-50 rounded-xl transition-all"
+                              title="Delete user"
+                            >
+                              <Trash2 className="w-5 h-5" />
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
 
-        {/* Pagination */}
-        {pagination.totalPages && pagination.totalPages > 1 && (
-          <div className="px-6 py-4 border-t flex items-center justify-between">
-            <div className="text-sm text-gray-700">
-              Showing page {pagination.page || 1} of {pagination.totalPages}
+          {/* Pagination */}
+          {pagination.totalPages && pagination.totalPages > 1 && (
+            <div className="px-6 py-4 border-t flex items-center justify-between">
+              <div className="text-sm text-gray-700">
+                Showing page {pagination.page || 1} of {pagination.totalPages}
+              </div>
+              <div className="flex space-x-2">
+                <button
+                  disabled={!pagination.page || pagination.page === 1}
+                  onClick={() => setFilters({ ...filters, page: (pagination.page || 1) - 1 })}
+                  className="btn-outline btn-sm"
+                >
+                  Previous
+                </button>
+                <button
+                  disabled={!pagination.page || pagination.page === pagination.totalPages}
+                  onClick={() => setFilters({ ...filters, page: (pagination.page || 1) + 1 })}
+                  className="btn-primary btn-sm"
+                >
+                  Next
+                </button>
+              </div>
             </div>
-            <div className="flex space-x-2">
-              <button
-                disabled={!pagination.page || pagination.page === 1}
-                onClick={() => setFilters({ ...filters, page: (pagination.page || 1) - 1 })}
-                className="btn-outline btn-sm"
-              >
-                Previous
-              </button>
-              <button
-                disabled={!pagination.page || pagination.page === pagination.totalPages}
-                onClick={() => setFilters({ ...filters, page: (pagination.page || 1) + 1 })}
-                className="btn-primary btn-sm"
-              >
-                Next
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
+          )}
+        </div>
       </div>
     </div>
   );

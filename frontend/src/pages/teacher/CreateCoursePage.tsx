@@ -12,7 +12,7 @@ import {
   DollarSign,
   Edit,
   Download,
-  FileIcon,
+  File as FileIcon,
 } from 'lucide-react';
 import { Course, Lesson, LessonPackage, Material, CourseType } from '@/types';
 import courseService from '@/services/course.service';

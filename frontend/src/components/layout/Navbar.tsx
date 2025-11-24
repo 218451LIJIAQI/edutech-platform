@@ -58,6 +58,30 @@ const Navbar = () => {
               Teachers
               <span className="absolute bottom-0 left-0 w-0 h-0.5 bg-gradient-to-r from-primary-600 to-primary-800 group-hover:w-full transition-all duration-300"></span>
             </Link>
+            {isAuthenticated && user?.role === UserRole.STUDENT ? (
+              <Link
+                to="/community"
+                className="text-gray-700 hover:text-primary-600 font-medium transition-colors duration-300 relative group"
+              >
+                Community
+                <span className="absolute bottom-0 left-0 w-0 h-0.5 bg-gradient-to-r from-primary-600 to-primary-800 group-hover:w-full transition-all duration-300"></span>
+              </Link>
+            ) : (
+              <Link
+                to="/help"
+                className="text-gray-700 hover:text-primary-600 font-medium transition-colors duration-300 relative group"
+              >
+                Help
+                <span className="absolute bottom-0 left-0 w-0 h-0.5 bg-gradient-to-r from-primary-600 to-primary-800 group-hover:w-full transition-all duration-300"></span>
+              </Link>
+            )}
+            <Link
+              to="/privacy"
+              className="text-gray-700 hover:text-primary-600 font-medium transition-colors duration-300 relative group"
+            >
+              Privacy
+              <span className="absolute bottom-0 left-0 w-0 h-0.5 bg-gradient-to-r from-primary-600 to-primary-800 group-hover:w-full transition-all duration-300"></span>
+            </Link>
           </div>
 
           {/* Auth Section */}

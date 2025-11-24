@@ -61,7 +61,7 @@ const HomePage = () => {
                 <div className="flex flex-wrap gap-4">
                   <Link 
                     to={getDashboardLink()} 
-                    className="btn-primary btn-lg inline-flex items-center gap-2 shadow-lg hover:shadow-xl"
+                    className="btn border-2 border-white/80 bg-white/10 backdrop-blur-sm text-white hover:bg-white hover:text-primary-600 hover:border-white btn-lg shadow-lg hover:shadow-xl transition-all duration-300 inline-flex items-center gap-2"
                   >
                     Go to {getDashboardLabel()}
                     <ArrowRight className="w-5 h-5" />
@@ -88,7 +88,7 @@ const HomePage = () => {
                   education tailored to your needs and goals.
                 </p>
                 <div className="flex flex-wrap gap-4">
-                  <Link to="/courses" className="btn-primary btn-lg shadow-lg hover:shadow-xl">
+                  <Link to="/courses" className="btn border-2 border-white/80 bg-white/10 backdrop-blur-sm text-white hover:bg-white hover:text-primary-600 hover:border-white btn-lg shadow-lg hover:shadow-xl transition-all duration-300">
                     Browse Courses
                   </Link>
                   <Link to="/register" className="btn border-2 border-white/80 bg-white/10 backdrop-blur-sm text-white hover:bg-white hover:text-primary-600 hover:border-white btn-lg shadow-lg hover:shadow-xl transition-all duration-300">

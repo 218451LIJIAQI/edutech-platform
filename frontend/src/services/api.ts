@@ -51,13 +51,13 @@ api.interceptors.response.use(
           const responseData = response.data as { data?: { accessToken?: string } };
           const accessToken = responseData.data?.accessToken;
           if (accessToken) {
-          localStorage.setItem('accessToken', accessToken);
+            localStorage.setItem('accessToken', accessToken);
           }
 
           // Retry original request
           if (accessToken && originalRequest.headers) {
-          originalRequest.headers.Authorization = `Bearer ${accessToken}`;
-          return api(originalRequest);
+            originalRequest.headers.Authorization = `Bearer ${accessToken}`;
+            return api(originalRequest);
           }
         }
       } catch (refreshError) {
@@ -74,6 +74,10 @@ api.interceptors.response.use(
     const status = error.response?.status;
     const errorData = error.response?.data as { message?: string } | undefined;
     let errorMessage = errorData?.message || 'An error occurred. Please try again.';
+
+    // Determine if we should suppress 404 toast for Community when fallback is enabled
+    const reqUrl = (error.config as any)?.url || '';
+    const suppressCommunity404 = typeof reqUrl === 'string' && reqUrl.includes('/community/');
     
     // Customize error messages based on status code
     if (status === 429) {
@@ -84,7 +88,9 @@ api.interceptors.response.use(
       toast.error(errorMessage);
     } else if (status === 404) {
       errorMessage = 'The requested resource was not found.';
-      toast.error(errorMessage);
+      if (!suppressCommunity404) {
+        toast.error(errorMessage);
+      }
     } else if (status === 500) {
       errorMessage = 'Server error. Please try again later.';
       toast.error(errorMessage);

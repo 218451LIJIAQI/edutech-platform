@@ -9,6 +9,12 @@ import {
   Download,
   ChevronRight,
   Star,
+  MessageSquare,
+  Smile,
+  Hand,
+  Mic,
+  MicOff,
+  Send,
 } from 'lucide-react';
 import { Course, Lesson, Enrollment } from '@/types';
 import courseService from '@/services/course.service';
@@ -29,6 +35,50 @@ const CourseLearningPage = () => {
   const [completedLessons, setCompletedLessons] = useState<Set<string>>(new Set());
   const [isLoading, setIsLoading] = useState(true);
   const [showReviewModal, setShowReviewModal] = useState(false);
+
+  // Live interactions (frontend-only stub)
+  const [chatMessages, setChatMessages] = useState<Array<any>>([]);
+  const [chatInput, setChatInput] = useState("");
+  const [showEmojis, setShowEmojis] = useState(false);
+  const [handRaised, setHandRaised] = useState(false);
+  const [micEnabled, setMicEnabled] = useState(false);
+
+  const handleSendMessage = () => {
+    if (!chatInput.trim()) return;
+    setChatMessages((prev) => [
+      ...prev,
+      { id: crypto.randomUUID?.() || String(Date.now()), user: "You", type: "text", text: chatInput.trim(), timestamp: Date.now() },
+    ]);
+    setChatInput("");
+    setShowEmojis(false);
+  };
+
+  const addReaction = (emoji: string) => {
+    setChatMessages((prev) => [
+      ...prev,
+      { id: crypto.randomUUID?.() || String(Date.now()), user: "You", type: "reaction", text: emoji, timestamp: Date.now() },
+    ]);
+  };
+
+  const toggleHand = () => {
+    setHandRaised((v) => !v);
+    const nowRaised = !handRaised;
+    setChatMessages((prev) => [
+      ...prev,
+      { id: crypto.randomUUID?.() || String(Date.now()), user: "System", type: "system", text: nowRaised ? "You raised your hand" : "You lowered your hand", timestamp: Date.now() },
+    ]);
+    toast.success(nowRaised ? "Hand raised" : "Hand lowered");
+  };
+
+  const toggleMic = () => {
+    setMicEnabled((v) => !v);
+    const now = !micEnabled;
+    toast(
+      now
+        ? "Mic requested (teacher approval required in real session)"
+        : "Mic off"
+    );
+  };
 
   useEffect(() => {
     if (courseId) {
@@ -345,6 +395,74 @@ const CourseLearningPage = () => {
                     </div>
                   </button>
                 ))}
+              </div>
+
+              <hr className="my-6 border-gray-200" />
+
+              <h3 className="font-bold text-lg mb-4 flex items-center text-gray-900">
+                <MessageSquare className="w-5 h-5 mr-2 text-primary-600" />
+                Live Interactions
+              </h3>
+
+              <div className="mb-4 flex items-center gap-2">
+                <button onClick={toggleHand} className={`${handRaised ? 'btn-primary' : 'btn-outline'} btn-sm flex items-center gap-2`}>
+                  <Hand className="w-4 h-4" /> {handRaised ? 'Lower Hand' : 'Raise Hand'}
+                </button>
+                <button onClick={toggleMic} className={`${micEnabled ? 'btn-primary' : 'btn-outline'} btn-sm flex items-center gap-2`}>
+                  {micEnabled ? <Mic className="w-4 h-4" /> : <MicOff className="w-4 h-4" />}
+                  {micEnabled ? 'Mic On' : 'Mic Off'}
+                </button>
+                <button onClick={() => setShowEmojis((v) => !v)} className="btn-outline btn-sm flex items-center gap-2">
+                  <Smile className="w-4 h-4" /> Emojis
+                </button>
+              </div>
+
+              {showEmojis && (
+                <div className="grid grid-cols-8 gap-2 mb-4">
+                  {['👍','👏','❤️','🎉','🔥','😊','🤔','🙌','🖐️','😂','😮','🙏','💯','🚀','🥳','😎'].map((e) => (
+                    <button key={e} onClick={() => addReaction(e)} className="text-xl p-2 hover:scale-110 transition-transform">
+                      {e}
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              <div className="bg-gray-50 border border-gray-200 rounded-xl p-3 max-h-60 overflow-y-auto mb-3 space-y-2">
+                {chatMessages.length === 0 ? (
+                  <p className="text-sm text-gray-500">No messages yet. Say hi!</p>
+                ) : (
+                  chatMessages.map((m) => (
+                    <div key={m.id} className={`${m.type === 'system' ? 'text-xs text-gray-500 italic' : 'text-sm'} `}>
+                      {m.type === 'reaction' ? (
+                        <div className="inline-flex items-center gap-2 px-2 py-1 bg-white border border-gray-200 rounded-lg">
+                          <span className="text-lg">{m.text}</span>
+                          <span className="text-xs text-gray-500">{new Date(m.timestamp).toLocaleTimeString()}</span>
+                        </div>
+                      ) : m.type === 'system' ? (
+                        <span>• {m.text}</span>
+                      ) : (
+                        <div className="px-3 py-2 bg-white border border-gray-200 rounded-lg">
+                          <span className="font-semibold mr-1">{m.user}:</span>
+                          <span>{m.text}</span>
+                        </div>
+                      )}
+                    </div>
+                  ))
+                )}
+              </div>
+
+              <div className="flex items-center gap-2">
+                <input
+                  value={chatInput}
+                  onChange={(e) => setChatInput(e.target.value)}
+                  onKeyDown={(e) => { if ((e as any).key === 'Enter') handleSendMessage(); }}
+                  className="input flex-1"
+                  placeholder="Message the class..."
+                />
+                <button onClick={handleSendMessage} className="btn-primary btn-sm inline-flex items-center gap-1">
+                  <Send className="w-4 h-4" />
+                  Send
+                </button>
               </div>
             </div>
           </div>

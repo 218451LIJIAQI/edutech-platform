@@ -11,7 +11,6 @@ const ordersService = {
   getOrderById: async (id: string): Promise<Order> => {
     const res = await api.get<ApiResponse<Order>>(`/orders/${id}`);
     return res.data.data!;
-    
   },
 
   cancelOrder: async (id: string, reason?: string): Promise<Order> => {

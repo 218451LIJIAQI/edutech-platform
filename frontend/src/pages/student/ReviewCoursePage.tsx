@@ -61,8 +61,9 @@ const ReviewCoursePage = () => {
       return;
     }
 
-    if (!comment.trim()) {
-      toast.error('Please write a review comment');
+    const trimmed = comment.trim();
+    if (trimmed.length < 50) {
+      toast.error('Please write at least 50 characters');
       return;
     }
 
@@ -73,7 +74,8 @@ const ReviewCoursePage = () => {
 
     setIsSubmitting(true);
     try {
-      await reviewService.createReview(enrollment.id, rating, comment);
+      const trimmed = comment.trim();
+      await reviewService.createReview(enrollment.id, rating, trimmed);
       toast.success('Thank you for your review!');
       navigate('/student/courses');
     } catch (error) {
@@ -238,7 +240,8 @@ const ReviewCoursePage = () => {
                 <button
                   type="submit"
                   disabled={isSubmitting || rating === 0 || comment.length < 50}
-                  className="btn-primary btn-lg"
+                  className="btn-primary btn-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                  title={rating === 0 || comment.length < 50 ? 'Select a rating and write at least 50 characters to enable submit' : undefined as any}
                 >
                   {isSubmitting ? (
                     <span className="flex items-center">

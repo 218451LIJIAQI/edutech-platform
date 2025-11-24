@@ -40,8 +40,10 @@ router.use('/notifications', notificationRoutes);
 // New routes
 import cartRoutes from './cart.routes';
 import ordersRoutes from './orders.routes';
+import communityRoutes from './community.routes';
 router.use('/cart', cartRoutes);
 router.use('/orders', ordersRoutes);
+router.use('/community', communityRoutes);
 
 router.use('/admin', adminRoutes);
 

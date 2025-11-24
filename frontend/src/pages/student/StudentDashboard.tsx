@@ -138,7 +138,7 @@ const StudentDashboard = () => {
                 <Link
                   key={enrollment.id}
                   to={`/courses/${course.id}`}
-                  className="card-hover"
+                  className="card-hover flex flex-col"
                 >
                   {/* Course Info */}
                     <div className="mb-5">
@@ -169,8 +169,8 @@ const StudentDashboard = () => {
                       📚 {enrollment.completedLessons} lessons completed
                   </div>
 
-                  {/* Continue Button */}
-                    <button className="btn-primary w-full">
+                  {/* Continue Button - Pushed to bottom */}
+                    <button className="btn-primary w-full mt-auto">
                     Continue Learning
                   </button>
                 </Link>

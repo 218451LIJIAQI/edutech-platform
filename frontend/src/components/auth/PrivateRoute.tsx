@@ -1,13 +1,14 @@
 import { Navigate } from 'react-router-dom';
 import { useAuthStore } from '@/store/authStore';
 import { UserRole } from '@/types';
+import { ReactNode } from 'react';
 
 /**
  * Private Route Component
  * Protects routes that require authentication
  */
 interface PrivateRouteProps {
-  children: React.ReactNode;
+  children: ReactNode;
   allowedRoles?: UserRole[];
 }
 

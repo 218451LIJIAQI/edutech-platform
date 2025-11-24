@@ -109,6 +109,12 @@ model User {
   notifications    Notification[]
   cartItems        CartItem[]
   orders           Order[]
+  communityPosts   CommunityPost[]
+  communityComments CommunityComment[]
+  communityLikes   CommunityPostLike[]
+  communityBookmarks CommunityPostBookmark[]
+  followers        CommunityFollowing[]   @relation("Followers")
+  following        CommunityFollowing[]   @relation("Following")
 
   @@map("users")
 }
@@ -456,4 +462,110 @@ model Notification {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("notifications")
+}
+
+// ================================
+// COMMUNITY
+// ================================
+
+model CommunityTag {
+  id    String   @id @default(uuid())
+  name  String   @unique
+  posts CommunityPost_Tag[]
+
+  @@map("community_tags")
+}
+
+model CommunityPost {
+  id            String   @id @default(uuid())
+  authorId      String   @map("author_id")
+  title         String?
+  content       String
+  likes         Int      @default(0)
+  bookmarks     Int      @default(0)
+  commentsCount Int      @default(0) @map("comments_count")
+  courseId      String?  @map("course_id")
+  courseTitle   String?  @map("course_title")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  author   User                  @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  tags     CommunityPost_Tag[]
+  media    CommunityMedia[]
+  comments CommunityComment[]
+  likes_   CommunityPostLike[]
+  bookmarks_ CommunityPostBookmark[]
+
+  @@map("community_posts")
+}
+
+model CommunityPost_Tag {
+  postId String @map("post_id")
+  tagId  String @map("tag_id")
+
+  post CommunityPost  @relation(fields: [postId], references: [id], onDelete: Cascade)
+  tag  CommunityTag   @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([postId, tagId])
+  @@map("community_post_tags")
+}
+
+model CommunityMedia {
+  id    String @id @default(uuid())
+  postId String @map("post_id")
+  type  String // 'image' or 'video'
+  url   String
+
+  post CommunityPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@map("community_media")
+}
+
+model CommunityComment {
+  id        String   @id @default(uuid())
+  postId    String   @map("post_id")
+  authorId  String   @map("author_id")
+  content   String
+  createdAt DateTime @default(now()) @map("created_at")
+
+  post   CommunityPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  author User          @relation(fields: [authorId], references: [id], onDelete: Cascade)
+
+  @@map("community_comments")
+}
+
+model CommunityPostLike {
+  id     String @id @default(uuid())
+  postId String @map("post_id")
+  userId String @map("user_id")
+
+  post CommunityPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([postId, userId])
+  @@map("community_post_likes")
+}
+
+model CommunityPostBookmark {
+  id     String @id @default(uuid())
+  postId String @map("post_id")
+  userId String @map("user_id")
+
+  post CommunityPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([postId, userId])
+  @@map("community_post_bookmarks")
+}
+
+model CommunityFollowing {
+  id         String @id @default(uuid())
+  followerId String @map("follower_id")
+  followingId String @map("following_id")
+
+  follower  User @relation("Followers", fields: [followerId], references: [id], onDelete: Cascade)
+  following User @relation("Following", fields: [followingId], references: [id], onDelete: Cascade)
+
+  @@unique([followerId, followingId])
+  @@map("community_following")
 }
