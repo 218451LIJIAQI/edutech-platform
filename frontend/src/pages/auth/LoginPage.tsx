@@ -13,7 +13,7 @@ const LoginPage = () => {
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
-  const { login, user } = useAuthStore();
+  const { login } = useAuthStore();
   const navigate = useNavigate();
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -40,34 +40,45 @@ const LoginPage = () => {
         default:
           navigate('/');
       }
-    } catch (err: any) {
-      setError(err.response?.data?.message || 'Login failed. Please try again.');
+    } catch (err) {
+      const message = err instanceof Error && 'response' in err 
+        ? (err as { response?: { data?: { message?: string } } }).response?.data?.message 
+        : err instanceof Error 
+        ? err.message 
+        : undefined;
+      setError(message || 'Login failed. Please try again.');
     } finally {
       setIsLoading(false);
     }
   };
 
   return (
-    <div className="min-h-[calc(100vh-4rem)] flex items-center justify-center bg-gray-50 py-12 px-4">
-      <div className="max-w-md w-full">
-        <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 bg-primary-600 text-white rounded-full mb-4">
-            <BookOpen className="w-8 h-8" />
+    <div className="min-h-[calc(100vh-4rem)] flex items-center justify-center bg-gradient-to-br from-gray-50 via-blue-50 to-indigo-50 py-12 px-4 relative overflow-hidden">
+      {/* Background decoration */}
+      <div className="absolute inset-0 opacity-10">
+        <div className="absolute top-0 right-0 w-96 h-96 bg-primary-600 rounded-full blur-3xl"></div>
+        <div className="absolute bottom-0 left-0 w-96 h-96 bg-primary-600 rounded-full blur-3xl"></div>
+      </div>
+
+      <div className="max-w-md w-full relative z-10">
+        <div className="text-center mb-10">
+          <div className="inline-flex items-center justify-center w-20 h-20 bg-gradient-to-br from-primary-600 to-primary-700 text-white rounded-2xl mb-6 shadow-lg">
+            <BookOpen className="w-10 h-10" />
           </div>
-          <h2 className="text-3xl font-bold text-gray-900">Welcome Back</h2>
-          <p className="mt-2 text-gray-600">Sign in to continue learning</p>
+          <h2 className="text-4xl font-bold text-gray-900 mb-2">Welcome Back</h2>
+          <p className="text-gray-600">Sign in to continue your learning journey</p>
         </div>
 
-        <div className="card">
+        <div className="card shadow-lg-custom">
           <form onSubmit={handleSubmit} className="space-y-6">
             {error && (
-              <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg">
-                {error}
+              <div className="bg-gradient-to-r from-red-50 to-red-100 border-l-4 border-red-600 text-red-700 px-4 py-3 rounded-lg">
+                <p className="font-semibold text-sm">{error}</p>
               </div>
             )}
 
             <div>
-              <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-2">
+              <label htmlFor="email" className="block text-sm font-semibold text-gray-700 mb-3">
                 Email Address
               </label>
               <input
@@ -75,14 +86,14 @@ const LoginPage = () => {
                 type="email"
                 required
                 className="input"
-                placeholder="Enter your email"
+                placeholder="you@example.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
               />
             </div>
 
             <div>
-              <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-2">
+              <label htmlFor="password" className="block text-sm font-semibold text-gray-700 mb-3">
                 Password
               </label>
               <input
@@ -90,7 +101,7 @@ const LoginPage = () => {
                 type="password"
                 required
                 className="input"
-                placeholder="Enter your password"
+                placeholder="••••••••"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
               />
@@ -99,18 +110,30 @@ const LoginPage = () => {
             <button
               type="submit"
               disabled={isLoading}
-              className="btn-primary w-full"
+              className="btn-primary w-full py-3 text-base font-semibold"
             >
-              {isLoading ? 'Signing in...' : 'Sign In'}
+              {isLoading ? (
+                <span className="flex items-center justify-center gap-2">
+                  <div className="spinner"></div>
+                  Signing in...
+                </span>
+              ) : (
+                'Sign In'
+              )}
             </button>
           </form>
 
-          <div className="mt-6 text-center text-sm">
+          <div className="mt-8 pt-6 border-t border-gray-200 text-center text-sm">
             <span className="text-gray-600">Don't have an account? </span>
-            <Link to="/register" className="text-primary-600 hover:text-primary-700 font-medium">
-              Sign up
+            <Link to="/register" className="text-primary-600 hover:text-primary-700 font-semibold transition-colors">
+              Sign up now
             </Link>
           </div>
+        </div>
+
+        {/* Additional info */}
+        <div className="mt-8 text-center text-xs text-gray-600">
+          <p>By signing in, you agree to our Terms of Service and Privacy Policy</p>
         </div>
       </div>
     </div>

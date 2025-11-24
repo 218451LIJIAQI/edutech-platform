@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Bell, Check, CheckCheck, X, Trash2 } from 'lucide-react';
+import { Bell, Check, CheckCheck, Trash2 } from 'lucide-react';
 import notificationService, { Notification } from '@/services/notification.service';
 import { formatDistanceToNow } from 'date-fns';
 import toast from 'react-hot-toast';
@@ -39,7 +39,7 @@ const NotificationCenter = () => {
     setIsLoading(true);
     try {
       const data = await notificationService.getNotifications({ limit: 10 });
-      setNotifications(data.notifications || []);
+      setNotifications(data.items || []);
     } catch (error) {
       console.error('Failed to fetch notifications:', error);
       toast.error('Failed to load notifications');

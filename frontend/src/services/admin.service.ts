@@ -1,5 +1,5 @@
 import api from './api';
-import { ApiResponse, PaginatedResponse, User, Course } from '@/types';
+import { ApiResponse, PaginatedResponse, User, Course, PaymentWithDetails, Report, TeacherVerification } from '@/types';
 
 export interface PlatformStats {
   overview: {
@@ -20,7 +20,7 @@ export interface PlatformStats {
   };
   revenue: {
     total: number;
-    monthly: any[];
+    monthly: Array<{ month: string; revenue: number }>;
   };
 }
 
@@ -31,7 +31,7 @@ export interface FinancialStats {
     teacherEarnings: number;
     transactionCount: number;
   };
-  recentPayments: any[];
+  recentPayments: PaymentWithDetails[];
 }
 
 /**
@@ -126,8 +126,8 @@ export const adminService = {
     status?: string;
     page?: number;
     limit?: number;
-  }): Promise<any> => {
-    const response = await api.get('/admin/verifications', { params });
+  }): Promise<PaginatedResponse<TeacherVerification>['data']> => {
+    const response = await api.get<PaginatedResponse<TeacherVerification>>('/admin/verifications', { params });
     return response.data.data;
   },
 
@@ -138,12 +138,12 @@ export const adminService = {
     id: string,
     status: string,
     reviewNotes?: string
-  ): Promise<any> => {
-    const response = await api.put(`/admin/verifications/${id}`, {
+  ): Promise<TeacherVerification> => {
+    const response = await api.put<ApiResponse<TeacherVerification>>(`/admin/verifications/${id}`, {
       status,
       reviewNotes,
     });
-    return response.data.data;
+    return response.data.data!;
   },
 
   /**
@@ -154,8 +154,8 @@ export const adminService = {
     type?: string;
     page?: number;
     limit?: number;
-  }): Promise<any> => {
-    const response = await api.get('/admin/reports', { params });
+  }): Promise<PaginatedResponse<Report>['data']> => {
+    const response = await api.get<PaginatedResponse<Report>>('/admin/reports', { params });
     return response.data.data;
   },
 
@@ -166,12 +166,12 @@ export const adminService = {
     id: string,
     status: string,
     resolution?: string
-  ): Promise<any> => {
-    const response = await api.put(`/admin/reports/${id}`, {
+  ): Promise<Report> => {
+    const response = await api.put<ApiResponse<Report>>(`/admin/reports/${id}`, {
       status,
       resolution,
     });
-    return response.data.data;
+    return response.data.data!;
   },
 
   /**
@@ -190,8 +190,20 @@ export const adminService = {
   /**
    * Get recent activities
    */
-  getRecentActivities: async (limit?: number): Promise<any[]> => {
-    const response = await api.get<ApiResponse<any[]>>('/admin/activities', {
+  getRecentActivities: async (limit?: number): Promise<Array<{
+    id: string;
+    type: string;
+    description: string;
+    createdAt: string;
+    user?: { firstName: string; lastName: string };
+  }>> => {
+    const response = await api.get<ApiResponse<Array<{
+      id: string;
+      type: string;
+      description: string;
+      createdAt: string;
+      user?: { firstName: string; lastName: string };
+    }>>>('/admin/activities', {
       params: { limit },
     });
     return response.data.data!;

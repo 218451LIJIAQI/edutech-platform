@@ -37,10 +37,16 @@ const CourseLearningPage = () => {
   }, [courseId]);
 
   const fetchCourseData = async () => {
+    if (!courseId) {
+      toast.error('Course ID is missing');
+      navigate('/courses');
+      return;
+    }
+    
     setIsLoading(true);
     try {
       // Check access first
-      const hasAccess = await enrollmentService.checkAccess(courseId!);
+      const hasAccess = await enrollmentService.checkAccess(courseId);
       if (!hasAccess) {
         toast.error('You need to enroll in this course first');
         navigate(`/courses/${courseId}`);
@@ -48,7 +54,7 @@ const CourseLearningPage = () => {
       }
 
       // Fetch course details
-      const courseData = await courseService.getCourseById(courseId!);
+      const courseData = await courseService.getCourseById(courseId);
       setCourse(courseData);
 
       // Fetch enrollment details
@@ -122,24 +128,30 @@ const CourseLearningPage = () => {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="spinner"></div>
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 via-blue-50 to-indigo-50">
+        <div className="flex flex-col items-center space-y-4">
+          <div className="spinner"></div>
+          <p className="text-gray-600 font-medium">Loading course...</p>
+        </div>
       </div>
     );
   }
 
   if (!course || !currentLesson) {
     return (
-      <div className="container mx-auto px-4 py-8 text-center">
-        <p className="text-gray-600">Course not found</p>
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 via-blue-50 to-indigo-50">
+        <div className="text-center">
+          <p className="text-gray-600 mb-4">Course not found</p>
+          <button className="btn-primary" onClick={() => navigate('/courses')}>Browse Courses</button>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-blue-50 to-indigo-50">
       {/* Video Player Section */}
-      <div className="bg-black">
+      <div className="bg-black shadow-2xl">
         <div className="container mx-auto">
           <div className="aspect-video bg-gray-900 flex items-center justify-center">
             {currentLesson.videoUrl ? (
@@ -169,14 +181,14 @@ const CourseLearningPage = () => {
           {/* Main Content */}
           <div className="lg:col-span-2 space-y-6">
             {/* Lesson Info */}
-            <div className="card">
-              <div className="flex items-start justify-between mb-4">
+            <div className="card shadow-lg">
+              <div className="flex items-start justify-between mb-6">
                 <div className="flex-1">
-                  <h1 className="text-2xl font-bold mb-2">{currentLesson.title}</h1>
-                  <div className="flex items-center space-x-4 text-sm text-gray-600">
+                  <h1 className="text-3xl font-bold mb-3 text-gray-900">{currentLesson.title}</h1>
+                  <div className="flex items-center space-x-4 text-sm">
                     <span className="badge-primary">{currentLesson.type}</span>
                     {currentLesson.duration && (
-                      <span>{currentLesson.duration} minutes</span>
+                      <span className="text-gray-600 font-medium">⏱️ {currentLesson.duration} minutes</span>
                     )}
                   </div>
                 </div>
@@ -189,7 +201,7 @@ const CourseLearningPage = () => {
               </div>
 
               {currentLesson.description && (
-                <p className="text-gray-700 leading-relaxed">{currentLesson.description}</p>
+                <p className="text-gray-700 leading-relaxed text-lg">{currentLesson.description}</p>
               )}
             </div>
 
@@ -216,25 +228,29 @@ const CourseLearningPage = () => {
 
             {/* Course Materials */}
             {course.materials && course.materials.length > 0 && (
-              <div className="card">
-                <h2 className="text-xl font-bold mb-4 flex items-center">
-                  <FileText className="w-5 h-5 mr-2" />
+              <div className="card shadow-lg">
+                <h2 className="text-2xl font-bold mb-6 flex items-center text-gray-900">
+                  <div className="p-2 bg-primary-100 rounded-lg mr-3">
+                    <FileText className="w-5 h-5 text-primary-600" />
+                  </div>
                   Course Materials
                 </h2>
                 <div className="space-y-3">
                   {course.materials.map((material) => (
                     <div
                       key={material.id}
-                      className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
+                      className="flex items-center justify-between p-4 bg-gradient-to-r from-gray-50 to-gray-100 rounded-xl border border-gray-200 hover:border-gray-300 transition-all"
                     >
-                      <div className="flex items-center space-x-3">
-                        <FileText className="w-5 h-5 text-gray-400" />
+                      <div className="flex items-center space-x-4">
+                        <div className="p-2 bg-primary-100 rounded-lg">
+                          <FileText className="w-5 h-5 text-primary-600" />
+                        </div>
                         <div>
-                          <p className="font-medium">{material.title}</p>
+                          <p className="font-bold text-gray-900">{material.title}</p>
                           {material.description && (
-                            <p className="text-sm text-gray-600">{material.description}</p>
+                            <p className="text-sm text-gray-600 mt-1">{material.description}</p>
                           )}
-                          <p className="text-xs text-gray-500">
+                          <p className="text-xs text-gray-500 mt-1">
                             {material.fileType} • {(material.fileSize / 1024).toFixed(0)} KB
                           </p>
                         </div>
@@ -256,13 +272,13 @@ const CourseLearningPage = () => {
             )}
 
             {/* Course Info */}
-            <div className="card">
-              <h2 className="text-xl font-bold mb-4">About This Course</h2>
-              <p className="text-gray-700 leading-relaxed mb-4">{course.description}</p>
+            <div className="card shadow-lg">
+              <h2 className="text-2xl font-bold mb-4 text-gray-900">About This Course</h2>
+              <p className="text-gray-700 leading-relaxed mb-4 text-lg">{course.description}</p>
               <div className="flex items-center space-x-4 text-sm">
                 <span className="badge-primary">{course.category}</span>
-                <span className="text-gray-600">
-                  {course.lessons?.length || 0} lessons
+                <span className="text-gray-600 font-medium">
+                  📚 {course.lessons?.length || 0} lessons
                 </span>
               </div>
             </div>
@@ -270,31 +286,30 @@ const CourseLearningPage = () => {
 
           {/* Sidebar - Course Outline */}
           <div className="lg:col-span-1">
-            <div className="card sticky top-4">
-              <div className="mb-4">
-                <h2 className="text-lg font-bold mb-2">Course Progress</h2>
-                <div className="mb-2">
-                  <div className="flex items-center justify-between text-sm mb-1">
-                    <span className="text-gray-600">Overall Progress</span>
-                    <span className="font-semibold">{enrollment?.progress || 0}%</span>
+            <div className="card sticky top-20 shadow-lg">
+              <div className="mb-6">
+                <h2 className="text-xl font-bold mb-4 text-gray-900">Course Progress</h2>
+                <div className="mb-3">
+                  <div className="flex items-center justify-between text-sm mb-2">
+                    <span className="text-gray-600 font-medium">Overall Progress</span>
+                    <span className="font-bold text-primary-600">{enrollment?.progress || 0}%</span>
                   </div>
-                  <div className="w-full bg-gray-200 rounded-full h-2">
+                  <div className="w-full bg-gray-300 rounded-full h-3">
                     <div
-                      className="bg-primary-600 h-2 rounded-full transition-all"
+                      className="bg-gradient-to-r from-primary-600 to-primary-700 h-3 rounded-full transition-all duration-500"
                       style={{ width: `${enrollment?.progress || 0}%` }}
                     ></div>
                   </div>
                 </div>
-                <p className="text-sm text-gray-600">
-                  {completedLessons.size} of {course.lessons?.length || 0} lessons
-                  completed
+                <p className="text-sm text-gray-600 font-medium">
+                  ✅ {completedLessons.size} of {course.lessons?.length || 0} lessons completed
                 </p>
               </div>
 
-              <hr className="my-4" />
+              <hr className="my-6 border-gray-200" />
 
-              <h3 className="font-semibold mb-3 flex items-center">
-                <BookOpen className="w-4 h-4 mr-2" />
+              <h3 className="font-bold text-lg mb-4 flex items-center text-gray-900">
+                <BookOpen className="w-5 h-5 mr-2 text-primary-600" />
                 Course Content
               </h3>
               <div className="space-y-2 max-h-96 overflow-y-auto">
@@ -302,10 +317,10 @@ const CourseLearningPage = () => {
                   <button
                     key={lesson.id}
                     onClick={() => setCurrentLesson(lesson)}
-                    className={`w-full text-left p-3 rounded-lg transition-colors ${
+                    className={`w-full text-left p-4 rounded-xl transition-all ${
                       currentLesson.id === lesson.id
-                        ? 'bg-primary-100 border-primary-500 border-2'
-                        : 'bg-gray-50 hover:bg-gray-100'
+                        ? 'bg-gradient-to-r from-primary-100 to-primary-50 border-2 border-primary-500 shadow-md'
+                        : 'bg-gray-50 hover:bg-gray-100 border border-gray-200'
                     }`}
                   >
                     <div className="flex items-start space-x-3">
@@ -319,11 +334,11 @@ const CourseLearningPage = () => {
                         )}
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium truncate">
+                        <p className="text-sm font-bold truncate text-gray-900">
                           {index + 1}. {lesson.title}
                         </p>
                         <div className="flex items-center space-x-2 text-xs text-gray-600 mt-1">
-                          <span className="badge-sm">{lesson.type}</span>
+                          <span className="badge-primary text-xs">{lesson.type}</span>
                           {lesson.duration && <span>{lesson.duration} min</span>}
                         </div>
                       </div>
@@ -338,13 +353,13 @@ const CourseLearningPage = () => {
 
       {/* Review Modal */}
       {showReviewModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg p-6 max-w-md w-full">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl p-8 max-w-md w-full shadow-lg-custom">
             <div className="text-center mb-6">
-              <div className="inline-flex items-center justify-center w-16 h-16 bg-green-100 rounded-full mb-4">
-                <CheckCircle className="w-8 h-8 text-green-600" />
+              <div className="inline-flex items-center justify-center w-20 h-20 bg-gradient-to-br from-green-500 to-green-600 rounded-full mb-4 shadow-lg">
+                <CheckCircle className="w-10 h-10 text-white" />
               </div>
-              <h3 className="text-2xl font-bold mb-2">Congratulations!</h3>
+              <h3 className="text-3xl font-bold mb-2 text-gray-900">Congratulations!</h3>
               <p className="text-gray-600">You've completed this course!</p>
             </div>
             <div className="space-y-3">

@@ -107,23 +107,25 @@ const HelpCenterPage = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 py-12">
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-blue-50 to-indigo-50 py-12">
       <div className="container mx-auto px-4">
         {/* Header */}
         <div className="text-center mb-12">
-          <h1 className="text-4xl font-bold mb-4">Help Center</h1>
-          <p className="text-xl text-gray-600 mb-8">
+          <h1 className="section-title mb-4">Help Center</h1>
+          <p className="section-subtitle mb-10">
             Find answers to common questions and get support
           </p>
 
           {/* Search Bar */}
           <div className="max-w-2xl mx-auto">
             <div className="relative">
-              <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+              <div className="absolute left-4 top-1/2 transform -translate-y-1/2">
+                <Search className="text-gray-400 w-5 h-5" />
+              </div>
               <input
                 type="text"
                 placeholder="Search for help..."
-                className="input pl-12 w-full"
+                className="input pl-12 w-full shadow-md"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
               />
@@ -132,16 +134,16 @@ const HelpCenterPage = () => {
         </div>
 
         {/* Category Filter */}
-        <div className="mb-8">
-          <div className="flex flex-wrap justify-center gap-2">
+        <div className="mb-10">
+          <div className="flex flex-wrap justify-center gap-3">
             {categories.map((category) => (
               <button
                 key={category.id}
                 onClick={() => setSelectedCategory(category.id)}
-                className={`px-4 py-2 rounded-lg transition ${
+                className={`px-5 py-2.5 rounded-full font-semibold text-sm transition-all border ${
                   selectedCategory === category.id
-                    ? 'bg-primary-600 text-white'
-                    : 'bg-white text-gray-700 hover:bg-gray-100'
+                    ? 'bg-primary-600 text-white border-primary-600 shadow-md'
+                    : 'bg-white text-gray-700 border-gray-200 hover:border-primary-300 hover:text-primary-700'
                 }`}
               >
                 {category.name}
@@ -153,36 +155,37 @@ const HelpCenterPage = () => {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           {/* FAQs */}
           <div className="lg:col-span-2">
-            <div className="card">
-              <h2 className="text-2xl font-bold mb-6">
+            <div className="card shadow-lg">
+              <h2 className="text-2xl font-bold mb-8 text-gray-900">
                 Frequently Asked Questions
               </h2>
 
               {filteredFAQs.length === 0 ? (
-                <p className="text-gray-600 text-center py-8">
-                  No results found. Try a different search term.
-                </p>
+                <div className="text-center py-12">
+                  <Search className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+                  <p className="text-gray-600 text-lg">No results found. Try a different search term.</p>
+                </div>
               ) : (
-                <div className="space-y-4">
+                <div className="space-y-3">
                   {filteredFAQs.map((faq, index) => (
                     <div
                       key={index}
-                      className="border border-gray-200 rounded-lg overflow-hidden"
+                      className="border-2 border-gray-200 rounded-xl overflow-hidden hover:border-primary-300 transition-all"
                     >
                       <button
                         onClick={() => toggleFAQ(index)}
-                        className="w-full px-6 py-4 flex items-center justify-between hover:bg-gray-50 transition"
+                        className="w-full px-6 py-5 flex items-center justify-between hover:bg-gradient-to-r hover:from-gray-50 hover:to-gray-100 transition-all"
                       >
-                        <span className="font-medium text-left">{faq.question}</span>
+                        <span className="font-bold text-left text-gray-900">{faq.question}</span>
                         {expandedId === index ? (
-                          <ChevronUp className="w-5 h-5 text-gray-500 flex-shrink-0" />
+                          <ChevronUp className="w-5 h-5 text-primary-600 flex-shrink-0" />
                         ) : (
                           <ChevronDown className="w-5 h-5 text-gray-500 flex-shrink-0" />
                         )}
                       </button>
                       {expandedId === index && (
-                        <div className="px-6 py-4 bg-gray-50 border-t border-gray-200">
-                          <p className="text-gray-700">{faq.answer}</p>
+                        <div className="px-6 py-5 bg-gradient-to-r from-gray-50 to-gray-100 border-t-2 border-gray-200">
+                          <p className="text-gray-700 leading-relaxed">{faq.answer}</p>
                         </div>
                       )}
                     </div>
@@ -194,47 +197,53 @@ const HelpCenterPage = () => {
 
           {/* Contact Support */}
           <div className="lg:col-span-1">
-            <div className="card bg-primary-50 border-primary-200 sticky top-4">
-              <h3 className="text-xl font-bold mb-4">Still Need Help?</h3>
-              <p className="text-gray-700 mb-6">
+            <div className="card bg-gradient-to-br from-primary-50 to-primary-100 border-2 border-primary-200 sticky top-20 shadow-lg">
+              <h3 className="text-2xl font-bold mb-4 text-gray-900">Still Need Help?</h3>
+              <p className="text-gray-700 mb-8 leading-relaxed">
                 Can't find what you're looking for? Our support team is here to help!
               </p>
 
               <div className="space-y-4">
                 <a
                   href="mailto:support@edutech.com"
-                  className="flex items-center space-x-3 p-4 bg-white rounded-lg hover:shadow-md transition"
+                  className="flex items-center space-x-4 p-4 bg-white rounded-xl hover:shadow-md transition-all border border-gray-200"
                 >
-                  <Mail className="w-6 h-6 text-primary-600" />
+                  <div className="p-2 bg-primary-100 rounded-lg">
+                    <Mail className="w-6 h-6 text-primary-600" />
+                  </div>
                   <div>
-                    <p className="font-medium">Email Support</p>
+                    <p className="font-bold text-gray-900">Email Support</p>
                     <p className="text-sm text-gray-600">support@edutech.com</p>
                   </div>
                 </a>
 
                 <a
                   href="tel:+15551234567"
-                  className="flex items-center space-x-3 p-4 bg-white rounded-lg hover:shadow-md transition"
+                  className="flex items-center space-x-4 p-4 bg-white rounded-xl hover:shadow-md transition-all border border-gray-200"
                 >
-                  <Phone className="w-6 h-6 text-primary-600" />
+                  <div className="p-2 bg-primary-100 rounded-lg">
+                    <Phone className="w-6 h-6 text-primary-600" />
+                  </div>
                   <div>
-                    <p className="font-medium">Phone Support</p>
+                    <p className="font-bold text-gray-900">Phone Support</p>
                     <p className="text-sm text-gray-600">+1 (555) 123-4567</p>
                   </div>
                 </a>
 
-                <div className="flex items-center space-x-3 p-4 bg-white rounded-lg">
-                  <MessageCircle className="w-6 h-6 text-primary-600" />
+                <div className="flex items-center space-x-4 p-4 bg-white rounded-xl border border-gray-200">
+                  <div className="p-2 bg-primary-100 rounded-lg">
+                    <MessageCircle className="w-6 h-6 text-primary-600" />
+                  </div>
                   <div>
-                    <p className="font-medium">Live Chat</p>
+                    <p className="font-bold text-gray-900">Live Chat</p>
                     <p className="text-sm text-gray-600">Available Mon-Fri 9AM-5PM</p>
                   </div>
                 </div>
               </div>
 
-              <div className="mt-6 p-4 bg-white rounded-lg">
-                <p className="text-sm text-gray-600">
-                  <strong>Response Time:</strong> We typically respond within 24 hours on business days.
+              <div className="mt-6 p-4 bg-white rounded-xl border border-gray-200">
+                <p className="text-sm text-gray-700">
+                  <strong className="text-gray-900">Response Time:</strong> We typically respond within 24 hours on business days.
                 </p>
               </div>
             </div>

@@ -4,7 +4,7 @@ import toast from 'react-hot-toast';
 /**
  * Axios instance with base configuration
  */
-const API_URL = (import.meta as any).env.VITE_API_URL || 'http://localhost:3000/api/v1';
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api/v1';
 
 const api: AxiosInstance = axios.create({
   baseURL: API_URL,
@@ -34,8 +34,8 @@ api.interceptors.request.use(
  */
 api.interceptors.response.use(
   (response) => response,
-  async (error: AxiosError<any>) => {
-    const originalRequest: any = error.config;
+  async (error: AxiosError) => {
+    const originalRequest = error.config as { _retry?: boolean; headers?: Record<string, string> } & typeof error.config;
 
     // Handle token expiration
     if (error.response?.status === 401 && !originalRequest._retry) {
@@ -48,12 +48,17 @@ api.interceptors.response.use(
             refreshToken,
           });
 
-          const { accessToken } = response.data.data;
+          const responseData = response.data as { data?: { accessToken?: string } };
+          const accessToken = responseData.data?.accessToken;
+          if (accessToken) {
           localStorage.setItem('accessToken', accessToken);
+          }
 
           // Retry original request
+          if (accessToken && originalRequest.headers) {
           originalRequest.headers.Authorization = `Bearer ${accessToken}`;
           return api(originalRequest);
+          }
         }
       } catch (refreshError) {
         // Refresh failed, logout user
@@ -67,7 +72,8 @@ api.interceptors.response.use(
 
     // Handle other errors
     const status = error.response?.status;
-    let errorMessage = error.response?.data?.message || 'An error occurred. Please try again.';
+    const errorData = error.response?.data as { message?: string } | undefined;
+    let errorMessage = errorData?.message || 'An error occurred. Please try again.';
     
     // Customize error messages based on status code
     if (status === 429) {

@@ -59,32 +59,35 @@ const ManageCoursesPage = () => {
       await courseService.deleteCourse(courseId);
       toast.success('Course deleted successfully');
       fetchMyCourses();
-    } catch (error: any) {
-      toast.error(
-        error.response?.data?.message || 'Failed to delete course'
-      );
+    } catch (error) {
+      const message = error instanceof Error && 'response' in error 
+        ? (error as { response?: { data?: { message?: string } } }).response?.data?.message 
+        : undefined;
+      toast.error(message || 'Failed to delete course');
     }
   };
 
   if (isLoading) {
     return (
-      <div className="container mx-auto px-4 py-8">
-        <div className="flex items-center justify-center min-h-[400px]">
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 via-blue-50 to-indigo-50">
+        <div className="flex flex-col items-center space-y-4">
           <div className="spinner"></div>
+          <p className="text-gray-600 font-medium">Loading your courses...</p>
         </div>
       </div>
     );
   }
 
   return (
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-blue-50 to-indigo-50">
     <div className="container mx-auto px-4 py-8">
       {/* Header */}
-      <div className="flex items-center justify-between mb-8">
+        <div className="flex items-center justify-between mb-10">
         <div>
-          <h1 className="text-3xl font-bold mb-2">Manage Courses</h1>
-          <p className="text-gray-600">Create and manage your course offerings</p>
+            <h1 className="section-title mb-2">Manage Courses</h1>
+            <p className="section-subtitle">Create and manage your course offerings</p>
         </div>
-        <Link to="/teacher/courses/new" className="btn-primary">
+          <Link to="/teacher/courses/new" className="btn-primary btn-lg">
           <Plus className="w-5 h-5 mr-2" />
           Create New Course
         </Link>
@@ -92,14 +95,14 @@ const ManageCoursesPage = () => {
 
       {/* Courses List */}
       {courses.length > 0 ? (
-        <div className="space-y-4">
+        <div className="space-y-6">
           {courses.map((course) => (
-            <div key={course.id} className="card">
+            <div key={course.id} className="card shadow-lg hover:shadow-xl transition-all">
               <div className="flex items-start justify-between">
                 {/* Course Info */}
                 <div className="flex-1">
-                  <div className="flex items-center flex-wrap gap-2 mb-2">
-                    <h3 className="text-xl font-semibold">{course.title}</h3>
+                  <div className="flex items-center flex-wrap gap-3 mb-3">
+                    <h3 className="text-2xl font-bold text-gray-900">{course.title}</h3>
                     {course.isPublished ? (
                       <span className="badge-success">Published</span>
                     ) : (
@@ -109,54 +112,54 @@ const ManageCoursesPage = () => {
                     
                     {/* Course Type */}
                     {course.courseType === CourseType.LIVE && (
-                      <span className="badge bg-red-100 text-red-700 flex items-center gap-1">
+                      <span className="badge bg-gradient-to-r from-red-100 to-red-50 text-red-800 border border-red-200 flex items-center gap-1">
                         <Radio className="w-3 h-3" />
                         Live
                       </span>
                     )}
                     {course.courseType === CourseType.RECORDED && (
-                      <span className="badge bg-blue-100 text-blue-700 flex items-center gap-1">
+                      <span className="badge bg-gradient-to-r from-blue-100 to-blue-50 text-blue-800 border border-blue-200 flex items-center gap-1">
                         <Video className="w-3 h-3" />
                         Recorded
                       </span>
                     )}
                     {course.courseType === CourseType.HYBRID && (
-                      <span className="badge bg-purple-100 text-purple-700 flex items-center gap-1">
+                      <span className="badge bg-gradient-to-r from-purple-100 to-purple-50 text-purple-800 border border-purple-200 flex items-center gap-1">
                         <PlayCircle className="w-3 h-3" />
                         Hybrid
                       </span>
                     )}
                   </div>
 
-                  <p className="text-gray-600 mb-4 line-clamp-2">
+                  <p className="text-gray-600 mb-4 line-clamp-2 text-lg">
                     {course.description}
                   </p>
 
                   {/* Stats */}
-                  <div className="flex items-center space-x-6 text-sm text-gray-600">
-                    <div className="flex items-center space-x-1">
-                      <Users className="w-4 h-4" />
+                  <div className="flex items-center space-x-6 text-sm">
+                    <div className="flex items-center space-x-2 text-gray-700 font-medium">
+                      <Users className="w-5 h-5 text-primary-600" />
                       <span>
-                        {(course as any)._count?.enrollments || 0} students
+                        {(course as Course & { _count?: { enrollments?: number } })._count?.enrollments || 0} students
                       </span>
                     </div>
-                    <div>
-                      {course.lessons?.length || 0} lessons
+                    <div className="text-gray-700 font-medium">
+                      📚 {course.lessons?.length || 0} lessons
                     </div>
                     {course.packages && course.packages.length > 0 && (
-                      <div>
-                        From {formatCurrency(course.packages[0].finalPrice)}
+                      <div className="text-primary-600 font-bold">
+                        💰 From {formatCurrency(course.packages[0].finalPrice)}
                       </div>
                     )}
                   </div>
                 </div>
 
                 {/* Actions */}
-                <div className="flex items-center space-x-2 ml-4">
+                <div className="flex items-center space-x-2 ml-6">
                   {/* View */}
                   <Link
                     to={`/courses/${course.id}`}
-                    className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg transition"
+                    className="p-3 text-gray-600 hover:bg-primary-50 hover:text-primary-600 rounded-xl transition-all"
                     title="View Course"
                   >
                     <Eye className="w-5 h-5" />
@@ -165,7 +168,7 @@ const ManageCoursesPage = () => {
                   {/* Toggle Publish */}
                   <button
                     onClick={() => handleTogglePublish(course.id, course.isPublished)}
-                    className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg transition"
+                    className="p-3 text-gray-600 hover:bg-yellow-50 hover:text-yellow-600 rounded-xl transition-all"
                     title={course.isPublished ? 'Unpublish' : 'Publish'}
                   >
                     {course.isPublished ? (
@@ -178,7 +181,7 @@ const ManageCoursesPage = () => {
                   {/* Edit */}
                   <button
                     onClick={() => navigate(`/teacher/courses/${course.id}/edit`)}
-                    className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition"
+                    className="p-3 text-blue-600 hover:bg-blue-50 rounded-xl transition-all"
                     title="Edit Course"
                   >
                     <Edit className="w-5 h-5" />
@@ -187,7 +190,7 @@ const ManageCoursesPage = () => {
                   {/* Delete */}
                   <button
                     onClick={() => handleDeleteCourse(course.id, course.title)}
-                    className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition"
+                    className="p-3 text-red-600 hover:bg-red-50 rounded-xl transition-all"
                     title="Delete Course"
                   >
                     <Trash2 className="w-5 h-5" />
@@ -196,23 +199,23 @@ const ManageCoursesPage = () => {
               </div>
 
               {/* Course Details Expandable Section */}
-              <div className="mt-4 pt-4 border-t">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
-                  <div>
-                    <p className="text-gray-600 mb-1">Lessons</p>
-                    <p className="font-medium">
+              <div className="mt-6 pt-6 border-t border-gray-200">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="p-4 bg-gradient-to-r from-gray-50 to-gray-100 rounded-xl">
+                    <p className="text-gray-600 mb-2 font-medium">Lessons</p>
+                    <p className="text-2xl font-bold text-gray-900">
                       {course.lessons?.length || 0} total
                     </p>
                   </div>
-                  <div>
-                    <p className="text-gray-600 mb-1">Materials</p>
-                    <p className="font-medium">
+                  <div className="p-4 bg-gradient-to-r from-gray-50 to-gray-100 rounded-xl">
+                    <p className="text-gray-600 mb-2 font-medium">Materials</p>
+                    <p className="text-2xl font-bold text-gray-900">
                       {course.materials?.length || 0} files
                     </p>
                   </div>
-                  <div>
-                    <p className="text-gray-600 mb-1">Packages</p>
-                    <p className="font-medium">
+                  <div className="p-4 bg-gradient-to-r from-gray-50 to-gray-100 rounded-xl">
+                    <p className="text-gray-600 mb-2 font-medium">Packages</p>
+                    <p className="text-2xl font-bold text-gray-900">
                       {course.packages?.length || 0} pricing options
                     </p>
                   </div>
@@ -222,15 +225,15 @@ const ManageCoursesPage = () => {
           ))}
         </div>
       ) : (
-        <div className="card text-center py-12">
-          <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-            <Plus className="w-8 h-8 text-gray-400" />
+        <div className="card text-center py-16 shadow-lg max-w-md mx-auto">
+          <div className="w-20 h-20 bg-gradient-to-br from-primary-100 to-primary-200 rounded-full flex items-center justify-center mx-auto mb-6">
+            <Plus className="w-10 h-10 text-primary-600" />
           </div>
-          <h3 className="text-xl font-semibold mb-2">No courses yet</h3>
-          <p className="text-gray-600 mb-6">
+          <h3 className="text-2xl font-bold text-gray-900 mb-3">No courses yet</h3>
+          <p className="text-gray-600 mb-8 text-lg">
             Create your first course to start teaching
           </p>
-          <Link to="/teacher/courses/new" className="btn-primary inline-block">
+          <Link to="/teacher/courses/new" className="btn-primary btn-lg inline-block">
             <Plus className="w-5 h-5 mr-2" />
             Create Your First Course
           </Link>
@@ -238,16 +241,35 @@ const ManageCoursesPage = () => {
       )}
 
       {/* Help Card */}
-      <div className="card bg-blue-50 border-blue-200 mt-6">
-        <h3 className="font-semibold mb-2">Course Creation Tips</h3>
-        <ul className="space-y-1 text-sm text-gray-700">
-          <li>✓ Use clear, descriptive titles</li>
-          <li>✓ Provide detailed course descriptions</li>
-          <li>✓ Add preview content to attract students</li>
-          <li>✓ Structure lessons in a logical order</li>
-          <li>✓ Include downloadable materials</li>
-          <li>✓ Set competitive pricing</li>
+      <div className="card bg-gradient-to-r from-blue-50 to-blue-100 border-2 border-blue-200 mt-8 shadow-lg">
+        <h3 className="font-bold text-lg text-gray-900 mb-4">Course Creation Tips</h3>
+        <ul className="space-y-2 text-sm text-gray-700">
+          <li className="flex items-start">
+            <span className="mr-2 text-green-600 font-bold">✓</span>
+            <span>Use clear, descriptive titles</span>
+          </li>
+          <li className="flex items-start">
+            <span className="mr-2 text-green-600 font-bold">✓</span>
+            <span>Provide detailed course descriptions</span>
+          </li>
+          <li className="flex items-start">
+            <span className="mr-2 text-green-600 font-bold">✓</span>
+            <span>Add preview content to attract students</span>
+          </li>
+          <li className="flex items-start">
+            <span className="mr-2 text-green-600 font-bold">✓</span>
+            <span>Structure lessons in a logical order</span>
+          </li>
+          <li className="flex items-start">
+            <span className="mr-2 text-green-600 font-bold">✓</span>
+            <span>Include downloadable materials</span>
+          </li>
+          <li className="flex items-start">
+            <span className="mr-2 text-green-600 font-bold">✓</span>
+            <span>Set competitive pricing</span>
+          </li>
         </ul>
+      </div>
       </div>
     </div>
   );

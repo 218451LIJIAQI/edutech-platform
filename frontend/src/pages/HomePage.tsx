@@ -39,36 +39,40 @@ const HomePage = () => {
   };
 
   return (
-    <div>
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-blue-50 to-indigo-50">
       {/* Hero Section */}
-      <section className="bg-gradient-to-r from-primary-600 to-primary-800 text-white py-20">
-        <div className="container mx-auto px-4">
-          <div className="max-w-3xl">
+      <section className="relative overflow-hidden bg-gradient-to-br from-primary-600 via-primary-700 to-primary-900 text-white py-32 md:py-40">
+        <div className="absolute inset-0 opacity-10">
+          <div className="absolute top-0 right-0 w-96 h-96 bg-white rounded-full blur-3xl"></div>
+          <div className="absolute bottom-0 left-0 w-96 h-96 bg-white rounded-full blur-3xl"></div>
+        </div>
+        <div className="container mx-auto px-4 relative z-10">
+          <div className="max-w-3xl animate-fadeInUp">
             {isAuthenticated ? (
               <>
-                <h1 className="text-5xl font-bold mb-6">
-                  Welcome back, {user?.firstName}!
+                <h1 className="text-6xl md:text-7xl font-bold mb-6 leading-tight">
+                  Welcome back, <span className="text-primary-200">{user?.firstName}!</span>
                 </h1>
-                <p className="text-xl mb-8 text-primary-100">
-                  {user?.role === UserRole.STUDENT && "Continue your learning journey with our expert teachers."}
-                  {user?.role === UserRole.TEACHER && "Manage your courses and connect with your students."}
-                  {user?.role === UserRole.ADMIN && "Oversee the platform and manage users and courses."}
+                <p className="text-xl md:text-2xl mb-8 text-primary-100 leading-relaxed">
+                  {user?.role === UserRole.STUDENT && "Continue your learning journey with our expert teachers and unlock your potential."}
+                  {user?.role === UserRole.TEACHER && "Manage your courses, connect with students, and grow your teaching career."}
+                  {user?.role === UserRole.ADMIN && "Oversee the platform, manage users, and ensure quality education delivery."}
                 </p>
                 <div className="flex flex-wrap gap-4">
                   <Link 
                     to={getDashboardLink()} 
-                    className="btn bg-white text-primary-600 hover:bg-gray-100 btn-lg inline-flex items-center gap-2"
+                    className="btn-primary btn-lg inline-flex items-center gap-2 shadow-lg hover:shadow-xl"
                   >
                     Go to {getDashboardLabel()}
                     <ArrowRight className="w-5 h-5" />
                   </Link>
                   {user?.role === UserRole.STUDENT && (
-                    <Link to="/courses" className="btn btn-outline border-white text-white hover:bg-white hover:text-primary-600 btn-lg">
+                    <Link to="/courses" className="btn border-2 border-white/80 bg-white/10 backdrop-blur-sm text-white hover:bg-white hover:text-primary-600 hover:border-white btn-lg shadow-lg hover:shadow-xl transition-all duration-300">
                       Browse Courses
                     </Link>
                   )}
                   {user?.role === UserRole.TEACHER && (
-                    <Link to="/teacher/courses/new" className="btn btn-outline border-white text-white hover:bg-white hover:text-primary-600 btn-lg">
+                    <Link to="/teacher/courses/new" className="btn border-2 border-white/80 bg-white/10 backdrop-blur-sm text-white hover:bg-white hover:text-primary-600 hover:border-white btn-lg shadow-lg hover:shadow-xl transition-all duration-300">
                       Create New Course
                     </Link>
                   )}
@@ -76,18 +80,18 @@ const HomePage = () => {
               </>
             ) : (
               <>
-                <h1 className="text-5xl font-bold mb-6">
-                  Learn Anywhere, Anytime with Expert Teachers
+                <h1 className="text-6xl md:text-7xl font-bold mb-6 leading-tight">
+                  Learn Anywhere, <span className="text-primary-200">Anytime</span> with Expert Teachers
                 </h1>
-                <p className="text-xl mb-8 text-primary-100">
+                <p className="text-xl md:text-2xl mb-8 text-primary-100 leading-relaxed">
                   Connect with certified teachers for live and recorded lessons. Get personalized
-                  education tailored to your needs.
+                  education tailored to your needs and goals.
                 </p>
                 <div className="flex flex-wrap gap-4">
-                  <Link to="/courses" className="btn bg-white text-primary-600 hover:bg-gray-100 btn-lg">
+                  <Link to="/courses" className="btn-primary btn-lg shadow-lg hover:shadow-xl">
                     Browse Courses
                   </Link>
-                  <Link to="/register" className="btn btn-outline border-white text-white hover:bg-white hover:text-primary-600 btn-lg">
+                  <Link to="/register" className="btn border-2 border-white/80 bg-white/10 backdrop-blur-sm text-white hover:bg-white hover:text-primary-600 hover:border-white btn-lg shadow-lg hover:shadow-xl transition-all duration-300">
                     Become a Teacher
                   </Link>
                 </div>
@@ -98,62 +102,47 @@ const HomePage = () => {
       </section>
 
       {/* Features Section */}
-      <section className="py-20">
+      <section className="py-24 md:py-32 bg-gradient-to-br from-gray-50 via-blue-50 to-indigo-50">
         <div className="container mx-auto px-4">
-          <h2 className="text-3xl font-bold text-center mb-12">Why Choose Edutech?</h2>
+          <div className="text-center mb-16">
+            <h2 className="section-title">Why Choose Edutech?</h2>
+            <p className="section-subtitle">Experience the best online learning platform</p>
+          </div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
-            <div className="text-center">
-              <div className="inline-flex items-center justify-center w-16 h-16 bg-primary-100 text-primary-600 rounded-full mb-4">
-                <Users className="w-8 h-8" />
+            {[
+              { icon: Users, title: "Verified Teachers", desc: "All teachers are verified and certified professionals" },
+              { icon: BookOpen, title: "Flexible Learning", desc: "Choose between live classes and recorded lessons" },
+              { icon: Award, title: "Quality Assurance", desc: "Reviews and ratings ensure high teaching standards" },
+              { icon: TrendingUp, title: "Track Progress", desc: "Monitor your learning journey with detailed analytics" }
+            ].map((feature, idx) => (
+              <div key={idx} className="card-hover group">
+                <div className="inline-flex items-center justify-center w-20 h-20 bg-gradient-to-br from-primary-100 to-primary-50 text-primary-600 rounded-2xl mb-6 group-hover:from-primary-200 group-hover:to-primary-100 transition-all">
+                  <feature.icon className="w-10 h-10" />
               </div>
-              <h3 className="text-xl font-semibold mb-2">Verified Teachers</h3>
-              <p className="text-gray-600">
-                All teachers are verified and certified professionals
+                <h3 className="text-xl font-bold mb-3 text-gray-900">{feature.title}</h3>
+                <p className="text-gray-600 leading-relaxed">
+                  {feature.desc}
               </p>
             </div>
-
-            <div className="text-center">
-              <div className="inline-flex items-center justify-center w-16 h-16 bg-primary-100 text-primary-600 rounded-full mb-4">
-                <BookOpen className="w-8 h-8" />
-              </div>
-              <h3 className="text-xl font-semibold mb-2">Flexible Learning</h3>
-              <p className="text-gray-600">
-                Choose between live classes and recorded lessons
-              </p>
-            </div>
-
-            <div className="text-center">
-              <div className="inline-flex items-center justify-center w-16 h-16 bg-primary-100 text-primary-600 rounded-full mb-4">
-                <Award className="w-8 h-8" />
-              </div>
-              <h3 className="text-xl font-semibold mb-2">Quality Assurance</h3>
-              <p className="text-gray-600">
-                Reviews and ratings ensure high teaching standards
-              </p>
-            </div>
-
-            <div className="text-center">
-              <div className="inline-flex items-center justify-center w-16 h-16 bg-primary-100 text-primary-600 rounded-full mb-4">
-                <TrendingUp className="w-8 h-8" />
-              </div>
-              <h3 className="text-xl font-semibold mb-2">Track Progress</h3>
-              <p className="text-gray-600">
-                Monitor your learning journey with detailed analytics
-              </p>
-            </div>
+            ))}
           </div>
         </div>
       </section>
 
       {/* CTA Section */}
-      <section className="bg-gray-100 py-20">
-        <div className="container mx-auto px-4 text-center">
-          <h2 className="text-3xl font-bold mb-4">Ready to Start Learning?</h2>
-          <p className="text-xl text-gray-600 mb-8">
-            Join thousands of students learning from the best teachers worldwide
+      <section className="relative bg-gradient-to-r from-primary-600 to-primary-800 py-24 md:py-32 overflow-hidden">
+        <div className="absolute inset-0 opacity-10">
+          <div className="absolute top-0 left-0 w-96 h-96 bg-white rounded-full blur-3xl"></div>
+          <div className="absolute bottom-0 right-0 w-96 h-96 bg-white rounded-full blur-3xl"></div>
+        </div>
+        <div className="container mx-auto px-4 text-center relative z-10">
+          <h2 className="text-4xl md:text-5xl font-bold text-white mb-6 leading-tight">Ready to Start Learning?</h2>
+          <p className="text-xl text-primary-100 mb-10 max-w-2xl mx-auto">
+            Join thousands of students learning from the best teachers worldwide. Start your journey today!
           </p>
-          <Link to="/register" className="btn-primary btn-lg">
+          <Link to="/register" className="btn-primary btn-lg shadow-lg hover:shadow-xl inline-flex items-center gap-2">
             Get Started Today
+            <ArrowRight className="w-5 h-5" />
           </Link>
         </div>
       </section>

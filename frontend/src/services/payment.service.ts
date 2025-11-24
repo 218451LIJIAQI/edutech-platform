@@ -1,5 +1,5 @@
 import api from './api';
-import { Payment, ApiResponse, PaymentWithDetails, Enrollment } from '@/types';
+import { Payment, ApiResponse, PaymentWithDetails } from '@/types';
 
 /**
  * Payment Service
@@ -20,7 +20,15 @@ export const paymentService = {
       amount: number;
     };
   }> => {
-    const response = await api.post<ApiResponse<any>>('/payments/cart/create-intent');
+    const response = await api.post<ApiResponse<{
+      payment: Payment;
+      clientSecret: string | null;
+      order: {
+        id: string;
+        orderNo: string;
+        amount: number;
+      };
+    }>>('/payments/cart/create-intent');
     return response.data.data!;
   },
 
@@ -33,7 +41,15 @@ export const paymentService = {
       price: number;
     };
   }> => {
-    const response = await api.post<ApiResponse<any>>('/payments/create-intent', {
+    const response = await api.post<ApiResponse<{
+      payment: Payment;
+      clientSecret: string | null;
+      package: {
+        id: string;
+        name: string;
+        price: number;
+      };
+    }>>('/payments/create-intent', {
       packageId,
     });
     return response.data.data!;
@@ -45,8 +61,8 @@ export const paymentService = {
   confirmPayment: async (
     paymentId: string,
     stripePaymentId?: string
-  ): Promise<any> => {
-    const response = await api.post<ApiResponse<any>>('/payments/confirm', {
+  ): Promise<Payment> => {
+    const response = await api.post<ApiResponse<Payment>>('/payments/confirm', {
       paymentId,
       stripePaymentId,
     });
@@ -99,7 +115,19 @@ export const paymentService = {
     }>;
     recentPayments: PaymentWithDetails[];
   }> => {
-    const response = await api.get<ApiResponse<any>>('/payments/teacher/earnings-by-course');
+    const response = await api.get<ApiResponse<{
+      totalEarnings: number;
+      totalCourses: number;
+      totalStudents: number;
+      courseEarnings: Array<{
+        courseId: string;
+        courseTitle: string;
+        totalEarnings: number;
+        totalStudents: number;
+        payments: PaymentWithDetails[];
+      }>;
+      recentPayments: PaymentWithDetails[];
+    }>>('/payments/teacher/earnings-by-course');
     return response.data.data!;
   },
 };

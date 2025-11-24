@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { X, Plus, Trash2 } from 'lucide-react';
 import { useForm } from 'react-hook-form';
 import courseService from '@/services/course.service';
@@ -47,7 +47,9 @@ const PackageModal: React.FC<PackageModalProps> = ({
 
   const price = watch('price');
   const discount = watch('discount');
-  const finalPrice = Math.max(0, price - discount);
+  const priceNum = typeof price === 'string' ? parseFloat(price) || 0 : price || 0;
+  const discountNum = typeof discount === 'string' ? parseFloat(discount) || 0 : discount || 0;
+  const finalPrice = Math.max(0, priceNum - discountNum);
 
   const handleAddFeature = () => {
     if (newFeature.trim()) {
@@ -93,10 +95,14 @@ const PackageModal: React.FC<PackageModalProps> = ({
 
       onSuccess();
       onClose();
-    } catch (error: any) {
+    } catch (error) {
       console.error('Failed to save package:', error);
-      const errorMessage = error.response?.data?.message || 'Failed to save package';
-      toast.error(errorMessage);
+      const message = error instanceof Error && 'response' in error 
+        ? (error as { response?: { data?: { message?: string } } }).response?.data?.message 
+        : error instanceof Error 
+        ? error.message 
+        : undefined;
+      toast.error(message || 'Failed to save package');
     } finally {
       setIsSubmitting(false);
     }

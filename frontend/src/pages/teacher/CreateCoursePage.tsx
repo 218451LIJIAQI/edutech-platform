@@ -14,7 +14,7 @@ import {
   Download,
   FileIcon,
 } from 'lucide-react';
-import { Course, Lesson, LessonPackage, Material, LessonType, CourseType } from '@/types';
+import { Course, Lesson, LessonPackage, Material, CourseType } from '@/types';
 import courseService from '@/services/course.service';
 import uploadService from '@/services/upload.service';
 import FileUpload from '@/components/common/FileUpload';
@@ -132,14 +132,14 @@ const CreateCoursePage = () => {
       
       // Handle preview video based on selected type
       if (previewVideoType === 'upload' && previewVideoFile) {
-        toast.info('Uploading preview video...');
+        toast.loading('Uploading preview video...');
         data.previewVideoUrl = await uploadService.uploadVideo(previewVideoFile);
       } else if (previewVideoType === 'link' && previewVideoLink.trim()) {
         data.previewVideoUrl = previewVideoLink.trim();
       }
 
       // Remove empty strings to avoid validation errors
-      const cleanData: any = {
+      const cleanData: Partial<Course> = {
         title: data.title,
         description: data.description,
         category: data.category,
@@ -167,11 +167,19 @@ const CreateCoursePage = () => {
       if (!isEditMode) {
         navigate(`/teacher/courses/${savedCourse.id}/edit`);
       }
-    } catch (error: any) {
+    } catch (error) {
       console.error('Failed to save course:', error);
-      const errorMessage = error.response?.data?.message || error.response?.data?.errors 
-        ? Object.values(error.response.data.errors).flat().join(', ')
-        : 'Failed to save course';
+      let errorMessage = 'Failed to save course';
+      if (error instanceof Error && 'response' in error) {
+        const err = error as { response?: { data?: { message?: string; errors?: Record<string, string[]> } } };
+        if (err.response?.data?.message) {
+          errorMessage = err.response.data.message;
+        } else if (err.response?.data?.errors) {
+          errorMessage = Object.values(err.response.data.errors).flat().join(', ');
+        }
+      } else if (error instanceof Error) {
+        errorMessage = error.message;
+      }
       toast.error(errorMessage);
     } finally {
       setIsSaving(false);
@@ -262,30 +270,33 @@ const CreateCoursePage = () => {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="spinner"></div>
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 via-blue-50 to-indigo-50">
+        <div className="flex flex-col items-center space-y-4">
+          <div className="spinner"></div>
+          <p className="text-gray-600 font-medium">Loading course editor...</p>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 py-8">
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-blue-50 to-indigo-50 py-8">
       <div className="container mx-auto px-4">
         {/* Header */}
-        <div className="mb-6">
+        <div className="mb-8">
           <button
             onClick={() => navigate('/teacher/courses')}
-            className="btn-outline mb-4"
+            className="btn-outline mb-6"
           >
             <ArrowLeft className="w-4 h-4 mr-2" />
             Back to Courses
           </button>
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-3xl font-bold mb-2">
+              <h1 className="section-title mb-2">
                 {isEditMode ? 'Edit Course' : 'Create New Course'}
               </h1>
-              <p className="text-gray-600">
+              <p className="section-subtitle">
                 {isEditMode
                   ? 'Update your course information'
                   : 'Create a new course for your students'}
@@ -297,7 +308,7 @@ const CreateCoursePage = () => {
                   onClick={handlePublishToggle}
                   className={`btn ${
                     course.isPublished
-                      ? 'bg-yellow-600 hover:bg-yellow-700'
+                      ? 'bg-gradient-to-r from-yellow-600 to-yellow-700 hover:from-yellow-700 hover:to-yellow-800 text-white'
                       : 'btn-primary'
                   }`}
                 >
@@ -309,22 +320,22 @@ const CreateCoursePage = () => {
         </div>
 
         {/* Tabs */}
-        <div className="mb-6">
-          <div className="border-b border-gray-200">
-            <nav className="-mb-px flex space-x-8">
-              {[
-                { id: 'basic', label: 'Basic Info', icon: FileText },
-                { id: 'lessons', label: 'Lessons', icon: PlayCircle },
-                { id: 'packages', label: 'Pricing', icon: DollarSign },
-                { id: 'materials', label: 'Materials', icon: Upload },
-              ].map((tab) => (
+        <div className="mb-8">
+          <div className="bg-white rounded-xl p-2 shadow-md border border-gray-200">
+            <nav className="flex space-x-2">
+              {([
+                { id: 'basic' as const, label: 'Basic Info', icon: FileText },
+                { id: 'lessons' as const, label: 'Lessons', icon: PlayCircle },
+                { id: 'packages' as const, label: 'Pricing', icon: DollarSign },
+                { id: 'materials' as const, label: 'Materials', icon: Upload },
+              ] as const).map((tab) => (
                 <button
                   key={tab.id}
-                  onClick={() => setActiveTab(tab.id as any)}
-                  className={`flex items-center space-x-2 py-4 px-1 border-b-2 font-medium text-sm ${
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`flex items-center space-x-2 py-3 px-4 rounded-lg font-semibold text-sm transition-all ${
                     activeTab === tab.id
-                      ? 'border-primary-500 text-primary-600'
-                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                      ? 'bg-primary-600 text-white shadow-md'
+                      : 'text-gray-600 hover:bg-gray-100'
                   }`}
                 >
                   <tab.icon className="w-4 h-4" />
@@ -336,12 +347,12 @@ const CreateCoursePage = () => {
         </div>
 
         {/* Tab Content */}
-        <div className="card">
+        <div className="card shadow-lg">
           {/* Basic Info Tab */}
           {activeTab === 'basic' && (
             <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label className="block text-sm font-semibold text-gray-700 mb-3">
                   Course Title *
                 </label>
                 <input
@@ -361,12 +372,12 @@ const CreateCoursePage = () => {
                   placeholder="Enter course title (minimum 5 characters)"
                 />
                 {errors.title && (
-                  <p className="text-red-600 text-sm mt-1">{errors.title.message}</p>
+                  <p className="text-red-600 text-sm mt-2 font-medium">{errors.title.message}</p>
                 )}
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label className="block text-sm font-semibold text-gray-700 mb-3">
                   Description *
                 </label>
                 <textarea
@@ -386,12 +397,12 @@ const CreateCoursePage = () => {
                   placeholder="Describe your course, what students will learn, prerequisites, etc. (minimum 20 characters)"
                 />
                 {errors.description && (
-                  <p className="text-red-600 text-sm mt-1">{errors.description.message}</p>
+                  <p className="text-red-600 text-sm mt-2 font-medium">{errors.description.message}</p>
                 )}
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label className="block text-sm font-semibold text-gray-700 mb-3">
                   Category *
                 </label>
                 <select

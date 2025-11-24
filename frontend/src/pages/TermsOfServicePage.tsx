@@ -5,31 +5,34 @@ import { FileText } from 'lucide-react';
  */
 const TermsOfServicePage = () => {
   return (
-    <div className="min-h-screen bg-gray-50 py-12">
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-blue-50 to-indigo-50 py-12">
       <div className="container mx-auto px-4 max-w-4xl">
-        <div className="card">
+        <div className="card shadow-lg">
           {/* Header */}
-          <div className="flex items-center space-x-3 mb-8">
-            <FileText className="w-8 h-8 text-primary-600" />
-            <h1 className="text-3xl font-bold">Terms of Service</h1>
+          <div className="flex items-center space-x-4 mb-8 pb-8 border-b border-gray-200">
+            <div className="p-3 bg-gradient-to-br from-primary-600 to-primary-700 rounded-xl shadow-md">
+              <FileText className="w-8 h-8 text-white" />
+            </div>
+            <div>
+              <h1 className="text-4xl font-bold text-gray-900">Terms of Service</h1>
+              <p className="text-gray-600 mt-2">
+                Last updated: {new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
+              </p>
+            </div>
           </div>
-
-          <p className="text-gray-600 mb-8">
-            Last updated: {new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
-          </p>
 
           {/* Content */}
           <div className="prose prose-lg max-w-none">
-            <h2>1. Acceptance of Terms</h2>
-            <p>
+            <h2 className="text-2xl font-bold text-gray-900 mt-8 mb-4">1. Acceptance of Terms</h2>
+            <p className="text-gray-700 leading-relaxed">
               By accessing and using Edutech ("the Platform"), you accept and agree to be bound by the terms and provision of this agreement. If you do not agree to these terms, please do not use this Platform.
             </p>
 
-            <h2>2. Description of Service</h2>
-            <p>
+            <h2 className="text-2xl font-bold text-gray-900 mt-8 mb-4">2. Description of Service</h2>
+            <p className="text-gray-700 leading-relaxed">
               Edutech is an online learning management system that connects students with qualified teachers. The Platform provides:
             </p>
-            <ul>
+            <ul className="list-disc pl-6 space-y-2 text-gray-700">
               <li>Access to online courses and learning materials</li>
               <li>Live and recorded lessons</li>
               <li>Tools for teachers to create and manage courses</li>

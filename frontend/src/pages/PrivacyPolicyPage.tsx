@@ -5,37 +5,40 @@ import { Shield } from 'lucide-react';
  */
 const PrivacyPolicyPage = () => {
   return (
-    <div className="min-h-screen bg-gray-50 py-12">
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-blue-50 to-indigo-50 py-12">
       <div className="container mx-auto px-4 max-w-4xl">
-        <div className="card">
+        <div className="card shadow-lg">
           {/* Header */}
-          <div className="flex items-center space-x-3 mb-8">
-            <Shield className="w-8 h-8 text-primary-600" />
-            <h1 className="text-3xl font-bold">Privacy Policy</h1>
+          <div className="flex items-center space-x-4 mb-8 pb-8 border-b border-gray-200">
+            <div className="p-3 bg-gradient-to-br from-primary-600 to-primary-700 rounded-xl shadow-md">
+              <Shield className="w-8 h-8 text-white" />
+            </div>
+            <div>
+              <h1 className="text-4xl font-bold text-gray-900">Privacy Policy</h1>
+              <p className="text-gray-600 mt-2">
+                Last updated: {new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
+              </p>
+            </div>
           </div>
-
-          <p className="text-gray-600 mb-8">
-            Last updated: {new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
-          </p>
 
           {/* Content */}
           <div className="prose prose-lg max-w-none">
-            <h2>1. Introduction</h2>
-            <p>
+            <h2 className="text-2xl font-bold text-gray-900 mt-8 mb-4">1. Introduction</h2>
+            <p className="text-gray-700 leading-relaxed">
               Welcome to Edutech. We respect your privacy and are committed to protecting your personal data. This privacy policy explains how we collect, use, store, and protect your information when you use our Platform.
             </p>
 
-            <h2>2. Information We Collect</h2>
-            <h3>2.1 Information You Provide</h3>
-            <p>
+            <h2 className="text-2xl font-bold text-gray-900 mt-8 mb-4">2. Information We Collect</h2>
+            <h3 className="text-xl font-bold text-gray-900 mt-6 mb-3">2.1 Information You Provide</h3>
+            <p className="text-gray-700 leading-relaxed">
               When you register and use our Platform, we collect:
             </p>
-            <ul>
-              <li><strong>Account Information:</strong> Name, email address, password, role (student/teacher)</li>
-              <li><strong>Profile Information:</strong> Avatar, bio, headline, qualifications (for teachers)</li>
-              <li><strong>Payment Information:</strong> Processed securely through Stripe (we do not store credit card details)</li>
-              <li><strong>Course Content:</strong> Videos, materials, descriptions uploaded by teachers</li>
-              <li><strong>Communication Data:</strong> Messages, reviews, and reports submitted on the Platform</li>
+            <ul className="list-disc pl-6 space-y-2 text-gray-700">
+              <li><strong className="text-gray-900">Account Information:</strong> Name, email address, password, role (student/teacher)</li>
+              <li><strong className="text-gray-900">Profile Information:</strong> Avatar, bio, headline, qualifications (for teachers)</li>
+              <li><strong className="text-gray-900">Payment Information:</strong> Processed securely through Stripe (we do not store credit card details)</li>
+              <li><strong className="text-gray-900">Course Content:</strong> Videos, materials, descriptions uploaded by teachers</li>
+              <li><strong className="text-gray-900">Communication Data:</strong> Messages, reviews, and reports submitted on the Platform</li>
             </ul>
 
             <h3>2.2 Information We Collect Automatically</h3>

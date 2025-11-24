@@ -14,7 +14,12 @@ interface CourseState {
   isLoading: boolean;
   
   // Actions
-  fetchCourses: (params?: any) => Promise<void>;
+  fetchCourses: (params?: {
+    category?: string;
+    search?: string;
+    page?: number;
+    limit?: number;
+  }) => Promise<void>;
   fetchCourseById: (id: string) => Promise<void>;
   fetchCategories: () => Promise<void>;
   setCurrentCourse: (course: Course | null) => void;
@@ -27,11 +32,16 @@ export const useCourseStore = create<CourseState>((set) => ({
   categories: [],
   isLoading: false,
 
-  fetchCourses: async (params?: any) => {
+  fetchCourses: async (params?: {
+    category?: string;
+    search?: string;
+    page?: number;
+    limit?: number;
+  }) => {
     try {
       set({ isLoading: true });
       const data = await courseService.getAllCourses(params);
-      set({ courses: data.courses || [], isLoading: false });
+      set({ courses: data.items || data.courses || [], isLoading: false });
     } catch (error) {
       set({ isLoading: false });
       throw error;

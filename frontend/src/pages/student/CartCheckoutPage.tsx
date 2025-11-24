@@ -15,7 +15,7 @@ import toast from 'react-hot-toast';
 import { formatCurrency } from '@/utils/helpers';
 
 // Initialize Stripe
-const { VITE_STRIPE_PUBLISHABLE_KEY, VITE_STRIPE_PUBLIC_KEY, VITE_ENABLE_PAYMENT_MOCK } = (import.meta as any).env || import.meta.env;
+const { VITE_STRIPE_PUBLISHABLE_KEY, VITE_STRIPE_PUBLIC_KEY, VITE_ENABLE_PAYMENT_MOCK } = import.meta.env;
 const stripePublicKey = VITE_STRIPE_PUBLISHABLE_KEY || VITE_STRIPE_PUBLIC_KEY || 'pk_test_placeholder';
 const stripePromise = loadStripe(stripePublicKey);
 const enableMockPayment = (String(VITE_ENABLE_PAYMENT_MOCK).toLowerCase() === 'true');
@@ -109,9 +109,14 @@ const CartCheckoutForm = ({
       toast.dismiss(loadingToast);
       toast.success('Payment successful!');
       onSuccess();
-    } catch (error: any) {
+    } catch (error) {
+      const message = error instanceof Error && 'response' in error 
+        ? (error as { response?: { data?: { message?: string } } }).response?.data?.message 
+        : error instanceof Error 
+        ? error.message 
+        : undefined;
       console.error('Payment failed:', error);
-      toast.error(error.message || 'Payment failed. Please try again.');
+      toast.error(message || 'Payment failed. Please try again.');
     } finally {
       setIsProcessing(false);
     }
@@ -120,30 +125,32 @@ const CartCheckoutForm = ({
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-2">Cardholder Name *</label>
+        <label className="block text-sm font-semibold text-gray-700 mb-3">Cardholder Name *</label>
         <input type="text" value={cardName} onChange={(e) => setCardName(e.target.value)} className="input" placeholder="John Doe" required />
       </div>
       {/* Card Element (hidden in mock mode) */}
       {enableMockPayment ? (
-        <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 text-sm text-gray-700">
-          Mock payment is enabled. No card details required.
+        <div className="bg-gradient-to-r from-gray-50 to-gray-100 border-2 border-gray-200 rounded-xl p-4 text-sm text-gray-700">
+          <p className="font-semibold">Mock payment is enabled. No card details required.</p>
         </div>
       ) : (
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">Card Information *</label>
-          <div className="border border-gray-300 rounded-lg p-3 bg-white">
+          <label className="block text-sm font-semibold text-gray-700 mb-3">Card Information *</label>
+          <div className="border-2 border-gray-200 rounded-xl p-4 bg-white hover:border-gray-300 transition-colors">
             <CardElement options={{ style: { base: { fontSize: '16px', color: '#424770', '::placeholder': { color: '#aab7c4' } }, invalid: { color: '#9e2146' } } }} />
           </div>
         </div>
       )}
-      <div className="flex items-start">
-        <input type="checkbox" id="terms" checked={agreeTerms} onChange={(e) => setAgreeTerms(e.target.checked)} className="mt-1 mr-2" required />
-        <label htmlFor="terms" className="text-sm text-gray-600">I agree to the <a href="/terms" className="text-primary-600 hover:underline">Terms of Service</a> and <a href="/privacy" className="text-primary-600 hover:underline">Privacy Policy</a></label>
+      <div className="flex items-start p-4 bg-gray-50 rounded-xl">
+        <input type="checkbox" id="terms" checked={agreeTerms} onChange={(e) => setAgreeTerms(e.target.checked)} className="mt-1 mr-3 w-5 h-5" required />
+        <label htmlFor="terms" className="text-sm text-gray-700">I agree to the <a href="/terms" className="text-primary-600 hover:underline font-semibold">Terms of Service</a> and <a href="/privacy" className="text-primary-600 hover:underline font-semibold">Privacy Policy</a></label>
       </div>
-      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 flex items-start space-x-3">
-        <Lock className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
+      <div className="bg-gradient-to-r from-blue-50 to-blue-100 border-2 border-blue-200 rounded-xl p-4 flex items-start space-x-3">
+        <div className="p-2 bg-blue-200 rounded-lg flex-shrink-0">
+          <Lock className="w-5 h-5 text-blue-700" />
+        </div>
         <div>
-          <p className="text-sm font-medium text-blue-900">Secure Payment</p>
+          <p className="text-sm font-bold text-blue-900">Secure Payment</p>
           <p className="text-xs text-blue-700 mt-1">Your payment information is encrypted and secure, powered by Stripe.</p>
         </div>
       </div>
@@ -189,18 +196,25 @@ const CartCheckoutPage = () => {
   };
 
   if (isLoading) {
-    return <div className="flex items-center justify-center min-h-screen"><div className="spinner"></div></div>;
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 via-blue-50 to-indigo-50">
+        <div className="flex flex-col items-center space-y-4">
+          <div className="spinner"></div>
+          <p className="text-gray-600 font-medium">Loading checkout...</p>
+        </div>
+      </div>
+    );
   }
 
   if (paymentSuccess) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="card max-w-md text-center">
-          <div className="inline-flex items-center justify-center w-16 h-16 bg-green-100 rounded-full mb-4 mx-auto">
-            <CheckCircle className="w-8 h-8 text-green-600" />
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 via-blue-50 to-indigo-50">
+        <div className="card max-w-md text-center shadow-lg-custom">
+          <div className="inline-flex items-center justify-center w-20 h-20 bg-gradient-to-br from-green-500 to-green-600 rounded-full mb-6 mx-auto shadow-lg">
+            <CheckCircle className="w-10 h-10 text-white" />
           </div>
-          <h2 className="text-2xl font-bold mb-2">Payment Successful!</h2>
-          <p className="text-gray-600 mb-6">You've successfully enrolled in your new courses.</p>
+          <h2 className="text-3xl font-bold mb-3 text-gray-900">Payment Successful!</h2>
+          <p className="text-gray-600 mb-8">You've successfully enrolled in your new courses.</p>
           <button onClick={() => navigate('/student/courses')} className="btn-primary w-full">Go to My Courses</button>
         </div>
       </div>
@@ -209,43 +223,51 @@ const CartCheckoutPage = () => {
 
   if (!cart) {
     return (
-      <div className="container mx-auto px-4 py-8 text-center">
-        <p className="text-gray-600">Could not load cart information.</p>
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 via-blue-50 to-indigo-50">
+        <div className="text-center">
+          <p className="text-gray-600 mb-4">Could not load cart information.</p>
+          <button className="btn-primary" onClick={() => navigate('/cart')}>Back to Cart</button>
+        </div>
       </div>
     );
   }
 
   return (
     <Elements stripe={stripePromise}>
-      <div className="min-h-screen bg-gray-50 py-8">
+      <div className="min-h-screen bg-gradient-to-br from-gray-50 via-blue-50 to-indigo-50 py-8">
         <div className="container mx-auto px-4">
           <div className="max-w-5xl mx-auto">
-            <div className="mb-8">
-              <h1 className="text-3xl font-bold mb-2">Secure Cart Checkout</h1>
-              <p className="text-gray-600">Complete your purchase for {cart.items.length} item(s).</p>
+            <div className="mb-10">
+              <h1 className="section-title mb-2">Secure Cart Checkout</h1>
+              <p className="section-subtitle">Complete your purchase for {cart.items.length} item(s).</p>
             </div>
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
               <div className="lg:col-span-2">
-                <div className="card">
-                  <h2 className="text-xl font-bold mb-6 flex items-center"><CreditCard className="w-5 h-5 mr-2" />Payment Information</h2>
+                <div className="card shadow-lg">
+                  <h2 className="text-2xl font-bold mb-6 flex items-center text-gray-900">
+                    <div className="p-2 bg-primary-100 rounded-lg mr-3">
+                      <CreditCard className="w-5 h-5 text-primary-600" />
+                    </div>
+                    Payment Information
+                  </h2>
                   <CartCheckoutForm cart={cart} onSuccess={handlePaymentSuccess} />
                 </div>
               </div>
               <div className="lg:col-span-1">
-                <div className="card sticky top-4">
-                  <h2 className="text-xl font-bold mb-4">Order Summary</h2>
-                  <div className="space-y-3 mb-4">
+                <div className="card sticky top-20 shadow-lg">
+                  <h2 className="text-2xl font-bold mb-6 text-gray-900">Order Summary</h2>
+                  <div className="space-y-3 mb-6">
                     {cart.items.map(item => (
-                      <div key={item.id} className="flex items-center justify-between text-sm">
-                        <span className="text-gray-600 truncate flex-1 pr-2">{item.package?.course?.title}</span>
-                        <span className="font-medium">{formatCurrency(item.package?.finalPrice || 0)}</span>
+                      <div key={item.id} className="flex items-center justify-between text-sm p-3 bg-gray-50 rounded-lg">
+                        <span className="text-gray-700 truncate flex-1 pr-2 font-medium">{item.package?.course?.title}</span>
+                        <span className="font-bold text-primary-600">{formatCurrency(item.package?.finalPrice || 0)}</span>
                       </div>
                     ))}
                   </div>
-                  <hr className="my-4" />
-                  <div className="flex items-center justify-between mb-6">
-                    <span className="text-lg font-bold">Total</span>
-                    <span className="text-2xl font-bold text-primary-600">{formatCurrency(cart.totalAmount)}</span>
+                  <hr className="my-6 border-gray-200" />
+                  <div className="flex items-center justify-between mb-6 p-4 bg-gradient-to-r from-primary-50 to-primary-100 rounded-xl">
+                    <span className="text-xl font-bold text-gray-900">Total</span>
+                    <span className="text-3xl font-bold text-primary-600">{formatCurrency(cart.totalAmount)}</span>
                   </div>
                 </div>
               </div>

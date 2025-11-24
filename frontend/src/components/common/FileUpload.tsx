@@ -87,8 +87,9 @@ const FileUpload: React.FC<FileUploadProps> = ({
       const data = await response.json();
       toast.success('File uploaded successfully!');
       onUploadComplete?.(data.data.url);
-    } catch (error: any) {
-      toast.error(error.message || 'Failed to upload file');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to upload file';
+      toast.error(message);
       console.error('Upload error:', error);
     } finally {
       setUploading(false);

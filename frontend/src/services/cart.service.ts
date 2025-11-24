@@ -1,5 +1,5 @@
 import api from './api';
-import { ApiResponse } from '@/types';
+import { ApiResponse, LessonPackage, Course } from '@/types';
 
 export interface CartItemDTO {
   id: string;
@@ -7,7 +7,7 @@ export interface CartItemDTO {
   packageId: string;
   quantity: number;
   addedAt: string;
-  package?: any;
+  package?: LessonPackage & { course?: Course };
 }
 
 export interface CartSummaryDTO {

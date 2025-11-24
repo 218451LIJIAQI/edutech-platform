@@ -76,10 +76,13 @@ const ReviewCoursePage = () => {
       await reviewService.createReview(enrollment.id, rating, comment);
       toast.success('Thank you for your review!');
       navigate('/student/courses');
-    } catch (error: any) {
+    } catch (error) {
+      const message = error instanceof Error && 'response' in error 
+        ? (error as { response?: { data?: { message?: string } } }).response?.data?.message 
+        : undefined;
       console.error('Failed to submit review:', error);
       toast.error(
-        error.response?.data?.message || 'Failed to submit review. Please try again.'
+        message || 'Failed to submit review. Please try again.'
       );
     } finally {
       setIsSubmitting(false);
@@ -88,46 +91,52 @@ const ReviewCoursePage = () => {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="spinner"></div>
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 via-blue-50 to-indigo-50">
+        <div className="flex flex-col items-center space-y-4">
+          <div className="spinner"></div>
+          <p className="text-gray-600 font-medium">Loading course...</p>
+        </div>
       </div>
     );
   }
 
   if (!course || !enrollment) {
     return (
-      <div className="container mx-auto px-4 py-8 text-center">
-        <p className="text-gray-600">Course not found</p>
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 via-blue-50 to-indigo-50">
+        <div className="text-center">
+          <p className="text-gray-600 mb-4">Course not found</p>
+          <button className="btn-primary" onClick={() => navigate('/courses')}>Browse Courses</button>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 py-8">
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-blue-50 to-indigo-50 py-8">
       <div className="container mx-auto px-4">
         <div className="max-w-3xl mx-auto">
           {/* Header */}
           <button
             onClick={() => navigate('/student/courses')}
-            className="btn-outline mb-6"
+            className="btn-outline mb-8"
           >
             <ArrowLeft className="w-4 h-4 mr-2" />
             Back to My Courses
           </button>
 
-          <div className="card">
+          <div className="card shadow-lg">
             {/* Course Info */}
-            <div className="flex items-start space-x-4 mb-8 pb-8 border-b">
+            <div className="flex items-start space-x-6 mb-10 pb-8 border-b border-gray-200">
               {course.thumbnail && (
                 <img
                   src={course.thumbnail}
                   alt={course.title}
-                  className="w-32 h-20 object-cover rounded-lg"
+                  className="w-40 h-24 object-cover rounded-xl shadow-md"
                 />
               )}
               <div className="flex-1">
-                <h1 className="text-2xl font-bold mb-2">{course.title}</h1>
-                <p className="text-gray-600">
+                <h1 className="text-3xl font-bold mb-3 text-gray-900">{course.title}</h1>
+                <p className="text-gray-600 text-lg">
                   by {course.teacherProfile?.user?.firstName}{' '}
                   {course.teacherProfile?.user?.lastName}
                 </p>
@@ -135,12 +144,12 @@ const ReviewCoursePage = () => {
             </div>
 
             {/* Review Form */}
-            <form onSubmit={handleSubmitReview} className="space-y-6">
+            <form onSubmit={handleSubmitReview} className="space-y-8">
               <div>
-                <h2 className="text-xl font-bold mb-4">How would you rate this course?</h2>
+                <h2 className="text-2xl font-bold mb-6 text-gray-900">How would you rate this course?</h2>
                 
                 {/* Star Rating */}
-                <div className="flex items-center space-x-2 mb-2">
+                <div className="flex items-center justify-center space-x-3 mb-4">
                   {[1, 2, 3, 4, 5].map((star) => (
                     <button
                       key={star}
@@ -148,10 +157,10 @@ const ReviewCoursePage = () => {
                       onClick={() => setRating(star)}
                       onMouseEnter={() => setHoverRating(star)}
                       onMouseLeave={() => setHoverRating(0)}
-                      className="focus:outline-none transition-transform hover:scale-110"
+                      className="focus:outline-none transition-transform hover:scale-125 active:scale-95"
                     >
                       <Star
-                        className={`w-10 h-10 ${
+                        className={`w-12 h-12 ${
                           star <= (hoverRating || rating)
                             ? 'fill-yellow-400 text-yellow-400'
                             : 'text-gray-300'
@@ -164,7 +173,7 @@ const ReviewCoursePage = () => {
                 {/* Rating Label */}
                 <div className="text-center">
                   {rating > 0 && (
-                    <p className="text-lg font-medium text-primary-600">
+                    <p className="text-2xl font-bold text-primary-600">
                       {rating === 5 && '⭐ Excellent!'}
                       {rating === 4 && '👍 Very Good'}
                       {rating === 3 && '😊 Good'}
@@ -177,7 +186,7 @@ const ReviewCoursePage = () => {
 
               {/* Comment */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label className="block text-sm font-semibold text-gray-700 mb-3">
                   Share your experience with this course *
                 </label>
                 <textarea
@@ -188,24 +197,36 @@ const ReviewCoursePage = () => {
                   placeholder="What did you like or dislike about this course? What did you learn? Would you recommend it to others?"
                   required
                 />
-                <p className="text-xs text-gray-500 mt-1">
+                <p className={`text-xs mt-2 font-medium ${comment.length >= 50 ? 'text-green-600' : 'text-gray-500'}`}>
                   Minimum 50 characters ({comment.length}/50)
                 </p>
               </div>
 
               {/* Review Guidelines */}
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                <p className="font-medium text-blue-900 mb-2">Review Guidelines:</p>
-                <ul className="text-sm text-blue-800 space-y-1">
-                  <li>• Be honest and constructive in your feedback</li>
-                  <li>• Focus on the course content and teaching quality</li>
-                  <li>• Avoid personal attacks or inappropriate language</li>
-                  <li>• Share specific examples when possible</li>
+              <div className="bg-gradient-to-r from-blue-50 to-blue-100 border-2 border-blue-200 rounded-xl p-5">
+                <p className="font-bold text-blue-900 mb-3">Review Guidelines:</p>
+                <ul className="text-sm text-blue-800 space-y-2">
+                  <li className="flex items-start">
+                    <span className="mr-2">✓</span>
+                    <span>Be honest and constructive in your feedback</span>
+                  </li>
+                  <li className="flex items-start">
+                    <span className="mr-2">✓</span>
+                    <span>Focus on the course content and teaching quality</span>
+                  </li>
+                  <li className="flex items-start">
+                    <span className="mr-2">✓</span>
+                    <span>Avoid personal attacks or inappropriate language</span>
+                  </li>
+                  <li className="flex items-start">
+                    <span className="mr-2">✓</span>
+                    <span>Share specific examples when possible</span>
+                  </li>
                 </ul>
               </div>
 
               {/* Submit Button */}
-              <div className="flex items-center justify-end space-x-4">
+              <div className="flex items-center justify-end space-x-4 pt-4">
                 <button
                   type="button"
                   onClick={() => navigate('/student/courses')}
@@ -217,7 +238,7 @@ const ReviewCoursePage = () => {
                 <button
                   type="submit"
                   disabled={isSubmitting || rating === 0 || comment.length < 50}
-                  className="btn-primary"
+                  className="btn-primary btn-lg"
                 >
                   {isSubmitting ? (
                     <span className="flex items-center">
@@ -236,13 +257,16 @@ const ReviewCoursePage = () => {
           </div>
 
           {/* Previous Reviews Display */}
-          <div className="card mt-6">
-            <h3 className="text-lg font-bold mb-4">What others are saying</h3>
+          <div className="card mt-8 shadow-lg">
+            <h3 className="text-2xl font-bold mb-6 text-gray-900">What others are saying</h3>
             <div className="space-y-4">
               {/* Other course reviews would be fetched and displayed here */}
-              <p className="text-gray-500 text-sm text-center py-8">
-                Be the first to review this course!
-              </p>
+              <div className="text-center py-12">
+                <Star className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+                <p className="text-gray-500 text-lg">
+                  Be the first to review this course!
+                </p>
+              </div>
             </div>
           </div>
         </div>

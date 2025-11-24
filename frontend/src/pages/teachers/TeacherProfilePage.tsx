@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { Star, Users, Award, Calendar, CheckCircle, BookOpen } from 'lucide-react';
+import { Star, Users, Award, Calendar, BookOpen } from 'lucide-react';
 import teacherService from '@/services/teacher.service';
 import courseService from '@/services/course.service';
 import { TeacherProfile, Course } from '@/types';
@@ -32,7 +32,7 @@ const TeacherProfilePage = () => {
       const coursesData = await courseService.getAllCourses({
         teacherId: id,
       });
-      setCourses(coursesData.courses || []);
+      setCourses(coursesData.items || coursesData.courses || []);
     } catch (error) {
       console.error('Failed to fetch teacher data:', error);
     } finally {
@@ -42,9 +42,10 @@ const TeacherProfilePage = () => {
 
   if (isLoading) {
     return (
-      <div className="container mx-auto px-4 py-8">
-        <div className="flex items-center justify-center min-h-[400px]">
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 via-blue-50 to-indigo-50">
+        <div className="flex flex-col items-center space-y-4">
           <div className="spinner"></div>
+          <p className="text-gray-600 font-medium">Loading teacher profile...</p>
         </div>
       </div>
     );
@@ -52,9 +53,9 @@ const TeacherProfilePage = () => {
 
   if (!teacher) {
     return (
-      <div className="container mx-auto px-4 py-8">
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 via-blue-50 to-indigo-50">
         <div className="text-center">
-          <h2 className="text-2xl font-bold mb-4">Teacher not found</h2>
+          <h2 className="text-2xl font-bold mb-4 text-gray-900">Teacher not found</h2>
           <Link to="/teachers" className="btn-primary">
             Back to Teachers
           </Link>
@@ -64,24 +65,24 @@ const TeacherProfilePage = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-blue-50 to-indigo-50">
       {/* Hero Section */}
-      <div className="bg-gradient-to-r from-primary-600 to-primary-800 text-white py-12">
+      <div className="bg-gradient-to-br from-primary-600 via-primary-700 to-primary-900 text-white py-16 shadow-lg">
         <div className="container mx-auto px-4">
           <div className="flex flex-col md:flex-row items-start md:items-center space-y-4 md:space-y-0 md:space-x-6">
             {/* Avatar */}
-            <div className="w-24 h-24 bg-white text-primary-600 rounded-full flex items-center justify-center text-3xl font-bold">
+            <div className="w-28 h-28 bg-white text-primary-600 rounded-2xl flex items-center justify-center text-4xl font-bold shadow-xl">
               {teacher.user?.firstName?.[0]}{teacher.user?.lastName?.[0]}
             </div>
 
             {/* Info */}
             <div className="flex-1">
-              <div className="flex items-center space-x-3 mb-2">
-                <h1 className="text-3xl font-bold">
+              <div className="flex items-center space-x-3 mb-3">
+                <h1 className="text-4xl font-bold">
                   {teacher.user?.firstName} {teacher.user?.lastName}
                 </h1>
                 {teacher.isVerified && (
-                  <div className="flex items-center space-x-1 bg-green-500 px-3 py-1 rounded-full text-sm">
+                  <div className="flex items-center space-x-1 bg-gradient-to-r from-green-500 to-green-600 px-4 py-2 rounded-full text-sm font-bold shadow-md">
                     <Award className="w-4 h-4" />
                     <span>Verified</span>
                   </div>
@@ -89,30 +90,30 @@ const TeacherProfilePage = () => {
               </div>
 
               {teacher.headline && (
-                <p className="text-xl text-primary-100 mb-4">{teacher.headline}</p>
+                <p className="text-xl text-primary-100 mb-6 font-medium">{teacher.headline}</p>
               )}
 
               {/* Stats */}
               <div className="flex flex-wrap items-center gap-6 text-primary-100">
-                <div className="flex items-center space-x-2">
+                <div className="flex items-center space-x-2 bg-white bg-opacity-20 px-4 py-2 rounded-xl">
                   <Star className="w-5 h-5 fill-yellow-400 text-yellow-400" />
-                  <span className="font-semibold">
+                  <span className="font-bold text-lg">
                     {teacher.averageRating?.toFixed(1) || 'N/A'}
                   </span>
                 </div>
 
-                <div className="flex items-center space-x-2">
+                <div className="flex items-center space-x-2 bg-white bg-opacity-20 px-4 py-2 rounded-xl">
                   <Users className="w-5 h-5" />
-                  <span>{teacher.totalStudents || 0} students</span>
+                  <span className="font-semibold">{teacher.totalStudents || 0} students</span>
                 </div>
 
-                <div className="flex items-center space-x-2">
+                <div className="flex items-center space-x-2 bg-white bg-opacity-20 px-4 py-2 rounded-xl">
                   <BookOpen className="w-5 h-5" />
-                  <span>{courses.length} courses</span>
+                  <span className="font-semibold">{courses.length} courses</span>
                 </div>
 
                 {teacher.hourlyRate && (
-                  <div className="font-semibold">
+                  <div className="bg-white bg-opacity-20 px-4 py-2 rounded-xl font-bold">
                     ${teacher.hourlyRate}/hour
                   </div>
                 )}
@@ -128,33 +129,33 @@ const TeacherProfilePage = () => {
           <div className="lg:col-span-2 space-y-6">
             {/* About */}
             {teacher.bio && (
-              <div className="card">
-                <h2 className="text-2xl font-bold mb-4">About</h2>
-                <p className="text-gray-700 whitespace-pre-line">{teacher.bio}</p>
+              <div className="card shadow-lg">
+                <h2 className="text-2xl font-bold mb-6 text-gray-900">About</h2>
+                <p className="text-gray-700 whitespace-pre-line text-lg leading-relaxed">{teacher.bio}</p>
               </div>
             )}
 
             {/* Courses */}
-            <div className="card">
-              <h2 className="text-2xl font-bold mb-4">Courses by this Teacher</h2>
+            <div className="card shadow-lg">
+              <h2 className="text-2xl font-bold mb-6 text-gray-900">Courses by this Teacher</h2>
               {courses.length > 0 ? (
                 <div className="space-y-4">
                   {courses.map((course) => (
                     <Link
                       key={course.id}
                       to={`/courses/${course.id}`}
-                      className="block p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition"
+                      className="block p-5 bg-gradient-to-r from-gray-50 to-gray-100 rounded-xl hover:from-gray-100 hover:to-gray-200 transition-all border border-gray-200 hover:border-primary-300 hover:shadow-md"
                     >
                       <div className="flex items-start justify-between">
                         <div className="flex-1">
-                          <h3 className="font-semibold text-lg mb-2">{course.title}</h3>
+                          <h3 className="font-bold text-lg mb-2 text-gray-900">{course.title}</h3>
                           <p className="text-gray-600 text-sm mb-3 line-clamp-2">
                             {course.description}
                           </p>
                           <div className="flex items-center space-x-4">
                             <span className="badge-primary">{course.category}</span>
                             {course.packages && course.packages.length > 0 && (
-                              <span className="text-primary-600 font-semibold">
+                              <span className="text-primary-600 font-bold">
                                 From {formatCurrency(course.packages[0].finalPrice)}
                               </span>
                             )}
@@ -165,7 +166,10 @@ const TeacherProfilePage = () => {
                   ))}
                 </div>
               ) : (
-                <p className="text-gray-600">No courses available yet.</p>
+                <div className="text-center py-12">
+                  <BookOpen className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+                  <p className="text-gray-600 text-lg">No courses available yet.</p>
+                </div>
               )}
             </div>
           </div>
@@ -174,14 +178,14 @@ const TeacherProfilePage = () => {
           <div className="lg:col-span-1 space-y-6">
             {/* Certifications */}
             {teacher.certifications && teacher.certifications.length > 0 && (
-              <div className="card">
-                <h3 className="text-xl font-bold mb-4">Certifications</h3>
+              <div className="card shadow-lg">
+                <h3 className="text-xl font-bold mb-6 text-gray-900">Certifications</h3>
                 <div className="space-y-4">
                   {teacher.certifications.map((cert) => (
-                    <div key={cert.id} className="border-l-4 border-primary-600 pl-4">
-                      <h4 className="font-semibold">{cert.title}</h4>
-                      <p className="text-sm text-gray-600">{cert.issuer}</p>
-                      <div className="flex items-center space-x-1 text-sm text-gray-500 mt-1">
+                    <div key={cert.id} className="border-l-4 border-primary-600 pl-4 py-3 bg-gradient-to-r from-primary-50 to-primary-100 rounded-r-xl">
+                      <h4 className="font-bold text-gray-900">{cert.title}</h4>
+                      <p className="text-sm text-gray-600 font-medium">{cert.issuer}</p>
+                      <div className="flex items-center space-x-1 text-sm text-gray-500 mt-2">
                         <Calendar className="w-4 h-4" />
                         <span>{formatDate(cert.issueDate)}</span>
                       </div>
@@ -190,7 +194,7 @@ const TeacherProfilePage = () => {
                           href={cert.credentialUrl}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="text-sm text-primary-600 hover:underline mt-1 inline-block"
+                          className="text-sm text-primary-600 hover:underline mt-2 inline-block font-semibold"
                         >
                           View Credential →
                         </a>
@@ -201,35 +205,10 @@ const TeacherProfilePage = () => {
               </div>
             )}
 
-            {/* Verification Status - Showing Certifications */}
-            {teacher.certifications && teacher.certifications.length > 0 && (
-              <div className="card">
-                <h3 className="text-xl font-bold mb-4">Professional Certifications</h3>
-                <div className="space-y-3">
-                  {teacher.certifications.map((cert: any) => (
-                    <div
-                      key={cert.id}
-                      className="flex items-start space-x-2"
-                    >
-                      <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
-                      <div>
-                        <p className="text-sm font-medium">
-                          {cert.title}
-                        </p>
-                        <p className="text-xs text-gray-600">
-                          Issued by {cert.issuer} on {formatDate(cert.issueDate)}
-                        </p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
             {/* Contact */}
-            <div className="card bg-primary-50 border-primary-200">
-              <h3 className="text-xl font-bold mb-4">Interested in learning?</h3>
-              <p className="text-gray-700 mb-4">
+            <div className="card bg-gradient-to-br from-primary-50 to-primary-100 border-2 border-primary-200 shadow-lg">
+              <h3 className="text-xl font-bold mb-4 text-gray-900">Interested in learning?</h3>
+              <p className="text-gray-700 mb-6 leading-relaxed">
                 Browse {teacher.user?.firstName}'s courses and start your learning
                 journey today!
               </p>

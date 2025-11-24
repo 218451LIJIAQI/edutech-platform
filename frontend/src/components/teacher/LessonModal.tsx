@@ -53,7 +53,7 @@ const LessonModal: React.FC<LessonModalProps> = ({
 
       // Handle video based on selected type
       if (videoType === 'upload' && videoFile) {
-        toast.info('Uploading video...');
+        toast.loading('Uploading video...');
         videoUrl = await uploadService.uploadVideo(videoFile, setUploadProgress);
       } else if (videoType === 'link' && videoLink.trim()) {
         videoUrl = videoLink.trim();
@@ -80,10 +80,14 @@ const LessonModal: React.FC<LessonModalProps> = ({
 
       onSuccess();
       onClose();
-    } catch (error: any) {
+    } catch (error) {
       console.error('Failed to save lesson:', error);
-      const errorMessage = error.response?.data?.message || 'Failed to save lesson';
-      toast.error(errorMessage);
+      const message = error instanceof Error && 'response' in error 
+        ? (error as { response?: { data?: { message?: string } } }).response?.data?.message 
+        : error instanceof Error 
+        ? error.message 
+        : undefined;
+      toast.error(message || 'Failed to save lesson');
     } finally {
       setIsSubmitting(false);
       setUploadProgress(0);

@@ -50,7 +50,7 @@ const MaterialModal: React.FC<MaterialModalProps> = ({
 
       // Handle file based on selected type
       if (materialType === 'upload' && materialFile) {
-        toast.info('Uploading material...');
+        toast.loading('Uploading material...');
         const uploadResult = await uploadService.uploadDocument(materialFile);
         fileUrl = uploadResult.url;
         fileType = uploadResult.mimeType || 'application/octet-stream';
@@ -98,10 +98,14 @@ const MaterialModal: React.FC<MaterialModalProps> = ({
 
       onSuccess();
       onClose();
-    } catch (error: any) {
+    } catch (error) {
       console.error('Failed to save material:', error);
-      const errorMessage = error.response?.data?.message || 'Failed to save material';
-      toast.error(errorMessage);
+      const message = error instanceof Error && 'response' in error 
+        ? (error as { response?: { data?: { message?: string } } }).response?.data?.message 
+        : error instanceof Error 
+        ? error.message 
+        : undefined;
+      toast.error(message || 'Failed to save material');
     } finally {
       setIsSubmitting(false);
       setUploadProgress(0);
