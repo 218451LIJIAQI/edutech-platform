@@ -23,6 +23,16 @@ const UniversalVideoPlayer = ({
   autoPlay = false,
   startTime = 0,
 }: UniversalVideoPlayerProps) => {
+  const resolveAssetUrl = (path?: string) => {
+    if (!path) return '';
+    if (/^https?:\/\//i.test(path)) return path;
+    const apiUrl = (import.meta as any).env?.VITE_API_URL || 'http://localhost:3000/api/v1';
+    const origin = apiUrl.replace(/\/api(\/.*)?$/i, '');
+    return `${origin}${path.startsWith('/') ? path : `/${path}`}`;
+  };
+
+  const resolvedSrc = resolveAssetUrl(src);
+  const resolvedPoster = poster ? resolveAssetUrl(poster) : undefined;
   // Helper function to extract YouTube video ID
   const getYouTubeId = (url: string): string | null => {
     const patterns = [

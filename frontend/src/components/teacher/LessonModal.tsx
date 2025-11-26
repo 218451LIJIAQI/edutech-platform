@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 import { useForm } from 'react-hook-form';
-import { LessonType } from '@/types';
+import { LessonType, Lesson } from '@/types';
 import courseService from '@/services/course.service';
 import uploadService from '@/services/upload.service';
 import toast from 'react-hot-toast';
@@ -9,6 +10,8 @@ import toast from 'react-hot-toast';
 interface LessonModalProps {
   courseId: string;
   lessonId?: string;
+  initialLesson?: Lesson;
+  defaultVideoType?: 'upload' | 'link';
   onClose: () => void;
   onSuccess: () => void;
 }
@@ -24,6 +27,8 @@ interface LessonFormData {
 const LessonModal: React.FC<LessonModalProps> = ({
   courseId,
   lessonId,
+  initialLesson,
+  defaultVideoType,
   onClose,
   onSuccess,
 }) => {
@@ -37,6 +42,7 @@ const LessonModal: React.FC<LessonModalProps> = ({
   const {
     register,
     handleSubmit,
+    setValue,
     formState: { errors },
   } = useForm<LessonFormData>({
     defaultValues: {
@@ -45,6 +51,28 @@ const LessonModal: React.FC<LessonModalProps> = ({
       duration: 30,
     },
   });
+
+  // Prefill when editing
+  useEffect(() => {
+    if (isEditMode && initialLesson) {
+      setValue('title', initialLesson.title);
+      setValue('description', initialLesson.description || '');
+      setValue('type', initialLesson.type || LessonType.RECORDED);
+      if (typeof initialLesson.duration === 'number') setValue('duration', initialLesson.duration);
+      setValue('isFree', !!initialLesson.isFree);
+      if (initialLesson.videoUrl) {
+        setVideoType('link');
+        setVideoLink(initialLesson.videoUrl);
+      }
+    }
+  }, [isEditMode, initialLesson, setValue]);
+
+  // Initialize default video type for creation
+  useEffect(() => {
+    if (!isEditMode && defaultVideoType) {
+      setVideoType(defaultVideoType);
+    }
+  }, [defaultVideoType, isEditMode]);
 
   const onSubmit = async (data: LessonFormData) => {
     setIsSubmitting(true);
@@ -94,10 +122,19 @@ const LessonModal: React.FC<LessonModalProps> = ({
     }
   };
 
-  return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-        <div className="sticky top-0 bg-white border-b px-6 py-4 flex items-center justify-between">
+  const handleBackdropClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (e.target === e.currentTarget) {
+      onClose();
+    }
+  };
+
+  const modalContent = (
+    <div 
+      className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[9999] p-4 overflow-y-auto"
+      onClick={handleBackdropClick}
+    >
+      <div className="bg-white rounded-lg max-w-2xl w-full my-8 z-[10000]">
+        <div className="sticky top-0 bg-white border-b px-6 py-4 flex items-center justify-between z-[10001]">
           <h2 className="text-xl font-bold">
             {isEditMode ? 'Edit Lesson' : 'Create New Lesson'}
           </h2>
@@ -106,7 +143,7 @@ const LessonModal: React.FC<LessonModalProps> = ({
           </button>
         </div>
 
-        <form onSubmit={handleSubmit(onSubmit)} className="p-6 space-y-6">
+        <form onSubmit={handleSubmit(onSubmit)} className="p-6 space-y-6 overflow-y-auto max-h-[calc(90vh-120px)]">
           {/* Title */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -165,14 +202,14 @@ const LessonModal: React.FC<LessonModalProps> = ({
           </div>
 
           {/* Video */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+          <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+            <label className="block text-sm font-medium text-gray-700 mb-4">
               Video (Optional)
             </label>
             
             {/* Video Type Selection */}
-            <div className="flex space-x-4 mb-4">
-              <label className="flex items-center space-x-2 cursor-pointer">
+            <div className="flex flex-col sm:flex-row gap-4 mb-6">
+              <label className="flex items-center space-x-3 cursor-pointer p-3 bg-white rounded-lg border-2 transition-all" style={{borderColor: videoType === 'upload' ? '#3b82f6' : '#e5e7eb'}}>
                 <input
                   type="radio"
                   value="upload"
@@ -181,11 +218,11 @@ const LessonModal: React.FC<LessonModalProps> = ({
                     setVideoType(e.target.value as 'upload');
                     setVideoLink('');
                   }}
-                  className="form-radio text-primary-600"
+                  className="form-radio text-primary-600 w-4 h-4"
                 />
-                <span className="text-sm">Upload Video File</span>
+                <span className="text-sm font-medium">Upload Video File</span>
               </label>
-              <label className="flex items-center space-x-2 cursor-pointer">
+              <label className="flex items-center space-x-3 cursor-pointer p-3 bg-white rounded-lg border-2 transition-all" style={{borderColor: videoType === 'link' ? '#3b82f6' : '#e5e7eb'}}>
                 <input
                   type="radio"
                   value="link"
@@ -194,55 +231,66 @@ const LessonModal: React.FC<LessonModalProps> = ({
                     setVideoType(e.target.value as 'link');
                     setVideoFile(null);
                   }}
-                  className="form-radio text-primary-600"
+                  className="form-radio text-primary-600 w-4 h-4"
                 />
-                <span className="text-sm">Video Link</span>
+                <span className="text-sm font-medium">Paste Video URL</span>
               </label>
             </div>
 
             {/* Upload File Option */}
             {videoType === 'upload' && (
-              <>
+              <div className="space-y-3">
                 <input
                   type="file"
                   accept="video/*"
                   onChange={(e) => setVideoFile(e.target.files?.[0] || null)}
                   className="input"
                 />
-                <p className="text-xs text-gray-500 mt-1">
+                <p className="text-xs text-gray-600">
                   Upload a video file (max 100MB). Supported formats: MP4, WebM, MOV
                 </p>
+                {videoFile && (
+                  <p className="text-sm text-green-600 font-medium">
+                    ✓ Selected: {videoFile.name}
+                  </p>
+                )}
                 {uploadProgress > 0 && uploadProgress < 100 && (
-                  <div className="mt-2">
-                    <div className="flex items-center justify-between text-sm mb-1">
-                      <span>Uploading...</span>
-                      <span>{uploadProgress}%</span>
+                  <div className="mt-3">
+                    <div className="flex items-center justify-between text-sm mb-2">
+                      <span className="font-medium">Uploading...</span>
+                      <span className="font-bold text-primary-600">{uploadProgress}%</span>
                     </div>
-                    <div className="w-full bg-gray-200 rounded-full h-2">
+                    <div className="w-full bg-gray-300 rounded-full h-3">
                       <div
-                        className="bg-primary-600 h-2 rounded-full transition-all"
+                        className="bg-primary-600 h-3 rounded-full transition-all"
                         style={{ width: `${uploadProgress}%` }}
                       ></div>
                     </div>
                   </div>
                 )}
-              </>
+              </div>
             )}
 
             {/* Video Link Option */}
             {videoType === 'link' && (
-              <>
+              <div className="space-y-3">
                 <input
                   type="url"
                   value={videoLink}
                   onChange={(e) => setVideoLink(e.target.value)}
                   placeholder="https://www.youtube.com/watch?v=... or direct video link"
                   className="input"
+                  autoFocus
                 />
-                <p className="text-xs text-gray-500 mt-1">
+                <p className="text-xs text-gray-600">
                   Paste a video URL from YouTube, Vimeo, or direct video link
                 </p>
-              </>
+                {videoLink && (
+                  <p className="text-sm text-green-600 font-medium">
+                    ✓ Video URL: {videoLink.substring(0, 50)}...
+                  </p>
+                )}
+              </div>
             )}
           </div>
 
@@ -286,6 +334,8 @@ const LessonModal: React.FC<LessonModalProps> = ({
       </div>
     </div>
   );
+
+  return createPortal(modalContent, document.body);
 };
 
 export default LessonModal;

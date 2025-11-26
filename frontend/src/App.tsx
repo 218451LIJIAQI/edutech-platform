@@ -30,8 +30,11 @@ import LiveSessionPage from './pages/student/LiveSessionPage';
 import TeacherDashboard from './pages/teacher/TeacherDashboard';
 import ManageCoursesPage from './pages/teacher/ManageCoursesPage';
 import CreateCoursePage from './pages/teacher/CreateCoursePage';
+import CourseManagementPage from './pages/teacher/CourseManagementPage';
 import VerificationPage from './pages/teacher/VerificationPage';
 import StudentsPage from './pages/teacher/StudentsPage';
+import TeacherStudentManagementPage from './pages/teacher/TeacherStudentManagementPage';
+import MessagesPage from './pages/messages/MessagesPage';
 import ProfileCompletionPage from './pages/teacher/ProfileCompletionPage';
 import AdminDashboard from './pages/admin/AdminDashboard';
 import UsersManagement from './pages/admin/UsersManagement';
@@ -255,6 +258,14 @@ function App() {
           }
         />
         <Route
+          path="/teacher/courses/:courseId/manage"
+          element={
+            <PrivateRoute allowedRoles={[UserRole.TEACHER]}>
+              <CourseManagementPage />
+            </PrivateRoute>
+          }
+        />
+        <Route
           path="/teacher/verification"
           element={
             <PrivateRoute allowedRoles={[UserRole.TEACHER]}>
@@ -279,6 +290,14 @@ function App() {
           }
         />
         <Route
+          path="/teacher/students-management"
+          element={
+            <PrivateRoute allowedRoles={[UserRole.TEACHER]}>
+              <TeacherStudentManagementPage />
+            </PrivateRoute>
+          }
+        />
+        <Route
           path="/teacher/profile-completion"
           element={
             <PrivateRoute allowedRoles={[UserRole.TEACHER]}>
@@ -296,6 +315,14 @@ function App() {
         />
 
         {/* Protected Common routes */}
+        <Route
+          path="/messages"
+          element={
+            <PrivateRoute>
+              <MessagesPage />
+            </PrivateRoute>
+          }
+        />
         <Route
           path="/profile"
           element={

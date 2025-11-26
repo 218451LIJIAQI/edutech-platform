@@ -144,6 +144,8 @@ model User {
   following        CommunityFollowing[]   @relation("Following")
   supportTickets   SupportTicket[]
   supportMessages  SupportTicketMessage[]
+  messageThreads   MessageThread[]        @relation("ThreadParticipants")
+  sentMessages     Message[]
 
   @@map("users")
 }
@@ -678,4 +680,35 @@ model CommunityFollowing {
 
   @@unique([followerId, followingId])
   @@map("community_following")
+}
+
+// ================================
+// MESSAGING
+// ================================
+
+model MessageThread {
+  id            String   @id @default(uuid())
+  participantIds String  @map("participant_ids") // JSON array of user IDs
+  updatedAt     DateTime @updatedAt @map("updated_at")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  participants  User[]   @relation("ThreadParticipants")
+  messages      Message[]
+
+  @@map("message_threads")
+}
+
+model Message {
+  id        String   @id @default(uuid())
+  threadId  String   @map("thread_id")
+  senderId  String   @map("sender_id")
+  content   String
+  isRead    Boolean  @default(false) @map("is_read")
+  readAt    DateTime? @map("read_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  thread MessageThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  sender User          @relation(fields: [senderId], references: [id], onDelete: Cascade)
+
+  @@map("messages")
 }

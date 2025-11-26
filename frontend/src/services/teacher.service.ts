@@ -216,31 +216,6 @@ export const teacherService = {
     );
     return response.data.data!;
   },
-
-  /**
-   * Get pending teacher registrations (Admin only)
-   */
-  getPendingRegistrations: async (params?: {
-    page?: number;
-    limit?: number;
-  }): Promise<PaginatedResponse<TeacherProfile>['data']> => {
-    const response = await api.get<PaginatedResponse<TeacherProfile>>('/teachers/admin/pending-registrations', { params });
-    return response.data.data;
-  },
-
-  /**
-   * Review teacher registration (Admin only)
-   */
-  reviewRegistration: async (
-    teacherProfileId: string,
-    status: string
-  ): Promise<TeacherProfile> => {
-    const response = await api.put<ApiResponse<TeacherProfile>>(
-      `/teachers/admin/registrations/${teacherProfileId}/review`,
-      { status }
-    );
-    return response.data.data!;
-  },
 };
 
 export default teacherService;

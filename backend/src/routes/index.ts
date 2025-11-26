@@ -42,10 +42,12 @@ import cartRoutes from './cart.routes';
 import ordersRoutes from './orders.routes';
 import communityRoutes from './community.routes';
 import supportRoutes from './support.routes';
+import messageRoutes from './message.routes';
 router.use('/cart', cartRoutes);
 router.use('/orders', ordersRoutes);
 router.use('/community', communityRoutes);
 router.use('/support', supportRoutes);
+router.use('/messages', messageRoutes);
 
 router.use('/admin', adminRoutes);
 

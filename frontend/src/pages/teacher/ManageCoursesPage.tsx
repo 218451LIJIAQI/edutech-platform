@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Plus, Edit, Trash2, Eye, EyeOff, Users, Video, Radio, PlayCircle } from 'lucide-react';
+import { Plus, Edit, Trash2, Eye, EyeOff, Users, Video, Radio, PlayCircle, Search, Filter, BookOpen, TrendingUp } from 'lucide-react';
 import courseService from '@/services/course.service';
 import { Course, CourseType } from '@/types';
 import { formatCurrency } from '@/utils/helpers';
@@ -8,12 +8,14 @@ import toast from 'react-hot-toast';
 
 /**
  * Manage Courses Page
- * Teacher's course management interface
+ * Teacher's course management interface with improved UI
  */
 const ManageCoursesPage = () => {
   const navigate = useNavigate();
   const [courses, setCourses] = useState<Course[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [filterStatus, setFilterStatus] = useState<'all' | 'published' | 'draft'>('all');
 
   useEffect(() => {
     fetchMyCourses();
@@ -67,6 +69,42 @@ const ManageCoursesPage = () => {
     }
   };
 
+  // Filter and search courses
+  const filteredCourses = courses.filter((course) => {
+    const matchesSearch = course.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                         course.description?.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesStatus = filterStatus === 'all' || 
+                         (filterStatus === 'published' && course.isPublished) ||
+                         (filterStatus === 'draft' && !course.isPublished);
+    return matchesSearch && matchesStatus;
+  });
+
+  // Calculate statistics
+  const stats = {
+    total: courses.length,
+    published: courses.filter(c => c.isPublished).length,
+    draft: courses.filter(c => !c.isPublished).length,
+    totalStudents: courses.reduce((sum, c) => sum + ((c as Course & { _count?: { enrollments?: number } })._count?.enrollments || 0), 0),
+  };
+
+  // Resolve asset URL (handles absolute and relative paths like /uploads/...)
+  const resolveAssetUrl = (path?: string) => {
+    if (!path) return '';
+    if (/^https?:\/\//i.test(path)) return path;
+    const apiUrl = (import.meta as any).env?.VITE_API_URL || 'http://localhost:3000/api/v1';
+    // Remove trailing /api/... from API URL to get server origin
+    const origin = apiUrl.replace(/\/api(\/.*)?$/i, '');
+    return `${origin}${path.startsWith('/') ? path : `/${path}`}`;
+  };
+
+  // Build a placeholder cover when no thumbnail is set
+  const getCourseCover = (course: Course) => {
+    if (course.thumbnail) return resolveAssetUrl(course.thumbnail);
+    const keyword = encodeURIComponent(course.category || course.title || 'education');
+    // Unsplash dynamic placeholder
+    return `https://source.unsplash.com/featured/800x450?${keyword}`;
+  };
+
   if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 via-blue-50 to-indigo-50">
@@ -80,196 +118,336 @@ const ManageCoursesPage = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 via-blue-50 to-indigo-50">
-    <div className="container mx-auto px-4 py-8">
-      {/* Header */}
-        <div className="flex items-center justify-between mb-10">
-        <div>
-            <h1 className="section-title mb-2">Manage Courses</h1>
-            <p className="section-subtitle">Create and manage your course offerings</p>
-        </div>
-          <Link to="/teacher/courses/new" className="btn-primary btn-lg">
-          <Plus className="w-5 h-5 mr-2" />
-          Create New Course
-        </Link>
-      </div>
+      <div className="container mx-auto px-4 py-8">
+        {/* Header Section */}
+        <div className="mb-10">
+          <div className="flex items-center justify-between mb-8">
+            <div>
+              <h1 className="section-title mb-2">Manage Courses</h1>
+              <p className="section-subtitle">Create and manage your course offerings</p>
+            </div>
+            <Link to="/teacher/courses/new" className="btn-primary btn-lg">
+              <Plus className="w-5 h-5 mr-2" />
+              Create New Course
+            </Link>
+          </div>
 
-      {/* Courses List */}
-      {courses.length > 0 ? (
-        <div className="space-y-6">
-          {courses.map((course) => (
-            <div key={course.id} className="card shadow-lg hover:shadow-xl transition-all">
-              <div className="flex items-start justify-between">
-                {/* Course Info */}
-                <div className="flex-1">
-                  <div className="flex items-center flex-wrap gap-3 mb-3">
-                    <h3 className="text-2xl font-bold text-gray-900">{course.title}</h3>
-                    {course.isPublished ? (
-                      <span className="badge-success">Published</span>
-                    ) : (
-                      <span className="badge-warning">Draft</span>
-                    )}
-                    <span className="badge-primary">{course.category}</span>
-                    
-                    {/* Course Type */}
-                    {course.courseType === CourseType.LIVE && (
-                      <span className="badge bg-gradient-to-r from-red-100 to-red-50 text-red-800 border border-red-200 flex items-center gap-1">
-                        <Radio className="w-3 h-3" />
-                        Live
-                      </span>
-                    )}
-                    {course.courseType === CourseType.RECORDED && (
-                      <span className="badge bg-gradient-to-r from-blue-100 to-blue-50 text-blue-800 border border-blue-200 flex items-center gap-1">
-                        <Video className="w-3 h-3" />
-                        Recorded
-                      </span>
-                    )}
-                    {course.courseType === CourseType.HYBRID && (
-                      <span className="badge bg-gradient-to-r from-purple-100 to-purple-50 text-purple-800 border border-purple-200 flex items-center gap-1">
-                        <PlayCircle className="w-3 h-3" />
-                        Hybrid
-                      </span>
-                    )}
+          {/* Statistics Cards */}
+          {courses.length > 0 && (
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+              <div className="card shadow-md hover:shadow-lg transition-shadow">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-gray-600 text-sm font-medium mb-1">Total Courses</p>
+                    <p className="text-3xl font-bold text-gray-900">{stats.total}</p>
                   </div>
-
-                  <p className="text-gray-600 mb-4 line-clamp-2 text-lg">
-                    {course.description}
-                  </p>
-
-                  {/* Stats */}
-                  <div className="flex items-center space-x-6 text-sm">
-                    <div className="flex items-center space-x-2 text-gray-700 font-medium">
-                      <Users className="w-5 h-5 text-primary-600" />
-                      <span>
-                        {(course as Course & { _count?: { enrollments?: number } })._count?.enrollments || 0} students
-                      </span>
-                    </div>
-                    <div className="text-gray-700 font-medium">
-                      📚 {course.lessons?.length || 0} lessons
-                    </div>
-                    {course.packages && course.packages.length > 0 && (
-                      <div className="text-primary-600 font-bold">
-                        💰 From {formatCurrency(course.packages[0].finalPrice)}
-                      </div>
-                    )}
+                  <div className="w-12 h-12 bg-gradient-to-br from-blue-100 to-blue-200 rounded-lg flex items-center justify-center">
+                    <BookOpen className="w-6 h-6 text-blue-600" />
                   </div>
-                </div>
-
-                {/* Actions */}
-                <div className="flex items-center space-x-2 ml-6">
-                  {/* View */}
-                  <Link
-                    to={`/courses/${course.id}`}
-                    className="p-3 text-gray-600 hover:bg-primary-50 hover:text-primary-600 rounded-xl transition-all"
-                    title="View Course"
-                  >
-                    <Eye className="w-5 h-5" />
-                  </Link>
-
-                  {/* Toggle Publish */}
-                  <button
-                    onClick={() => handleTogglePublish(course.id, course.isPublished)}
-                    className="p-3 text-gray-600 hover:bg-yellow-50 hover:text-yellow-600 rounded-xl transition-all"
-                    title={course.isPublished ? 'Unpublish' : 'Publish'}
-                  >
-                    {course.isPublished ? (
-                      <EyeOff className="w-5 h-5" />
-                    ) : (
-                      <Eye className="w-5 h-5" />
-                    )}
-                  </button>
-
-                  {/* Edit */}
-                  <button
-                    onClick={() => navigate(`/teacher/courses/${course.id}/edit`)}
-                    className="p-3 text-blue-600 hover:bg-blue-50 rounded-xl transition-all"
-                    title="Edit Course"
-                  >
-                    <Edit className="w-5 h-5" />
-                  </button>
-
-                  {/* Delete */}
-                  <button
-                    onClick={() => handleDeleteCourse(course.id, course.title)}
-                    className="p-3 text-red-600 hover:bg-red-50 rounded-xl transition-all"
-                    title="Delete Course"
-                  >
-                    <Trash2 className="w-5 h-5" />
-                  </button>
                 </div>
               </div>
 
-              {/* Course Details Expandable Section */}
-              <div className="mt-6 pt-6 border-t border-gray-200">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <div className="p-4 bg-gradient-to-r from-gray-50 to-gray-100 rounded-xl">
-                    <p className="text-gray-600 mb-2 font-medium">Lessons</p>
-                    <p className="text-2xl font-bold text-gray-900">
-                      {course.lessons?.length || 0} total
-                    </p>
+              <div className="card shadow-md hover:shadow-lg transition-shadow">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-gray-600 text-sm font-medium mb-1">Published</p>
+                    <p className="text-3xl font-bold text-green-600">{stats.published}</p>
                   </div>
-                  <div className="p-4 bg-gradient-to-r from-gray-50 to-gray-100 rounded-xl">
-                    <p className="text-gray-600 mb-2 font-medium">Materials</p>
-                    <p className="text-2xl font-bold text-gray-900">
-                      {course.materials?.length || 0} files
-                    </p>
+                  <div className="w-12 h-12 bg-gradient-to-br from-green-100 to-green-200 rounded-lg flex items-center justify-center">
+                    <Eye className="w-6 h-6 text-green-600" />
                   </div>
-                  <div className="p-4 bg-gradient-to-r from-gray-50 to-gray-100 rounded-xl">
-                    <p className="text-gray-600 mb-2 font-medium">Packages</p>
-                    <p className="text-2xl font-bold text-gray-900">
-                      {course.packages?.length || 0} pricing options
-                    </p>
+                </div>
+              </div>
+
+              <div className="card shadow-md hover:shadow-lg transition-shadow">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-gray-600 text-sm font-medium mb-1">Drafts</p>
+                    <p className="text-3xl font-bold text-yellow-600">{stats.draft}</p>
+                  </div>
+                  <div className="w-12 h-12 bg-gradient-to-br from-yellow-100 to-yellow-200 rounded-lg flex items-center justify-center">
+                    <Edit className="w-6 h-6 text-yellow-600" />
+                  </div>
+                </div>
+              </div>
+
+              <div className="card shadow-md hover:shadow-lg transition-shadow">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-gray-600 text-sm font-medium mb-1">Total Students</p>
+                    <p className="text-3xl font-bold text-primary-600">{stats.totalStudents}</p>
+                  </div>
+                  <div className="w-12 h-12 bg-gradient-to-br from-primary-100 to-primary-200 rounded-lg flex items-center justify-center">
+                    <Users className="w-6 h-6 text-primary-600" />
                   </div>
                 </div>
               </div>
             </div>
-          ))}
-        </div>
-      ) : (
-        <div className="card text-center py-16 shadow-lg max-w-md mx-auto">
-          <div className="w-20 h-20 bg-gradient-to-br from-primary-100 to-primary-200 rounded-full flex items-center justify-center mx-auto mb-6">
-            <Plus className="w-10 h-10 text-primary-600" />
-          </div>
-          <h3 className="text-2xl font-bold text-gray-900 mb-3">No courses yet</h3>
-          <p className="text-gray-600 mb-8 text-lg">
-            Create your first course to start teaching
-          </p>
-          <Link to="/teacher/courses/new" className="btn-primary btn-lg inline-block">
-            <Plus className="w-5 h-5 mr-2" />
-            Create Your First Course
-          </Link>
-        </div>
-      )}
+          )}
 
-      {/* Help Card */}
-      <div className="card bg-gradient-to-r from-blue-50 to-blue-100 border-2 border-blue-200 mt-8 shadow-lg">
-        <h3 className="font-bold text-lg text-gray-900 mb-4">Course Creation Tips</h3>
-        <ul className="space-y-2 text-sm text-gray-700">
-          <li className="flex items-start">
-            <span className="mr-2 text-green-600 font-bold">✓</span>
-            <span>Use clear, descriptive titles</span>
-          </li>
-          <li className="flex items-start">
-            <span className="mr-2 text-green-600 font-bold">✓</span>
-            <span>Provide detailed course descriptions</span>
-          </li>
-          <li className="flex items-start">
-            <span className="mr-2 text-green-600 font-bold">✓</span>
-            <span>Add preview content to attract students</span>
-          </li>
-          <li className="flex items-start">
-            <span className="mr-2 text-green-600 font-bold">✓</span>
-            <span>Structure lessons in a logical order</span>
-          </li>
-          <li className="flex items-start">
-            <span className="mr-2 text-green-600 font-bold">✓</span>
-            <span>Include downloadable materials</span>
-          </li>
-          <li className="flex items-start">
-            <span className="mr-2 text-green-600 font-bold">✓</span>
-            <span>Set competitive pricing</span>
-          </li>
-        </ul>
-      </div>
+          {/* Search and Filter Bar */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {/* Search Input */}
+            <div className="md:col-span-2 relative">
+              <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+              <input
+                type="text"
+                placeholder="Search courses by title or description..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full pl-12 pr-4 py-3 bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent shadow-sm transition-all"
+              />
+            </div>
+
+            {/* Filter Dropdown */}
+            <div className="relative">
+              <Filter className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400 pointer-events-none" />
+              <select
+                value={filterStatus}
+                onChange={(e) => setFilterStatus(e.target.value as 'all' | 'published' | 'draft')}
+                className="w-full pl-12 pr-4 py-3 bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent shadow-sm transition-all appearance-none cursor-pointer"
+              >
+                <option value="all">All Courses</option>
+                <option value="published">Published</option>
+                <option value="draft">Draft</option>
+              </select>
+            </div>
+          </div>
+
+          {/* Results Count */}
+          {searchQuery || filterStatus !== 'all' ? (
+            <p className="text-sm text-gray-600 mt-3">
+              Found <span className="font-semibold text-gray-900">{filteredCourses.length}</span> course{filteredCourses.length !== 1 ? 's' : ''}
+            </p>
+          ) : null}
+        </div>
+
+        {/* Courses Grid */}
+        {filteredCourses.length > 0 ? (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {filteredCourses.map((course) => (
+              <div
+                key={course.id}
+                className="card shadow-lg hover:shadow-2xl transition-all duration-300 overflow-hidden group"
+              >
+                {/* Course Header with Thumbnail */}
+                <div className="relative h-40 overflow-hidden">
+                  {/* Fallback gradient + icon (visible when no image or image fails) */}
+                  <div className="absolute inset-0 bg-gradient-to-br from-primary-400 via-primary-500 to-primary-600">
+                    <div className="absolute inset-0 opacity-10 bg-pattern" />
+                    <div className="absolute inset-0 flex items-center justify-center">
+                      <BookOpen className="w-16 h-16 text-white opacity-40 group-hover:opacity-60 transition-opacity" />
+                    </div>
+                  </div>
+
+                  {/* Course cover image */}
+                  <img
+                    src={getCourseCover(course)}
+                    alt={`${course.title} cover`}
+                    loading="lazy"
+                    className="absolute inset-0 w-full h-full object-cover"
+                    onError={(e) => {
+                      // Hide broken image and show the gradient fallback beneath
+                      (e.currentTarget as HTMLImageElement).style.display = 'none';
+                    }}
+                  />
+
+                  {/* Overlay to improve contrast over images */}
+                  <div className="absolute inset-0 bg-black/10" />
+
+                  {/* Status Badge */}
+                  <div className="absolute top-4 right-4 flex gap-2">
+                    {course.isPublished ? (
+                      <span className="badge-success text-xs">Published</span>
+                    ) : (
+                      <span className="badge-warning text-xs">Draft</span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Course Content */}
+                <div className="p-6">
+                  {/* Title and Category */}
+                  <div className="mb-4">
+                    <h3 className="text-xl font-bold text-gray-900 mb-2 line-clamp-2 group-hover:text-primary-600 transition-colors">
+                      {course.title}
+                    </h3>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="badge-primary text-xs">{course.category}</span>
+                      
+                      {/* Course Type Badge */}
+                      {course.courseType === CourseType.LIVE && (
+                        <span className="badge bg-gradient-to-r from-red-100 to-red-50 text-red-800 border border-red-200 flex items-center gap-1 text-xs">
+                          <Radio className="w-3 h-3" />
+                          Live
+                        </span>
+                      )}
+                      {course.courseType === CourseType.RECORDED && (
+                        <span className="badge bg-gradient-to-r from-blue-100 to-blue-50 text-blue-800 border border-blue-200 flex items-center gap-1 text-xs">
+                          <Video className="w-3 h-3" />
+                          Recorded
+                        </span>
+                      )}
+                      {course.courseType === CourseType.HYBRID && (
+                        <span className="badge bg-gradient-to-r from-purple-100 to-purple-50 text-purple-800 border border-purple-200 flex items-center gap-1 text-xs">
+                          <PlayCircle className="w-3 h-3" />
+                          Hybrid
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Description */}
+                  <p className="text-gray-600 mb-4 line-clamp-2 text-sm">
+                    {course.description}
+                  </p>
+
+                  {/* Stats Grid */}
+                  <div className="grid grid-cols-3 gap-3 mb-6 py-4 border-y border-gray-200">
+                    <div className="text-center">
+                      <p className="text-gray-500 text-xs font-medium mb-1">Students</p>
+                      <p className="text-2xl font-bold text-gray-900">
+                        {(course as Course & { _count?: { enrollments?: number } })._count?.enrollments || 0}
+                      </p>
+                    </div>
+                    <div className="text-center">
+                      <p className="text-gray-500 text-xs font-medium mb-1">Lessons</p>
+                      <p className="text-2xl font-bold text-gray-900">
+                        {course.lessons?.length || 0}
+                      </p>
+                    </div>
+                    <div className="text-center">
+                      <p className="text-gray-500 text-xs font-medium mb-1">Materials</p>
+                      <p className="text-2xl font-bold text-gray-900">
+                        {course.materials?.length || 0}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Pricing */}
+                  {course.packages && course.packages.length > 0 && (
+                    <div className="mb-6 p-3 bg-gradient-to-r from-green-50 to-emerald-50 rounded-lg border border-green-200">
+                      <p className="text-xs text-gray-600 mb-1">Starting Price</p>
+                      <p className="text-lg font-bold text-green-700">
+                        {formatCurrency(course.packages[0].finalPrice)}
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Action Buttons */}
+                  <div className="flex gap-2">
+                    <Link
+                      to={`/teacher/courses/${course.id}/manage`}
+                      className="flex-1 btn-secondary text-center py-2 text-sm font-medium"
+                    >
+                      Manage
+                    </Link>
+                    <button
+                      onClick={() => navigate(`/teacher/courses/${course.id}/edit`)}
+                      className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
+                      title="Edit Course"
+                    >
+                      <Edit className="w-5 h-5" />
+                    </button>
+                    <button
+                      onClick={() => handleTogglePublish(course.id, course.isPublished)}
+                      className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-all"
+                      title={course.isPublished ? 'Unpublish' : 'Publish'}
+                    >
+                      {course.isPublished ? (
+                        <EyeOff className="w-5 h-5" />
+                      ) : (
+                        <Eye className="w-5 h-5" />
+                      )}
+                    </button>
+                    <button
+                      onClick={() => handleDeleteCourse(course.id, course.title)}
+                      className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-all"
+                      title="Delete Course"
+                    >
+                      <Trash2 className="w-5 h-5" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : courses.length === 0 ? (
+          // Empty State
+          <div className="card text-center py-16 shadow-lg max-w-md mx-auto">
+            <div className="w-20 h-20 bg-gradient-to-br from-primary-100 to-primary-200 rounded-full flex items-center justify-center mx-auto mb-6">
+              <Plus className="w-10 h-10 text-primary-600" />
+            </div>
+            <h3 className="text-2xl font-bold text-gray-900 mb-3">No courses yet</h3>
+            <p className="text-gray-600 mb-8 text-lg">
+              Create your first course to start teaching
+            </p>
+            <Link to="/teacher/courses/new" className="btn-primary btn-lg inline-block">
+              <Plus className="w-5 h-5 mr-2" />
+              Create Your First Course
+            </Link>
+          </div>
+        ) : (
+          // No Results State
+          <div className="card text-center py-16 shadow-lg max-w-md mx-auto">
+            <div className="w-20 h-20 bg-gradient-to-br from-gray-100 to-gray-200 rounded-full flex items-center justify-center mx-auto mb-6">
+              <Search className="w-10 h-10 text-gray-600" />
+            </div>
+            <h3 className="text-2xl font-bold text-gray-900 mb-3">No courses found</h3>
+            <p className="text-gray-600 mb-8 text-lg">
+              Try adjusting your search or filter criteria
+            </p>
+            <button
+              onClick={() => {
+                setSearchQuery('');
+                setFilterStatus('all');
+              }}
+              className="btn-secondary inline-block"
+            >
+              Clear Filters
+            </button>
+          </div>
+        )}
+
+        {/* Help Card */}
+        {courses.length > 0 && (
+          <div className="card bg-gradient-to-r from-blue-50 to-blue-100 border-2 border-blue-200 mt-8 shadow-lg">
+            <div className="flex items-start gap-4">
+              <div className="w-12 h-12 bg-blue-200 rounded-lg flex items-center justify-center flex-shrink-0">
+                <TrendingUp className="w-6 h-6 text-blue-600" />
+              </div>
+              <div>
+                <h3 className="font-bold text-lg text-gray-900 mb-3">Tips to Improve Your Courses</h3>
+                <ul className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm text-gray-700">
+                  <li className="flex items-start">
+                    <span className="mr-2 text-green-600 font-bold">✓</span>
+                    <span>Use clear, descriptive titles</span>
+                  </li>
+                  <li className="flex items-start">
+                    <span className="mr-2 text-green-600 font-bold">✓</span>
+                    <span>Provide detailed course descriptions</span>
+                  </li>
+                  <li className="flex items-start">
+                    <span className="mr-2 text-green-600 font-bold">✓</span>
+                    <span>Add preview content to attract students</span>
+                  </li>
+                  <li className="flex items-start">
+                    <span className="mr-2 text-green-600 font-bold">✓</span>
+                    <span>Structure lessons in a logical order</span>
+                  </li>
+                  <li className="flex items-start">
+                    <span className="mr-2 text-green-600 font-bold">✓</span>
+                    <span>Include downloadable materials</span>
+                  </li>
+                  <li className="flex items-start">
+                    <span className="mr-2 text-green-600 font-bold">✓</span>
+                    <span>Set competitive pricing</span>
+                  </li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
