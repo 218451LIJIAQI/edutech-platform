@@ -46,6 +46,33 @@ export enum RefundStatus {
   APPROVED = 'APPROVED',
   REJECTED = 'REJECTED',
   COMPLETED = 'COMPLETED',
+  PROCESSING = 'PROCESSING',
+}
+
+export enum RefundMethod {
+  ORIGINAL_PAYMENT = 'ORIGINAL_PAYMENT',
+  WALLET = 'WALLET',
+  BANK_TRANSFER = 'BANK_TRANSFER',
+}
+
+export enum SupportTicketStatus {
+  OPEN = 'OPEN',
+  IN_PROGRESS = 'IN_PROGRESS',
+  RESOLVED = 'RESOLVED',
+  CLOSED = 'CLOSED',
+}
+
+export enum SupportTicketPriority {
+  LOW = 'LOW',
+  MEDIUM = 'MEDIUM',
+  HIGH = 'HIGH',
+  URGENT = 'URGENT',
+}
+
+export enum RegistrationStatus {
+  PENDING = 'PENDING',
+  APPROVED = 'APPROVED',
+  REJECTED = 'REJECTED',
 }
 
 export enum ReportType {
@@ -86,6 +113,27 @@ export interface TeacherProfile {
   averageRating: number;
   totalEarnings: number;
   isVerified: boolean;
+  verificationStatus?: VerificationStatus;
+  registrationStatus?: 'PENDING' | 'APPROVED' | 'REJECTED';
+  
+  // Extended Profile Fields
+  selfIntroduction?: string;
+  educationBackground?: string;
+  teachingExperience?: string;
+  awards?: string[] | string; // JSON array or string
+  specialties?: string[] | string; // JSON array or string
+  teachingStyle?: string;
+  languages?: string[] | string; // JSON array or string
+  yearsOfExperience?: number;
+  profilePhoto?: string;
+  certificatePhotos?: string[] | string; // JSON array or string
+  
+  // Profile Completion Status
+  profileCompletionStatus?: string; // INCOMPLETE, PENDING_REVIEW, APPROVED, REJECTED
+  profileSubmittedAt?: string;
+  profileReviewedAt?: string;
+  profileReviewNotes?: string;
+  
   user?: User;
   certifications?: Certification[];
 }
@@ -220,9 +268,45 @@ export interface Refund {
   orderId: string;
   amount: number;
   reason?: string;
+  reasonCategory?: string;
   status: RefundStatus;
+  refundMethod: RefundMethod;
+  bankDetails?: string;
+  notes?: string;
   createdAt: string;
   processedAt?: string;
+  completedAt?: string;
+  // Expanded details for admin views
+  order?: Order & { user?: User };
+}
+
+export interface SupportTicketMessage {
+  id: string;
+  ticketId: string;
+  senderId: string;
+  message: string;
+  attachment?: string;
+  createdAt: string;
+  sender?: User;
+}
+
+export interface SupportTicket {
+  id: string;
+  ticketNo: string;
+  userId: string;
+  orderId?: string;
+  subject: string;
+  description: string;
+  category: string;
+  priority: SupportTicketPriority;
+  status: SupportTicketStatus;
+  assignedTo?: string;
+  resolution?: string;
+  createdAt: string;
+  updatedAt: string;
+  resolvedAt?: string;
+  messages?: SupportTicketMessage[];
+  user?: User;
 }
 
 export interface Review {
@@ -327,6 +411,17 @@ export interface TeacherVerification {
   reviewNotes?: string;
   submittedAt: string;
   reviewedAt?: string;
+}
+
+// Teacher Profile Submission
+export interface TeacherProfileSubmission {
+  id: string;
+  teacherProfileId: string;
+  status: VerificationStatus;
+  submittedAt: string;
+  reviewedBy?: string;
+  reviewedAt?: string;
+  reviewNotes?: string;
 }
 
 // Payment with expanded details

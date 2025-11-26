@@ -63,6 +63,13 @@ export const authService = {
   },
 
   /**
+   * Delete current account (Danger Zone)
+   */
+  deleteAccount: async (): Promise<void> => {
+    await api.delete('/auth/account');
+  },
+
+  /**
    * Refresh access token
    */
   refreshToken: async (refreshToken: string): Promise<AuthTokens> => {

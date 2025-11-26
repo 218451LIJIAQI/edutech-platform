@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ImagePlus, Video, Tag, Link as LinkIcon, Trash2, Loader2 } from 'lucide-react';
+import { ImagePlus, Video, Tag, Link as LinkIcon, Trash2, Loader2, Star } from 'lucide-react';
 import communityService from '@/services/community.service';
 import { CommunityMedia, CommunityPost, CommunityTag } from '@/types/community';
 import uploadService from '@/services/upload.service';
@@ -137,7 +137,9 @@ const CreatePostPage = () => {
 
             <div>
               <label className="block text-sm font-semibold text-gray-700 mb-2">Add Media (Images/Videos)</label>
-              <div className="flex items-center gap-3 mb-3">
+              <p className="text-xs text-gray-600 mb-2">Tip: Use an image as the first media to make your post more eye-catching in the feed.</p>
+              <div className="flex items-center gap-3 mb-3 flex-wrap">
+                {/* Local upload */}
                 <label className="btn-outline btn-sm inline-flex items-center gap-2 cursor-pointer">
                   <ImagePlus className="w-4 h-4" /> Upload Image
                   <input type="file" accept="image/*" hidden onChange={(e) => e.target.files && onUpload(e.target.files[0])} />
@@ -146,18 +148,82 @@ const CreatePostPage = () => {
                   <Video className="w-4 h-4" /> Upload Video
                   <input type="file" accept="video/*" hidden onChange={(e) => e.target.files && onUpload(e.target.files[0])} />
                 </label>
+
+                {/* Add by URL */}
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    id="mediaUrlInput"
+                    placeholder="Paste image URL or video URL (YouTube/Vimeo/mp4)"
+                    className="input w-80"
+                  />
+                  <button
+                    type="button"
+                    className="btn-outline btn-sm"
+                    onClick={() => {
+                      const el = document.getElementById('mediaUrlInput') as HTMLInputElement | null;
+                      const url = el?.value.trim();
+                      if (!url) return;
+                      // Detect media type by extension or known hosts
+                      const isImage = /\.(png|jpe?g|gif|webp|avif)(\?.*)?$/i.test(url);
+                      const isDirectVideo = /\.(mp4|webm|m3u8|mov|ogg)(\?.*)?$/i.test(url);
+                      const isYouTube = /(?:youtube\.com\/(?:watch\?v=|embed\/)|youtu\.be\/)/i.test(url);
+                      const isVimeo = /vimeo\.com\//i.test(url);
+                      const type: 'image' | 'video' | undefined = isImage ? 'image' : (isDirectVideo || isYouTube || isVimeo) ? 'video' : undefined;
+                      if (!type) { toast.error('Unsupported media URL'); return; }
+                      const m: CommunityMedia = {
+                        id: (crypto.randomUUID?.() || String(Date.now())),
+                        type,
+                        url,
+                      };
+                      setMedia(prev => [...prev, m]);
+                      if (el) el.value = '';
+                    }}
+                  >
+                    Add by URL
+                  </button>
+                </div>
+
                 {isUploading && <span className="inline-flex items-center text-sm text-gray-600"><Loader2 className="w-4 h-4 mr-1 animate-spin" /> Uploading...</span>}
               </div>
+
               {media.length > 0 && (
                 <div className="grid grid-cols-2 gap-3">
-                  {media.map(m => (
-                    <div key={m.id} className="relative">
+                  {media.map((m, idx) => (
+                    <div key={m.id} className="relative group">
+                      {/* Media preview */}
                       {m.type === 'image' ? (
                         <img src={m.url} alt="uploaded media" className="w-full h-44 object-cover rounded-xl border" />
                       ) : (
                         <video src={m.url} className="w-full h-44 object-cover rounded-xl border" controls />
                       )}
+
+                      {/* Remove */}
                       <button type="button" onClick={() => removeMedia(m.id)} className="absolute top-2 right-2 p-1 rounded-full bg-white shadow border hover:bg-gray-50" aria-label="remove media"><Trash2 className="w-4 h-4" /></button>
+
+                      {/* Set as cover (move to index 0) */}
+                      <button
+                        type="button"
+                        onClick={() => setMedia((prev) => {
+                          const copy = [...prev];
+                          const i = copy.findIndex(x => x.id === m.id);
+                          if (i > -1) {
+                            const [item] = copy.splice(i, 1);
+                            copy.unshift(item);
+                          }
+                          return copy;
+                        })}
+                        className="absolute bottom-2 right-2 px-2 py-1 rounded bg-white/90 text-xs border hover:bg-white"
+                        title="Set as cover"
+                      >
+                        <Star className="w-3 h-3 inline mr-1" /> Cover
+                      </button>
+
+                      {idx === 0 && (
+                        <span className="absolute top-2 left-2 inline-flex items-center gap-1 px-2 py-0.5 rounded bg-primary-600 text-white text-xs shadow">
+                          <Star className="w-3 h-3" /> Cover
+                        </span>
+                      )}
                     </div>
                   ))}
                 </div>

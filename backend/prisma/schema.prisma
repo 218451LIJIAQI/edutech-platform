@@ -80,6 +80,33 @@ enum RefundStatus {
   APPROVED
   REJECTED
   COMPLETED
+  PROCESSING
+}
+
+enum RefundMethod {
+  ORIGINAL_PAYMENT
+  WALLET
+  BANK_TRANSFER
+}
+
+enum SupportTicketStatus {
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+  CLOSED
+}
+
+enum SupportTicketPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum RegistrationStatus {
+  PENDING
+  APPROVED
+  REJECTED
 }
 
 // ================================
@@ -115,6 +142,8 @@ model User {
   communityBookmarks CommunityPostBookmark[]
   followers        CommunityFollowing[]   @relation("Followers")
   following        CommunityFollowing[]   @relation("Following")
+  supportTickets   SupportTicket[]
+  supportMessages  SupportTicketMessage[]
 
   @@map("users")
 }
@@ -124,23 +153,45 @@ model User {
 // ================================
 
 model TeacherProfile {
-  id            String   @id @default(uuid())
-  userId        String   @unique @map("user_id")
-  bio           String?
-  headline      String?
-  hourlyRate    Float?   @map("hourly_rate")
-  totalStudents Int      @default(0) @map("total_students")
-  averageRating Float    @default(0) @map("average_rating")
-  totalEarnings Float    @default(0) @map("total_earnings")
-  isVerified    Boolean  @default(false) @map("is_verified")
-  createdAt     DateTime @default(now()) @map("created_at")
-  updatedAt     DateTime @updatedAt @map("updated_at")
+  id                    String                 @id @default(uuid())
+  userId                String                 @unique @map("user_id")
+  bio                   String?
+  headline              String?
+  hourlyRate            Float?                 @map("hourly_rate")
+  totalStudents         Int                    @default(0) @map("total_students")
+  averageRating         Float                  @default(0) @map("average_rating")
+  totalEarnings         Float                  @default(0) @map("total_earnings")
+  isVerified            Boolean                @default(false) @map("is_verified")
+  verificationStatus    VerificationStatus     @default(PENDING) @map("verification_status")
+  registrationStatus    RegistrationStatus     @default(PENDING) @map("registration_status")
+  
+  // Extended Profile Fields
+  selfIntroduction      String?                @map("self_introduction")
+  educationBackground   String?                @map("education_background")
+  teachingExperience    String?                @map("teaching_experience")
+  awards                String?                // JSON array of awards
+  specialties           String?                // JSON array of specialties
+  teachingStyle         String?                @map("teaching_style")
+  languages             String?                // JSON array of languages
+  yearsOfExperience     Int?                   @map("years_of_experience")
+  profilePhoto          String?                @map("profile_photo")
+  certificatePhotos     String?                @map("certificate_photos") // JSON array of certificate photo URLs
+  
+  // Profile Completion Status
+  profileCompletionStatus String               @default("INCOMPLETE") @map("profile_completion_status") // INCOMPLETE, PENDING_REVIEW, APPROVED, REJECTED
+  profileSubmittedAt    DateTime?              @map("profile_submitted_at")
+  profileReviewedAt     DateTime?              @map("profile_reviewed_at")
+  profileReviewNotes    String?                @map("profile_review_notes")
+  
+  createdAt             DateTime               @default(now()) @map("created_at")
+  updatedAt             DateTime               @updatedAt @map("updated_at")
 
   // Relations
-  user           User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
-  verifications  TeacherVerification[]
-  courses        Course[]
-  certifications Certification[]
+  user                  User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  verifications         TeacherVerification[]
+  courses               Course[]
+  certifications        Certification[]
+  profileSubmissions    TeacherProfileSubmission[]
 
   @@map("teacher_profiles")
 }
@@ -159,6 +210,22 @@ model TeacherVerification {
   teacherProfile TeacherProfile @relation(fields: [teacherProfileId], references: [id], onDelete: Cascade)
 
   @@map("teacher_verifications")
+}
+
+// Teacher Profile Submission for tracking profile completion submissions
+model TeacherProfileSubmission {
+  id               String             @id @default(uuid())
+  teacherProfileId String             @map("teacher_profile_id")
+  status           VerificationStatus @default(PENDING)
+  submittedAt      DateTime           @default(now()) @map("submitted_at")
+  reviewedBy       String?            @map("reviewed_by")
+  reviewedAt       DateTime?          @map("reviewed_at")
+  reviewNotes      String?            @map("review_notes")
+  payload          Json?              @map("payload")
+  
+  teacherProfile   TeacherProfile     @relation(fields: [teacherProfileId], references: [id], onDelete: Cascade)
+
+  @@map("teacher_profile_submissions")
 }
 
 model Certification {
@@ -345,17 +412,60 @@ model OrderItem {
 }
 
 model Refund {
-  id          String       @id @default(uuid())
-  orderId     String       @map("order_id")
-  amount      Float
-  reason      String?
-  status      RefundStatus @default(PENDING)
-  createdAt   DateTime     @default(now()) @map("created_at")
-  processedAt DateTime?    @map("processed_at")
+  id              String        @id @default(uuid())
+  orderId         String        @map("order_id")
+  amount          Float
+  reason          String?
+  reasonCategory  String?       @map("reason_category") // e.g., "QUALITY_ISSUE", "CHANGED_MIND", "TECHNICAL_ISSUE"
+  status          RefundStatus  @default(PENDING)
+  refundMethod    RefundMethod  @default(ORIGINAL_PAYMENT) @map("refund_method")
+  bankDetails     String?       @map("bank_details") // JSON string for bank transfer details
+  notes           String?
+  createdAt       DateTime      @default(now()) @map("created_at")
+  processedAt     DateTime?     @map("processed_at")
+  completedAt     DateTime?     @map("completed_at")
 
   order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
 
   @@map("refunds")
+}
+
+// Support Tickets for Customer Service
+model SupportTicket {
+  id          String                 @id @default(uuid())
+  ticketNo    String                 @unique @map("ticket_no")
+  userId      String                 @map("user_id")
+  orderId     String?                @map("order_id")
+  subject     String
+  description String
+  category    String // e.g., "REFUND", "TECHNICAL", "QUALITY", "OTHER"
+  priority    SupportTicketPriority  @default(MEDIUM)
+  status      SupportTicketStatus    @default(OPEN)
+  assignedTo  String?                @map("assigned_to") // admin user id
+  resolution  String?
+  createdAt   DateTime               @default(now()) @map("created_at")
+  updatedAt   DateTime               @updatedAt @map("updated_at")
+  resolvedAt  DateTime?              @map("resolved_at")
+
+  user     User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages SupportTicketMessage[]
+
+  @@map("support_tickets")
+}
+
+// Support Ticket Messages for chat-like communication
+model SupportTicketMessage {
+  id        String   @id @default(uuid())
+  ticketId  String   @map("ticket_id")
+  senderId  String   @map("sender_id")
+  message   String
+  attachment String? // file URL
+  createdAt DateTime @default(now()) @map("created_at")
+
+  ticket SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  sender User          @relation(fields: [senderId], references: [id], onDelete: Cascade)
+
+  @@map("support_ticket_messages")
 }
 
 // ================================

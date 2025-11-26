@@ -1,4 +1,4 @@
-import { VerificationStatus } from '@prisma/client';
+import { Prisma, VerificationStatus, RegistrationStatus } from '@prisma/client';
 import prisma from '../config/database';
 import {
   NotFoundError,
@@ -135,7 +135,23 @@ class TeacherService {
       throw new NotFoundError('Teacher not found');
     }
 
-    return teacher;
+    // Only expose extended profile fields to students when approved
+    const approved = teacher.profileCompletionStatus === 'APPROVED';
+
+    return {
+      ...teacher,
+      // Parse JSON fields conditionally
+      awards: approved && teacher.awards ? JSON.parse(teacher.awards) : [],
+      specialties: approved && teacher.specialties ? JSON.parse(teacher.specialties) : [],
+      languages: approved && teacher.languages ? JSON.parse(teacher.languages) : [],
+      certificatePhotos: approved && teacher.certificatePhotos ? JSON.parse(teacher.certificatePhotos) : [],
+      selfIntroduction: approved ? teacher.selfIntroduction : undefined,
+      educationBackground: approved ? teacher.educationBackground : undefined,
+      teachingExperience: approved ? teacher.teachingExperience : undefined,
+      teachingStyle: approved ? teacher.teachingStyle : undefined,
+      yearsOfExperience: approved ? teacher.yearsOfExperience : undefined,
+      profilePhoto: approved ? teacher.profilePhoto : teacher.user?.avatar || null,
+    };
   }
 
   /**
@@ -356,6 +372,18 @@ class TeacherService {
       });
     }
 
+    // If rejected, do NOT delete the user. Keep the record for admin auditing and notify teacher.
+    if (status === VerificationStatus.REJECTED) {
+      await prisma.notification.create({
+        data: {
+          userId: verification.teacherProfile.userId,
+          title: 'Verification Rejected',
+          message: `Your verification has been rejected. Reason: ${reviewNotes || 'Not specified'}`,
+          type: 'verification',
+        },
+      });
+    }
+
     return updated;
   }
 
@@ -410,6 +438,429 @@ class TeacherService {
       averageRating: teacherProfile.averageRating,
       totalStudents: teacherProfile.totalStudents,
       isVerified: teacherProfile.isVerified,
+    };
+  }
+
+  /**
+   * Submit extended profile for review
+   * This method saves the extended profile information and creates a submission record
+   */
+  async submitExtendedProfile(
+    userId: string,
+    data: {
+      selfIntroduction?: string;
+      educationBackground?: string;
+      teachingExperience?: string;
+      awards?: string[];
+      specialties?: string[];
+      teachingStyle?: string;
+      languages?: string[];
+      yearsOfExperience?: number;
+      profilePhoto?: string;
+      certificatePhotos?: string[];
+    }
+  ) {
+    const teacherProfile = await prisma.teacherProfile.findUnique({
+      where: { userId },
+    });
+
+    if (!teacherProfile) {
+      throw new NotFoundError('Teacher profile not found');
+    }
+
+    // Do NOT write into TeacherProfile yet; store as draft payload in submission
+    const updatedProfile = await prisma.teacherProfile.update({
+      where: { userId },
+      data: {
+        // Mark as pending review so admin can find it
+        profileCompletionStatus: 'PENDING_REVIEW',
+        profileSubmittedAt: new Date(),
+      },
+      include: {
+        user: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            email: true,
+          },
+        },
+      },
+    });
+
+    await prisma.teacherProfileSubmission.create({
+      data: {
+        teacherProfileId: teacherProfile.id,
+        status: VerificationStatus.PENDING,
+        submittedAt: new Date(),
+        payload: {
+          selfIntroduction: data.selfIntroduction ?? null,
+          educationBackground: data.educationBackground ?? null,
+          teachingExperience: data.teachingExperience ?? null,
+          awards: data.awards ?? [],
+          specialties: data.specialties ?? [],
+          teachingStyle: data.teachingStyle ?? null,
+          languages: data.languages ?? [],
+          yearsOfExperience: data.yearsOfExperience ?? null,
+          profilePhoto: data.profilePhoto ?? null,
+          certificatePhotos: data.certificatePhotos ?? [],
+        },
+      },
+    });
+
+    return updatedProfile;
+  }
+
+  /**
+   * Get extended profile for teacher
+   */
+  async getExtendedProfile(userId: string) {
+    const teacherProfile = await prisma.teacherProfile.findUnique({
+      where: { userId },
+      include: {
+        user: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            email: true,
+            avatar: true,
+          },
+        },
+        certifications: true,
+      },
+    });
+
+    if (!teacherProfile) {
+      throw new NotFoundError('Teacher profile not found');
+    }
+
+    // Parse JSON fields
+    return {
+      ...teacherProfile,
+      awards: teacherProfile.awards ? JSON.parse(teacherProfile.awards) : [],
+      specialties: teacherProfile.specialties ? JSON.parse(teacherProfile.specialties) : [],
+      languages: teacherProfile.languages ? JSON.parse(teacherProfile.languages) : [],
+      certificatePhotos: teacherProfile.certificatePhotos ? JSON.parse(teacherProfile.certificatePhotos) : [],
+    };
+  }
+
+  /**
+   * Get pending teacher registrations (Admin only)
+   */
+  async getPendingRegistrations(page = 1, limit = 10) {
+    const skip = (page - 1) * limit;
+
+    const [teachers, total] = await Promise.all([
+      prisma.teacherProfile.findMany({
+        where: { registrationStatus: RegistrationStatus.PENDING },
+        skip,
+        take: limit,
+        include: {
+          user: {
+            select: {
+              id: true,
+              firstName: true,
+              lastName: true,
+              email: true,
+              avatar: true,
+            },
+          },
+        },
+        orderBy: { createdAt: 'asc' },
+      }),
+      prisma.teacherProfile.count({ where: { registrationStatus: RegistrationStatus.PENDING } }),
+    ]);
+
+    return {
+      teachers,
+      pagination: {
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit),
+      },
+    };
+  }
+
+  /**
+   * Review teacher registration (Admin only)
+   */
+  async reviewRegistration(
+    teacherProfileId: string,
+    adminId: string,
+    status: RegistrationStatus,
+  ) {
+    // Mark adminId as intentionally unused for now (placeholder for future auditing)
+    void adminId;
+    const teacherProfile = await prisma.teacherProfile.findUnique({ where: { id: teacherProfileId } });
+    if (!teacherProfile) {
+      throw new NotFoundError('Teacher profile not found');
+    }
+
+    const updated = await prisma.teacherProfile.update({
+      where: { id: teacherProfileId },
+      data: {
+        registrationStatus: status,
+      },
+      include: {
+        user: {
+          select: { id: true, firstName: true, lastName: true, email: true, isActive: true },
+        },
+      },
+    });
+
+    // If registration is rejected, hard delete the user (and cascade related teacher entities)
+    if (status === RegistrationStatus.REJECTED) {
+      await prisma.user.delete({ where: { id: updated.user.id } });
+      return { ...updated, user: { ...updated.user, isActive: false } } as any; // return shape-compatible object
+    }
+
+    return updated;
+  }
+
+  /**
+   * Get all teachers pending profile verification (Admin only)
+   */
+  async getPendingProfileVerifications(page = 1, limit = 10) {
+    const skip = (page - 1) * limit;
+
+    const [teachers, total] = await Promise.all([
+      prisma.teacherProfile.findMany({
+        where: {
+          profileCompletionStatus: 'PENDING_REVIEW',
+        },
+        skip,
+        take: limit,
+        include: {
+          user: {
+            select: {
+              id: true,
+              firstName: true,
+              lastName: true,
+              email: true,
+              avatar: true,
+            },
+          },
+          profileSubmissions: {
+            orderBy: { submittedAt: 'desc' },
+            take: 1,
+          },
+        },
+        orderBy: { profileSubmittedAt: 'asc' },
+      }),
+      prisma.teacherProfile.count({
+        where: { profileCompletionStatus: 'PENDING_REVIEW' },
+      }),
+    ]);
+
+    // For admin review: overlay pending draft payload onto the teacher object for display only
+    const mapped = teachers.map((t) => {
+      const draft = t.profileSubmissions?.[0]?.payload as any | undefined;
+      const base = {
+        ...t,
+        awards: t.awards ? JSON.parse(t.awards) : [],
+        specialties: t.specialties ? JSON.parse(t.specialties) : [],
+        languages: t.languages ? JSON.parse(t.languages) : [],
+        certificatePhotos: t.certificatePhotos ? JSON.parse(t.certificatePhotos) : [],
+      } as any;
+
+      if (draft) {
+        base.selfIntroduction = draft.selfIntroduction ?? base.selfIntroduction;
+        base.educationBackground = draft.educationBackground ?? base.educationBackground;
+        base.teachingExperience = draft.teachingExperience ?? base.teachingExperience;
+        base.awards = Array.isArray(draft.awards) ? draft.awards : base.awards;
+        base.specialties = Array.isArray(draft.specialties) ? draft.specialties : base.specialties;
+        base.teachingStyle = draft.teachingStyle ?? base.teachingStyle;
+        base.languages = Array.isArray(draft.languages) ? draft.languages : base.languages;
+        base.yearsOfExperience = draft.yearsOfExperience ?? base.yearsOfExperience;
+        base.profilePhoto = draft.profilePhoto ?? base.profilePhoto;
+        base.certificatePhotos = Array.isArray(draft.certificatePhotos) ? draft.certificatePhotos : base.certificatePhotos;
+      }
+      return base;
+    });
+
+    return {
+      teachers: mapped,
+      pagination: {
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit),
+      },
+    };
+  }
+
+  /**
+   * Review and approve/reject teacher extended profile (Admin only)
+   */
+  async reviewTeacherProfile(
+    teacherProfileId: string,
+    adminId: string,
+    status: VerificationStatus,
+    reviewNotes?: string
+  ) {
+    const teacherProfile = await prisma.teacherProfile.findUnique({ where: { id: teacherProfileId } });
+    if (!teacherProfile) throw new NotFoundError('Teacher profile not found');
+
+    // Get latest submission (draft payload)
+    const submission = await prisma.teacherProfileSubmission.findFirst({
+      where: { teacherProfileId },
+      orderBy: { submittedAt: 'desc' },
+    });
+
+    if (!submission) {
+      throw new NotFoundError('No submission found for this teacher');
+    }
+
+    if (status === VerificationStatus.APPROVED) {
+      const p = (submission.payload as any) || {};
+      const updated = await prisma.teacherProfile.update({
+        where: { id: teacherProfileId },
+        data: {
+          // Apply approved payload to live profile fields
+          selfIntroduction: p.selfIntroduction ?? teacherProfile.selfIntroduction,
+          educationBackground: p.educationBackground ?? teacherProfile.educationBackground,
+          teachingExperience: p.teachingExperience ?? teacherProfile.teachingExperience,
+          awards: Array.isArray(p.awards) ? JSON.stringify(p.awards) : teacherProfile.awards,
+          specialties: Array.isArray(p.specialties) ? JSON.stringify(p.specialties) : teacherProfile.specialties,
+          teachingStyle: p.teachingStyle ?? teacherProfile.teachingStyle,
+          languages: Array.isArray(p.languages) ? JSON.stringify(p.languages) : teacherProfile.languages,
+          yearsOfExperience: p.yearsOfExperience ?? teacherProfile.yearsOfExperience,
+          profilePhoto: p.profilePhoto ?? teacherProfile.profilePhoto,
+          certificatePhotos: Array.isArray(p.certificatePhotos) ? JSON.stringify(p.certificatePhotos) : teacherProfile.certificatePhotos,
+          profileCompletionStatus: 'APPROVED',
+          profileReviewedAt: new Date(),
+          profileReviewNotes: reviewNotes,
+        },
+        include: {
+          user: { select: { id: true, firstName: true, lastName: true, email: true } },
+        },
+      });
+
+      await prisma.teacherProfileSubmission.update({
+        where: { id: submission.id },
+        data: { status: VerificationStatus.APPROVED, reviewedBy: adminId, reviewedAt: new Date(), reviewNotes, payload: Prisma.DbNull },
+      });
+
+      // Notify teacher of approval
+      await prisma.notification.create({
+        data: {
+          userId: updated.user.id,
+          title: 'Profile Approved',
+          message: 'Your teacher profile submission has been approved.',
+          type: 'profile',
+        },
+      });
+
+      return updated;
+    } else if (status === VerificationStatus.REJECTED) {
+      // Mark submission rejected and clear payload; keep live profile unchanged
+      await prisma.teacherProfileSubmission.update({
+        where: { id: submission.id },
+        data: { status: VerificationStatus.REJECTED, reviewedBy: adminId, reviewedAt: new Date(), reviewNotes, payload: Prisma.DbNull },
+      });
+
+      // Preserve previously approved profile visibility: do not downgrade from APPROVED
+      const nextStatus = teacherProfile.profileCompletionStatus === 'APPROVED' ? 'APPROVED' : 'INCOMPLETE';
+      const updated = await prisma.teacherProfile.update({
+        where: { id: teacherProfileId },
+        data: { profileCompletionStatus: nextStatus, profileReviewedAt: new Date(), profileReviewNotes: reviewNotes },
+        include: { user: { select: { id: true, firstName: true, lastName: true, email: true } } },
+      });
+
+      // Notify teacher of rejection
+      await prisma.notification.create({
+        data: {
+          userId: updated.user.id,
+          title: 'Profile Rejected',
+          message: `Your teacher profile submission was rejected. Reason: ${reviewNotes || 'Not specified'}`,
+          type: 'profile',
+        },
+      });
+
+      return updated;
+    } else {
+      // PENDING maps to PENDING_REVIEW state (no-op for review action)
+      const updated = await prisma.teacherProfile.update({
+        where: { id: teacherProfileId },
+        data: { profileCompletionStatus: 'PENDING_REVIEW', profileReviewedAt: new Date(), profileReviewNotes: reviewNotes },
+        include: { user: { select: { id: true, firstName: true, lastName: true, email: true } } },
+      });
+      return updated;
+    }
+  }
+
+  /**
+   * Get all verified teachers (for student view)
+   */
+  async getVerifiedTeachers(filters: {
+    search?: string;
+    page?: number;
+    limit?: number;
+  }) {
+    const {
+      search,
+      page = 1,
+      limit = 10,
+    } = filters;
+
+    const skip = (page - 1) * limit;
+
+    const where: any = {
+      isVerified: true,
+      profileCompletionStatus: 'APPROVED',
+    };
+
+    if (search) {
+      where.OR = [
+        { user: { firstName: { contains: search, mode: 'insensitive' } } },
+        { user: { lastName: { contains: search, mode: 'insensitive' } } },
+        { headline: { contains: search, mode: 'insensitive' } },
+        { bio: { contains: search, mode: 'insensitive' } },
+        { specialties: { contains: search, mode: 'insensitive' } },
+      ];
+    }
+
+    const [teachers, total] = await Promise.all([
+      prisma.teacherProfile.findMany({
+        where,
+        skip,
+        take: limit,
+        include: {
+          user: {
+            select: {
+              id: true,
+              firstName: true,
+              lastName: true,
+              email: true,
+              avatar: true,
+            },
+          },
+          certifications: true,
+          _count: {
+            select: { courses: true },
+          },
+        },
+        orderBy: { averageRating: 'desc' },
+      }),
+      prisma.teacherProfile.count({ where }),
+    ]);
+
+    return {
+      teachers: teachers.map((t) => ({
+        ...t,
+        awards: t.awards ? JSON.parse(t.awards) : [],
+        specialties: t.specialties ? JSON.parse(t.specialties) : [],
+        languages: t.languages ? JSON.parse(t.languages) : [],
+        certificatePhotos: t.certificatePhotos ? JSON.parse(t.certificatePhotos) : [],
+      })),
+      pagination: {
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit),
+      },
     };
   }
 }

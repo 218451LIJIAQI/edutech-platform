@@ -22,8 +22,12 @@ const TeachersPage = () => {
   const fetchTeachers = async () => {
     setIsLoading(true);
     try {
-      const result = await teacherService.getAllTeachers({
-        isVerified: verifiedOnly || undefined,
+      // Use verified teachers endpoint if verified filter is selected
+      const result = verifiedOnly
+        ? await teacherService.getVerifiedTeachers({
+            search: searchTerm || undefined,
+          })
+        : await teacherService.getAllTeachers({
         minRating: minRating || undefined,
         search: searchTerm || undefined,
       });
@@ -129,9 +133,17 @@ const TeachersPage = () => {
               >
                 {/* Teacher Avatar */}
                 <div className="flex items-center space-x-4 mb-4">
+                  {teacher.user?.avatar ? (
+                    <img
+                      src={teacher.user.avatar}
+                      alt={`${teacher.user.firstName} ${teacher.user.lastName}`}
+                      className="w-16 h-16 rounded-full object-cover shadow-md"
+                    />
+                  ) : (
                   <div className="w-16 h-16 bg-gradient-to-br from-primary-600 to-primary-700 text-white rounded-full flex items-center justify-center text-xl font-bold shadow-md">
                     {teacher.user?.firstName?.[0]}{teacher.user?.lastName?.[0]}
                   </div>
+                  )}
                   <div className="flex-1">
                     <h3 className="font-bold text-lg text-gray-900">
                       {teacher.user?.firstName} {teacher.user?.lastName}

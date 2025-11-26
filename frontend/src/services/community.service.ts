@@ -104,6 +104,9 @@ export const communityService = {
       const { data } = await api.post('/community/posts', input);
       return data.data as CommunityPost;
     } catch (e) {
+      if (!useFallback) {
+        throw e;
+      }
       const s = loadStore();
       const p: CommunityPost = {
         id: uid(),

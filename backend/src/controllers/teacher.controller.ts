@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import { VerificationStatus } from '@prisma/client';
+import { VerificationStatus, RegistrationStatus } from '@prisma/client';
 import teacherService from '../services/teacher.service';
 import asyncHandler from '../utils/asyncHandler';
 
@@ -23,7 +23,8 @@ class TeacherController {
     } = req.query;
 
     const result = await teacherService.getAllTeachers({
-      isVerified: isVerified === 'true',
+      // Only apply isVerified filter if the query param is provided
+      isVerified: typeof isVerified === 'string' ? isVerified === 'true' : undefined,
       category: category as string,
       minRating: minRating ? parseFloat(minRating as string) : undefined,
       search: search as string,
@@ -213,6 +214,159 @@ class TeacherController {
       status: 'success',
       message: 'Verification reviewed successfully',
       data: verification,
+    });
+  });
+
+  /**
+   * Submit extended profile for review
+   * POST /api/teachers/me/profile/submit
+   */
+  submitExtendedProfile = asyncHandler(async (req: Request, res: Response) => {
+    const userId = req.user!.id;
+    const {
+      selfIntroduction,
+      educationBackground,
+      teachingExperience,
+      awards,
+      specialties,
+      teachingStyle,
+      languages,
+      yearsOfExperience,
+      profilePhoto,
+      certificatePhotos,
+    } = req.body;
+
+    const profile = await teacherService.submitExtendedProfile(userId, {
+      selfIntroduction,
+      educationBackground,
+      teachingExperience,
+      awards,
+      specialties,
+      teachingStyle,
+      languages,
+      yearsOfExperience,
+      profilePhoto,
+      certificatePhotos,
+    });
+
+    res.status(201).json({
+      status: 'success',
+      message: 'Profile submitted for review successfully',
+      data: profile,
+    });
+  });
+
+  /**
+   * Get extended profile
+   * GET /api/teachers/me/profile/extended
+   */
+  getExtendedProfile = asyncHandler(async (req: Request, res: Response) => {
+    const userId = req.user!.id;
+
+    const profile = await teacherService.getExtendedProfile(userId);
+
+    res.status(200).json({
+      status: 'success',
+      data: profile,
+    });
+  });
+
+  /**
+   * Get all teachers pending profile verification (Admin only)
+   * GET /api/teachers/admin/pending-profiles
+   */
+  getPendingProfileVerifications = asyncHandler(async (req: Request, res: Response) => {
+    const { page, limit } = req.query;
+
+    const result = await teacherService.getPendingProfileVerifications(
+      page ? parseInt(page as string) : 1,
+      limit ? parseInt(limit as string) : 10
+    );
+
+    res.status(200).json({
+      status: 'success',
+      data: result,
+    });
+  });
+
+  /**
+   * Review teacher extended profile (Admin only)
+   * PUT /api/teachers/admin/profiles/:id/review
+   */
+  reviewTeacherProfile = asyncHandler(async (req: Request, res: Response) => {
+    const { id } = req.params;
+    const adminId = req.user!.id;
+    const { status, reviewNotes } = req.body;
+
+    const profile = await teacherService.reviewTeacherProfile(
+      id,
+      adminId,
+      status as VerificationStatus,
+      reviewNotes
+    );
+
+    res.status(200).json({
+      status: 'success',
+      message: 'Teacher profile reviewed successfully',
+      data: profile,
+    });
+  });
+
+  /**
+   * Get all verified teachers (for student view)
+   * GET /api/teachers/verified
+   */
+  getVerifiedTeachers = asyncHandler(async (req: Request, res: Response) => {
+    const { search, page, limit } = req.query;
+
+    const result = await teacherService.getVerifiedTeachers({
+      search: search as string,
+      page: page ? parseInt(page as string) : 1,
+      limit: limit ? parseInt(limit as string) : 10,
+    });
+
+    res.status(200).json({
+      status: 'success',
+      data: result,
+    });
+  });
+  /**
+   * Get pending teacher registrations (Admin only)
+   * GET /api/teachers/admin/pending-registrations
+   */
+  getPendingRegistrations = asyncHandler(async (req: Request, res: Response) => {
+    const { page, limit } = req.query;
+
+    const result = await teacherService.getPendingRegistrations(
+      page ? parseInt(page as string) : 1,
+      limit ? parseInt(limit as string) : 10
+    );
+
+    res.status(200).json({
+      status: 'success',
+      data: result,
+    });
+  });
+
+  /**
+   * Review teacher registration (Admin only)
+   * PUT /api/teachers/admin/registrations/:id/review
+   */
+  reviewRegistration = asyncHandler(async (req: Request, res: Response) => {
+    const { id } = req.params;
+    const adminId = req.user!.id;
+    const { status } = req.body;
+
+    const updated = await teacherService.reviewRegistration(
+      id,
+      adminId,
+      status as RegistrationStatus
+    );
+
+    res.status(200).json({
+      status: 'success',
+      message: 'Teacher registration reviewed successfully',
+      data: updated,
     });
   });
 }

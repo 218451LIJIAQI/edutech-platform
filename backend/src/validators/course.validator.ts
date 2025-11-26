@@ -370,21 +370,37 @@ export const updateMaterialValidation = [
 ];
 
 export const getCoursesValidation = [
+  query('search').optional().isString(),
+  query('category').optional().isString(),
+  query('teacherId').optional().isUUID().withMessage('teacherId must be a valid UUID'),
+  query('courseType')
+    .optional()
+    .isIn(['LIVE', 'RECORDED', 'HYBRID'])
+    .withMessage('courseType must be LIVE, RECORDED, or HYBRID'),
   query('minRating')
     .optional()
     .isFloat({ min: 0, max: 5 })
     .withMessage('minRating must be between 0 and 5'),
-
+  query('minPrice')
+    .optional()
+    .isFloat({ min: 0 })
+    .withMessage('minPrice must be a positive number'),
   query('maxPrice')
     .optional()
     .isFloat({ min: 0 })
     .withMessage('maxPrice must be a positive number'),
-
+  query('sortBy')
+    .optional()
+    .isIn(['NEWEST', 'RATING', 'POPULARITY', 'PRICE_ASC', 'PRICE_DESC'])
+    .withMessage('Invalid sortBy value'),
+  query('sortOrder')
+    .optional()
+    .isIn(['asc', 'desc'])
+    .withMessage('sortOrder must be asc or desc'),
   query('page')
     .optional()
     .isInt({ min: 1 })
     .withMessage('Page must be a positive integer'),
-
   query('limit')
     .optional()
     .isInt({ min: 1, max: 100 })

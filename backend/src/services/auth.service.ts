@@ -1,6 +1,6 @@
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
-import { UserRole } from '@prisma/client';
+import { UserRole, RegistrationStatus, VerificationStatus } from '@prisma/client';
 import prisma from '../config/database';
 import config from '../config/env';
 import {
@@ -42,6 +42,21 @@ interface TokenPair {
  * Handles user registration, login, token generation, and password management
  */
 class AuthService {
+  /**
+   * Permanently delete current user's account (Danger Zone)
+   */
+  async deleteAccount(userId: string) {
+    // Ensure user exists
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+    if (!user) {
+      throw new NotFoundError('User not found');
+    }
+
+    // Hard delete user; relations are set to onDelete: Cascade in Prisma schema
+    await prisma.user.delete({ where: { id: userId } });
+
+    return { message: 'Account deleted successfully' };
+  }
   /**
    * Register a new user
    */
@@ -87,6 +102,8 @@ class AuthService {
       await prisma.teacherProfile.create({
         data: {
           userId: user.id,
+          registrationStatus: RegistrationStatus.PENDING,
+          verificationStatus: VerificationStatus.PENDING,
         },
       });
     }
@@ -136,6 +153,8 @@ class AuthService {
         lastName: user.lastName,
         role: user.role,
         avatar: user.avatar,
+        createdAt: user.createdAt,
+        updatedAt: user.updatedAt,
       },
       tokens,
     };
@@ -195,6 +214,9 @@ class AuthService {
             totalStudents: true,
             averageRating: true,
             isVerified: true,
+            registrationStatus: true,
+            verificationStatus: true,
+            profileCompletionStatus: true, 
           },
         },
       },

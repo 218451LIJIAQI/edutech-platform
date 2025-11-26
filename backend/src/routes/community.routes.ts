@@ -1,6 +1,6 @@
 import { Router } from 'express';
-import communityController from '@/controllers/community.controller';
-import { authenticate } from '@/middleware/auth';
+import communityController from '../controllers/community.controller';
+import { authenticate } from '../middleware/auth';
 
 const router = Router();
 

@@ -132,6 +132,19 @@ class AuthController {
       message: 'Logout successful',
     });
   });
+
+  /**
+   * Delete current user's account
+   * DELETE /api/auth/account
+   */
+  deleteAccount = asyncHandler(async (req: Request, res: Response) => {
+    const userId = req.user!.id;
+    await authService.deleteAccount(userId);
+    res.status(200).json({
+      status: 'success',
+      message: 'Account deleted successfully',
+    });
+  });
 }
 
 export default new AuthController();

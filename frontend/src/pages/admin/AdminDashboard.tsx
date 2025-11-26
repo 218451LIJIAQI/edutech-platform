@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import {
   Users,
@@ -12,6 +12,35 @@ import {
 } from 'lucide-react';
 import adminService, { PlatformStats } from '@/services/admin.service';
 import { formatCurrency } from '@/utils/helpers';
+import styles from './AdminDashboard.module.css';
+
+/**
+ * Progress Bar Component
+ */
+interface ProgressBarProps {
+  percentage: number;
+  containerClassName: string;
+  barClassName: string;
+}
+
+const ProgressBar = ({ percentage, containerClassName, barClassName }: ProgressBarProps) => {
+  const progressRef = useRef<HTMLDivElement>(null);
+  
+  useEffect(() => {
+    if (progressRef.current) {
+      progressRef.current.style.setProperty('--progress-width', `${percentage}%`);
+    }
+  }, [percentage]);
+
+  return (
+    <div className={containerClassName}>
+      <div
+        ref={progressRef}
+        className={`${styles.progressBar} ${barClassName}`}
+      ></div>
+    </div>
+  );
+};
 
 /**
  * Admin Dashboard
@@ -24,8 +53,7 @@ const AdminDashboard = () => {
     type: string;
     description: string;
     createdAt: string;
-    timestamp?: string;
-    data?: Record<string, unknown>;
+    user?: { firstName: string; lastName: string };
   }>>([]);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -110,7 +138,7 @@ const AdminDashboard = () => {
       icon: Clock,
       color: 'text-yellow-600',
       bgColor: 'bg-yellow-50',
-      link: '/admin/verifications',
+      link: '/admin/verification-teachers',
     },
     {
       title: 'Open Reports',
@@ -141,46 +169,10 @@ const AdminDashboard = () => {
 
   const getActivityMessage = (activity: {
     type: string;
-    data?: Record<string, unknown>;
+    description: string;
+    user?: { firstName: string; lastName: string };
   }) => {
-    if (!activity.data) return 'Activity recorded';
-    
-    const data = activity.data;
-    switch (activity.type) {
-      case 'user_registered': {
-        const firstName = (data.firstName as string) || '';
-        const lastName = (data.lastName as string) || '';
-        const role = (data.role as string) || '';
-        return `${firstName} ${lastName} registered as ${role.toLowerCase()}`;
-      }
-      case 'course_created': {
-        const title = (data.title as string) || '';
-        const teacherProfile = data.teacherProfile as { user?: { firstName?: string } } | undefined;
-        const teacherName = teacherProfile?.user?.firstName || 'Unknown';
-        return `New course "${title}" created by ${teacherName}`;
-      }
-      case 'enrollment_created': {
-        const user = data.user as { firstName?: string } | undefined;
-        const pkg = data.package as { course?: { title?: string } } | undefined;
-        const userName = user?.firstName || 'Someone';
-        const courseTitle = pkg?.course?.title || 'a course';
-        return `${userName} enrolled in "${courseTitle}"`;
-      }
-      case 'report_submitted': {
-        const type = (data.type as string) || '';
-        return `New ${type.replace('_', ' ').toLowerCase()} report submitted`;
-      }
-      case 'payment_completed': {
-        const user = data.user as { firstName?: string; lastName?: string } | undefined;
-        const pkg = data.package as { course?: { title?: string } } | undefined;
-        const buyer = [user?.firstName, user?.lastName].filter(Boolean).join(' ') || 'Someone';
-        const courseTitle = pkg?.course?.title || 'a course';
-        const amount = typeof data.amount === 'number' ? formatCurrency(data.amount) : '';
-        return `${buyer} purchased "${courseTitle}"${amount ? ` for ${amount}` : ''}`;
-      }
-      default:
-        return 'Activity recorded';
-    }
+    return activity.description;
   };
 
   return (
@@ -233,7 +225,7 @@ const AdminDashboard = () => {
         </div>
 
         {/* Quick Actions */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-6 mb-8">
           <Link
             to="/admin/users"
             className="card bg-gradient-to-br from-blue-50 to-blue-100 border-2 border-blue-200 hover:shadow-xl hover:-translate-y-1 transition-all duration-300 group"
@@ -272,6 +264,28 @@ const AdminDashboard = () => {
               View revenue and transactions
             </p>
           </Link>
+
+          <Link
+            to="/admin/refunds"
+            className="card bg-gradient-to-br from-yellow-50 to-yellow-100 border-2 border-yellow-200 hover:shadow-xl hover:-translate-y-1 transition-all duration-300 group"
+          >
+            <div className="p-3 bg-yellow-200 rounded-lg w-fit mb-4 group-hover:bg-yellow-300 transition-colors">
+              <DollarSign className="w-8 h-8 text-yellow-700" />
+            </div>
+            <h3 className="text-lg font-bold mb-2 text-gray-900">Refunds</h3>
+            <p className="text-sm text-gray-700">Review and process refunds</p>
+          </Link>
+
+          <Link
+            to="/admin/support"
+            className="card bg-gradient-to-br from-indigo-50 to-indigo-100 border-2 border-indigo-200 hover:shadow-xl hover:-translate-y-1 transition-all duration-300 group"
+          >
+            <div className="p-3 bg-indigo-200 rounded-lg w-fit mb-4 group-hover:bg-indigo-300 transition-colors">
+              <Activity className="w-8 h-8 text-indigo-700" />
+            </div>
+            <h3 className="text-lg font-bold mb-2 text-gray-900">Support</h3>
+            <p className="text-sm text-gray-700">Manage support tickets</p>
+          </Link>
         </div>
 
         {/* Recent Activities */}
@@ -287,10 +301,10 @@ const AdminDashboard = () => {
 
           {activities.length > 0 ? (
             <div className="space-y-3">
-              {activities.map((activity, index) => (
+              {activities.map((activity) => (
                 <div
-                  key={index}
-                  className="flex items-start space-x-4 p-4 bg-gradient-to-r from-gray-50 to-gray-100 rounded-xl hover:from-gray-100 hover:to-gray-150 transition-all duration-300 border border-gray-200"
+                  key={activity.id}
+                  className="flex items-start space-x-4 p-4 bg-gradient-to-r from-gray-50 to-gray-100 rounded-xl hover:from-gray-100 hover:to-gray-200 transition-all duration-300 border border-gray-200"
                 >
                   <span className="text-3xl flex-shrink-0">
                     {getActivityIcon(activity.type)}
@@ -300,7 +314,7 @@ const AdminDashboard = () => {
                       {getActivityMessage(activity)}
                     </p>
                     <p className="text-xs text-gray-500 mt-2">
-                      {new Date(activity.timestamp || activity.createdAt).toLocaleString()}
+                      {new Date(activity.createdAt).toLocaleString()}
                     </p>
                   </div>
                 </div>
@@ -324,12 +338,11 @@ const AdminDashboard = () => {
           <p className="text-4xl font-bold text-primary-600 mb-2">
             {stats.overview.totalTeachers}
           </p>
-          <div className="w-full bg-primary-200 rounded-full h-2">
-            <div
-              className="bg-gradient-to-r from-primary-600 to-primary-700 h-2 rounded-full"
-              style={{ width: `${Math.round((stats.overview.totalTeachers / stats.overview.totalUsers) * 100)}%` }}
-            ></div>
-          </div>
+          <ProgressBar
+            percentage={Math.round((stats.overview.totalTeachers / stats.overview.totalUsers) * 100)}
+            containerClassName="w-full bg-primary-200 rounded-full h-2 overflow-hidden"
+            barClassName="bg-gradient-to-r from-primary-600 to-primary-700 h-2 rounded-full transition-all duration-500"
+          />
           <p className="text-sm text-primary-700 mt-3 font-medium">
             {Math.round((stats.overview.totalTeachers / stats.overview.totalUsers) * 100)}% of users
           </p>
@@ -342,12 +355,11 @@ const AdminDashboard = () => {
           <p className="text-4xl font-bold text-green-600 mb-2">
             {stats.overview.totalStudents}
           </p>
-          <div className="w-full bg-green-200 rounded-full h-2">
-            <div
-              className="bg-gradient-to-r from-green-600 to-green-700 h-2 rounded-full"
-              style={{ width: `${Math.round((stats.overview.totalStudents / stats.overview.totalUsers) * 100)}%` }}
-            ></div>
-          </div>
+          <ProgressBar
+            percentage={Math.round((stats.overview.totalStudents / stats.overview.totalUsers) * 100)}
+            containerClassName="w-full bg-green-200 rounded-full h-2 overflow-hidden"
+            barClassName="bg-gradient-to-r from-green-600 to-green-700 h-2 rounded-full transition-all duration-500"
+          />
           <p className="text-sm text-green-700 mt-3 font-medium">
             {Math.round((stats.overview.totalStudents / stats.overview.totalUsers) * 100)}% of users
           </p>
@@ -360,12 +372,11 @@ const AdminDashboard = () => {
           <p className="text-4xl font-bold text-purple-600 mb-2">
             {stats.overview.publishedCourses}
           </p>
-          <div className="w-full bg-purple-200 rounded-full h-2">
-            <div
-              className="bg-gradient-to-r from-purple-600 to-purple-700 h-2 rounded-full"
-              style={{ width: `${Math.round((stats.overview.publishedCourses / stats.overview.totalCourses) * 100)}%` }}
-            ></div>
-          </div>
+          <ProgressBar
+            percentage={Math.round((stats.overview.publishedCourses / stats.overview.totalCourses) * 100)}
+            containerClassName="w-full bg-purple-200 rounded-full h-2 overflow-hidden"
+            barClassName="bg-gradient-to-r from-purple-600 to-purple-700 h-2 rounded-full transition-all duration-500"
+          />
           <p className="text-sm text-purple-700 mt-3 font-medium">
             {Math.round((stats.overview.publishedCourses / stats.overview.totalCourses) * 100)}% of total
           </p>

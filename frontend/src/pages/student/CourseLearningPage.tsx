@@ -20,6 +20,7 @@ import { Course, Lesson, Enrollment } from '@/types';
 import courseService from '@/services/course.service';
 import enrollmentService from '@/services/enrollment.service';
 import toast from 'react-hot-toast';
+import UniversalVideoPlayer from '@/components/common/UniversalVideoPlayer';
 
 /**
  * Course Learning Page
@@ -200,28 +201,27 @@ const CourseLearningPage = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 via-blue-50 to-indigo-50">
-      {/* Video Player Section */}
-      <div className="bg-black shadow-2xl">
-        <div className="container mx-auto">
-          <div className="aspect-video bg-gray-900 flex items-center justify-center">
+      {/* Video Player */}
+      <div className="container mx-auto px-4 pt-6">
+        <div className="max-w-5xl mx-auto">
             {currentLesson.videoUrl ? (
-              <video
+            <div className="rounded-xl overflow-hidden shadow-xl">
+              <UniversalVideoPlayer
                 key={currentLesson.id}
                 src={currentLesson.videoUrl}
-                controls
-                controlsList="nodownload"
-                className="w-full h-full"
-                onEnded={handleLessonComplete}
-              >
-                Your browser does not support the video tag.
-              </video>
+                title={currentLesson.title}
+                onComplete={handleLessonComplete}
+                autoPlay={false}
+              />
+            </div>
             ) : (
-              <div className="text-white text-center">
+            <div className="aspect-video bg-gray-900 flex items-center justify-center rounded-xl text-white">
+              <div className="text-center p-8">
                 <Play className="w-16 h-16 mx-auto mb-4 opacity-50" />
                 <p>No video available for this lesson</p>
               </div>
+              </div>
             )}
-          </div>
         </div>
       </div>
 

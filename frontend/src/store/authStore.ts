@@ -43,8 +43,11 @@ export const useAuthStore = create<AuthState>()(
           localStorage.setItem('accessToken', tokens.accessToken);
           localStorage.setItem('refreshToken', tokens.refreshToken);
           
+          // Fetch full profile to include nested teacherProfile status
+          const fullUser = await authService.getProfile();
+
           set({
-            user,
+            user: fullUser,
             accessToken: tokens.accessToken,
             refreshToken: tokens.refreshToken,
             isAuthenticated: true,
@@ -67,8 +70,11 @@ export const useAuthStore = create<AuthState>()(
           localStorage.setItem('accessToken', tokens.accessToken);
           localStorage.setItem('refreshToken', tokens.refreshToken);
           
+          // Fetch full profile to include nested teacherProfile status
+          const fullUser = await authService.getProfile();
+
           set({
-            user,
+            user: fullUser,
             accessToken: tokens.accessToken,
             refreshToken: tokens.refreshToken,
             isAuthenticated: true,
@@ -106,7 +112,9 @@ export const useAuthStore = create<AuthState>()(
       updateProfile: async (data: Partial<User>) => {
         try {
           const updatedUser = await authService.updateProfile(data);
-          set({ user: updatedUser });
+          // Merge to preserve fields not returned by updateProfile (e.g., createdAt)
+          const prev = get().user || ({} as User);
+          set({ user: { ...prev, ...updatedUser } as User });
           toast.success('Profile updated successfully');
         } catch (error) {
           throw error;

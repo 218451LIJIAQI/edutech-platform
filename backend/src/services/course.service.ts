@@ -18,8 +18,12 @@ class CourseService {
     category?: string;
     teacherId?: string;
     search?: string;
+    courseType?: CourseType;
     minRating?: number;
+    minPrice?: number;
     maxPrice?: number;
+    sortBy?: 'NEWEST' | 'RATING' | 'POPULARITY' | 'PRICE_ASC' | 'PRICE_DESC';
+    sortOrder?: 'asc' | 'desc';
     page?: number;
     limit?: number;
   }) {
@@ -27,10 +31,14 @@ class CourseService {
       category,
       teacherId,
       search,
+      courseType,
       minRating,
+      minPrice,
       maxPrice,
+      sortBy = 'NEWEST',
+      sortOrder = 'desc',
       page = 1,
-      limit = 10,
+      limit = 12,
     } = filters;
 
     const skip = (page - 1) * limit;
@@ -48,6 +56,10 @@ class CourseService {
       where.teacherProfileId = teacherId;
     }
 
+    if (courseType) {
+      where.courseType = courseType;
+    }
+
     if (search) {
       where.OR = [
         { title: { contains: search, mode: 'insensitive' } },
@@ -55,21 +67,33 @@ class CourseService {
       ];
     }
 
-    if (minRating) {
+    if (minRating !== undefined) {
       where.teacherProfile = {
         averageRating: { gte: minRating },
       };
     }
 
-    if (maxPrice) {
+    if (minPrice !== undefined || maxPrice !== undefined) {
       where.packages = {
         some: {
-          finalPrice: { lte: maxPrice },
+          ...(minPrice !== undefined ? { finalPrice: { gte: minPrice } } : {}),
+          ...(maxPrice !== undefined ? { finalPrice: { lte: maxPrice } } : {}),
         },
       };
     }
 
-    const [courses, total] = await Promise.all([
+    // Map sort to Prisma orderBy where possible
+    let orderBy: any = undefined;
+    if (sortBy === 'NEWEST') {
+      orderBy = { createdAt: sortOrder };
+    } else if (sortBy === 'RATING') {
+      orderBy = { teacherProfile: { averageRating: 'desc' } }; // rating is always DESC
+    } else if (sortBy === 'POPULARITY') {
+      orderBy = { teacherProfile: { totalStudents: 'desc' } }; // popularity proxy
+    }
+
+    // Fetch data
+    const [rawCourses, total] = await Promise.all([
       prisma.course.findMany({
         where,
         skip,
@@ -103,13 +127,30 @@ class CourseService {
             },
           },
         },
-        orderBy: { createdAt: 'desc' },
+        ...(orderBy ? { orderBy } : { orderBy: { createdAt: 'desc' } }),
       }),
       prisma.course.count({ where }),
     ]);
 
+    // Compute min package price and sort by price if requested (in-memory for current page)
+    const courses = rawCourses.map((c) => ({
+      ...c,
+      minPackagePrice: c.packages.length
+        ? Math.min(...c.packages.map((p) => p.finalPrice))
+        : 0,
+    }));
+
+    if (sortBy === 'PRICE_ASC') {
+      courses.sort((a, b) => (a.minPackagePrice || 0) - (b.minPackagePrice || 0));
+    } else if (sortBy === 'PRICE_DESC') {
+      courses.sort((a, b) => (b.minPackagePrice || 0) - (a.minPackagePrice || 0));
+    }
+
+    // Strip helper field before returning
+    const sanitized = courses.map(({ minPackagePrice, ...rest }) => rest);
+
     return {
-      courses,
+      courses: sanitized,
       pagination: {
         total,
         page,

@@ -14,8 +14,12 @@ export const courseService = {
     category?: string;
     teacherId?: string;
     search?: string;
+    courseType?: 'LIVE' | 'RECORDED' | 'HYBRID';
     minRating?: number;
+    minPrice?: number;
     maxPrice?: number;
+    sortBy?: 'NEWEST' | 'RATING' | 'POPULARITY' | 'PRICE_ASC' | 'PRICE_DESC';
+    sortOrder?: 'asc' | 'desc';
     page?: number;
     limit?: number;
   }): Promise<PaginatedResponse<Course>['data']> => {

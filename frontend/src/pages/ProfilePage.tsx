@@ -1,20 +1,35 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '@/store/authStore';
-import { User, Mail, Shield, Edit2, Save, X } from 'lucide-react';
+import { User, Mail, Shield, Edit2, Save, X, ImagePlus, Link as LinkIcon, Trash2, Lock } from 'lucide-react';
 import toast from 'react-hot-toast';
+import uploadService from '@/services/upload.service';
+import authService from '@/services/auth.service';
 
 /**
  * Profile Page
  * User profile management with edit capabilities
  */
 const ProfilePage = () => {
-  const { user, updateProfile } = useAuthStore();
+  const navigate = useNavigate();
+  const { user, updateProfile, logout, fetchProfile } = useAuthStore();
   const [isEditing, setIsEditing] = useState(false);
   const [formData, setFormData] = useState({
     firstName: user?.firstName || '',
     lastName: user?.lastName || '',
   });
   const [isSaving, setIsSaving] = useState(false);
+
+  // Avatar editing state
+  const [avatarUrlInput, setAvatarUrlInput] = useState('');
+  const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
+
+  // Change password modal state
+  const [showPwdModal, setShowPwdModal] = useState(false);
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [isChangingPwd, setIsChangingPwd] = useState(false);
 
   useEffect(() => {
     if (user) {
@@ -24,6 +39,13 @@ const ProfilePage = () => {
       });
     }
   }, [user]);
+
+  // Ensure we have full profile (including createdAt) after login or profile edits
+  useEffect(() => {
+    if (user && !user.createdAt) {
+      fetchProfile().catch(() => {});
+    }
+  }, [user, fetchProfile]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData({
@@ -59,6 +81,7 @@ const ProfilePage = () => {
   };
 
   return (
+    <>
     <div className="min-h-screen bg-gradient-to-br from-gray-50 via-blue-50 to-indigo-50">
     <div className="container mx-auto px-4 py-8">
       <div className="max-w-3xl mx-auto">
@@ -104,15 +127,73 @@ const ProfilePage = () => {
           <div className="space-y-6">
             {/* Avatar */}
               <div className="flex items-center space-x-6 pb-6 border-b border-gray-200">
+                {user?.avatar ? (
+                  <img
+                    src={user.avatar}
+                    alt={`${user.firstName} ${user.lastName}`}
+                    className="w-24 h-24 rounded-2xl object-cover shadow-lg"
+                  />
+                ) : (
                 <div className="w-24 h-24 bg-gradient-to-br from-primary-600 to-primary-700 text-white rounded-2xl flex items-center justify-center text-3xl font-bold shadow-lg">
                 {user?.firstName?.[0] || ''}{user?.lastName?.[0] || ''}
               </div>
+                )}
               <div>
                   <p className="font-bold text-2xl text-gray-900">
                   {user?.firstName} {user?.lastName}
                 </p>
                   <p className="text-sm text-gray-600 mt-1">{user?.email}</p>
-              </div>
+
+                  {/* Avatar Editor */}
+                  <div className="mt-3 flex items-center gap-2 flex-wrap">
+                    <label className="btn-outline btn-sm inline-flex items-center gap-2 cursor-pointer">
+                      <ImagePlus className="w-4 h-4" /> Upload Avatar
+                      <input
+                        type="file"
+                        accept="image/*"
+                        hidden
+                        onChange={async (e) => {
+                          if (!e.target.files || !e.target.files[0]) return;
+                          setIsUploadingAvatar(true);
+                          try {
+                            const url = await uploadService.uploadAvatar(e.target.files[0]);
+                            await updateProfile({ avatar: url });
+                            toast.success('Avatar updated');
+                          } catch (err) {
+                            toast.error('Failed to upload avatar');
+                          } finally {
+                            setIsUploadingAvatar(false);
+                          }
+                        }}
+                      />
+                    </label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="text"
+                        value={avatarUrlInput}
+                        onChange={(e) => setAvatarUrlInput(e.target.value)}
+                        placeholder="Paste image URL"
+                        className="input h-9 w-64"
+                      />
+                      <button
+                        className="btn-outline btn-sm"
+                        disabled={isUploadingAvatar || !avatarUrlInput.trim()}
+                        onClick={async () => {
+                          const url = avatarUrlInput.trim();
+                          try {
+                            await updateProfile({ avatar: url });
+                            toast.success('Avatar updated');
+                            setAvatarUrlInput('');
+                          } catch (err) {
+                            toast.error('Invalid avatar URL');
+                          }
+                        }}
+                      >
+                        <LinkIcon className="w-4 h-4 mr-1" /> Use URL
+                      </button>
+                    </div>
+                  </div>
+                </div>
             </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -227,7 +308,7 @@ const ProfilePage = () => {
                   <p className="font-bold text-gray-900">Password</p>
                   <p className="text-sm text-gray-600 mt-1">••••••••</p>
               </div>
-              <button className="btn-outline btn-sm">
+              <button className="btn-outline btn-sm" onClick={() => setShowPwdModal(true)}>
                 Change Password
               </button>
             </div>
@@ -236,7 +317,7 @@ const ProfilePage = () => {
               <div>
                   <p className="font-bold text-gray-900">Account Created</p>
                   <p className="text-sm text-gray-600 mt-1">
-                  {user?.createdAt ? new Date(user.createdAt).toLocaleDateString() : 'N/A'}
+                  {user?.createdAt ? new Date(user.createdAt).toLocaleString() : 'N/A'}
                 </p>
               </div>
             </div>
@@ -254,8 +335,21 @@ const ProfilePage = () => {
                   Permanently delete your account and all associated data
                 </p>
               </div>
-              <button className="btn-danger btn-sm">
-                Delete Account
+              <button
+                className="btn-danger btn-sm inline-flex items-center gap-2"
+                onClick={async () => {
+                  if (!confirm('This will permanently delete your account and all related data. Continue?')) return;
+                  try {
+                    await authService.deleteAccount();
+                    toast.success('Account deleted');
+                    await logout();
+                    navigate('/');
+                  } catch (err) {
+                    toast.error('Failed to delete account');
+                  }
+                }}
+              >
+                <Trash2 className="w-4 h-4" /> Delete Account
               </button>
               </div>
             </div>
@@ -263,6 +357,79 @@ const ProfilePage = () => {
         </div>
       </div>
     </div>
+
+    {/* Change Password Modal */}
+    {showPwdModal && (
+      <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+        <div className="bg-white rounded-2xl p-6 w-full max-w-md shadow-xl">
+          <h3 className="text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
+            <Lock className="w-5 h-5 text-primary-600" /> Change Password
+          </h3>
+          <div className="space-y-3">
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 mb-2">Current Password</label>
+              <input
+                type="password"
+                className="input"
+                value={currentPassword}
+                onChange={(e) => setCurrentPassword(e.target.value)}
+                placeholder="Enter current password"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 mb-2">New Password</label>
+              <input
+                type="password"
+                className="input"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                placeholder="At least 8 characters, include upper/lower/number"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 mb-2">Confirm New Password</label>
+              <input
+                type="password"
+                className="input"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                placeholder="Re-enter new password"
+              />
+            </div>
+          </div>
+          <div className="mt-5 flex items-center justify-end gap-2">
+            <button className="btn-outline" onClick={() => setShowPwdModal(false)} disabled={isChangingPwd}>Cancel</button>
+            <button
+              className="btn-primary"
+              disabled={isChangingPwd || !currentPassword || !newPassword || newPassword !== confirmPassword}
+              onClick={async () => {
+                if (newPassword !== confirmPassword) {
+                  toast.error('Passwords do not match');
+                  return;
+                }
+                setIsChangingPwd(true);
+                try {
+                  await authService.changePassword(currentPassword, newPassword);
+                  toast.success('Password changed');
+                  setShowPwdModal(false);
+                  setCurrentPassword('');
+                  setNewPassword('');
+                  setConfirmPassword('');
+                } catch (err: any) {
+                  const msg = err?.response?.data?.message || 'Failed to change password';
+                  toast.error(msg);
+                } finally {
+                  setIsChangingPwd(false);
+                }
+              }}
+            >
+              {isChangingPwd ? 'Changing...' : 'Change Password'}
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
+    </>
   );
 };
 

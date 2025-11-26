@@ -33,10 +33,19 @@ router.post(
       .withMessage('Description is required')
       .isLength({ min: 20, max: 1000 })
       .withMessage('Description must be between 20 and 1000 characters'),
+    body('contentType')
+      .optional()
+      .isIn(['teacher', 'course', 'community_post', 'community_comment'])
+      .withMessage('Invalid content type'),
+    body('contentId')
+      .optional()
+      .isUUID()
+      .withMessage('Invalid content ID'),
   ]),
   reportController.submitReport
 );
 
+// Get my reports - must be before /:id route
 router.get(
   '/my-reports',
   authenticate,
@@ -44,6 +53,7 @@ router.get(
   reportController.getMyReports
 );
 
+// Get report by ID
 router.get('/:id', authenticate, reportController.getReportById);
 
 // Admin routes

@@ -8,19 +8,22 @@ import {
 
 /**
  * Report Service
- * Handles complaints and reports against teachers
+ * Handles complaints and reports against teachers, courses, and community content
  */
 class ReportService {
   /**
    * Submit a report
+   * Supports reporting teachers, courses, and community content
    */
   async submitReport(
     reporterId: string,
     reportedId: string,
     type: ReportType,
-    description: string
+    description: string,
+    contentType?: string,
+    contentId?: string
   ) {
-    // Verify reported user is a teacher
+    // Verify reported user exists
     const reportedUser = await prisma.user.findUnique({
       where: { id: reportedId },
     });
@@ -29,8 +32,39 @@ class ReportService {
       throw new NotFoundError('Reported user not found');
     }
 
-    if (reportedUser.role !== 'TEACHER') {
-      throw new ValidationError('You can only report teachers');
+    // Verify reporter is a student
+    const reporter = await prisma.user.findUnique({
+      where: { id: reporterId },
+    });
+
+    if (!reporter || reporter.role !== 'STUDENT') {
+      throw new ValidationError('Only students can submit reports');
+    }
+
+    // Validate content if contentType is provided
+    if (contentType && contentId) {
+      if (contentType === 'course') {
+        const course = await prisma.course.findUnique({
+          where: { id: contentId },
+        });
+        if (!course) {
+          throw new NotFoundError('Course not found');
+        }
+      } else if (contentType === 'community_post') {
+        const post = await prisma.communityPost.findUnique({
+          where: { id: contentId },
+        });
+        if (!post) {
+          throw new NotFoundError('Community post not found');
+        }
+      } else if (contentType === 'community_comment') {
+        const comment = await prisma.communityComment.findUnique({
+          where: { id: contentId },
+        });
+        if (!comment) {
+          throw new NotFoundError('Community comment not found');
+        }
+      }
     }
 
     // Create report

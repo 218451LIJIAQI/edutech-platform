@@ -13,17 +13,21 @@ class CourseController {
    * GET /api/courses
    */
   getAllCourses = asyncHandler(async (req: Request, res: Response) => {
-    const { category, teacherId, search, minRating, maxPrice, page, limit } =
-      req.query;
+    const { category, teacherId, search, courseType, minRating, minPrice, maxPrice, sortBy, sortOrder, page, limit } =
+      req.query as Record<string, string>;
 
     const result = await courseService.getAllCourses({
-      category: category as string,
-      teacherId: teacherId as string,
-      search: search as string,
-      minRating: minRating ? parseFloat(minRating as string) : undefined,
-      maxPrice: maxPrice ? parseFloat(maxPrice as string) : undefined,
-      page: page ? parseInt(page as string) : undefined,
-      limit: limit ? parseInt(limit as string) : undefined,
+      category,
+      teacherId,
+      search,
+      courseType: courseType as any,
+      minRating: minRating ? parseFloat(minRating) : undefined,
+      minPrice: minPrice ? parseFloat(minPrice) : undefined,
+      maxPrice: maxPrice ? parseFloat(maxPrice) : undefined,
+      sortBy: sortBy as any,
+      sortOrder: sortOrder as any,
+      page: page ? parseInt(page) : undefined,
+      limit: limit ? parseInt(limit) : undefined,
     });
 
     res.status(200).json({

@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { Star, Users, Award, Calendar, BookOpen } from 'lucide-react';
+import { Star, Users, Award, Calendar, BookOpen, AlertCircle, Globe, Briefcase, GraduationCap, CheckCircle } from 'lucide-react';
 import teacherService from '@/services/teacher.service';
 import courseService from '@/services/course.service';
 import { TeacherProfile, Course } from '@/types';
 import { formatDate, formatCurrency } from '@/utils/helpers';
+import { useAuthStore } from '@/store/authStore';
+import ReportSubmissionModal from '@/components/common/ReportSubmissionModal';
 
 /**
  * Teacher Profile Page
@@ -12,9 +14,11 @@ import { formatDate, formatCurrency } from '@/utils/helpers';
  */
 const TeacherProfilePage = () => {
   const { id } = useParams<{ id: string }>();
+  const { isAuthenticated, user } = useAuthStore();
   const [teacher, setTeacher] = useState<TeacherProfile | null>(null);
   const [courses, setCourses] = useState<Course[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isReportOpen, setIsReportOpen] = useState(false);
 
   useEffect(() => {
     if (id) {
@@ -71,16 +75,34 @@ const TeacherProfilePage = () => {
         <div className="container mx-auto px-4">
           <div className="flex flex-col md:flex-row items-start md:items-center space-y-4 md:space-y-0 md:space-x-6">
             {/* Avatar */}
+            {teacher.user?.avatar ? (
+              <img
+                src={teacher.user.avatar}
+                alt={`${teacher.user.firstName} ${teacher.user.lastName}`}
+                className="w-28 h-28 rounded-2xl object-cover shadow-xl"
+              />
+            ) : (
             <div className="w-28 h-28 bg-white text-primary-600 rounded-2xl flex items-center justify-center text-4xl font-bold shadow-xl">
               {teacher.user?.firstName?.[0]}{teacher.user?.lastName?.[0]}
             </div>
+            )}
 
             {/* Info */}
             <div className="flex-1">
               <div className="flex items-center space-x-3 mb-3">
-                <h1 className="text-4xl font-bold">
+                <h1 className="text-4xl font-bold flex-1">
                   {teacher.user?.firstName} {teacher.user?.lastName}
                 </h1>
+                {isAuthenticated && user?.role === 'STUDENT' && teacher.user && (
+                  <button
+                    onClick={() => setIsReportOpen(true)}
+                    className="p-2 bg-red-500 hover:bg-red-600 text-white rounded-lg transition-colors flex items-center gap-2"
+                    title="Report this teacher"
+                  >
+                    <AlertCircle className="w-5 h-5" />
+                    <span className="hidden sm:inline">Report</span>
+                  </button>
+                )}
                 {teacher.isVerified && (
                   <div className="flex items-center space-x-1 bg-gradient-to-r from-green-500 to-green-600 px-4 py-2 rounded-full text-sm font-bold shadow-md">
                     <Award className="w-4 h-4" />
@@ -127,10 +149,48 @@ const TeacherProfilePage = () => {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           {/* Main Content */}
           <div className="lg:col-span-2 space-y-6">
+            {/* Self Introduction */}
+            {teacher.selfIntroduction && (
+              <div className="card shadow-lg">
+                <h2 className="text-2xl font-bold mb-6 text-gray-900">About Me</h2>
+                <p className="text-gray-700 whitespace-pre-line text-lg leading-relaxed">{teacher.selfIntroduction}</p>
+              </div>
+            )}
+
+            {/* Teaching Style */}
+            {teacher.teachingStyle && (
+              <div className="card shadow-lg">
+                <h2 className="text-2xl font-bold mb-6 text-gray-900">Teaching Style</h2>
+                <p className="text-gray-700 whitespace-pre-line text-lg leading-relaxed">{teacher.teachingStyle}</p>
+              </div>
+            )}
+
+            {/* Education Background */}
+            {teacher.educationBackground && (
+              <div className="card shadow-lg">
+                <div className="flex items-center space-x-3 mb-6">
+                  <GraduationCap className="w-6 h-6 text-primary-600" />
+                  <h2 className="text-2xl font-bold text-gray-900">Education Background</h2>
+                </div>
+                <p className="text-gray-700 whitespace-pre-line text-lg leading-relaxed">{teacher.educationBackground}</p>
+              </div>
+            )}
+
+            {/* Teaching Experience */}
+            {teacher.teachingExperience && (
+              <div className="card shadow-lg">
+                <div className="flex items-center space-x-3 mb-6">
+                  <Briefcase className="w-6 h-6 text-primary-600" />
+                  <h2 className="text-2xl font-bold text-gray-900">Teaching Experience</h2>
+                </div>
+                <p className="text-gray-700 whitespace-pre-line text-lg leading-relaxed">{teacher.teachingExperience}</p>
+              </div>
+            )}
+
             {/* About */}
             {teacher.bio && (
               <div className="card shadow-lg">
-                <h2 className="text-2xl font-bold mb-6 text-gray-900">About</h2>
+                <h2 className="text-2xl font-bold mb-6 text-gray-900">Bio</h2>
                 <p className="text-gray-700 whitespace-pre-line text-lg leading-relaxed">{teacher.bio}</p>
               </div>
             )}
@@ -176,6 +236,92 @@ const TeacherProfilePage = () => {
 
           {/* Sidebar */}
           <div className="lg:col-span-1 space-y-6">
+            {/* Years of Experience */}
+            {teacher.yearsOfExperience && (
+              <div className="card shadow-lg bg-gradient-to-br from-blue-50 to-blue-100 border-2 border-blue-200">
+                <div className="flex items-center space-x-3 mb-2">
+                  <Briefcase className="w-6 h-6 text-blue-600" />
+                  <h3 className="text-lg font-bold text-gray-900">Experience</h3>
+                </div>
+                <p className="text-2xl font-bold text-blue-600">
+                  {teacher.yearsOfExperience} {teacher.yearsOfExperience === 1 ? 'year' : 'years'}
+                </p>
+              </div>
+            )}
+
+            {/* Specialties */}
+            {Array.isArray(teacher.specialties) && teacher.specialties.length > 0 && (
+              <div className="card shadow-lg">
+                <h3 className="text-lg font-bold mb-4 text-gray-900">Specialties</h3>
+                <div className="flex flex-wrap gap-2">
+                  {teacher.specialties.map((specialty: string, idx: number) => (
+                    <span key={idx} className="badge-primary">
+                      {specialty}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Languages */}
+            {Array.isArray(teacher.languages) && teacher.languages.length > 0 && (
+              <div className="card shadow-lg">
+                <div className="flex items-center space-x-3 mb-4">
+                  <Globe className="w-5 h-5 text-primary-600" />
+                  <h3 className="text-lg font-bold text-gray-900">Languages</h3>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {teacher.languages.map((language: string, idx: number) => (
+                    <span key={idx} className="badge-primary">
+                      {language}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Awards & Honors */}
+            {Array.isArray(teacher.awards) && teacher.awards.length > 0 && (
+              <div className="card shadow-lg">
+                <h3 className="text-lg font-bold mb-4 text-gray-900">Awards & Honors</h3>
+                <div className="space-y-2">
+                  {teacher.awards.map((award: string, idx: number) => (
+                    <div key={idx} className="flex items-start space-x-2 p-2 bg-yellow-50 rounded">
+                      <Award className="w-4 h-4 text-yellow-600 flex-shrink-0 mt-0.5" />
+                      <span className="text-sm text-gray-700">{award}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Certificate Photos */}
+            {Array.isArray(teacher.certificatePhotos) && teacher.certificatePhotos.length > 0 && (
+              <div className="card shadow-lg">
+                <h3 className="text-lg font-bold mb-4 text-gray-900">Certificates</h3>
+                <div className="grid grid-cols-2 gap-3">
+                  {teacher.certificatePhotos.map((photo: string, idx: number) => (
+                    <a
+                      key={idx}
+                      href={photo}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="relative group"
+                    >
+                      <img
+                        src={photo}
+                        alt={`Certificate ${idx + 1}`}
+                        className="w-full h-24 rounded-lg object-cover group-hover:opacity-75 transition-opacity"
+                      />
+                      <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black bg-opacity-50 rounded-lg">
+                        <span className="text-white text-xs font-semibold">View</span>
+                      </div>
+                    </a>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* Certifications */}
             {teacher.certifications && teacher.certifications.length > 0 && (
               <div className="card shadow-lg">
@@ -219,6 +365,16 @@ const TeacherProfilePage = () => {
           </div>
         </div>
       </div>
+      {/* Report Modal */}
+      {teacher?.user && (
+        <ReportSubmissionModal
+          isOpen={isReportOpen}
+          onClose={() => setIsReportOpen(false)}
+          reportedId={teacher.user.id}
+          reportedName={`${teacher.user.firstName} ${teacher.user.lastName}`}
+          contentType="teacher"
+        />
+      )}
     </div>
   );
 };

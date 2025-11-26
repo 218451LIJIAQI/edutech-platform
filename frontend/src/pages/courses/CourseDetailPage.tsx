@@ -4,9 +4,10 @@ import { useCourseStore } from '@/store/courseStore';
 import { useAuthStore } from '@/store/authStore';
 import { formatCurrency, formatDuration } from '@/utils/helpers';
 import { CourseType } from '@/types';
-import { BookOpen, Clock, Star, Users, CheckCircle, PlayCircle, Video, Radio } from 'lucide-react';
+import { BookOpen, Clock, Star, Users, CheckCircle, PlayCircle, Video, Radio, AlertCircle } from 'lucide-react';
 import toast from 'react-hot-toast';
 import UniversalVideoPlayer from '@/components/common/UniversalVideoPlayer';
+import ReportSubmissionModal from '@/components/common/ReportSubmissionModal';
 
 /**
  * Course Detail Page
@@ -16,9 +17,10 @@ const CourseDetailPage = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { currentCourse, isLoading, fetchCourseById } = useCourseStore();
-  const { isAuthenticated } = useAuthStore();
+  const { isAuthenticated, user } = useAuthStore();
   const [selectedPackage, setSelectedPackage] = useState<string | null>(null);
   const [isPurchasing, setIsPurchasing] = useState(false);
+  const [isReportModalOpen, setIsReportModalOpen] = useState(false);
 
   const handleOpenLesson = (_lessonId?: string) => {
     if (!isEnrolled) {
@@ -135,7 +137,19 @@ const CourseDetailPage = () => {
                 <span className="badge bg-green-500 text-white font-semibold">✓ Enrolled</span>
               )}
             </div>
-            <h1 className="text-5xl md:text-6xl font-bold mb-6 leading-tight">{currentCourse.title}</h1>
+            <div className="flex items-start justify-between mb-6">
+              <h1 className="text-5xl md:text-6xl font-bold leading-tight flex-1">{currentCourse.title}</h1>
+              {isAuthenticated && user?.role === 'STUDENT' && (
+                <button
+                  onClick={() => setIsReportModalOpen(true)}
+                  className="ml-4 p-3 bg-red-500 hover:bg-red-600 text-white rounded-lg transition-colors flex items-center gap-2 whitespace-nowrap"
+                  title="Report this course"
+                >
+                  <AlertCircle className="w-5 h-5" />
+                  <span className="hidden md:inline">Report</span>
+                </button>
+              )}
+            </div>
             <p className="text-xl text-primary-100 mb-8 leading-relaxed max-w-2xl">{currentCourse.description}</p>
             
             {/* Teacher Info */}
@@ -399,6 +413,18 @@ const CourseDetailPage = () => {
           </div>
         </div>
       </div>
+
+      {/* Report Modal */}
+      {currentCourse.teacherProfile?.user && (
+        <ReportSubmissionModal
+          isOpen={isReportModalOpen}
+          onClose={() => setIsReportModalOpen(false)}
+          reportedId={currentCourse.teacherProfile.user.id}
+          reportedName={`${currentCourse.teacherProfile.user.firstName} ${currentCourse.teacherProfile.user.lastName}`}
+          contentType="course"
+          contentId={currentCourse.id}
+        />
+      )}
     </div>
   );
 };

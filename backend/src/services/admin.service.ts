@@ -22,9 +22,9 @@ class AdminService {
       pendingVerifications,
       openReports,
     ] = await Promise.all([
-      prisma.user.count(),
-      prisma.user.count({ where: { role: UserRole.TEACHER } }),
-      prisma.user.count({ where: { role: UserRole.STUDENT } }),
+      prisma.user.count({ where: { isActive: true } }),
+      prisma.user.count({ where: { role: UserRole.TEACHER, isActive: true } }),
+      prisma.user.count({ where: { role: UserRole.STUDENT, isActive: true } }),
       prisma.course.count(),
       prisma.course.count({ where: { isPublished: true } }),
       prisma.enrollment.count(),
@@ -36,30 +36,41 @@ class AdminService {
       prisma.report.count({ where: { status: ReportStatus.OPEN } }),
     ]);
 
-    // Get revenue data for last 12 months
-    const twelveMonthsAgo = new Date();
-    twelveMonthsAgo.setMonth(twelveMonthsAgo.getMonth() - 12);
+    // Build revenue data for last 12 months (YYYY-MM) using paidAt
+    const now = new Date();
+    const months: string[] = [];
+    for (let i = 11; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const label = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      months.push(label);
+    }
 
-    const monthlyRevenue = await prisma.payment.groupBy({
-      by: ['createdAt'],
+    const paymentsLast12 = await prisma.payment.findMany({
       where: {
         status: PaymentStatus.COMPLETED,
-        createdAt: { gte: twelveMonthsAgo },
+        paidAt: { gte: new Date(now.getFullYear(), now.getMonth() - 11, 1) },
       },
-      _sum: {
-        amount: true,
-        platformCommission: true,
-      },
+      select: { amount: true, paidAt: true },
     });
 
-    // Get growth metrics
-    const lastMonth = new Date();
-    lastMonth.setMonth(lastMonth.getMonth() - 1);
+    const monthlyMap = new Map<string, number>();
+    months.forEach((m) => monthlyMap.set(m, 0));
+    for (const p of paymentsLast12) {
+      if (!p.paidAt) continue;
+      const label = `${p.paidAt.getFullYear()}-${String(p.paidAt.getMonth() + 1).padStart(2, '0')}`;
+      monthlyMap.set(label, (monthlyMap.get(label) || 0) + p.amount);
+    }
+
+    const monthly = months.map((m) => ({ month: m, revenue: monthlyMap.get(m) || 0 }));
+
+    // Growth metrics (last 30 days)
+    const last30Days = new Date();
+    last30Days.setDate(last30Days.getDate() - 30);
 
     const [newUsersThisMonth, newCoursesThisMonth, enrollmentsThisMonth] = await Promise.all([
-      prisma.user.count({ where: { createdAt: { gte: lastMonth } } }),
-      prisma.course.count({ where: { createdAt: { gte: lastMonth } } }),
-      prisma.enrollment.count({ where: { enrolledAt: { gte: lastMonth } } }),
+      prisma.user.count({ where: { createdAt: { gte: last30Days } } }),
+      prisma.course.count({ where: { createdAt: { gte: last30Days } } }),
+      prisma.enrollment.count({ where: { enrolledAt: { gte: last30Days } } }),
     ]);
 
     return {
@@ -81,7 +92,7 @@ class AdminService {
       },
       revenue: {
         total: totalRevenue._sum.amount || 0,
-        monthly: monthlyRevenue,
+        monthly,
       },
     };
   }
@@ -458,6 +469,7 @@ class AdminService {
         },
       });
     } else if (status === VerificationStatus.REJECTED) {
+      // Create notification for rejection and keep record for admin auditing
       await prisma.notification.create({
         data: {
           userId: verification.teacherProfile.userId,
@@ -711,35 +723,50 @@ class AdminService {
       }),
     ]);
 
-    // Combine and sort all activities
-    const activities = [
+    // Combine, normalize to a consistent shape, and sort by recency
+    const raw = [
       ...recentUsers.map((u) => ({
-        type: 'user_registered',
-        data: u,
-        timestamp: u.createdAt,
+        id: u.id,
+        type: 'user_registered' as const,
+        createdAt: u.createdAt,
+        description: `${u.firstName || ''} ${u.lastName || ''} registered as ${u.role}`.trim(),
+        user: { firstName: u.firstName || '', lastName: u.lastName || '' },
       })),
       ...recentCourses.map((c) => ({
-        type: 'course_created',
-        data: c,
-        timestamp: c.createdAt,
+        id: c.id,
+        type: 'course_created' as const,
+        createdAt: c.createdAt,
+        description: `New course created: ${c.title}`,
+        user: {
+          firstName: c.teacherProfile?.user?.firstName || '',
+          lastName: c.teacherProfile?.user?.lastName || '',
+        },
       })),
       ...recentEnrollments.map((e) => ({
-        type: 'enrollment_created',
-        data: e,
-        timestamp: e.enrolledAt,
+        id: e.id,
+        type: 'enrollment_created' as const,
+        createdAt: e.enrolledAt,
+        description: `${e.user?.firstName || ''} ${e.user?.lastName || ''} enrolled in ${e.package?.course?.title || 'a course'}`.trim(),
+        user: { firstName: e.user?.firstName || '', lastName: e.user?.lastName || '' },
       })),
       ...recentReports.map((r) => ({
-        type: 'report_submitted',
-        data: r,
-        timestamp: r.createdAt,
+        id: r.id,
+        type: 'report_submitted' as const,
+        createdAt: r.createdAt,
+        description: `Report submitted: ${r.type} (${r.status})`,
+        user: { firstName: r.reporter?.firstName || '', lastName: r.reporter?.lastName || '' },
       })),
       ...recentPayments.map((p) => ({
-        type: 'payment_completed',
-        data: p,
-        timestamp: p.paidAt,
+        id: p.id,
+        type: 'payment_completed' as const,
+        createdAt: p.paidAt || new Date(),
+        description: `Payment completed: ${p.amount.toFixed(2)} for ${p.package?.course?.title || 'a course'}`,
+        user: { firstName: p.user?.firstName || '', lastName: p.user?.lastName || '' },
       })),
-    ]
-      .sort((a, b) => new Date(b.timestamp as any).getTime() - new Date(a.timestamp as any).getTime())
+    ];
+
+    const activities = raw
+      .sort((a, b) => new Date(b.createdAt as any).getTime() - new Date(a.createdAt as any).getTime())
       .slice(0, limit);
 
     return activities;

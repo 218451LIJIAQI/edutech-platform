@@ -5,7 +5,8 @@ import {
   ApiResponse, 
   PaginatedResponse,
   TeacherStats,
-  TeacherVerification
+  TeacherVerification,
+  TeacherProfileSubmission
 } from '@/types';
 
 /**
@@ -98,6 +99,124 @@ export const teacherService = {
    */
   getMyVerifications: async (): Promise<TeacherVerification[]> => {
     const response = await api.get<ApiResponse<TeacherVerification[]>>('/teachers/me/verifications');
+    return response.data.data!;
+  },
+
+  /**
+   * Submit extended profile for review
+   */
+  submitExtendedProfile: async (data: {
+    selfIntroduction?: string;
+    educationBackground?: string;
+    teachingExperience?: string;
+    awards?: string[];
+    specialties?: string[];
+    teachingStyle?: string;
+    languages?: string[];
+    yearsOfExperience?: number;
+    profilePhoto?: string;
+    certificatePhotos?: string[];
+  }): Promise<TeacherProfile> => {
+    const response = await api.post<ApiResponse<TeacherProfile>>(
+      '/teachers/me/profile/submit',
+      data
+    );
+    return response.data.data!;
+  },
+
+  /**
+   * Get extended profile
+   */
+  getExtendedProfile: async (): Promise<TeacherProfile> => {
+    const response = await api.get<ApiResponse<TeacherProfile>>('/teachers/me/profile/extended');
+    return response.data.data!;
+  },
+
+  /**
+   * Get verified teachers (for students)
+   */
+  getVerifiedTeachers: async (params?: {
+    search?: string;
+    page?: number;
+    limit?: number;
+  }): Promise<PaginatedResponse<TeacherProfile>['data']> => {
+    const response = await api.get<PaginatedResponse<TeacherProfile>>('/teachers/verified', { params });
+    return response.data.data;
+  },
+
+  /**
+   * Get pending registrations (Admin only)
+   */
+  getPendingRegistrations: async (params?: {
+    page?: number;
+    limit?: number;
+  }): Promise<PaginatedResponse<TeacherProfile>['data']> => {
+    const response = await api.get<PaginatedResponse<TeacherProfile>>('/teachers/admin/pending-registrations', { params });
+    return response.data.data;
+  },
+
+  /**
+   * Review teacher registration (Admin only)
+   */
+  reviewRegistration: async (
+    teacherProfileId: string,
+    status: 'PENDING' | 'APPROVED' | 'REJECTED'
+  ): Promise<TeacherProfile> => {
+    const response = await api.put<ApiResponse<TeacherProfile>>(
+      `/teachers/admin/registrations/${teacherProfileId}/review`,
+      { status }
+    );
+    return response.data.data!;
+  },
+
+  /**
+   * Get pending profile verifications (Admin only)
+   */
+  getPendingProfileVerifications: async (params?: {
+    page?: number;
+    limit?: number;
+  }): Promise<PaginatedResponse<TeacherProfile>['data']> => {
+    const response = await api.get<PaginatedResponse<TeacherProfile>>('/teachers/admin/pending-profiles', { params });
+    return response.data.data;
+  },
+
+  /**
+   * Review teacher profile (Admin only)
+   */
+  reviewTeacherProfile: async (
+    teacherProfileId: string,
+    status: string,
+    reviewNotes?: string
+  ): Promise<TeacherProfile> => {
+    const response = await api.put<ApiResponse<TeacherProfile>>(
+      `/teachers/admin/profiles/${teacherProfileId}/review`,
+      { status, reviewNotes }
+    );
+    return response.data.data!;
+  },
+
+  /**
+   * Get pending teacher registrations (Admin only)
+   */
+  getPendingRegistrations: async (params?: {
+    page?: number;
+    limit?: number;
+  }): Promise<PaginatedResponse<TeacherProfile>['data']> => {
+    const response = await api.get<PaginatedResponse<TeacherProfile>>('/teachers/admin/pending-registrations', { params });
+    return response.data.data;
+  },
+
+  /**
+   * Review teacher registration (Admin only)
+   */
+  reviewRegistration: async (
+    teacherProfileId: string,
+    status: string
+  ): Promise<TeacherProfile> => {
+    const response = await api.put<ApiResponse<TeacherProfile>>(
+      `/teachers/admin/registrations/${teacherProfileId}/review`,
+      { status }
+    );
     return response.data.data!;
   },
 };

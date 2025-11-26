@@ -11,16 +11,19 @@ class ReportController {
   /**
    * Submit a report
    * POST /api/reports
+   * Supports reporting teachers, courses, and community content
    */
   submitReport = asyncHandler(async (req: Request, res: Response) => {
     const reporterId = req.user!.id;
-    const { reportedId, type, description } = req.body;
+    const { reportedId, type, description, contentType, contentId } = req.body;
 
     const report = await reportService.submitReport(
       reporterId,
       reportedId,
       type as ReportType,
-      description
+      description,
+      contentType,
+      contentId
     );
 
     res.status(201).json({

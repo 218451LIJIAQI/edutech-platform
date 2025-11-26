@@ -9,6 +9,8 @@ import PrivateRoute from './components/auth/PrivateRoute';
 
 // Pages
 import HomePage from './pages/HomePage';
+import TeacherApprovedRoute from './components/auth/TeacherApprovedRoute';
+import TeacherPendingPage from './pages/teacher/TeacherPendingPage';
 import LoginPage from './pages/auth/LoginPage';
 import RegisterPage from './pages/auth/RegisterPage';
 import CoursesPage from './pages/courses/CoursesPage';
@@ -30,10 +32,14 @@ import ManageCoursesPage from './pages/teacher/ManageCoursesPage';
 import CreateCoursePage from './pages/teacher/CreateCoursePage';
 import VerificationPage from './pages/teacher/VerificationPage';
 import StudentsPage from './pages/teacher/StudentsPage';
+import ProfileCompletionPage from './pages/teacher/ProfileCompletionPage';
 import AdminDashboard from './pages/admin/AdminDashboard';
 import UsersManagement from './pages/admin/UsersManagement';
 import CoursesManagement from './pages/admin/CoursesManagement';
 import ReportsManagement from './pages/admin/ReportsManagement';
+import RefundsManagement from './pages/admin/RefundsManagement';
+import SupportTicketsManagement from './pages/admin/SupportTicketsManagement';
+import VerificationTeachersManagement from './pages/admin/VerificationTeachersManagement';
 import ProfilePage from './pages/ProfilePage';
 import NotFoundPage from './pages/NotFoundPage';
 import HelpCenterPage from './pages/HelpCenterPage';
@@ -44,6 +50,8 @@ import CommunityHomePage from './pages/community/CommunityHomePage';
 import CreatePostPage from './pages/community/CreatePostPage';
 import PostDetailPage from './pages/community/PostDetailPage';
 import CommunityUserProfilePage from './pages/community/CommunityUserProfilePage';
+// Report (Student)
+import StudentReportPage from './pages/student/StudentReportPage';
 
 /**
  * Main App Component
@@ -159,6 +167,16 @@ function App() {
           }
         />
 
+        {/* Reports (Student) */}
+        <Route
+          path="/student/reports"
+          element={
+            <PrivateRoute allowedRoles={[UserRole.STUDENT]}>
+              <StudentReportPage />
+            </PrivateRoute>
+          }
+        />
+
         {/* Cart and Orders (Student) */}
         <Route
           path="/cart"
@@ -195,10 +213,20 @@ function App() {
 
         {/* Protected Teacher routes */}
         <Route
+          path="/teacher/pending"
+          element={
+            <PrivateRoute allowedRoles={[UserRole.TEACHER]}>
+              <TeacherPendingPage />
+            </PrivateRoute>
+          }
+        />
+        <Route
           path="/teacher"
           element={
             <PrivateRoute allowedRoles={[UserRole.TEACHER]}>
-              <TeacherDashboard />
+              <TeacherApprovedRoute>
+                <TeacherDashboard />
+              </TeacherApprovedRoute>
             </PrivateRoute>
           }
         />
@@ -247,6 +275,22 @@ function App() {
           element={
             <PrivateRoute allowedRoles={[UserRole.TEACHER]}>
               <StudentsPage />
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path="/teacher/profile-completion"
+          element={
+            <PrivateRoute allowedRoles={[UserRole.TEACHER]}>
+              <ProfileCompletionPage />
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path="/teacher/dashboard"
+          element={
+            <PrivateRoute allowedRoles={[UserRole.TEACHER]}>
+              <TeacherDashboard />
             </PrivateRoute>
           }
         />
@@ -301,6 +345,30 @@ function App() {
           element={
             <PrivateRoute allowedRoles={[UserRole.ADMIN]}>
               <ReportsManagement />
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path="/admin/refunds"
+          element={
+            <PrivateRoute allowedRoles={[UserRole.ADMIN]}>
+              <RefundsManagement />
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path="/admin/support"
+          element={
+            <PrivateRoute allowedRoles={[UserRole.ADMIN]}>
+              <SupportTicketsManagement />
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path="/admin/verification-teachers"
+          element={
+            <PrivateRoute allowedRoles={[UserRole.ADMIN]}>
+              <VerificationTeachersManagement />
             </PrivateRoute>
           }
         />

@@ -100,7 +100,16 @@ class OrdersService {
     return updated;
   }
 
-  async requestRefund(userId: string, id: string, amount: number, reason?: string) {
+  async requestRefund(
+    userId: string,
+    id: string,
+    amount: number,
+    reason?: string,
+    reasonCategory?: string,
+    refundMethod: string = 'ORIGINAL_PAYMENT',
+    bankDetails?: string,
+    notes?: string
+  ) {
     const order = await prisma.order.findUnique({
       where: { id },
       include: { payment: true },
@@ -111,16 +120,98 @@ class OrdersService {
       throw new ValidationError('Only paid orders can be refunded');
     }
 
+    // Validate refund amount
+    if (amount <= 0 || amount > order.totalAmount) {
+      throw new ValidationError('Invalid refund amount');
+    }
+
     const refund = await prisma.refund.create({
       data: {
         orderId: id,
         amount,
         reason,
+        reasonCategory,
         status: RefundStatus.PENDING,
+        refundMethod: refundMethod as any,
+        bankDetails,
+        notes,
+      },
+      include: {
+        order: {
+          include: {
+            items: {
+              include: {
+                package: {
+                  include: { course: true },
+                },
+              },
+            },
+          },
+        },
       },
     });
 
     return refund;
+  }
+
+  /**
+   * Get refund details for an order
+   */
+  async getRefundByOrderId(userId: string, orderId: string) {
+    const order = await prisma.order.findUnique({
+      where: { id: orderId },
+    });
+
+    if (!order) throw new NotFoundError('Order not found');
+    if (order.userId !== userId) throw new ValidationError('Unauthorized');
+
+    const refund = await prisma.refund.findFirst({
+      where: { orderId },
+      include: {
+        order: {
+          include: {
+            items: {
+              include: {
+                package: {
+                  include: { course: true },
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+
+    return refund;
+  }
+
+  /**
+   * Get all refunds for a user
+   */
+  async getUserRefunds(userId: string) {
+    const refunds = await prisma.refund.findMany({
+      where: {
+        order: {
+          userId,
+        },
+      },
+      include: {
+        order: {
+          include: {
+            items: {
+              include: {
+                package: {
+                  include: { course: true },
+                },
+              },
+            },
+          },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    return refunds;
   }
 }
 

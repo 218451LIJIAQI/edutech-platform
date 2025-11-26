@@ -51,14 +51,25 @@ const Navbar = () => {
               Courses
               <span className="absolute bottom-0 left-0 w-0 h-0.5 bg-gradient-to-r from-primary-600 to-primary-800 group-hover:w-full transition-all duration-300"></span>
             </Link>
-            <Link
-              to="/teachers"
-              className="text-gray-700 hover:text-primary-600 font-medium transition-colors duration-300 relative group"
-            >
-              Teachers
-              <span className="absolute bottom-0 left-0 w-0 h-0.5 bg-gradient-to-r from-primary-600 to-primary-800 group-hover:w-full transition-all duration-300"></span>
-            </Link>
+            {user?.role === UserRole.ADMIN ? (
+              <Link
+                to="/admin/verification-teachers"
+                className="text-gray-700 hover:text-primary-600 font-medium transition-colors duration-300 relative group"
+              >
+                Verification Teachers
+                <span className="absolute bottom-0 left-0 w-0 h-0.5 bg-gradient-to-r from-primary-600 to-primary-800 group-hover:w-full transition-all duration-300"></span>
+              </Link>
+            ) : (
+              <Link
+                to="/teachers"
+                className="text-gray-700 hover:text-primary-600 font-medium transition-colors duration-300 relative group"
+              >
+                Teachers
+                <span className="absolute bottom-0 left-0 w-0 h-0.5 bg-gradient-to-r from-primary-600 to-primary-800 group-hover:w-full transition-all duration-300"></span>
+              </Link>
+            )}
             {isAuthenticated && user?.role === UserRole.STUDENT ? (
+              <>
               <Link
                 to="/community"
                 className="text-gray-700 hover:text-primary-600 font-medium transition-colors duration-300 relative group"
@@ -66,6 +77,14 @@ const Navbar = () => {
                 Community
                 <span className="absolute bottom-0 left-0 w-0 h-0.5 bg-gradient-to-r from-primary-600 to-primary-800 group-hover:w-full transition-all duration-300"></span>
               </Link>
+                <Link
+                  to="/student/reports"
+                  className="text-gray-700 hover:text-primary-600 font-medium transition-colors duration-300 relative group"
+                >
+                  Report
+                  <span className="absolute bottom-0 left-0 w-0 h-0.5 bg-gradient-to-r from-primary-600 to-primary-800 group-hover:w-full transition-all duration-300"></span>
+                </Link>
+              </>
             ) : (
               <Link
                 to="/help"
@@ -75,13 +94,6 @@ const Navbar = () => {
                 <span className="absolute bottom-0 left-0 w-0 h-0.5 bg-gradient-to-r from-primary-600 to-primary-800 group-hover:w-full transition-all duration-300"></span>
               </Link>
             )}
-            <Link
-              to="/privacy"
-              className="text-gray-700 hover:text-primary-600 font-medium transition-colors duration-300 relative group"
-            >
-              Privacy
-              <span className="absolute bottom-0 left-0 w-0 h-0.5 bg-gradient-to-r from-primary-600 to-primary-800 group-hover:w-full transition-all duration-300"></span>
-            </Link>
           </div>
 
           {/* Auth Section */}
@@ -126,6 +138,7 @@ const Navbar = () => {
                   <span className="hidden md:inline text-sm font-medium">{user?.firstName}</span>
                 </Link>
                 <button
+                  type="button"
                   onClick={handleLogout}
                   className="flex items-center space-x-1 text-gray-700 hover:text-red-600 transition-colors duration-300 p-2 hover:bg-red-50 rounded-lg"
                 >

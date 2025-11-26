@@ -27,9 +27,57 @@ class OrdersController {
   requestRefund = asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user!.id;
     const { id } = req.params as { id: string };
-    const { amount, reason } = req.body as { amount: number; reason?: string };
-    const refund = await ordersService.requestRefund(userId, id, amount, reason);
-    res.status(201).json({ status: 'success', message: 'Refund requested', data: refund });
+    const {
+      amount,
+      reason,
+      reasonCategory,
+      refundMethod,
+      bankDetails,
+      notes,
+    } = req.body as {
+      amount: number;
+      reason?: string;
+      reasonCategory?: string;
+      refundMethod?: string;
+      bankDetails?: string;
+      notes?: string;
+    };
+
+    const refund = await ordersService.requestRefund(
+      userId,
+      id,
+      amount,
+      reason,
+      reasonCategory,
+      refundMethod,
+      bankDetails,
+      notes
+    );
+
+    res.status(201).json({
+      status: 'success',
+      message: 'Refund requested',
+      data: refund,
+    });
+  });
+
+  /**
+   * Get refund details for an order
+   */
+  getRefundByOrderId = asyncHandler(async (req: Request, res: Response) => {
+    const userId = req.user!.id;
+    const { id } = req.params as { id: string };
+    const refund = await ordersService.getRefundByOrderId(userId, id);
+    res.status(200).json({ status: 'success', data: refund });
+  });
+
+  /**
+   * Get all refunds for the current user
+   */
+  getUserRefunds = asyncHandler(async (req: Request, res: Response) => {
+    const userId = req.user!.id;
+    const refunds = await ordersService.getUserRefunds(userId);
+    res.status(200).json({ status: 'success', data: refunds });
   });
 }
 

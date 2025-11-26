@@ -213,7 +213,7 @@ const UsersManagement = () => {
                         </div>
                       </td>
                       <td className="px-6 py-5 whitespace-nowrap">
-                        <span className={`badge ${getRoleBadgeColor(user.role).replace('bg-', 'bg-gradient-to-r from-').replace('text-', 'text-')}`}>
+                        <span className={`badge ${getRoleBadgeColor(user.role)}`}>
                           {user.role}
                         </span>
                       </td>

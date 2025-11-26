@@ -1,27 +1,47 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import ordersService from '@/services/orders.service';
-import { Order } from '@/types';
+import { Order, Refund } from '@/types';
 import toast from 'react-hot-toast';
+import RefundModal from '@/components/common/RefundModal';
+import CustomerServiceModal from '@/components/common/CustomerServiceModal';
 
+/**
+ * Order Detail Page Component
+ * Displays comprehensive order information with:
+ * - Order details and timeline
+ * - Item information
+ * - Refund status and history
+ * - Customer service integration
+ * - Cancel/Refund actions
+ */
 const OrderDetailPage = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [order, setOrder] = useState<Order | null>(null);
+  const [refund, setRefund] = useState<Refund | null>(null);
   const [loading, setLoading] = useState(true);
   const [working, setWorking] = useState(false);
-  const [refundAmount, setRefundAmount] = useState('');
-  const [refundReason, setRefundReason] = useState('');
   const [cancelReason, setCancelReason] = useState('');
+  const [showRefundModal, setShowRefundModal] = useState(false);
+  const [showCustomerService, setShowCustomerService] = useState(false);
 
+  /**
+   * Load order and refund details
+   */
   const load = async () => {
     if (!id) return;
     setLoading(true);
     try {
-      const data = await ordersService.getOrderById(id);
-      setOrder(data);
+      const [orderData, refundData] = await Promise.all([
+        ordersService.getOrderById(id),
+        ordersService.getRefundByOrderId(id).catch(() => null),
+      ]);
+      setOrder(orderData);
+      setRefund(refundData);
     } catch (e) {
-      const message = e instanceof Error && 'response' in e 
+      const message =
+        e instanceof Error && 'response' in e
         ? (e as { response?: { data?: { message?: string } } }).response?.data?.message 
         : undefined;
       toast.error(message || 'Failed to load order');
@@ -30,18 +50,25 @@ const OrderDetailPage = () => {
     }
   };
 
-  useEffect(() => { load(); }, [id]);
+  useEffect(() => {
+    load();
+  }, [id]);
 
+  /**
+   * Handle cancel order
+   */
   const handleCancel = async () => {
     if (!id) return;
-    if (!confirm('Cancel this order?')) return;
+    if (!confirm('Are you sure you want to cancel this order?')) return;
     setWorking(true);
     try {
       const updated = await ordersService.cancelOrder(id, cancelReason || undefined);
-      toast.success('Order cancelled');
+      toast.success('Order cancelled successfully');
       setOrder(updated);
+      setCancelReason('');
     } catch (e) {
-      const message = e instanceof Error && 'response' in e 
+      const message =
+        e instanceof Error && 'response' in e
         ? (e as { response?: { data?: { message?: string } } }).response?.data?.message 
         : undefined;
       toast.error(message || 'Failed to cancel order');
@@ -50,27 +77,41 @@ const OrderDetailPage = () => {
     }
   };
 
-  const handleRefund = async () => {
-    if (!id || !refundAmount) return;
-    if (!confirm('Submit a refund request?')) return;
-    setWorking(true);
-    try {
-      const amount = parseFloat(refundAmount);
-      if (isNaN(amount) || amount <= 0) {
-        toast.error('Enter a valid refund amount');
-        setWorking(false);
-        return;
-      }
-      await ordersService.requestRefund(id, amount, refundReason || undefined);
-      toast.success('Refund request submitted');
-      navigate('/orders');
-    } catch (e) {
-      const message = e instanceof Error && 'response' in e 
-        ? (e as { response?: { data?: { message?: string } } }).response?.data?.message 
-        : undefined;
-      toast.error(message || 'Failed to request refund');
-    } finally {
-      setWorking(false);
+  /**
+   * Get status badge color
+   */
+  const getStatusBadgeClass = (status: string) => {
+    switch (status) {
+      case 'PAID':
+        return 'badge-success';
+      case 'PENDING':
+        return 'badge-warning';
+      case 'CANCELLED':
+        return 'badge-danger';
+      case 'REFUNDED':
+        return 'badge-info';
+      default:
+        return 'badge-primary';
+    }
+  };
+
+  /**
+   * Get refund status badge color
+   */
+  const getRefundStatusColor = (status: string) => {
+    switch (status) {
+      case 'PENDING':
+        return 'bg-yellow-100 text-yellow-700';
+      case 'APPROVED':
+        return 'bg-blue-100 text-blue-700';
+      case 'PROCESSING':
+        return 'bg-purple-100 text-purple-700';
+      case 'COMPLETED':
+        return 'bg-green-100 text-green-700';
+      case 'REJECTED':
+        return 'bg-red-100 text-red-700';
+      default:
+        return 'bg-gray-100 text-gray-700';
     }
   };
 
@@ -90,7 +131,9 @@ const OrderDetailPage = () => {
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 via-blue-50 to-indigo-50">
         <div className="text-center">
           <p className="text-gray-600 mb-4">Order not found.</p>
-          <button className="btn-primary" onClick={() => navigate('/orders')}>Back to Orders</button>
+          <button className="btn-primary" onClick={() => navigate('/orders')}>
+            Back to Orders
+          </button>
         </div>
       </div>
     );
@@ -99,93 +142,304 @@ const OrderDetailPage = () => {
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 via-blue-50 to-indigo-50">
       <div className="container mx-auto px-4 py-8">
+        {/* Header */}
         <div className="flex items-center justify-between mb-10">
-          <h1 className="section-title">Order Detail</h1>
-          <button className="btn-outline" onClick={() => navigate('/orders')}>Back to Orders</button>
+          <h1 className="section-title">Order Details</h1>
+          <button className="btn-outline" onClick={() => navigate('/orders')}>
+            ← Back to Orders
+          </button>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          {/* Main Content */}
           <div className="lg:col-span-2 space-y-6">
+            {/* Order Header */}
             <div className="card shadow-lg">
-              <div className="flex items-center justify-between">
-                <div className="flex-1">
-                  <div className="font-bold text-xl text-gray-900 mb-3">Order No: {order.orderNo}</div>
-                  <div className="space-y-2 text-sm text-gray-600">
-                    <div>Created: {new Date(order.createdAt).toLocaleString()}</div>
+              <div className="flex items-center justify-between mb-6">
+                <div>
+                  <div className="text-sm text-gray-600 mb-1">Order Number</div>
+                  <div className="text-2xl font-bold text-gray-900">{order.orderNo}</div>
+                </div>
+                <div className={`badge ${getStatusBadgeClass(order.status)} text-lg px-4 py-2`}>
+                  {order.status}
+                </div>
+              </div>
+
+              {/* Timeline */}
+              <div className="space-y-4 border-t pt-6">
+                <div className="flex items-start gap-4">
+                  <div className="w-3 h-3 rounded-full bg-green-500 mt-2"></div>
+                  <div>
+                    <p className="font-semibold text-gray-900">Order Created</p>
+                    <p className="text-sm text-gray-600">
+                      {new Date(order.createdAt).toLocaleString()}
+                    </p>
+                  </div>
+                </div>
+
                     {order.paidAt && (
-                      <div>Paid: {new Date(order.paidAt).toLocaleString()}</div>
+                  <div className="flex items-start gap-4">
+                    <div className="w-3 h-3 rounded-full bg-green-500 mt-2"></div>
+                    <div>
+                      <p className="font-semibold text-gray-900">Payment Completed</p>
+                      <p className="text-sm text-gray-600">
+                        {new Date(order.paidAt).toLocaleString()}
+                      </p>
+                    </div>
+                  </div>
                     )}
+
                     {order.canceledAt && (
-                      <div>Cancelled: {new Date(order.canceledAt).toLocaleString()}</div>
+                  <div className="flex items-start gap-4">
+                    <div className="w-3 h-3 rounded-full bg-red-500 mt-2"></div>
+                    <div>
+                      <p className="font-semibold text-gray-900">Order Cancelled</p>
+                      <p className="text-sm text-gray-600">
+                        {new Date(order.canceledAt).toLocaleString()}
+                      </p>
+                      {order.cancelReason && (
+                        <p className="text-sm text-gray-700 mt-1">
+                          <span className="font-semibold">Reason:</span> {order.cancelReason}
+                        </p>
+                      )}
+                    </div>
+                  </div>
                     )}
+
                     {order.refundedAt && (
-                      <div>Refunded: {new Date(order.refundedAt).toLocaleString()}</div>
+                  <div className="flex items-start gap-4">
+                    <div className="w-3 h-3 rounded-full bg-blue-500 mt-2"></div>
+                    <div>
+                      <p className="font-semibold text-gray-900">Refund Processed</p>
+                      <p className="text-sm text-gray-600">
+                        {new Date(order.refundedAt).toLocaleString()}
+                      </p>
+                      {order.refundAmount && (
+                        <p className="text-sm text-gray-700 mt-1">
+                          <span className="font-semibold">Amount:</span> ${order.refundAmount.toFixed(2)}
+                        </p>
                     )}
                   </div>
                 </div>
-                <div className="text-right">
-                  <div className="text-sm text-gray-600 mb-2">Status</div>
-                  <div className={`badge ${
-                    order.status === 'PAID' ? 'badge-success' :
-                    order.status === 'PENDING' ? 'badge-warning' :
-                    order.status === 'CANCELLED' ? 'badge-danger' :
-                    'badge-primary'
-                  } text-lg px-4 py-2`}>{order.status}</div>
-                </div>
+                )}
               </div>
             </div>
 
+            {/* Order Items */}
             <div className="card shadow-lg">
-              <h2 className="text-2xl font-bold mb-6 text-gray-900">Items</h2>
+              <h2 className="text-2xl font-bold mb-6 text-gray-900">Order Items</h2>
               <div className="space-y-4">
-                {order.items?.map((it) => (
-                  <div key={it.id} className="flex items-center justify-between p-4 bg-gradient-to-r from-gray-50 to-gray-100 rounded-xl">
+                {order.items && order.items.length > 0 ? (
+                  order.items.map((item) => (
+                    <div
+                      key={item.id}
+                      className="flex items-center justify-between p-4 bg-gradient-to-r from-gray-50 to-gray-100 rounded-xl hover:shadow-md transition-shadow"
+                    >
                     <div className="flex-1">
-                      <div className="font-bold text-gray-900 mb-1">{it.package?.name || 'Package'}</div>
-                      <div className="text-sm text-gray-600">{it.package?.course?.title || ''}</div>
+                        <div className="font-bold text-gray-900 mb-1">
+                          {item.package?.name || 'Package'}
+                        </div>
+                        <div className="text-sm text-gray-600">
+                          {item.package?.course?.title || 'Course'}
+                        </div>
+                        {item.package?.description && (
+                          <div className="text-xs text-gray-500 mt-1">
+                            {item.package.description}
+                          </div>
+                        )}
                     </div>
                     <div className="text-right">
-                      <div className="text-sm text-gray-600 mb-1">Price: ${it.price.toFixed(2)}</div>
-                      <div className="font-bold text-lg text-primary-600">${it.finalPrice.toFixed(2)}</div>
+                        <div className="text-sm text-gray-600 mb-1">
+                          Price: ${item.price.toFixed(2)}
                     </div>
+                        {item.discount && item.discount > 0 && (
+                          <div className="text-sm text-green-600 font-semibold mb-1">
+                            Discount: -${(item.discount * item.price).toFixed(2)}
                   </div>
-                ))}
+                        )}
+                        <div className="font-bold text-lg text-primary-600">
+                          ${item.finalPrice.toFixed(2)}
               </div>
             </div>
+                    </div>
+                  ))
+                ) : (
+                  <p className="text-gray-500">No items in this order</p>
+                )}
+              </div>
+            </div>
+
+            {/* Refund Information */}
+            {refund && (
+              <div className="card shadow-lg border-2 border-blue-200 bg-blue-50">
+                <h2 className="text-2xl font-bold mb-4 text-gray-900">Refund Status</h2>
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <span className="text-gray-700 font-semibold">Status:</span>
+                    <span className={`px-3 py-1 rounded-full text-sm font-semibold ${getRefundStatusColor(refund.status)}`}>
+                      {refund.status}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center justify-between">
+                    <span className="text-gray-700 font-semibold">Refund Amount:</span>
+                    <span className="text-lg font-bold text-blue-600">
+                      ${refund.amount.toFixed(2)}
+                    </span>
+                  </div>
+
+                  {refund.reasonCategory && (
+                    <div className="flex items-center justify-between">
+                      <span className="text-gray-700 font-semibold">Reason:</span>
+                      <span className="text-gray-900">{refund.reasonCategory}</span>
+                    </div>
+                  )}
+
+                  {refund.refundMethod && (
+                    <div className="flex items-center justify-between">
+                      <span className="text-gray-700 font-semibold">Refund Method:</span>
+                      <span className="text-gray-900">
+                        {refund.refundMethod === 'ORIGINAL_PAYMENT'
+                          ? 'Original Payment Method'
+                          : refund.refundMethod === 'WALLET'
+                            ? 'Platform Wallet'
+                            : 'Bank Transfer'}
+                      </span>
+                    </div>
+                  )}
+
+                  {refund.reason && (
+                    <div>
+                      <span className="text-gray-700 font-semibold block mb-2">Details:</span>
+                      <p className="text-gray-700 bg-white p-3 rounded-lg">{refund.reason}</p>
+                    </div>
+                  )}
+
+                  {refund.createdAt && (
+                    <div className="text-sm text-gray-600 pt-2 border-t">
+                      Requested: {new Date(refund.createdAt).toLocaleString()}
+                    </div>
+                  )}
+
+                  {refund.completedAt && (
+                    <div className="text-sm text-green-600 font-semibold">
+                      Completed: {new Date(refund.completedAt).toLocaleString()}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
 
+          {/* Sidebar */}
           <div className="space-y-6">
+            {/* Total Amount */}
             <div className="card shadow-lg bg-gradient-to-r from-primary-50 to-primary-100 border-2 border-primary-200">
               <div className="flex items-center justify-between">
                 <span className="text-xl font-bold text-gray-900">Total</span>
-                <span className="text-3xl font-bold text-primary-600">${order.totalAmount.toFixed(2)}</span>
+                <span className="text-3xl font-bold text-primary-600">
+                  ${order.totalAmount.toFixed(2)}
+                </span>
               </div>
             </div>
 
-            {/* Cancel order (PENDING only) */}
+            {/* Customer Service Button */}
+            <button
+              onClick={() => setShowCustomerService(true)}
+              className="w-full card shadow-lg hover:shadow-xl transition-all border-2 border-primary-200 bg-gradient-to-r from-primary-50 to-primary-100 p-4 text-center cursor-pointer"
+            >
+              <div className="text-3xl mb-2">🎧</div>
+              <p className="font-bold text-gray-900">Contact Support</p>
+              <p className="text-xs text-gray-600 mt-1">Get help with this order</p>
+            </button>
+
+            {/* Cancel Order (PENDING only) */}
             {order.status === 'PENDING' && (
               <div className="card shadow-lg border-2 border-orange-200 bg-orange-50">
                 <h3 className="font-bold text-lg text-gray-900 mb-4">Cancel Order</h3>
-                <input className="input mb-4" placeholder="Optional reason" value={cancelReason} onChange={(e)=>setCancelReason(e.target.value)} />
-                <button className="btn-outline w-full" onClick={handleCancel} disabled={working}>Cancel Order</button>
+                <textarea
+                  className="input mb-4 h-20 resize-none"
+                  placeholder="Optional reason for cancellation"
+                  value={cancelReason}
+                  onChange={(e) => setCancelReason(e.target.value)}
+                  disabled={working}
+                />
+                <button
+                  className="btn-outline w-full"
+                  onClick={handleCancel}
+                  disabled={working}
+                >
+                  {working ? 'Cancelling...' : 'Cancel Order'}
+                </button>
               </div>
             )}
 
-            {/* Request refund (PAID only) */}
-            {order.status === 'PAID' && (
+            {/* Request Refund (PAID only) */}
+            {order.status === 'PAID' && !refund && (
               <div className="card shadow-lg border-2 border-blue-200 bg-blue-50">
                 <h3 className="font-bold text-lg text-gray-900 mb-4">Request Refund</h3>
-                <input className="input mb-4" placeholder="Amount" value={refundAmount} onChange={(e)=>setRefundAmount(e.target.value)} />
-                <input className="input mb-4" placeholder="Optional reason" value={refundReason} onChange={(e)=>setRefundReason(e.target.value)} />
-                <button className="btn-primary w-full" onClick={handleRefund} disabled={working}>Submit Refund</button>
+                <p className="text-sm text-gray-600 mb-4">
+                  Start a refund request for this order. Our support team will review your request.
+                </p>
+                <button
+                  className="btn-primary w-full"
+                  onClick={() => setShowRefundModal(true)}
+                  disabled={working}
+                >
+                  Request Refund
+                </button>
+              </div>
+            )}
+
+            {/* Refund Pending */}
+            {refund && refund.status === 'PENDING' && (
+              <div className="card shadow-lg border-2 border-yellow-200 bg-yellow-50">
+                <h3 className="font-bold text-lg text-gray-900 mb-2">Refund Pending</h3>
+                <p className="text-sm text-gray-700 mb-4">
+                  Your refund request is being reviewed. We'll notify you once it's processed.
+                </p>
+                <button
+                  className="btn-outline w-full"
+                  onClick={() => setShowCustomerService(true)}
+                >
+                  Contact Support
+                </button>
+              </div>
+            )}
+
+            {/* Refund Info */}
+            {refund && ['APPROVED', 'PROCESSING', 'COMPLETED'].includes(refund.status) && (
+              <div className="card shadow-lg border-2 border-green-200 bg-green-50">
+                <h3 className="font-bold text-lg text-gray-900 mb-2">Refund {refund.status}</h3>
+                <p className="text-sm text-gray-700">
+                  Amount: <span className="font-bold">${refund.amount.toFixed(2)}</span>
+                </p>
+                {refund.status === 'COMPLETED' && (
+                  <p className="text-xs text-green-600 mt-2">
+                    ✓ Refund completed on {new Date(refund.completedAt || '').toLocaleString()}
+                  </p>
+                )}
               </div>
             )}
           </div>
         </div>
       </div>
+
+      {/* Modals */}
+      <RefundModal
+        isOpen={showRefundModal}
+        onClose={() => setShowRefundModal(false)}
+        order={order}
+        onRefundSubmitted={load}
+      />
+
+      <CustomerServiceModal
+        isOpen={showCustomerService}
+        onClose={() => setShowCustomerService(false)}
+        orderId={order.id}
+      />
     </div>
   );
 };
 
 export default OrderDetailPage;
-

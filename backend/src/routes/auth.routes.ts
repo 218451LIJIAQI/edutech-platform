@@ -57,5 +57,8 @@ router.post(
 
 router.post('/logout', authenticate, authController.logout);
 
+// Danger Zone: delete current account
+router.delete('/account', authenticate, authController.deleteAccount);
+
 export default router;
 

@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
-import communityService from '@/services/community.service';
-import { asyncHandler } from '@/utils/asyncHandler';
-import { BadRequestError } from '@/utils/errors';
+import communityService from '../services/community.service';
+import asyncHandler from '../utils/asyncHandler';
+import { BadRequestError } from '../utils/errors';
 
 export const communityController = {
   // ==================== TAGS ====================

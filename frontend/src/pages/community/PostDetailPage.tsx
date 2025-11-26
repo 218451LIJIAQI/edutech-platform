@@ -2,11 +2,11 @@ import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { Heart, Bookmark, Share2, MessageCircle, Flag, User, Tag, Loader2 } from 'lucide-react';
 import communityService from '@/services/community.service';
-import reportService from '@/services/report.service';
 import { CommunityComment, CommunityPost } from '@/types/community';
 import { useAuthStore } from '@/store/authStore';
-import { ReportType } from '@/types';
 import toast from 'react-hot-toast';
+import ReportSubmissionModal from '@/components/common/ReportSubmissionModal';
+import UniversalVideoPlayer from '@/components/common/UniversalVideoPlayer';
 
 const PostDetailPage = () => {
   const { id } = useParams<{ id: string }>();
@@ -18,10 +18,7 @@ const PostDetailPage = () => {
   const [isLoading, setIsLoading] = useState(true);
 
   const [commentInput, setCommentInput] = useState('');
-  const [isReporting, setIsReporting] = useState(false);
-  const [reportType, setReportType] = useState<ReportType>(ReportType.INAPPROPRIATE_CONTENT);
-  const [reportDesc, setReportDesc] = useState('');
-  const [submittingReport, setSubmittingReport] = useState(false);
+  const [isReportModalOpen, setIsReportModalOpen] = useState(false);
 
   useEffect(() => {
     const load = async () => {
@@ -73,22 +70,7 @@ const PostDetailPage = () => {
     } catch { toast.error('Failed to comment'); }
   };
 
-  const openReport = () => { setIsReporting(true); };
-  const closeReport = () => { if (!submittingReport) setIsReporting(false); };
-  const submitReport = async () => {
-    if (!post) return;
-    if (!reportDesc.trim()) { toast.error('Please provide a reason'); return; }
-    setSubmittingReport(true);
-    try {
-      await reportService.submitReport(post.id, reportType, reportDesc.trim());
-      toast.success('Report submitted');
-      setIsReporting(false);
-      setReportDesc('');
-    } catch (e) {
-      console.error(e);
-      toast.error('Failed to submit report');
-    } finally { setSubmittingReport(false); }
-  };
+
 
   if (isLoading) {
     return (
@@ -121,7 +103,7 @@ const PostDetailPage = () => {
                   <Link to={`/community/user/${post.authorId}`} className="font-bold text-gray-900 hover:underline">{post.author?.firstName} {post.author?.lastName}</Link>
                   <p className="text-xs text-gray-500">{new Date(post.createdAt).toLocaleString()}</p>
                 </div>
-                <button type="button" onClick={openReport} className="btn-outline btn-sm inline-flex items-center gap-1"><Flag className="w-4 h-4" aria-label="flag" /> Report</button>
+                <button type="button" onClick={() => setIsReportModalOpen(true)} className="btn-outline btn-sm inline-flex items-center gap-1"><Flag className="w-4 h-4" aria-label="flag" /> Report</button>
               </div>
             </div>
           </div>
@@ -136,7 +118,7 @@ const PostDetailPage = () => {
                   {m.type === 'image' ? (
                     <img src={m.url} alt="post media" className="w-full rounded-xl border" />
                   ) : (
-                    <video src={m.url} className="w-full rounded-xl border" controls />
+                    <UniversalVideoPlayer src={m.url} title={post.title || 'Post video'} />
                   )}
                 </div>
               ))}
@@ -188,30 +170,15 @@ const PostDetailPage = () => {
         </div>
       </div>
 
-      {isReporting && (
-        <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl p-6 w-full max-w-md">
-            <h4 className="text-lg font-bold mb-4">Report Post</h4>
-            <div className="mb-3">
-              <label className="block text-sm font-semibold text-gray-700 mb-2">Type</label>
-              <select value={reportType} onChange={(e) => setReportType(e.target.value as ReportType)} className="input" aria-label="report type">
-                {Object.values(ReportType).map(rt => (
-                  <option key={rt} value={rt}>{rt}</option>
-                ))}
-              </select>
-            </div>
-            <div className="mb-4">
-              <label className="block text-sm font-semibold text-gray-700 mb-2">Description</label>
-              <textarea value={reportDesc} onChange={(e) => setReportDesc(e.target.value)} rows={5} className="input" placeholder="Please describe the issue..." />
-            </div>
-            <div className="flex items-center justify-end gap-2">
-              <button type="button" onClick={closeReport} disabled={submittingReport} className="btn-outline">Cancel</button>
-              <button type="button" onClick={submitReport} disabled={submittingReport || !reportDesc.trim()} className="btn-primary">
-                {submittingReport ? 'Submitting...' : 'Submit'}
-              </button>
-            </div>
-          </div>
-        </div>
+      {post && (
+        <ReportSubmissionModal
+          isOpen={isReportModalOpen}
+          onClose={() => setIsReportModalOpen(false)}
+          reportedId={post.authorId}
+          reportedName={`${post.author?.firstName} ${post.author?.lastName}`}
+          contentType="community_post"
+          contentId={post.id}
+        />
       )}
     </div>
   );

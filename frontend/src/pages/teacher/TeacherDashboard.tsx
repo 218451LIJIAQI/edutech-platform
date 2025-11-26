@@ -73,6 +73,26 @@ const TeacherDashboard = () => {
           <p className="section-subtitle">Manage your courses and track your performance</p>
       </div>
 
+      {/* Profile Completion Alert */}
+      <div className="card bg-gradient-to-r from-blue-50 to-blue-100 border-2 border-blue-200 mb-8 hover:shadow-lg transition-all">
+        <div className="flex items-start space-x-4">
+          <div className="p-3 bg-blue-200 rounded-lg flex-shrink-0">
+            <Award className="w-6 h-6 text-blue-700" />
+          </div>
+          <div className="flex-1">
+            <h3 className="font-bold text-blue-900 mb-2 text-lg">
+              Complete Your Profile
+            </h3>
+            <p className="text-sm text-blue-800 mb-4">
+              Fill in your extended profile information to help students learn more about you and get verified
+            </p>
+            <Link to="/teacher/profile-completion" className="btn-primary btn-sm">
+              Complete Profile
+            </Link>
+          </div>
+        </div>
+      </div>
+
       {/* Verification Alert */}
       {!stats.isVerified && (
           <div className="card bg-gradient-to-r from-yellow-50 to-yellow-100 border-2 border-yellow-200 mb-8 hover:shadow-lg transition-all">

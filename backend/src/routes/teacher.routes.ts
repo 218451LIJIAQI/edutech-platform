@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { UserRole } from '@prisma/client';
 import teacherController from '../controllers/teacher.controller';
 import { authenticate, authorize } from '../middleware/auth';
+import { ensureTeacherApproved } from '../middleware/teacherAccess';
 import { validate } from '../middleware/validate';
 import {
   updateProfileValidation,
@@ -46,6 +47,7 @@ router.get(
   '/me/stats',
   authenticate,
   authorize(UserRole.TEACHER),
+  ensureTeacherApproved,
   teacherController.getMyStats
 );
 
@@ -81,6 +83,21 @@ router.get(
   teacherController.getMyVerifications
 );
 
+// Extended Profile Routes
+router.post(
+  '/me/profile/submit',
+  authenticate,
+  authorize(UserRole.TEACHER),
+  teacherController.submitExtendedProfile
+);
+
+router.get(
+  '/me/profile/extended',
+  authenticate,
+  authorize(UserRole.TEACHER),
+  teacherController.getExtendedProfile
+);
+
 // Admin routes
 router.get(
   '/verifications/pending',
@@ -95,6 +112,42 @@ router.put(
   authorize(UserRole.ADMIN),
   validate(reviewVerificationValidation),
   teacherController.reviewVerification
+);
+
+// Admin - Teacher Registrations
+router.get(
+  '/admin/pending-registrations',
+  authenticate,
+  authorize(UserRole.ADMIN),
+  teacherController.getPendingRegistrations
+);
+
+router.put(
+  '/admin/registrations/:id/review',
+  authenticate,
+  authorize(UserRole.ADMIN),
+  teacherController.reviewRegistration
+);
+
+// Admin - Teacher Profile Verification Routes
+router.get(
+  '/admin/pending-profiles',
+  authenticate,
+  authorize(UserRole.ADMIN),
+  teacherController.getPendingProfileVerifications
+);
+
+router.put(
+  '/admin/profiles/:id/review',
+  authenticate,
+  authorize(UserRole.ADMIN),
+  teacherController.reviewTeacherProfile
+);
+
+// Verified Teachers (for students)
+router.get(
+  '/verified',
+  teacherController.getVerifiedTeachers
 );
 
 export default router;
