@@ -13,6 +13,7 @@
     "db:setup": "prisma migrate deploy && prisma generate",
     "db:seed": "ts-node prisma/seed.ts",
     "db:studio": "prisma studio",
+    "script:recalculate-students": "ts-node -r tsconfig-paths/register scripts/recalculate-student-counts.ts",
     "test": "jest --coverage",
     "test:watch": "jest --watch",
     "lint": "eslint src/**/*.ts",

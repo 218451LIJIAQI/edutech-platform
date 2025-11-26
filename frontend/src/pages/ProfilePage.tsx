@@ -293,7 +293,10 @@ const ProfilePage = () => {
               <p className="text-sm text-gray-700 mb-4">
               Manage your teaching profile, certifications, and verification status
             </p>
-            <button className="btn-primary">
+            <button 
+              onClick={() => navigate('/teacher/profile-completion')}
+              className="btn-primary"
+            >
               Go to Teacher Profile
             </button>
           </div>

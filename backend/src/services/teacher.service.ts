@@ -88,8 +88,19 @@ class TeacherService {
       prisma.teacherProfile.count({ where }),
     ]);
 
+    // Calculate actual student counts for each teacher
+    const teachersWithActualCounts = await Promise.all(
+      teachers.map(async (teacher) => {
+        const actualStudentCount = await this.calculateActualStudentCount(teacher.id);
+        return {
+          ...teacher,
+          totalStudents: actualStudentCount, // Override with actual count
+        };
+      })
+    );
+
     return {
-      teachers,
+      teachers: teachersWithActualCounts,
       pagination: {
         total,
         page,
@@ -135,11 +146,15 @@ class TeacherService {
       throw new NotFoundError('Teacher not found');
     }
 
+    // Get actual student count
+    const actualStudentCount = await this.calculateActualStudentCount(teacherId);
+
     // Only expose extended profile fields to students when approved
     const approved = teacher.profileCompletionStatus === 'APPROVED';
 
     return {
       ...teacher,
+      totalStudents: actualStudentCount, // Override with actual count
       // Parse JSON fields conditionally
       awards: approved && teacher.awards ? JSON.parse(teacher.awards) : [],
       specialties: approved && teacher.specialties ? JSON.parse(teacher.specialties) : [],
@@ -414,6 +429,28 @@ class TeacherService {
   }
 
   /**
+   * Calculate actual unique students for a teacher
+   * Counts distinct users who have enrollments in this teacher's courses
+   */
+  async calculateActualStudentCount(teacherProfileId: string): Promise<number> {
+    const result = await prisma.enrollment.findMany({
+      where: {
+        package: {
+          course: {
+            teacherProfileId,
+          },
+        },
+      },
+      select: {
+        userId: true,
+      },
+      distinct: ['userId'],
+    });
+
+    return result.length;
+  }
+
+  /**
    * Get teacher statistics
    */
   async getTeacherStats(userId: string) {
@@ -426,9 +463,10 @@ class TeacherService {
     }
 
     // Compute counts efficiently via aggregate queries
-    const [totalCourses, totalEnrollments] = await Promise.all([
+    const [totalCourses, totalEnrollments, actualStudentCount] = await Promise.all([
       prisma.course.count({ where: { teacherProfileId: teacherProfile.id } }),
       prisma.enrollment.count({ where: { package: { course: { teacherProfileId: teacherProfile.id } } } }),
+      this.calculateActualStudentCount(teacherProfile.id),
     ]);
 
     return {
@@ -436,7 +474,7 @@ class TeacherService {
       totalEnrollments,
       totalRevenue: teacherProfile.totalEarnings,
       averageRating: teacherProfile.averageRating,
-      totalStudents: teacherProfile.totalStudents,
+      totalStudents: actualStudentCount, // Use actual count instead of stored value
       isVerified: teacherProfile.isVerified,
     };
   }
@@ -543,6 +581,77 @@ class TeacherService {
       languages: teacherProfile.languages ? JSON.parse(teacherProfile.languages) : [],
       certificatePhotos: teacherProfile.certificatePhotos ? JSON.parse(teacherProfile.certificatePhotos) : [],
     };
+  }
+
+  /**
+   * Update extended profile for approved teachers
+   * This creates a new submission for review
+   */
+  async updateExtendedProfile(
+    userId: string,
+    data: {
+      selfIntroduction?: string;
+      educationBackground?: string;
+      teachingExperience?: string;
+      awards?: string[];
+      specialties?: string[];
+      teachingStyle?: string;
+      languages?: string[];
+      yearsOfExperience?: number;
+      profilePhoto?: string;
+      certificatePhotos?: string[];
+    }
+  ) {
+    const teacherProfile = await prisma.teacherProfile.findUnique({
+      where: { userId },
+    });
+
+    if (!teacherProfile) {
+      throw new NotFoundError('Teacher profile not found');
+    }
+
+    // For approved profiles, create a new submission for review
+    // Update status to PENDING_REVIEW to indicate there are pending changes
+    const updatedProfile = await prisma.teacherProfile.update({
+      where: { userId },
+      data: {
+        profileCompletionStatus: 'PENDING_REVIEW',
+        profileSubmittedAt: new Date(),
+      },
+      include: {
+        user: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            email: true,
+          },
+        },
+      },
+    });
+
+    // Create a new submission record with the updated payload
+    await prisma.teacherProfileSubmission.create({
+      data: {
+        teacherProfileId: teacherProfile.id,
+        status: VerificationStatus.PENDING,
+        submittedAt: new Date(),
+        payload: {
+          selfIntroduction: data.selfIntroduction ?? null,
+          educationBackground: data.educationBackground ?? null,
+          teachingExperience: data.teachingExperience ?? null,
+          awards: data.awards ?? [],
+          specialties: data.specialties ?? [],
+          teachingStyle: data.teachingStyle ?? null,
+          languages: data.languages ?? [],
+          yearsOfExperience: data.yearsOfExperience ?? null,
+          profilePhoto: data.profilePhoto ?? null,
+          certificatePhotos: data.certificatePhotos ?? [],
+        },
+      },
+    });
+
+    return updatedProfile;
   }
 
   /**
@@ -847,14 +956,23 @@ class TeacherService {
       prisma.teacherProfile.count({ where }),
     ]);
 
+    // Calculate actual student counts for each teacher
+    const teachersWithActualCounts = await Promise.all(
+      teachers.map(async (t) => {
+        const actualStudentCount = await this.calculateActualStudentCount(t.id);
+        return {
+          ...t,
+          totalStudents: actualStudentCount, // Override with actual count
+          awards: t.awards ? JSON.parse(t.awards) : [],
+          specialties: t.specialties ? JSON.parse(t.specialties) : [],
+          languages: t.languages ? JSON.parse(t.languages) : [],
+          certificatePhotos: t.certificatePhotos ? JSON.parse(t.certificatePhotos) : [],
+        };
+      })
+    );
+
     return {
-      teachers: teachers.map((t) => ({
-        ...t,
-        awards: t.awards ? JSON.parse(t.awards) : [],
-        specialties: t.specialties ? JSON.parse(t.specialties) : [],
-        languages: t.languages ? JSON.parse(t.languages) : [],
-        certificatePhotos: t.certificatePhotos ? JSON.parse(t.certificatePhotos) : [],
-      })),
+      teachers: teachersWithActualCounts,
       pagination: {
         total,
         page,

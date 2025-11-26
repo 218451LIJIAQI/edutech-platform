@@ -98,6 +98,13 @@ router.get(
   teacherController.getExtendedProfile
 );
 
+router.put(
+  '/me/profile/update',
+  authenticate,
+  authorize(UserRole.TEACHER),
+  teacherController.updateExtendedProfile
+);
+
 // Admin routes
 router.get(
   '/verifications/pending',

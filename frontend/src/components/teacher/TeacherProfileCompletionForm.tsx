@@ -8,6 +8,7 @@ interface TeacherProfileCompletionFormProps {
   onSuccess: (profile: TeacherProfile) => void;
   onError: (error: string) => void;
   initialData?: TeacherProfile;
+  isEditingApproved?: boolean;
 }
 
 /**
@@ -18,6 +19,7 @@ const TeacherProfileCompletionForm = ({
   onSuccess,
   onError,
   initialData,
+  isEditingApproved = false,
 }: TeacherProfileCompletionFormProps) => {
   // Form state
   const [formData, setFormData] = useState({
@@ -209,7 +211,14 @@ const TeacherProfileCompletionForm = ({
 
     setIsSubmitting(true);
     try {
-      const profile = await teacherService.submitExtendedProfile(formData);
+      let profile;
+      if (isEditingApproved) {
+        // Use update endpoint for approved profiles
+        profile = await teacherService.updateExtendedProfile(formData);
+      } else {
+        // Use submit endpoint for new submissions
+        profile = await teacherService.submitExtendedProfile(formData);
+      }
       onSuccess(profile);
     } catch (error: any) {
       onError(error.response?.data?.message || 'Failed to submit profile');
@@ -518,10 +527,10 @@ const TeacherProfileCompletionForm = ({
           {isSubmitting ? (
             <>
               <Loader className="w-4 h-4 animate-spin" />
-              Submitting...
+              {isEditingApproved ? 'Updating...' : 'Submitting...'}
             </>
           ) : (
-            'Submit Profile for Review'
+            isEditingApproved ? 'Update Profile' : 'Submit Profile for Review'
           )}
         </button>
       </div>
@@ -529,7 +538,10 @@ const TeacherProfileCompletionForm = ({
       {/* Info Box */}
       <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
         <p className="text-sm text-blue-800">
-          <strong>Note:</strong> Your profile will be reviewed by our admin team. Once approved, your extended profile information will be visible to students, and you'll receive a verified badge.
+          <strong>Note:</strong> {isEditingApproved 
+            ? 'Your profile updates will be reviewed by our admin team before being published.'
+            : 'Your profile will be reviewed by our admin team. Once approved, your extended profile information will be visible to students, and you\'ll receive a verified badge.'
+          }
         </p>
       </div>
     </form>

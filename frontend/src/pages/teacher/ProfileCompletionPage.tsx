@@ -41,11 +41,17 @@ const ProfileCompletionPage = () => {
    */
   const handleSuccess = (updatedProfile: TeacherProfile) => {
     setProfile(updatedProfile);
-    setSuccessMessage('Profile submitted successfully! It will be reviewed by our admin team.');
+    const isApproved = profile?.profileCompletionStatus === 'APPROVED';
+    setSuccessMessage(
+      isApproved 
+        ? 'Profile updated successfully! Your changes will be reviewed by our admin team.'
+        : 'Profile submitted successfully! It will be reviewed by our admin team.'
+    );
     setErrorMessage('');
+    // Refresh profile data
     setTimeout(() => {
-      navigate('/teacher/dashboard');
-    }, 2000);
+      fetchProfile();
+    }, 1000);
   };
 
   /**
@@ -170,32 +176,28 @@ const ProfileCompletionPage = () => {
           </div>
         )}
 
-        {/* Form */}
-        {profile?.profileCompletionStatus !== 'APPROVED' && (
-          <TeacherProfileCompletionForm
-            onSuccess={handleSuccess}
-            onError={handleError}
-            initialData={profile}
-          />
-        )}
+        {/* Form - Show for both incomplete and approved profiles */}
+        <TeacherProfileCompletionForm
+          onSuccess={handleSuccess}
+          onError={handleError}
+          initialData={profile}
+          isEditingApproved={profile?.profileCompletionStatus === 'APPROVED'}
+        />
 
-        {/* Approved Message */}
+        {/* Approved Message - Show below form when approved */}
         {profile?.profileCompletionStatus === 'APPROVED' && (
-          <div className="card shadow-lg bg-gradient-to-br from-green-50 to-green-100 border-2 border-green-200">
-            <div className="text-center py-12">
-              <CheckCircle className="w-16 h-16 text-green-600 mx-auto mb-4" />
-              <h2 className="text-2xl font-bold text-green-900 mb-2">
-                Profile Approved!
-              </h2>
-              <p className="text-green-800 mb-6">
-                Your profile has been approved and is now visible to students. You have received a verified badge!
-              </p>
-              <button
-                onClick={() => navigate('/teacher/dashboard')}
-                className="btn-primary"
-              >
-                Back to Dashboard
-              </button>
+          <div className="card shadow-lg bg-gradient-to-br from-green-50 to-green-100 border-2 border-green-200 mt-8">
+            <div className="flex items-start space-x-4">
+              <CheckCircle className="w-8 h-8 text-green-600 flex-shrink-0 mt-1" />
+              <div>
+                <h3 className="font-bold text-green-900 text-lg">Profile Approved!</h3>
+                <p className="text-sm text-green-800 mt-1">
+                  Your profile has been approved and is now visible to students. You have received a verified badge!
+                </p>
+                <p className="text-sm text-green-700 mt-2">
+                  You can update your profile information below. Changes will be reviewed by our admin team.
+                </p>
+              </div>
             </div>
           </div>
         )}

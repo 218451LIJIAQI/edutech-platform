@@ -272,6 +272,45 @@ class TeacherController {
   });
 
   /**
+   * Update extended profile (for approved teachers)
+   * PUT /api/teachers/me/profile/update
+   */
+  updateExtendedProfile = asyncHandler(async (req: Request, res: Response) => {
+    const userId = req.user!.id;
+    const {
+      selfIntroduction,
+      educationBackground,
+      teachingExperience,
+      awards,
+      specialties,
+      teachingStyle,
+      languages,
+      yearsOfExperience,
+      profilePhoto,
+      certificatePhotos,
+    } = req.body;
+
+    const profile = await teacherService.updateExtendedProfile(userId, {
+      selfIntroduction,
+      educationBackground,
+      teachingExperience,
+      awards,
+      specialties,
+      teachingStyle,
+      languages,
+      yearsOfExperience,
+      profilePhoto,
+      certificatePhotos,
+    });
+
+    res.status(200).json({
+      status: 'success',
+      message: 'Profile updated successfully and submitted for review',
+      data: profile,
+    });
+  });
+
+  /**
    * Get all teachers pending profile verification (Admin only)
    * GET /api/teachers/admin/pending-profiles
    */

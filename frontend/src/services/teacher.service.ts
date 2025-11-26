@@ -133,6 +133,28 @@ export const teacherService = {
   },
 
   /**
+   * Update extended profile (for approved teachers)
+   */
+  updateExtendedProfile: async (data: {
+    selfIntroduction?: string;
+    educationBackground?: string;
+    teachingExperience?: string;
+    awards?: string[];
+    specialties?: string[];
+    teachingStyle?: string;
+    languages?: string[];
+    yearsOfExperience?: number;
+    profilePhoto?: string;
+    certificatePhotos?: string[];
+  }): Promise<TeacherProfile> => {
+    const response = await api.put<ApiResponse<TeacherProfile>>(
+      '/teachers/me/profile/update',
+      data
+    );
+    return response.data.data!;
+  },
+
+  /**
    * Get verified teachers (for students)
    */
   getVerifiedTeachers: async (params?: {
