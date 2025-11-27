@@ -146,6 +146,20 @@ const Navbar = () => {
             ) : user?.role === UserRole.ADMIN ? (
               <>
                 <Link
+                  to="/admin/financials"
+                  className="text-gray-700 hover:text-primary-600 font-medium transition-colors duration-300 relative group"
+                >
+                  Financials Management
+                  <span className="absolute bottom-0 left-0 w-0 h-0.5 bg-gradient-to-r from-primary-600 to-primary-800 group-hover:w-full transition-all duration-300"></span>
+                </Link>
+                <Link
+                  to="/admin/users"
+                  className="text-gray-700 hover:text-primary-600 font-medium transition-colors duration-300 relative group"
+                >
+                  Users Management
+                  <span className="absolute bottom-0 left-0 w-0 h-0.5 bg-gradient-to-r from-primary-600 to-primary-800 group-hover:w-full transition-all duration-300"></span>
+                </Link>
+                <Link
                   to="/admin/verification-teachers"
                   className="text-gray-700 hover:text-primary-600 font-medium transition-colors duration-300 relative group"
                 >

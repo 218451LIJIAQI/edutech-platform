@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
-import { Users, Search, Filter, Download, TrendingUp, Calendar, BookOpen, User } from 'lucide-react';
+import { Link, useNavigate } from 'react-router-dom';
+import { Users, Search, Filter, Download, TrendingUp, Calendar, BookOpen, User, MessageSquare, Copy } from 'lucide-react';
 import courseService from '@/services/course.service';
 import enrollmentService from '@/services/enrollment.service';
 import { Course, Enrollment, User as AppUser } from '@/types';
@@ -29,6 +29,7 @@ const TeacherStudentManagementPage = () => {
   const [filterCourseId, setFilterCourseId] = useState<string>('all');
   const [progressMin, setProgressMin] = useState(0);
   const [progressMax, setProgressMax] = useState(100);
+  const navigate = useNavigate();
 
   useEffect(() => {
     loadData();
@@ -261,6 +262,33 @@ const TeacherStudentManagementPage = () => {
                             ))}
                           </div>
                         </details>
+                      </td>
+                      <td className="py-5 px-4">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => navigate(`/messages?contactId=${s.user.id}`)}
+                            className="btn-outline btn-sm flex items-center gap-1"
+                            title="Message student"
+                          >
+                            <MessageSquare className="w-4 h-4" /> Message
+                          </button>
+                          <button
+                            type="button"
+                            onClick={async () => { try { await navigator.clipboard.writeText(s.user.email); toast.success('Email copied'); } catch { toast.error('Copy failed'); } }}
+                            className="btn-outline btn-sm flex items-center gap-1"
+                            title="Copy email"
+                          >
+                            <Copy className="w-4 h-4" /> Copy Email
+                          </button>
+                          <Link
+                            to={`/community/user/${s.user.id}`}
+                            className="btn-outline btn-sm flex items-center gap-1"
+                            title="View profile"
+                          >
+                            <User className="w-4 h-4" /> Profile
+                          </Link>
+                        </div>
                       </td>
                     </tr>
                   ))}

@@ -20,12 +20,24 @@ router.use(authorize(UserRole.ADMIN));
 router.get('/stats', adminController.getPlatformStats);
 router.get('/activities', adminController.getRecentActivities);
 router.get('/financials', adminController.getFinancials);
+router.get('/financials/commissions', adminController.getTeacherCommissions);
+router.put('/financials/commissions/:userId', adminController.updateTeacherCommission);
+router.get('/financials/settlements', adminController.getSettlements);
+router.get('/financials/invoices', adminController.getInvoices);
+router.get('/financials/analytics', adminController.getRevenueAnalytics);
 
 // User Management
 router.get('/users', adminController.getAllUsers);
 router.get('/users/:id', adminController.getUserById);
+router.post('/users', adminController.createUser);
+router.put('/users/:id', adminController.updateUser);
 router.put('/users/:id/status', adminController.updateUserStatus);
+router.put('/users/:id/password', adminController.resetUserPassword);
+router.put('/users/:id/lock', adminController.lockUserAccount);
 router.delete('/users/:id', adminController.deleteUser);
+router.post('/users/batch/delete', adminController.batchDeleteUsers);
+router.post('/users/batch/status', adminController.batchUpdateUserStatus);
+router.get('/users/audit-logs', adminController.getUserAuditLogs);
 
 // Course Management
 router.get('/courses', adminController.getAllCourses);

@@ -40,6 +40,7 @@ import AdminDashboard from './pages/admin/AdminDashboard';
 import UsersManagement from './pages/admin/UsersManagement';
 import CoursesManagement from './pages/admin/CoursesManagement';
 import ReportsManagement from './pages/admin/ReportsManagement';
+import FinancialsManagement from './pages/admin/FinancialsManagement';
 import RefundsManagement from './pages/admin/RefundsManagement';
 import SupportTicketsManagement from './pages/admin/SupportTicketsManagement';
 import VerificationTeachersManagement from './pages/admin/VerificationTeachersManagement';
@@ -98,7 +99,7 @@ function App() {
         <Route
           path="/community"
           element={
-            <PrivateRoute allowedRoles={[UserRole.STUDENT]}>
+            <PrivateRoute allowedRoles={[UserRole.STUDENT, UserRole.TEACHER, UserRole.ADMIN]}>
               <CommunityHomePage />
             </PrivateRoute>
           }
@@ -114,7 +115,7 @@ function App() {
         <Route
           path="/community/post/:id"
           element={
-            <PrivateRoute allowedRoles={[UserRole.STUDENT]}>
+            <PrivateRoute allowedRoles={[UserRole.STUDENT, UserRole.TEACHER, UserRole.ADMIN]}>
               <PostDetailPage />
             </PrivateRoute>
           }
@@ -122,7 +123,7 @@ function App() {
         <Route
           path="/community/user/:userId"
           element={
-            <PrivateRoute allowedRoles={[UserRole.STUDENT]}>
+            <PrivateRoute allowedRoles={[UserRole.STUDENT, UserRole.TEACHER, UserRole.ADMIN]}>
               <CommunityUserProfilePage />
             </PrivateRoute>
           }
@@ -388,6 +389,14 @@ function App() {
           element={
             <PrivateRoute allowedRoles={[UserRole.ADMIN]}>
               <SupportTicketsManagement />
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path="/admin/financials"
+          element={
+            <PrivateRoute allowedRoles={[UserRole.ADMIN]}>
+              <FinancialsManagement />
             </PrivateRoute>
           }
         />

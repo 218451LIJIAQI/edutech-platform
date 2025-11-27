@@ -18,6 +18,7 @@ import {
   Settings,
 } from 'lucide-react';
 import courseService from '@/services/course.service';
+import notificationService from '@/services/notification.service';
 import LessonModal from '@/components/teacher/LessonModal';
 import { Course, CourseType, LessonType } from '@/types';
 import toast from 'react-hot-toast';
@@ -37,7 +38,7 @@ const CourseManagementPage = () => {
   const [isSendingNotification, setIsSendingNotification] = useState(false);
   const [showRecordingModal, setShowRecordingModal] = useState(false);
   const [editingRecordingId, setEditingRecordingId] = useState<string | undefined>(undefined);
-  const [recordingDefaultVideoType, setRecordingDefaultVideoType] = useState<'upload' | 'link'>('upload');
+  const [recordingDefaultVideoType] = useState<'upload' | 'link'>('upload');
 
   useEffect(() => {
     fetchCourse();
@@ -65,16 +66,21 @@ const CourseManagementPage = () => {
 
     setIsSendingNotification(true);
     try {
-      // TODO: Implement notification API call
-      // await notificationService.sendCourseNotification(courseId, {
-      //   title: notificationTitle,
-      //   message: notificationMessage,
-      // });
+      await notificationService.sendCourseNotification(courseId!, {
+        title: notificationTitle.trim(),
+        message: notificationMessage.trim(),
+        type: 'COURSE_ANNOUNCEMENT',
+      });
       toast.success('Notification sent to all students');
       setNotificationTitle('');
       setNotificationMessage('');
     } catch (error) {
-      toast.error('Failed to send notification');
+      const message = error instanceof Error && 'response' in error
+        ? (error as { response?: { data?: { message?: string } } }).response?.data?.message
+        : error instanceof Error
+        ? error.message
+        : undefined;
+      toast.error(message || 'Failed to send notification');
     } finally {
       setIsSendingNotification(false);
     }
@@ -109,7 +115,7 @@ const CourseManagementPage = () => {
       <div className="container mx-auto px-4 py-8">
         {/* Header */}
         <div className="mb-8">
-          <button
+          <button type="button"
             onClick={() => navigate('/teacher/courses')}
             className="flex items-center space-x-2 text-primary-600 hover:text-primary-700 font-semibold mb-4"
           >
@@ -205,6 +211,7 @@ const CourseManagementPage = () => {
           <div className="flex items-center space-x-2 border-b border-gray-200 overflow-x-auto">
             {(['overview', 'live', 'notifications', 'materials', 'recordings'] as const).map((tab) => (
               <button
+                type="button"
                 key={tab}
                 onClick={() => setActiveTab(tab)}
                 className={`px-6 py-4 font-medium transition-all whitespace-nowrap ${
@@ -298,7 +305,7 @@ const CourseManagementPage = () => {
                       <p className="text-red-800 mb-4">
                         Start a live teaching session for your students. They will receive notifications and can join the live class.
                       </p>
-                      <button className="btn-primary flex items-center space-x-2">
+                      <button type="button" className="btn-primary flex items-center space-x-2">
                         <Radio className="w-4 h-4" />
                         <span>Start Live Session</span>
                       </button>
@@ -350,6 +357,7 @@ const CourseManagementPage = () => {
                     </div>
 
                     <button
+                      type="button"
                       onClick={handleSendNotification}
                       disabled={isSendingNotification}
                       className="btn-primary flex items-center space-x-2 w-full justify-center"
@@ -387,7 +395,7 @@ const CourseManagementPage = () => {
                       <p className="text-sm text-gray-600">Drag and drop files or click to browse</p>
                     </div>
 
-                    <button className="btn-outline w-full flex items-center justify-center space-x-2">
+                    <button type="button" className="btn-outline w-full flex items-center justify-center space-x-2">
                       <Plus className="w-4 h-4" />
                       <span>Add Material</span>
                     </button>
@@ -410,7 +418,7 @@ const CourseManagementPage = () => {
                               <p className="text-sm text-gray-600">{material.description}</p>
                             </div>
                           </div>
-                          <button className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors">
+                          <button type="button" aria-label="Delete material" title="Delete material" className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors">
                             <Trash2 className="w-5 h-5" />
                           </button>
                         </div>
@@ -481,11 +489,14 @@ const CourseManagementPage = () => {
                                   setEditingRecordingId(lesson.id);
                                   setShowRecordingModal(true);
                                 }}
-                                className="btn-sm btn-outline"
+                                type="button" className="btn-sm btn-outline"
                               >
                                 Edit
                               </button>
                               <button
+                                type="button"
+                                aria-label="Delete recording"
+                                title="Delete recording"
                                 onClick={async () => {
                                   if (!confirm('Delete this recording?')) return;
                                   try {

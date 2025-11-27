@@ -1,6 +1,4 @@
-import { PrismaClient } from '@prisma/client';
-
-const prisma = new PrismaClient();
+import prisma from '../src/config/database';
 
 /**
  * Script to recalculate actual student counts for all teachers

@@ -59,8 +59,16 @@ export const addCertificationValidation = [
   body('credentialUrl')
     .optional()
     .trim()
-    .isURL()
-    .withMessage('Credential URL must be a valid URL'),
+    .custom((value) => {
+      if (!value) return true;
+      const isUrl = /^https?:\/\/.+/.test(value);
+      const isRelativePath = value.startsWith('/');
+      if (!isUrl && !isRelativePath) {
+        throw new Error('Credential URL must be a valid URL or path');
+      }
+      return true;
+    })
+    .withMessage('Credential URL must be a valid URL or file path'),
 ];
 
 export const submitVerificationValidation = [
@@ -75,8 +83,16 @@ export const submitVerificationValidation = [
     .trim()
     .notEmpty()
     .withMessage('Document URL is required')
-    .isURL()
-    .withMessage('Document URL must be a valid URL'),
+    .custom((value) => {
+      if (!value) return true;
+      const isUrl = /^https?:\/\/.+/.test(value);
+      const isRelativePath = value.startsWith('/');
+      if (!isUrl && !isRelativePath) {
+        throw new Error('Document URL must be a valid URL or path');
+      }
+      return true;
+    })
+    .withMessage('Document URL must be a valid URL or file path'),
 ];
 
 export const reviewVerificationValidation = [

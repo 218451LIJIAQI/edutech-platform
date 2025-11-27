@@ -1,6 +1,6 @@
 import prisma from '../config/database';
 import { NotFoundError, ValidationError } from '../utils/errors';
-import { RefundStatus } from '@prisma/client';
+import { RefundStatus, OrderStatus } from '@prisma/client';
 
 /**
  * Admin Refund Management Service
@@ -252,7 +252,7 @@ class RefundAdminService {
     await prisma.order.update({
       where: { id: refund.orderId },
       data: {
-        status: 'REFUNDED',
+        status: OrderStatus.REFUNDED,
         refundedAt: new Date(),
         refundAmount: refund.amount,
       },

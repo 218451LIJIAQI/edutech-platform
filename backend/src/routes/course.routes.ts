@@ -3,6 +3,7 @@ import { UserRole } from '@prisma/client';
 import courseController from '../controllers/course.controller';
 import { authenticate, authorize, optionalAuth } from '../middleware/auth';
 import { validate } from '../middleware/validate';
+import { ensureTeacherApproved } from '../middleware/teacherAccess';
 import {
   createCourseValidation,
   updateCourseValidation,
@@ -136,6 +137,15 @@ router.delete(
   authenticate,
   authorize(UserRole.TEACHER),
   courseController.deleteMaterial
+);
+
+// Course announcements/notifications (Teacher only, approved teachers)
+router.post(
+  '/:id/notifications',
+  authenticate,
+  authorize(UserRole.TEACHER),
+  ensureTeacherApproved,
+  courseController.sendCourseNotification
 );
 
 export default router;

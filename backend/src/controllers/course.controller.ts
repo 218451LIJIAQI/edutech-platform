@@ -1,6 +1,9 @@
 import { Request, Response } from 'express';
 import { LessonType } from '@prisma/client';
 import courseService from '../services/course.service';
+import notificationService from '../services/notification.service';
+import prisma from '../config/database';
+import { NotFoundError, AuthorizationError } from '../utils/errors';
 import asyncHandler from '../utils/asyncHandler';
 
 /**
@@ -366,6 +369,59 @@ class CourseController {
     res.status(200).json({
       status: 'success',
       data: categories,
+    });
+  });
+  /**
+   * Send course notification to all enrolled students (Teacher only)
+   * POST /api/courses/:id/notifications
+   */
+  sendCourseNotification = asyncHandler(async (req: Request, res: Response) => {
+    const teacherUserId = req.user!.id;
+    const { id: courseId } = req.params;
+    const { title, message, type } = req.body as { title: string; message: string; type?: string };
+
+    if (!title || !message) {
+      res.status(400).json({ status: 'error', message: 'Title and message are required' });
+      return;
+    }
+
+    // Verify course ownership
+    const course = await prisma.course.findUnique({
+      where: { id: courseId },
+      include: {
+        teacherProfile: { select: { userId: true } },
+      },
+    });
+
+    if (!course) throw new NotFoundError('Course not found');
+    if (course.teacherProfile.userId !== teacherUserId) {
+      throw new AuthorizationError('You can only notify students of your own course');
+    }
+
+    // Find active enrollments (students) for this course
+    const enrollments = await prisma.enrollment.findMany({
+      where: {
+        isActive: true,
+        package: { courseId },
+      },
+      select: { userId: true },
+    });
+
+    const userIds = Array.from(new Set(enrollments.map((e) => e.userId)));
+
+    if (userIds.length > 0) {
+      await notificationService.createBulkNotifications(
+        userIds,
+        title,
+        message,
+        type || 'COURSE_ANNOUNCEMENT'
+      );
+    }
+
+    res.status(201).json({
+      status: 'success',
+      message: 'Notification sent',
+      data: { recipients: userIds.length },
     });
   });
 }

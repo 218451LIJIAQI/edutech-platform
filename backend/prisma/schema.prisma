@@ -122,8 +122,24 @@ model User {
   role      UserRole @default(STUDENT)
   avatar    String?
   isActive  Boolean  @default(true) @map("is_active")
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  
+  // Contact Information
+  phone     String?
+  address   String?
+  department String?
+  
+  // Account Management
+  lastLoginAt       DateTime? @map("last_login_at")
+  loginCount        Int       @default(0) @map("login_count")
+  isLocked          Boolean   @default(false) @map("is_locked")
+  lockedUntil       DateTime? @map("locked_until")
+  failedLoginAttempts Int     @default(0) @map("failed_login_attempts")
+  
+  // Audit Information
+  createdBy         String?   @map("created_by")
+  updatedBy         String?   @map("updated_by")
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
 
   // Relations
   teacherProfile   TeacherProfile?
@@ -146,8 +162,41 @@ model User {
   supportMessages  SupportTicketMessage[]
   messageThreads   MessageThread[]        @relation("ThreadParticipants")
   sentMessages     Message[]
+  auditLogs        UserAuditLog[]         @relation("AdminLogs")
+  auditedLogs      UserAuditLog[]         @relation("UserLogs")
 
+  @@index([email])
+  @@index([role])
+  @@index([isActive])
+  @@index([createdAt])
+  @@index([lastLoginAt])
   @@map("users")
+}
+
+// ================================
+// USER AUDIT LOGS
+// ================================
+
+model UserAuditLog {
+  id                String   @id @default(uuid())
+  adminId           String   @map("admin_id")
+  userId            String   @map("user_id")
+  action            String   // CREATE, UPDATE, DELETE, ACTIVATE, DEACTIVATE, LOCK, UNLOCK, RESET_PASSWORD, etc.
+  oldValues         Json?    @map("old_values")
+  newValues         Json?    @map("new_values")
+  reason            String?
+  ipAddress         String?  @map("ip_address")
+  userAgent         String?  @map("user_agent")
+  createdAt         DateTime @default(now()) @map("created_at")
+
+  admin             User     @relation("AdminLogs", fields: [adminId], references: [id], onDelete: Cascade)
+  user              User     @relation("UserLogs", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([adminId])
+  @@index([createdAt])
+  @@index([action])
+  @@map("user_audit_logs")
 }
 
 // ================================
@@ -163,6 +212,7 @@ model TeacherProfile {
   totalStudents         Int                    @default(0) @map("total_students")
   averageRating         Float                  @default(0) @map("average_rating")
   totalEarnings         Float                  @default(0) @map("total_earnings")
+  commissionRate        Float?                 @map("commission_rate")
   isVerified            Boolean                @default(false) @map("is_verified")
   verificationStatus    VerificationStatus     @default(PENDING) @map("verification_status")
   registrationStatus    RegistrationStatus     @default(PENDING) @map("registration_status")

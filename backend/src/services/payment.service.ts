@@ -46,9 +46,15 @@ class PaymentService {
     // Create order from cart
     const order = await ordersService.createOrderFromCart(userId);
 
-    // Calculate commission on total amount
+    // Calculate commission per item using teacher-specific commissionRate when present
     const amount = order.totalAmount;
-    const platformCommission = (amount * config.PLATFORM_COMMISSION_RATE) / 100;
+    let platformCommission = 0;
+    for (const item of cartItems) {
+      const pkg = item.package;
+      const course = pkg?.course;
+      const teacherRate = course?.teacherProfile?.commissionRate ?? config.PLATFORM_COMMISSION_RATE;
+      platformCommission += (pkg.finalPrice * teacherRate) / 100;
+    }
     const teacherEarning = amount - platformCommission;
 
     // Create payment record for the order
@@ -136,10 +142,10 @@ class PaymentService {
       throw new ValidationError('You are already enrolled in this package');
     }
 
-    // Calculate commission
+    // Calculate commission using teacher-specific rate when present
     const amount = lessonPackage.finalPrice;
-    const platformCommission =
-      (amount * config.PLATFORM_COMMISSION_RATE) / 100;
+    const teacherRate = lessonPackage.course?.teacherProfile?.commissionRate ?? config.PLATFORM_COMMISSION_RATE;
+    const platformCommission = (amount * teacherRate) / 100;
     const teacherEarning = amount - platformCommission;
 
     // Create payment record
@@ -281,7 +287,7 @@ class PaymentService {
             include: {
               package: {
                 include: {
-                  course: true,
+                  course: { include: { teacherProfile: true } },
                 },
               },
             },
@@ -313,7 +319,8 @@ class PaymentService {
 
         // Update teacher stats per course
         if (pkg?.course) {
-          const netTeacherEarning = item.finalPrice * (1 - config.PLATFORM_COMMISSION_RATE / 100);
+          const teacherRate = pkg.course?.teacherProfile?.commissionRate ?? config.PLATFORM_COMMISSION_RATE;
+          const netTeacherEarning = item.finalPrice * (1 - teacherRate / 100);
           await prisma.teacherProfile.update({
             where: { id: pkg.course.teacherProfileId },
             data: {
@@ -466,7 +473,7 @@ class PaymentService {
         for (const item of p.order.items) {
           const pkg = item.package;
           if (pkg?.course && pkg.course.teacherProfileId === teacherProfile.id) {
-            const teacherEarning = item.finalPrice * (1 - config.PLATFORM_COMMISSION_RATE / 100);
+            const teacherEarning = item.finalPrice * (1 - ((teacherProfile.commissionRate ?? config.PLATFORM_COMMISSION_RATE) / 100));
             entries.push({
               id: `${p.id}:${item.id}`,
               amount: item.finalPrice,

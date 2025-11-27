@@ -243,20 +243,221 @@ class AdminController {
   });
 
   /**
+   * List teacher commissions
+   * GET /api/admin/financials/commissions
+   */
+  getTeacherCommissions = asyncHandler(async (req: Request, res: Response) => {
+    const { search, page, limit } = req.query as { search?: string; page?: string; limit?: string };
+    const data = await adminService.getTeacherCommissions({
+      search,
+      page: page ? parseInt(page) : undefined,
+      limit: limit ? parseInt(limit) : undefined,
+    });
+    res.status(200).json({ status: 'success', data });
+  });
+
+  /**
+   * Update a teacher commission rate
+   * PUT /api/admin/financials/commissions/:userId
+   */
+  updateTeacherCommission = asyncHandler(async (req: Request, res: Response) => {
+    const { userId } = req.params as { userId: string };
+    const { commissionRate } = req.body as { commissionRate: number | null };
+    const adminId = req.user!.id;
+
+    const updated = await adminService.updateTeacherCommission(userId, adminId, commissionRate);
+    res.status(200).json({ status: 'success', data: updated, message: 'Commission updated' });
+  });
+
+  /**
    * Get recent activities
    * GET /api/admin/activities
    */
   getRecentActivities = asyncHandler(async (req: Request, res: Response) => {
-    const { limit } = req.query;
+    const { limit, page } = req.query;
 
-    const activities = await adminService.getRecentActivities(
-      limit ? parseInt(limit as string) : 20
-    );
+    const data = await adminService.getRecentActivities({
+      limit: limit ? parseInt(limit as string) : undefined,
+      page: page ? parseInt(page as string) : undefined,
+    });
 
     res.status(200).json({
       status: 'success',
-      data: activities,
+      data,
     });
+  });
+
+  /**
+   * Create a new user
+   * POST /api/admin/users
+   */
+  createUser = asyncHandler(async (req: Request, res: Response) => {
+    const { email, password, firstName, lastName, role, phone, address, department } = req.body;
+    const adminId = req.user!.id;
+
+    const user = await adminService.createUser({
+      email,
+      password,
+      firstName,
+      lastName,
+      role,
+      phone,
+      address,
+      department,
+      createdBy: adminId,
+    });
+
+    res.status(201).json({
+      status: 'success',
+      message: 'User created successfully',
+      data: user,
+    });
+  });
+
+  /**
+   * Update user information
+   * PUT /api/admin/users/:id
+   */
+  updateUser = asyncHandler(async (req: Request, res: Response) => {
+    const { id } = req.params;
+    const adminId = req.user!.id;
+
+    const user = await adminService.updateUser(id, req.body, adminId);
+
+    res.status(200).json({
+      status: 'success',
+      message: 'User updated successfully',
+      data: user,
+    });
+  });
+
+  /**
+   * Reset user password
+   * PUT /api/admin/users/:id/password
+   */
+  resetUserPassword = asyncHandler(async (req: Request, res: Response) => {
+    const { id } = req.params;
+    const { newPassword } = req.body;
+    const adminId = req.user!.id;
+
+    const user = await adminService.resetUserPassword(id, newPassword, adminId);
+
+    res.status(200).json({
+      status: 'success',
+      message: 'Password reset successfully',
+      data: user,
+    });
+  });
+
+  /**
+   * Lock/Unlock user account
+   * PUT /api/admin/users/:id/lock
+   */
+  lockUserAccount = asyncHandler(async (req: Request, res: Response) => {
+    const { id } = req.params;
+    const { lock, reason } = req.body;
+    const adminId = req.user!.id;
+
+    const user = await adminService.lockUserAccount(id, lock, adminId, reason);
+
+    res.status(200).json({
+      status: 'success',
+      message: `User account ${lock ? 'locked' : 'unlocked'} successfully`,
+      data: user,
+    });
+  });
+
+  /**
+   * Batch delete users
+   * POST /api/admin/users/batch/delete
+   */
+  batchDeleteUsers = asyncHandler(async (req: Request, res: Response) => {
+    const { userIds } = req.body;
+    const adminId = req.user!.id;
+
+    await adminService.batchDeleteUsers(userIds, adminId);
+
+    res.status(200).json({
+      status: 'success',
+      message: 'Users deleted successfully',
+    });
+  });
+
+  /**
+   * Batch update user status
+   * POST /api/admin/users/batch/status
+   */
+  batchUpdateUserStatus = asyncHandler(async (req: Request, res: Response) => {
+    const { userIds, isActive } = req.body;
+    const adminId = req.user!.id;
+
+    await adminService.batchUpdateUserStatus(userIds, isActive, adminId);
+
+    res.status(200).json({
+      status: 'success',
+      message: `Users ${isActive ? 'activated' : 'deactivated'} successfully`,
+    });
+  });
+
+  /**
+   * Get user audit logs
+   * GET /api/admin/users/audit-logs
+   */
+  getUserAuditLogs = asyncHandler(async (req: Request, res: Response) => {
+    const { userId, adminId, action, page, limit } = req.query;
+
+    const result = await adminService.getUserAuditLogs({
+      userId: userId as string,
+      adminId: adminId as string,
+      action: action as string,
+      page: page ? parseInt(page as string) : undefined,
+      limit: limit ? parseInt(limit as string) : undefined,
+    });
+
+    res.status(200).json({
+      status: 'success',
+      data: result,
+    });
+  });
+  /**
+   * Get settlements (aggregated by teacher)
+   * GET /api/admin/financials/settlements
+   */
+  getSettlements = asyncHandler(async (req: Request, res: Response) => {
+    const { startDate, endDate, page, limit } = req.query as { startDate?: string; endDate?: string; page?: string; limit?: string };
+    const data = await adminService.getSettlements({
+      startDate: startDate ? new Date(startDate) : undefined,
+      endDate: endDate ? new Date(endDate) : undefined,
+      page: page ? parseInt(page) : undefined,
+      limit: limit ? parseInt(limit) : undefined,
+    });
+    res.status(200).json({ status: 'success', data });
+  });
+
+  /**
+   * Get invoices & bills (payments list)
+   * GET /api/admin/financials/invoices
+   */
+  getInvoices = asyncHandler(async (req: Request, res: Response) => {
+    const { startDate, endDate, page, limit, search } = req.query as { startDate?: string; endDate?: string; page?: string; limit?: string; search?: string };
+    const data = await adminService.getInvoices({
+      startDate: startDate ? new Date(startDate) : undefined,
+      endDate: endDate ? new Date(endDate) : undefined,
+      page: page ? parseInt(page) : undefined,
+      limit: limit ? parseInt(limit) : undefined,
+      search,
+    });
+    res.status(200).json({ status: 'success', data });
+  });
+
+  getRevenueAnalytics = asyncHandler(async (req: Request, res: Response) => {
+    const { startDate, endDate, groupBy } = req.query as { startDate?: string; endDate?: string; groupBy?: 'day' | 'week' | 'month' };
+    const data = await adminService.getRevenueAnalytics({
+      startDate: startDate ? new Date(startDate) : undefined,
+      endDate: endDate ? new Date(endDate) : undefined,
+      groupBy,
+    });
+    res.status(200).json({ status: 'success', data });
   });
 }
 

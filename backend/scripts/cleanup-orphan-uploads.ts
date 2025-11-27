@@ -1,9 +1,7 @@
-import { PrismaClient } from '@prisma/client';
 import fs from 'fs';
 import fsp from 'fs/promises';
 import path from 'path';
-
-const prisma = new PrismaClient();
+import prisma from '../src/config/database';
 
 const UPLOADS_DIR = path.resolve(__dirname, '..', 'uploads');
 

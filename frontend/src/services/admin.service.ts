@@ -188,27 +188,171 @@ export const adminService = {
   },
 
   /**
-   * Get recent activities
+   * Get recent activities with pagination
    */
-  getRecentActivities: async (limit?: number): Promise<Array<{
-    id: string;
-    type: string;
-    description: string;
-    createdAt: string;
-    user?: { firstName: string; lastName: string };
-  }>> => {
-    const response = await api.get<ApiResponse<Array<{
+  getRecentActivities: async (params?: {
+    limit?: number;
+    page?: number;
+  }): Promise<{
+    items: Array<{
       id: string;
       type: string;
       description: string;
       createdAt: string;
       user?: { firstName: string; lastName: string };
-    }>>>('/admin/activities', {
-      params: { limit },
+    }>;
+    pagination: { total: number; page: number; limit: number; totalPages: number; hasMore: boolean };
+  }> => {
+    const response = await api.get<ApiResponse<{
+      items: Array<{
+        id: string;
+        type: string;
+        description: string;
+        createdAt: string;
+        user?: { firstName: string; lastName: string };
+      }>;
+      pagination: { total: number; page: number; limit: number; totalPages: number; hasMore: boolean };
+    }>>('/admin/activities', { params });
+    return response.data.data!;
+  },
+
+  /**
+   * Create a new user
+   */
+  createUser: async (data: {
+    email: string;
+    password: string;
+    firstName: string;
+    lastName: string;
+    role: string;
+    phone?: string;
+    address?: string;
+    department?: string;
+  }): Promise<User> => {
+    const response = await api.post<ApiResponse<User>>('/admin/users', data);
+    return response.data.data!;
+  },
+
+  /**
+   * Update user information
+   */
+  updateUser: async (id: string, data: any): Promise<User> => {
+    const response = await api.put<ApiResponse<User>>(`/admin/users/${id}`, data);
+    return response.data.data!;
+  },
+
+  /**
+   * Reset user password
+   */
+  resetUserPassword: async (id: string, newPassword: string): Promise<User> => {
+    const response = await api.put<ApiResponse<User>>(`/admin/users/${id}/password`, {
+      newPassword,
     });
     return response.data.data!;
+  },
+
+  /**
+   * Lock/Unlock user account
+   */
+  lockUserAccount: async (id: string, lock: boolean, reason?: string): Promise<User> => {
+    const response = await api.put<ApiResponse<User>>(`/admin/users/${id}/lock`, {
+      lock,
+      reason,
+    });
+    return response.data.data!;
+  },
+
+  /**
+   * Batch delete users
+   */
+  batchDeleteUsers: async (userIds: string[]): Promise<void> => {
+    await api.post('/admin/users/batch/delete', { userIds });
+  },
+
+  /**
+   * Batch update user status
+   */
+  batchUpdateUserStatus: async (userIds: string[], isActive: boolean): Promise<void> => {
+    await api.post('/admin/users/batch/status', { userIds, isActive });
+  },
+
+  /**
+   * Get user audit logs
+   */
+  getAuditLogs: async (params?: {
+    userId?: string;
+    adminId?: string;
+    action?: string;
+    page?: number;
+    limit?: number;
+  }): Promise<PaginatedResponse<any>['data']> => {
+    const response = await api.get<PaginatedResponse<any>>('/admin/users/audit-logs', {
+      params,
+    });
+    return response.data.data;
+  },
+  /**
+   * List teacher commissions
+   */
+  getTeacherCommissions: async (params?: {
+    search?: string;
+    page?: number;
+    limit?: number;
+  }): Promise<PaginatedResponse<any>['data']> => {
+    const response = await api.get<PaginatedResponse<any>>('/admin/financials/commissions', {
+      params,
+    });
+    return response.data.data;
+  },
+
+  /**
+   * Update a teacher commission rate (percent). Pass null to reset to platform default.
+   */
+  updateTeacherCommission: async (userId: string, commissionRate: number | null): Promise<any> => {
+    const response = await api.put<ApiResponse<any>>(`/admin/financials/commissions/${userId}`, {
+      commissionRate,
+    });
+    return response.data.data;
+  },
+
+  /**
+   * Get settlements aggregated by teacher
+   */
+  getSettlements: async (params?: {
+    startDate?: string;
+    endDate?: string;
+    page?: number;
+    limit?: number;
+  }): Promise<PaginatedResponse<any>['data']> => {
+    const response = await api.get<PaginatedResponse<any>>('/admin/financials/settlements', { params });
+    return response.data.data;
+  },
+
+  /**
+   * Get invoices & bills (payments list)
+   */
+  getInvoices: async (params?: {
+    startDate?: string;
+    endDate?: string;
+    page?: number;
+    limit?: number;
+    search?: string;
+  }): Promise<PaginatedResponse<any>['data']> => {
+    const response = await api.get<PaginatedResponse<any>>('/admin/financials/invoices', { params });
+    return response.data.data;
+  },
+
+  /**
+   * Revenue analytics
+   */
+  getRevenueAnalytics: async (params?: {
+    startDate?: string;
+    endDate?: string;
+    groupBy?: 'day' | 'week' | 'month';
+  }): Promise<any> => {
+    const response = await api.get<ApiResponse<any>>('/admin/financials/analytics', { params });
+    return response.data.data;
   },
 };
 
 export default adminService;
-

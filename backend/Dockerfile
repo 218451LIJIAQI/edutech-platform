@@ -1,52 +1,48 @@
 # Multi-stage build for optimized production image
 
-# Stage 1: Build
+# Stage 1: Build (install all deps, build, and prepare runtime artifacts)
 FROM node:18-alpine AS builder
 
 WORKDIR /app
 
-# Copy package files
+# Copy package files and prisma schema first (better layer caching)
 COPY package*.json ./
 COPY prisma ./prisma/
 
-# Install dependencies
-RUN npm ci --only=production && \
-    npm install -g prisma
+# Install all dependencies (including dev) for building
+RUN npm ci
 
-# Copy source code
+# Copy the rest of the source
 COPY . .
 
-# Generate Prisma Client
+# Generate Prisma Client (uses prisma/schema.prisma)
 RUN npx prisma generate
 
 # Build TypeScript
 RUN npm run build
 
-# Stage 2: Production
+# Optionally prune devDependencies to reduce size for runtime
+RUN npm prune --omit=dev
+
+# Stage 2: Production (copy built artifacts and production deps from builder)
 FROM node:18-alpine
 
 WORKDIR /app
 
-# Copy package files
-COPY package*.json ./
+# Set environment
+ENV NODE_ENV=production
 
-# Install production dependencies only
-RUN npm ci --only=production
+# Copy production node_modules from builder
+COPY --from=builder /app/node_modules ./node_modules
 
-# Copy Prisma schema
+# Copy Prisma schema (optional, useful for tooling/ops)
 COPY --from=builder /app/prisma ./prisma
 
 # Copy built application
 COPY --from=builder /app/dist ./dist
 
-# Generate Prisma Client
-RUN npx prisma generate
-
 # Create uploads directory
 RUN mkdir -p /app/uploads
-
-# Set environment
-ENV NODE_ENV=production
 
 # Expose port
 EXPOSE 3000

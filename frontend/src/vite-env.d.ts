@@ -5,6 +5,7 @@ interface ImportMetaEnv {
   readonly VITE_STRIPE_PUBLISHABLE_KEY?: string;
   readonly VITE_STRIPE_PUBLIC_KEY?: string;
   readonly VITE_ENABLE_PAYMENT_MOCK?: string;
+  readonly VITE_ENABLE_NOTIFICATION_MOCK?: string;
   readonly VITE_SOCKET_URL?: string;
 }
 

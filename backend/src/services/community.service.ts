@@ -1,7 +1,5 @@
-import { PrismaClient } from '@prisma/client';
 import { BadRequestError, NotFoundError } from '../utils/errors';
-
-const prisma = new PrismaClient();
+import prisma from '../config/database';
 
 export const communityService = {
   // ==================== TAGS ====================

@@ -24,7 +24,10 @@ class NotificationController {
 
     res.status(200).json({
       status: 'success',
-      data: result,
+      data: {
+        items: result.notifications,
+        pagination: result.pagination,
+      },
     });
   });
 

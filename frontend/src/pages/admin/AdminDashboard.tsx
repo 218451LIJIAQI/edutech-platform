@@ -55,33 +55,40 @@ const AdminDashboard = () => {
     createdAt: string;
     user?: { firstName: string; lastName: string };
   }>>([]);
+  const [activitiesPage, setActivitiesPage] = useState(1);
+  const [activitiesLimit, setActivitiesLimit] = useState(10);
+  const [activitiesPagination, setActivitiesPagination] = useState<{ total: number; page: number; limit: number; totalPages: number; hasMore: boolean } | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     fetchDashboardData();
+  }, [activitiesPage, activitiesLimit]);
 
-    // lightweight polling for recent activities to keep the feed in sync
+  useEffect(() => {
+    // lightweight polling for recent activities to keep the feed in sync on current page
     const interval = setInterval(async () => {
       try {
-        const latest = await adminService.getRecentActivities(30);
-        setActivities(latest);
+        const latest = await adminService.getRecentActivities({ limit: activitiesLimit, page: activitiesPage });
+        setActivities(latest.items);
+        setActivitiesPagination(latest.pagination);
       } catch (e) {
         // silent fail for background refresh
       }
     }, 20000);
 
     return () => clearInterval(interval);
-  }, []);
+  }, [activitiesPage, activitiesLimit]);
 
   const fetchDashboardData = async () => {
     setIsLoading(true);
     try {
       const [statsData, activitiesData] = await Promise.all([
         adminService.getStats(),
-        adminService.getRecentActivities(30),
+        adminService.getRecentActivities({ limit: activitiesLimit, page: activitiesPage }),
       ]);
       setStats(statsData);
-      setActivities(activitiesData);
+      setActivities(activitiesData.items);
+      setActivitiesPagination(activitiesData.pagination);
     } catch (error) {
       console.error('Failed to fetch dashboard data:', error);
     } finally {
@@ -297,6 +304,22 @@ const AdminDashboard = () => {
               </div>
               <h2 className="text-2xl font-bold text-gray-900">Recent Activities</h2>
             </div>
+            {/* Page size selector */}
+            <div className="flex items-center gap-2 text-sm">
+              <span className="text-gray-600">Per page:</span>
+              <select
+                value={activitiesLimit}
+                onChange={(e) => {
+                  setActivitiesPage(1);
+                  setActivitiesLimit(parseInt(e.target.value));
+                }}
+                className="px-2 py-1 border border-gray-300 rounded-lg"
+              >
+                {[10, 20, 30, 40, 50].map((size) => (
+                  <option key={size} value={size}>{size}</option>
+                ))}
+              </select>
+            </div>
           </div>
 
           {activities.length > 0 ? (
@@ -324,6 +347,31 @@ const AdminDashboard = () => {
             <div className="text-center py-12 text-gray-500">
               <Activity className="w-16 h-16 text-gray-300 mx-auto mb-3" />
               <p className="text-lg">No recent activities</p>
+            </div>
+          )}
+
+          {/* Pagination controls */}
+          {activitiesPagination && activitiesPagination.totalPages > 1 && (
+            <div className="mt-6 pt-4 border-t flex items-center justify-between">
+              <div className="text-sm text-gray-700">
+                Showing page {activitiesPagination.page} of {activitiesPagination.totalPages}
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  className="btn-outline btn-sm"
+                  disabled={activitiesPagination.page <= 1}
+                  onClick={() => setActivitiesPage((p) => Math.max(1, p - 1))}
+                >
+                  Previous
+                </button>
+                <button
+                  className="btn-primary btn-sm"
+                  disabled={activitiesPagination.page >= activitiesPagination.totalPages}
+                  onClick={() => setActivitiesPage((p) => Math.min(activitiesPagination.totalPages, p + 1))}
+                >
+                  Next
+                </button>
+              </div>
             </div>
           )}
         </div>

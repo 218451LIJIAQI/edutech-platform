@@ -190,8 +190,16 @@ export const updateLessonValidation = [
   body('videoUrl')
     .optional()
     .trim()
-    .isURL()
-    .withMessage('Video URL must be a valid URL'),
+    .custom((value) => {
+      if (!value) return true;
+      const isUrl = /^https?:\/\/.+/.test(value);
+      const isRelativePath = value.startsWith('/');
+      if (!isUrl && !isRelativePath) {
+        throw new Error('Video URL must be a valid URL or path');
+      }
+      return true;
+    })
+    .withMessage('Video URL must be a valid URL or file path'),
 
   body('isFree')
     .optional()

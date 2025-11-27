@@ -112,6 +112,7 @@ export interface TeacherProfile {
   totalStudents: number;
   averageRating: number;
   totalEarnings: number;
+  commissionRate?: number; // percent override for platform commission
   isVerified: boolean;
   verificationStatus?: VerificationStatus;
   registrationStatus?: 'PENDING' | 'APPROVED' | 'REJECTED';

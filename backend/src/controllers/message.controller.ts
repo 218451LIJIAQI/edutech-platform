@@ -1,9 +1,7 @@
 import { Request, Response } from 'express';
-import { PrismaClient } from '@prisma/client';
 import asyncHandler from '../utils/asyncHandler';
 import { AppError } from '../utils/errors';
-
-const prisma = new PrismaClient();
+import prisma from '../config/database';
 
 /**
  * Message Controller

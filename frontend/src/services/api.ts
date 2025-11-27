@@ -78,6 +78,8 @@ api.interceptors.response.use(
     // Determine if we should suppress 404 toast for Community when fallback is enabled
     const reqUrl = (error.config as any)?.url || '';
     const suppressCommunity404 = typeof reqUrl === 'string' && reqUrl.includes('/community/');
+    const suppress404Header = (error.config as any)?.headers?.['X-Suppress-404'] || (error.config as any)?.headers?.['x-suppress-404'];
+    const suppress404 = suppressCommunity404 || !!suppress404Header;
     
     // Customize error messages based on status code
     if (status === 429) {
@@ -88,7 +90,7 @@ api.interceptors.response.use(
       toast.error(errorMessage);
     } else if (status === 404) {
       errorMessage = 'The requested resource was not found.';
-      if (!suppressCommunity404) {
+      if (!suppress404) {
         toast.error(errorMessage);
       }
     } else if (status === 500) {
