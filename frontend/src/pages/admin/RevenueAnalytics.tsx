@@ -43,7 +43,7 @@ const RevenueAnalytics = () => {
   return (
     <div className="space-y-6">
       {/* Filters */}
-      <div className="card flex flex-col md:flex-row md:items-end gap-4">
+      <div className="card shadow-xl border border-gray-100 rounded-2xl flex flex-col md:flex-row md:items-end gap-4">
         <div className="flex-1">
           <label className="block text-sm font-medium text-gray-700 mb-1">Start Date</label>
           <div className="flex items-center gap-2">
@@ -72,7 +72,7 @@ const RevenueAnalytics = () => {
       </div>
 
       {/* Revenue Trend */}
-      <div className="card">
+      <div className="card shadow-xl border border-gray-100 rounded-2xl">
         <h3 className="text-xl font-bold mb-4">Revenue Trend</h3>
         <ResponsiveContainer width="100%" height={400}>
           <LineChart data={data?.revenueTrend ?? []}>
@@ -119,7 +119,7 @@ const RevenueAnalytics = () => {
       </div>
 
       {/* Revenue Breakdown */}
-      <div className="card">
+      <div className="card shadow-xl border border-gray-100 rounded-2xl">
         <h3 className="text-xl font-bold mb-4">Revenue Breakdown by Course Type</h3>
         <ResponsiveContainer width="100%" height={300}>
           <PieChart>

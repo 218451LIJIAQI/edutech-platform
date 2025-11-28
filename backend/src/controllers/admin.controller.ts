@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import { UserRole, VerificationStatus, ReportStatus } from '@prisma/client';
+import { VerificationStatus, ReportStatus } from '@prisma/client';
 import adminService from '../services/admin.service';
 import asyncHandler from '../utils/asyncHandler';
 
@@ -29,11 +29,11 @@ class AdminController {
     const { role, isActive, search, page, limit } = req.query;
 
     const result = await adminService.getAllUsers({
-      role: role as UserRole,
+      role: role as any,
       isActive: isActive === 'true' ? true : isActive === 'false' ? false : undefined,
       search: search as string,
-      page: page ? parseInt(page as string) : undefined,
-      limit: limit ? parseInt(limit as string) : undefined,
+      page: page ? parseInt(page as string, 10) : undefined,
+      limit: limit ? parseInt(limit as string, 10) : undefined,
     });
 
     res.status(200).json({
@@ -63,7 +63,7 @@ class AdminController {
    */
   updateUserStatus = asyncHandler(async (req: Request, res: Response) => {
     const { id } = req.params;
-    const { isActive } = req.body;
+    const { isActive } = req.body as { isActive: boolean };
 
     const user = await adminService.updateUserStatus(id, isActive);
 
@@ -80,8 +80,9 @@ class AdminController {
    */
   deleteUser = asyncHandler(async (req: Request, res: Response) => {
     const { id } = req.params;
+    const force = req.query.force === 'true' || !!(req.body as any)?.force;
 
-    await adminService.deleteUser(id);
+    await adminService.deleteUser(id, { force });
 
     res.status(200).json({
       status: 'success',
@@ -99,8 +100,8 @@ class AdminController {
     const result = await adminService.getAllCourses({
       isPublished: isPublished === 'true' ? true : isPublished === 'false' ? false : undefined,
       category: category as string,
-      page: page ? parseInt(page as string) : undefined,
-      limit: limit ? parseInt(limit as string) : undefined,
+      page: page ? parseInt(page as string, 10) : undefined,
+      limit: limit ? parseInt(limit as string, 10) : undefined,
     });
 
     res.status(200).json({
@@ -115,7 +116,7 @@ class AdminController {
    */
   updateCourseStatus = asyncHandler(async (req: Request, res: Response) => {
     const { id } = req.params;
-    const { isPublished } = req.body;
+    const { isPublished } = req.body as { isPublished: boolean };
 
     const course = await adminService.updateCourseStatus(id, isPublished);
 
@@ -150,8 +151,8 @@ class AdminController {
 
     const result = await adminService.getAllVerifications({
       status: status as VerificationStatus,
-      page: page ? parseInt(page as string) : undefined,
-      limit: limit ? parseInt(limit as string) : undefined,
+      page: page ? parseInt(page as string, 10) : undefined,
+      limit: limit ? parseInt(limit as string, 10) : undefined,
     });
 
     res.status(200).json({
@@ -167,7 +168,7 @@ class AdminController {
   reviewVerification = asyncHandler(async (req: Request, res: Response) => {
     const { id } = req.params;
     const adminId = req.user!.id;
-    const { status, reviewNotes } = req.body;
+    const { status, reviewNotes } = req.body as { status: VerificationStatus; reviewNotes?: string };
 
     const verification = await adminService.reviewVerification(
       id,
@@ -193,8 +194,8 @@ class AdminController {
     const result = await adminService.getAllReports({
       status: status as ReportStatus,
       type: type as string,
-      page: page ? parseInt(page as string) : undefined,
-      limit: limit ? parseInt(limit as string) : undefined,
+      page: page ? parseInt(page as string, 10) : undefined,
+      limit: limit ? parseInt(limit as string, 10) : undefined,
     });
 
     res.status(200).json({
@@ -209,13 +210,9 @@ class AdminController {
    */
   updateReportStatus = asyncHandler(async (req: Request, res: Response) => {
     const { id } = req.params;
-    const { status, resolution } = req.body;
+    const { status, resolution } = req.body as { status: ReportStatus; resolution?: string };
 
-    const report = await adminService.updateReportStatus(
-      id,
-      status as ReportStatus,
-      resolution
-    );
+    const report = await adminService.updateReportStatus(id, status as ReportStatus, resolution);
 
     res.status(200).json({
       status: 'success',
@@ -250,8 +247,8 @@ class AdminController {
     const { search, page, limit } = req.query as { search?: string; page?: string; limit?: string };
     const data = await adminService.getTeacherCommissions({
       search,
-      page: page ? parseInt(page) : undefined,
-      limit: limit ? parseInt(limit) : undefined,
+      page: page ? parseInt(page, 10) : undefined,
+      limit: limit ? parseInt(limit, 10) : undefined,
     });
     res.status(200).json({ status: 'success', data });
   });
@@ -277,8 +274,8 @@ class AdminController {
     const { limit, page } = req.query;
 
     const data = await adminService.getRecentActivities({
-      limit: limit ? parseInt(limit as string) : undefined,
-      page: page ? parseInt(page as string) : undefined,
+      limit: limit ? parseInt(limit as string, 10) : undefined,
+      page: page ? parseInt(page as string, 10) : undefined,
     });
 
     res.status(200).json({
@@ -337,7 +334,7 @@ class AdminController {
    */
   resetUserPassword = asyncHandler(async (req: Request, res: Response) => {
     const { id } = req.params;
-    const { newPassword } = req.body;
+    const { newPassword } = req.body as { newPassword: string };
     const adminId = req.user!.id;
 
     const user = await adminService.resetUserPassword(id, newPassword, adminId);
@@ -355,7 +352,7 @@ class AdminController {
    */
   lockUserAccount = asyncHandler(async (req: Request, res: Response) => {
     const { id } = req.params;
-    const { lock, reason } = req.body;
+    const { lock, reason } = req.body as { lock: boolean; reason?: string };
     const adminId = req.user!.id;
 
     const user = await adminService.lockUserAccount(id, lock, adminId, reason);
@@ -372,10 +369,9 @@ class AdminController {
    * POST /api/admin/users/batch/delete
    */
   batchDeleteUsers = asyncHandler(async (req: Request, res: Response) => {
-    const { userIds } = req.body;
-    const adminId = req.user!.id;
+    const { userIds } = req.body as { userIds: string[] };
 
-    await adminService.batchDeleteUsers(userIds, adminId);
+    await adminService.batchDeleteUsers(userIds);
 
     res.status(200).json({
       status: 'success',
@@ -388,7 +384,7 @@ class AdminController {
    * POST /api/admin/users/batch/status
    */
   batchUpdateUserStatus = asyncHandler(async (req: Request, res: Response) => {
-    const { userIds, isActive } = req.body;
+    const { userIds, isActive } = req.body as { userIds: string[]; isActive: boolean };
     const adminId = req.user!.id;
 
     await adminService.batchUpdateUserStatus(userIds, isActive, adminId);
@@ -410,8 +406,8 @@ class AdminController {
       userId: userId as string,
       adminId: adminId as string,
       action: action as string,
-      page: page ? parseInt(page as string) : undefined,
-      limit: limit ? parseInt(limit as string) : undefined,
+      page: page ? parseInt(page as string, 10) : undefined,
+      limit: limit ? parseInt(limit as string, 10) : undefined,
     });
 
     res.status(200).json({
@@ -419,17 +415,23 @@ class AdminController {
       data: result,
     });
   });
+
   /**
    * Get settlements (aggregated by teacher)
    * GET /api/admin/financials/settlements
    */
   getSettlements = asyncHandler(async (req: Request, res: Response) => {
-    const { startDate, endDate, page, limit } = req.query as { startDate?: string; endDate?: string; page?: string; limit?: string };
+    const { startDate, endDate, page, limit } = req.query as {
+      startDate?: string;
+      endDate?: string;
+      page?: string;
+      limit?: string;
+    };
     const data = await adminService.getSettlements({
       startDate: startDate ? new Date(startDate) : undefined,
       endDate: endDate ? new Date(endDate) : undefined,
-      page: page ? parseInt(page) : undefined,
-      limit: limit ? parseInt(limit) : undefined,
+      page: page ? parseInt(page, 10) : undefined,
+      limit: limit ? parseInt(limit, 10) : undefined,
     });
     res.status(200).json({ status: 'success', data });
   });
@@ -439,19 +441,29 @@ class AdminController {
    * GET /api/admin/financials/invoices
    */
   getInvoices = asyncHandler(async (req: Request, res: Response) => {
-    const { startDate, endDate, page, limit, search } = req.query as { startDate?: string; endDate?: string; page?: string; limit?: string; search?: string };
+    const { startDate, endDate, page, limit, search } = req.query as {
+      startDate?: string;
+      endDate?: string;
+      page?: string;
+      limit?: string;
+      search?: string;
+    };
     const data = await adminService.getInvoices({
       startDate: startDate ? new Date(startDate) : undefined,
       endDate: endDate ? new Date(endDate) : undefined,
-      page: page ? parseInt(page) : undefined,
-      limit: limit ? parseInt(limit) : undefined,
+      page: page ? parseInt(page, 10) : undefined,
+      limit: limit ? parseInt(limit, 10) : undefined,
       search,
     });
     res.status(200).json({ status: 'success', data });
   });
 
   getRevenueAnalytics = asyncHandler(async (req: Request, res: Response) => {
-    const { startDate, endDate, groupBy } = req.query as { startDate?: string; endDate?: string; groupBy?: 'day' | 'week' | 'month' };
+    const { startDate, endDate, groupBy } = req.query as {
+      startDate?: string;
+      endDate?: string;
+      groupBy?: 'day' | 'week' | 'month';
+    };
     const data = await adminService.getRevenueAnalytics({
       startDate: startDate ? new Date(startDate) : undefined,
       endDate: endDate ? new Date(endDate) : undefined,
@@ -462,4 +474,3 @@ class AdminController {
 }
 
 export default new AdminController();
-

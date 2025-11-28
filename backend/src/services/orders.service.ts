@@ -1,10 +1,16 @@
 import prisma from '../config/database';
-import { NotFoundError, ValidationError } from '../utils/errors';
+import { NotFoundError, ValidationError, AuthorizationError } from '../utils/errors';
 import { OrderStatus, RefundStatus } from '@prisma/client';
 
 const genOrderNo = () => {
   const now = new Date();
-  return `ORD-${now.getFullYear()}${(now.getMonth()+1).toString().padStart(2,'0')}${now.getDate().toString().padStart(2,'0')}-${now.getTime()}-${Math.floor(Math.random()*1000).toString().padStart(3,'0')}`;
+  return `ORD-${now.getFullYear()}${(now.getMonth() + 1)
+    .toString()
+    .padStart(2, '0')}${now.getDate().toString().padStart(2, '0')}-${now.getTime()}-${Math.floor(
+    Math.random() * 1000
+  )
+    .toString()
+    .padStart(3, '0')}`;
 };
 
 class OrdersService {
@@ -41,7 +47,7 @@ class OrdersService {
       },
     });
     if (!order) throw new NotFoundError('Order not found');
-    if (order.userId !== userId) throw new ValidationError('Unauthorized');
+    if (order.userId !== userId) throw new AuthorizationError('You can only access your own orders');
     return order;
   }
 
@@ -49,14 +55,29 @@ class OrdersService {
     const cartItems = await prisma.cartItem.findMany({
       where: { userId },
       include: {
-        package: true,
+        package: {
+          include: {
+            course: { select: { isPublished: true } },
+          },
+        },
       },
     });
     if (cartItems.length === 0) {
       throw new ValidationError('Your cart is empty');
     }
 
-    const totalAmount = cartItems.reduce((sum, it) => sum + it.package.finalPrice * it.quantity, 0);
+    // Validate availability of all items
+    const unavailable = cartItems.find(
+      (it) => !it.package || !it.package.isActive || !it.package.course?.isPublished
+    );
+    if (unavailable) {
+      throw new ValidationError('Some items are no longer available. Please update your cart.');
+    }
+
+    const totalAmount = cartItems.reduce(
+      (sum, it) => sum + it.package.finalPrice * it.quantity,
+      0
+    );
 
     const order = await prisma.order.create({
       data: {
@@ -68,7 +89,7 @@ class OrdersService {
           create: cartItems.map((it) => ({
             packageId: it.packageId,
             price: it.package.price,
-            discount: (it.package.discount || 0),
+            discount: it.package.discount || 0,
             finalPrice: it.package.finalPrice,
           })),
         },
@@ -84,7 +105,7 @@ class OrdersService {
   async cancelOrder(userId: string, id: string, reason?: string) {
     const order = await prisma.order.findUnique({ where: { id } });
     if (!order) throw new NotFoundError('Order not found');
-    if (order.userId !== userId) throw new ValidationError('Unauthorized');
+    if (order.userId !== userId) throw new AuthorizationError('You can only modify your own orders');
     if (order.status !== OrderStatus.PENDING) {
       throw new ValidationError('Only pending orders can be cancelled');
     }
@@ -115,7 +136,7 @@ class OrdersService {
       include: { payment: true },
     });
     if (!order) throw new NotFoundError('Order not found');
-    if (order.userId !== userId) throw new ValidationError('Unauthorized');
+    if (order.userId !== userId) throw new AuthorizationError('You can only request refund for your own orders');
     if (order.status !== OrderStatus.PAID) {
       throw new ValidationError('Only paid orders can be refunded');
     }
@@ -123,6 +144,14 @@ class OrdersService {
     // Validate refund amount
     if (amount <= 0 || amount > order.totalAmount) {
       throw new ValidationError('Invalid refund amount');
+    }
+
+    // Prevent duplicate pending/processing refunds on the same order
+    const existing = await prisma.refund.findFirst({
+      where: { orderId: id, status: { in: [RefundStatus.PENDING, RefundStatus.PROCESSING] } },
+    });
+    if (existing) {
+      throw new ValidationError('A refund request is already in progress for this order');
     }
 
     const refund = await prisma.refund.create({
@@ -163,7 +192,7 @@ class OrdersService {
     });
 
     if (!order) throw new NotFoundError('Order not found');
-    if (order.userId !== userId) throw new ValidationError('Unauthorized');
+    if (order.userId !== userId) throw new AuthorizationError('You can only access your own refunds');
 
     const refund = await prisma.refund.findFirst({
       where: { orderId },
@@ -186,7 +215,7 @@ class OrdersService {
   }
 
   /**
-   * Get all refunds for a user
+   * Get all refunds for the current user
    */
   async getUserRefunds(userId: string) {
     const refunds = await prisma.refund.findMany({
@@ -216,4 +245,3 @@ class OrdersService {
 }
 
 export default new OrdersService();
-

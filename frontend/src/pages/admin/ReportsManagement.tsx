@@ -40,7 +40,7 @@ const ReportsManagement = () => {
       <div className="container mx-auto px-4 py-8">
         <h1 className="section-title mb-8">Reports Management</h1>
         
-        <div className="card shadow-lg">
+        <div className="card shadow-xl border border-gray-100 rounded-2xl">
           {isLoading ? (
             <div className="flex justify-center py-16">
               <div className="flex flex-col items-center space-y-4">

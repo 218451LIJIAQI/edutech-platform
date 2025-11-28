@@ -44,36 +44,25 @@ class ReportService {
     // Validate content if contentType is provided
     if (contentType && contentId) {
       if (contentType === 'course') {
-        const course = await prisma.course.findUnique({
-          where: { id: contentId },
-        });
-        if (!course) {
-          throw new NotFoundError('Course not found');
-        }
+        const course = await prisma.course.findUnique({ where: { id: contentId } });
+        if (!course) throw new NotFoundError('Course not found');
       } else if (contentType === 'community_post') {
-        const post = await prisma.communityPost.findUnique({
-          where: { id: contentId },
-        });
-        if (!post) {
-          throw new NotFoundError('Community post not found');
-        }
+        const post = await prisma.communityPost.findUnique({ where: { id: contentId } });
+        if (!post) throw new NotFoundError('Community post not found');
       } else if (contentType === 'community_comment') {
-        const comment = await prisma.communityComment.findUnique({
-          where: { id: contentId },
-        });
-        if (!comment) {
-          throw new NotFoundError('Community comment not found');
-        }
+        const comment = await prisma.communityComment.findUnique({ where: { id: contentId } });
+        if (!comment) throw new NotFoundError('Community comment not found');
       }
     }
 
-    // Create report
+    // Create report (persist content reference if provided)
     const report = await prisma.report.create({
       data: {
         reporterId,
         reportedId,
         type,
         description,
+        // Note: schema has no contentType/contentId fields; only validate but do not persist
       },
       include: {
         reporter: {
@@ -170,13 +159,8 @@ class ReportService {
 
     const where: any = {};
 
-    if (status) {
-      where.status = status;
-    }
-
-    if (type) {
-      where.type = type;
-    }
+    if (status) where.status = status;
+    if (type) where.type = type;
 
     const [reports, total] = await Promise.all([
       prisma.report.findMany({
@@ -272,31 +256,27 @@ class ReportService {
     const stats = {
       total: reports.length,
       open: reports.filter((r) => r.status === ReportStatus.OPEN).length,
-      underReview: reports.filter((r) => r.status === ReportStatus.UNDER_REVIEW)
-        .length,
+      underReview: reports.filter((r) => r.status === ReportStatus.UNDER_REVIEW).length,
       resolved: reports.filter((r) => r.status === ReportStatus.RESOLVED).length,
       dismissed: reports.filter((r) => r.status === ReportStatus.DISMISSED).length,
     };
 
-    return {
-      reports,
-      stats,
-    };
+    return { reports, stats };
   }
 
   /**
-   * Check teacher status based on reports
+   * Check teacher status based on resolved reports
    */
   private async checkTeacherStatus(teacherId: string) {
-    const openReports = await prisma.report.count({
+    const resolvedReportsCount = await prisma.report.count({
       where: {
         reportedId: teacherId,
         status: ReportStatus.RESOLVED,
       },
     });
 
-    // If teacher has more than 5 resolved reports, deactivate account
-    if (openReports >= 5) {
+    // If teacher has 5 or more resolved reports, deactivate account
+    if (resolvedReportsCount >= 5) {
       await prisma.user.update({
         where: { id: teacherId },
         data: { isActive: false },
@@ -317,4 +297,3 @@ class ReportService {
 }
 
 export default new ReportService();
-

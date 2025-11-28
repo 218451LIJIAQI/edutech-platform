@@ -29,8 +29,18 @@ const io = new Server(httpServer, {
   },
 });
 
+// Trust proxy in production (needed for correct IPs and some rate limiters behind proxies)
+if (config.NODE_ENV === 'production') {
+  app.set('trust proxy', 1);
+}
+
 // Security middleware
-app.use(helmet());
+app.use(
+  helmet({
+    // Allow cross-origin loading of static assets like images/videos from /uploads when frontend is on a different origin
+    crossOriginResourcePolicy: { policy: 'cross-origin' },
+  })
+);
 
 // CORS configuration
 app.use(
@@ -85,31 +95,35 @@ app.use(errorHandler);
 // Initialize Socket.io handlers
 new LiveSessionHandler(io);
 
-// Start server
+// Start server (skip when running tests)
 const PORT = config.PORT || 3000;
-
-httpServer.listen(PORT, () => {
-  logger.info(`🚀 Server running on port ${PORT} in ${config.NODE_ENV} mode`);
-  logger.info(`📚 API available at http://localhost:${PORT}/api/${config.API_VERSION}`);
-  logger.info(`🔌 Socket.io server running on port ${PORT}`);
-});
+if (config.NODE_ENV !== 'test') {
+  httpServer.listen(PORT, () => {
+    logger.info(`🚀 Server running on port ${PORT} in ${config.NODE_ENV} mode`);
+    logger.info(`📚 API available at http://localhost:${PORT}/api/${config.API_VERSION}`);
+    logger.info(`🔌 Socket.io server running on port ${PORT}`);
+  });
+}
 
 // Graceful shutdown
-process.on('SIGTERM', () => {
-  logger.info('SIGTERM signal received: closing HTTP server');
-  httpServer.close(() => {
-    logger.info('HTTP server closed');
-    process.exit(0);
-  });
-});
+const shutdown = (signal: string) => {
+  logger.info(`${signal} signal received: closing Socket.io and HTTP server`);
+  try {
+    io.close(() => {
+      logger.info('Socket.io server closed');
+      httpServer.close(() => {
+        logger.info('HTTP server closed');
+        process.exit(0);
+      });
+    });
+  } catch (err) {
+    logger.error('Error during shutdown', err);
+    process.exit(1);
+  }
+};
 
-process.on('SIGINT', () => {
-  logger.info('SIGINT signal received: closing HTTP server');
-  httpServer.close(() => {
-    logger.info('HTTP server closed');
-    process.exit(0);
-  });
-});
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT', () => shutdown('SIGINT'));
 
 // Handle unhandled promise rejections
 process.on('unhandledRejection', (reason: any, promise: Promise<any>) => {
@@ -117,5 +131,12 @@ process.on('unhandledRejection', (reason: any, promise: Promise<any>) => {
   // In production, you might want to restart the server or alert monitoring service
 });
 
-export default app;
+// Handle uncaught exceptions
+process.on('uncaughtException', (err: Error) => {
+  logger.error('Uncaught Exception:', err);
+  // Best practice is to crash so process managers can restart the service cleanly
+  process.exit(1);
+});
 
+export { app };
+export default app;

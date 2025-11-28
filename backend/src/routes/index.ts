@@ -9,6 +9,12 @@ import reportRoutes from './report.routes';
 import uploadRoutes from './upload.routes';
 import notificationRoutes from './notification.routes';
 import adminRoutes from './admin.routes';
+import walletRoutes from './wallet.routes';
+import messageRoutes from './message.routes';
+import communityRoutes from './community.routes';
+import supportRoutes from './support.routes';
+import cartRoutes from './cart.routes';
+import ordersRoutes from './orders.routes';
 
 const router = Router();
 
@@ -19,10 +25,13 @@ const router = Router();
 
 // Health check
 router.get('/health', (_req, res) => {
+  res.set('Cache-Control', 'no-store');
   res.status(200).json({
     status: 'success',
     message: 'Edutech API is running',
-    timestamp: new Date(),
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime(),
+    version: process.env.npm_package_version || '1.0.0',
   });
 });
 
@@ -37,19 +46,24 @@ router.use('/reports', reportRoutes);
 router.use('/upload', uploadRoutes);
 router.use('/notifications', notificationRoutes);
 
-// New routes
-import cartRoutes from './cart.routes';
-import ordersRoutes from './orders.routes';
-import communityRoutes from './community.routes';
-import supportRoutes from './support.routes';
-import messageRoutes from './message.routes';
-router.use('/cart', cartRoutes);
-router.use('/orders', ordersRoutes);
-router.use('/community', communityRoutes);
-router.use('/support', supportRoutes);
+// Wallet routes
+router.use('/wallet', walletRoutes);
+
+// Message routes
 router.use('/messages', messageRoutes);
+
+// Community routes
+router.use('/community', communityRoutes);
+
+// Support routes
+router.use('/support', supportRoutes);
+
+// Cart routes
+router.use('/cart', cartRoutes);
+
+// Orders routes
+router.use('/orders', ordersRoutes);
 
 router.use('/admin', adminRoutes);
 
 export default router;
-

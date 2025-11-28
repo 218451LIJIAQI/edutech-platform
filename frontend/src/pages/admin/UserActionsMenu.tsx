@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { User } from '@/types';
-import { MoreVertical, Edit, Lock, Unlock, Key, Trash2, Eye } from 'lucide-react';
+import { MoreVertical, Edit, Lock, Unlock, Key, Trash2, Eye, Flame } from 'lucide-react';
 import toast from 'react-hot-toast';
 import adminService from '@/services/admin.service';
 
@@ -83,6 +83,39 @@ const UserActionsMenu = ({
     }
   };
 
+  const handleForceDeleteTeacher = async () => {
+    if (user.role !== 'TEACHER') {
+      toast.error('Force delete is only available for teachers');
+      return;
+    }
+
+    const ok = confirm(
+      'DANGER: You are about to FORCE DELETE this teacher.\n\nThis will permanently remove:\n- The teacher account\n- All courses created by this teacher\n- All lessons, packages, and materials under those courses\n- All enrollments and related payments for those courses\n- Related messages and contacts\n\nThis action CANNOT be undone. Do you want to continue?'
+    );
+    if (!ok) return;
+
+    const phrase = prompt('Type exactly: FORCE DELETE to confirm');
+    if ((phrase || '').trim().toUpperCase() !== 'FORCE DELETE') {
+      toast.error('Confirmation phrase did not match. Aborted.');
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      await adminService.deleteUser(user.id, { force: true });
+      toast.success('Teacher force deleted with cascade');
+      onRefresh();
+    } catch (error) {
+      const message = error instanceof Error && 'response' in error 
+        ? (error as { response?: { data?: { message?: string } } }).response?.data?.message 
+        : undefined;
+      toast.error(message || 'Failed to force delete teacher');
+    } finally {
+      setIsLoading(false);
+      setIsOpen(false);
+    }
+  };
+
   return (
     <div className="relative">
       <button
@@ -153,6 +186,18 @@ const UserActionsMenu = ({
             <Trash2 className="w-4 h-4" />
             Delete User
           </button>
+
+          {user.role === 'TEACHER' && (
+            <button
+              onClick={handleForceDeleteTeacher}
+              disabled={isLoading}
+              className="w-full text-left px-4 py-2 hover:bg-red-100 flex items-center gap-2 text-red-700 disabled:opacity-50"
+              title="Force delete teacher with cascade"
+            >
+              <Flame className="w-4 h-4" />
+              Force Delete (Cascade)
+            </button>
+          )}
         </div>
       )}
 

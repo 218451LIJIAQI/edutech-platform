@@ -7,7 +7,7 @@ const TermsOfServicePage = () => {
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 via-blue-50 to-indigo-50 py-12">
       <div className="container mx-auto px-4 max-w-4xl">
-        <div className="card shadow-lg">
+        <div className="card shadow-xl border border-gray-100 rounded-2xl">
           {/* Header */}
           <div className="flex items-center space-x-4 mb-8 pb-8 border-b border-gray-200">
             <div className="p-3 bg-gradient-to-br from-primary-600 to-primary-700 rounded-xl shadow-md">

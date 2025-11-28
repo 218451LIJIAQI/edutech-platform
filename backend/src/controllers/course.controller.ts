@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import { LessonType } from '@prisma/client';
+import { LessonType, CourseType } from '@prisma/client';
 import courseService from '../services/course.service';
 import notificationService from '../services/notification.service';
 import prisma from '../config/database';
@@ -16,21 +16,36 @@ class CourseController {
    * GET /api/courses
    */
   getAllCourses = asyncHandler(async (req: Request, res: Response) => {
-    const { category, teacherId, search, courseType, minRating, minPrice, maxPrice, sortBy, sortOrder, page, limit } =
-      req.query as Record<string, string>;
+    const {
+      category,
+      teacherId,
+      search,
+      courseType,
+      minRating,
+      minPrice,
+      maxPrice,
+      sortBy,
+      sortOrder,
+      page,
+      limit,
+    } = req.query as Record<string, string>;
+
+    const parsedCourseType = courseType && Object.values(CourseType).includes(courseType as CourseType)
+      ? (courseType as CourseType)
+      : undefined;
 
     const result = await courseService.getAllCourses({
       category,
       teacherId,
       search,
-      courseType: courseType as any,
+      courseType: parsedCourseType,
       minRating: minRating ? parseFloat(minRating) : undefined,
       minPrice: minPrice ? parseFloat(minPrice) : undefined,
       maxPrice: maxPrice ? parseFloat(maxPrice) : undefined,
       sortBy: sortBy as any,
       sortOrder: sortOrder as any,
-      page: page ? parseInt(page) : undefined,
-      limit: limit ? parseInt(limit) : undefined,
+      page: page ? parseInt(page, 10) : undefined,
+      limit: limit ? parseInt(limit, 10) : undefined,
     });
 
     res.status(200).json({
@@ -61,13 +76,29 @@ class CourseController {
    */
   createCourse = asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user!.id;
-    const { title, description, category, courseType, thumbnail, previewVideoUrl } = req.body;
+    const { title, description, category, courseType, thumbnail, previewVideoUrl } = req.body as {
+      title: string;
+      description: string;
+      category: string;
+      courseType?: CourseType | string;
+      thumbnail?: string;
+      previewVideoUrl?: string;
+    };
+
+    if (!title || !description || !category) {
+      res.status(400).json({ status: 'error', message: 'title, description and category are required' });
+      return;
+    }
+
+    const parsedCourseType = courseType && Object.values(CourseType).includes(courseType as CourseType)
+      ? (courseType as CourseType)
+      : undefined;
 
     const course = await courseService.createCourse(userId, {
       title,
       description,
       category,
-      courseType,
+      courseType: parsedCourseType,
       thumbnail,
       previewVideoUrl,
     });
@@ -87,13 +118,25 @@ class CourseController {
     const userId = req.user!.id;
     const { id } = req.params;
     const { title, description, category, courseType, thumbnail, previewVideoUrl, isPublished } =
-      req.body;
+      req.body as {
+        title?: string;
+        description?: string;
+        category?: string;
+        courseType?: CourseType | string;
+        thumbnail?: string;
+        previewVideoUrl?: string;
+        isPublished?: boolean;
+      };
+
+    const parsedCourseType = courseType && Object.values(CourseType).includes(courseType as CourseType)
+      ? (courseType as CourseType)
+      : undefined;
 
     const course = await courseService.updateCourse(userId, id, {
       title,
       description,
       category,
-      courseType,
+      courseType: parsedCourseType,
       thumbnail,
       previewVideoUrl,
       isPublished,
@@ -129,7 +172,14 @@ class CourseController {
   createLesson = asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user!.id;
     const { id: courseId } = req.params;
-    const { title, description, type, duration, videoUrl, isFree } = req.body;
+    const { title, description, type, duration, videoUrl, isFree } = req.body as {
+      title: string;
+      description?: string;
+      type: LessonType | string;
+      duration?: number;
+      videoUrl?: string;
+      isFree?: boolean;
+    };
 
     const lesson = await courseService.createLesson(userId, courseId, {
       title,
@@ -155,12 +205,20 @@ class CourseController {
     const userId = req.user!.id;
     const { id } = req.params;
     const { title, description, type, duration, videoUrl, isFree, orderIndex } =
-      req.body;
+      req.body as {
+        title?: string;
+        description?: string;
+        type?: LessonType | string;
+        duration?: number;
+        videoUrl?: string;
+        isFree?: boolean;
+        orderIndex?: number;
+      };
 
     const lesson = await courseService.updateLesson(userId, id, {
       title,
       description,
-      type,
+      type: (type as LessonType | undefined),
       duration,
       videoUrl,
       isFree,
@@ -205,7 +263,15 @@ class CourseController {
       duration,
       maxStudents,
       features,
-    } = req.body;
+    } = req.body as {
+      name: string;
+      description?: string;
+      price: number;
+      discount?: number;
+      duration?: number;
+      maxStudents?: number;
+      features?: string[];
+    };
 
     const lessonPackage = await courseService.createPackage(userId, courseId, {
       name,
@@ -240,7 +306,16 @@ class CourseController {
       maxStudents,
       features,
       isActive,
-    } = req.body;
+    } = req.body as {
+      name?: string;
+      description?: string;
+      price?: number;
+      discount?: number;
+      duration?: number;
+      maxStudents?: number;
+      features?: string[];
+      isActive?: boolean;
+    };
 
     const lessonPackage = await courseService.updatePackage(userId, id, {
       name,
@@ -284,7 +359,14 @@ class CourseController {
     const userId = req.user!.id;
     const { id: courseId } = req.params;
     const { title, description, fileUrl, fileType, fileSize, isDownloadable } =
-      req.body;
+      req.body as {
+        title: string;
+        description?: string;
+        fileUrl: string;
+        fileType: string;
+        fileSize: number;
+        isDownloadable?: boolean;
+      };
 
     const material = await courseService.uploadMaterial(userId, courseId, {
       title,
@@ -310,7 +392,14 @@ class CourseController {
     const userId = req.user!.id;
     const { id } = req.params;
     const { title, description, fileUrl, fileType, fileSize, isDownloadable } =
-      req.body;
+      req.body as {
+        title?: string;
+        description?: string;
+        fileUrl?: string;
+        fileType?: string;
+        fileSize?: number;
+        isDownloadable?: boolean;
+      };
 
     const material = await courseService.updateMaterial(userId, id, {
       title,
@@ -427,4 +516,3 @@ class CourseController {
 }
 
 export default new CourseController();
-

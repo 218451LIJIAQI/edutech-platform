@@ -172,7 +172,7 @@ const VerificationTeachersManagement = () => {
                 </div>
               </div>
             ) : pendingRegistrations.length > 0 ? (
-              <div className="card shadow-lg overflow-hidden">
+              <div className="card shadow-xl border border-gray-100 rounded-2xl overflow-hidden">
                 <div className="overflow-x-auto">
                   <table className="w-full">
                     <thead>
@@ -237,7 +237,7 @@ const VerificationTeachersManagement = () => {
                 </div>
               </div>
             ) : (
-              <div className="card text-center py-16 shadow-lg">
+              <div className="card text-center py-16 shadow-xl border border-gray-100 rounded-2xl">
                 <Clock className="w-16 h-16 text-yellow-600 mx-auto mb-4" />
                 <h3 className="text-2xl font-bold text-gray-900 mb-2">No pending registrations</h3>
                 <p className="text-gray-600">New teacher registrations will appear here.</p>
@@ -257,7 +257,7 @@ const VerificationTeachersManagement = () => {
                 </div>
               </div>
             ) : pendingProfiles.length > 0 ? (
-              <div className="card shadow-lg overflow-hidden">
+              <div className="card shadow-xl border border-gray-100 rounded-2xl overflow-hidden">
                 <div className="overflow-x-auto">
                   <table className="w-full">
                     <thead>
@@ -325,7 +325,7 @@ const VerificationTeachersManagement = () => {
                 </div>
               </div>
             ) : (
-              <div className="card text-center py-16 shadow-lg">
+              <div className="card text-center py-16 shadow-xl border border-gray-100 rounded-2xl">
                 <Clock className="w-16 h-16 text-yellow-600 mx-auto mb-4" />
                 <h3 className="text-2xl font-bold text-gray-900 mb-2">No pending profiles</h3>
                 <p className="text-gray-600">Teacher profile submissions awaiting review will appear here.</p>

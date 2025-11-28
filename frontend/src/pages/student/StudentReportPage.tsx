@@ -144,14 +144,14 @@ const StudentReportPage = () => {
                 {filteredReports.map((report) => (
                   <div
                     key={report.id}
-                    className={`card cursor-pointer hover:shadow-lg transition-all border-l-4 ${
+                    className={`card cursor-pointer hover:shadow-2xl transition-all duration-300 transform hover:scale-102 border-l-4 rounded-2xl shadow-lg ${
                       report.status === ReportStatus.OPEN
-                        ? 'border-l-yellow-600'
+                        ? 'border-l-yellow-600 hover:border-l-yellow-700'
                         : report.status === ReportStatus.UNDER_REVIEW
-                        ? 'border-l-blue-600'
+                        ? 'border-l-blue-600 hover:border-l-blue-700'
                         : report.status === ReportStatus.RESOLVED
-                        ? 'border-l-green-600'
-                        : 'border-l-gray-600'
+                        ? 'border-l-green-600 hover:border-l-green-700'
+                        : 'border-l-gray-600 hover:border-l-gray-700'
                     }`}
                     onClick={() => setSelectedReport(report)}
                   >

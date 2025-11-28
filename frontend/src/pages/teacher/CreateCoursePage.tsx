@@ -321,8 +321,8 @@ const CreateCoursePage = () => {
 
         {/* Tabs */}
         <div className="mb-8">
-          <div className="bg-white rounded-xl p-2 shadow-md border border-gray-200">
-            <nav className="flex space-x-2">
+          <div className="bg-white rounded-2xl p-2 shadow-xl border-2 border-gray-200 hover:border-primary-200 transition-all">
+            <nav className="flex gap-2">
               {([
                 { id: 'basic' as const, label: 'Basic Info', icon: FileText },
                 { id: 'lessons' as const, label: 'Lessons', icon: PlayCircle },
@@ -332,13 +332,13 @@ const CreateCoursePage = () => {
                 <button
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id)}
-                  className={`flex items-center space-x-2 py-3 px-4 rounded-lg font-semibold text-sm transition-all ${
+                  className={`flex items-center gap-2 py-3 px-5 rounded-xl font-bold text-sm transition-all transform ${
                     activeTab === tab.id
-                      ? 'bg-primary-600 text-white shadow-md'
-                      : 'text-gray-600 hover:bg-gray-100'
+                      ? 'bg-gradient-to-r from-primary-600 to-primary-700 text-white shadow-lg scale-105'
+                      : 'text-gray-600 hover:bg-gray-100 hover:text-primary-600'
                   }`}
                 >
-                  <tab.icon className="w-4 h-4" />
+                  <tab.icon className="w-5 h-5" />
                   <span>{tab.label}</span>
                 </button>
               ))}
@@ -347,7 +347,7 @@ const CreateCoursePage = () => {
         </div>
 
         {/* Tab Content */}
-        <div className="card shadow-lg">
+        <div className="card shadow-xl border border-gray-100 rounded-2xl">
           {/* Basic Info Tab */}
           {activeTab === 'basic' && (
             <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">

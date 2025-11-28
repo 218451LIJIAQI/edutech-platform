@@ -8,6 +8,26 @@ import { NotFoundError, ValidationError } from '../utils/errors';
  * Handles administrative functions
  */
 class AdminService {
+  /** Recalculate and persist teacher's totalStudents based on distinct enrolled students */
+  private async recalculateTeacherStudentCount(teacherUserId: string) {
+    const teacherProfile = await prisma.teacherProfile.findUnique({ where: { userId: teacherUserId } });
+    if (!teacherProfile) return;
+
+    const enrollments = await prisma.enrollment.findMany({
+      where: {
+        package: {
+          course: { teacherProfileId: teacherProfile.id },
+        },
+      },
+      select: { userId: true },
+      distinct: ['userId'],
+    });
+
+    await prisma.teacherProfile.update({
+      where: { id: teacherProfile.id },
+      data: { totalStudents: enrollments.length },
+    });
+  }
   /**
    * Get platform statistics
    */
@@ -274,9 +294,9 @@ class AdminService {
   }
 
   /**
-   * Delete user (soft delete by deactivating)
+   * Delete user (HARD DELETE from database)
    */
-  async deleteUser(userId: string) {
+  async deleteUser(userId: string, options?: { force?: boolean }) {
     const user = await prisma.user.findUnique({ where: { id: userId } });
 
     if (!user) {
@@ -287,7 +307,22 @@ class AdminService {
       throw new ValidationError('Cannot delete admin user');
     }
 
-    // Check if teacher has active students
+    // If deleting a student, capture impacted teachers before deletion
+    let impactedTeacherUserIds: Set<string> = new Set();
+    if (user.role === UserRole.STUDENT) {
+      const enrollments = await prisma.enrollment.findMany({
+        where: { userId },
+        select: {
+          package: { select: { course: { select: { teacherProfile: { select: { userId: true } } } } } },
+        },
+      });
+      enrollments.forEach((e) => {
+        const tId = e.package?.course?.teacherProfile?.userId;
+        if (tId) impactedTeacherUserIds.add(tId);
+      });
+    }
+
+    // Prevent deleting teacher with active students
     if (user.role === UserRole.TEACHER) {
       const activeEnrollments = await prisma.enrollment.count({
         where: {
@@ -302,16 +337,21 @@ class AdminService {
         },
       });
 
-      if (activeEnrollments > 0) {
+      if (activeEnrollments > 0 && !options?.force) {
         throw new ValidationError('Cannot delete teacher with active students');
       }
+      // if force=true, proceed; cascading FK will remove courses/enrollments
     }
 
-    // Soft delete by deactivating
-    await prisma.user.update({
-      where: { id: userId },
-      data: { isActive: false },
-    });
+    // Hard delete
+    await prisma.user.delete({ where: { id: userId } });
+
+    // Recalculate teacher totalStudents for impacted teachers after student deletion
+    if (impactedTeacherUserIds.size > 0) {
+      for (const tUserId of impactedTeacherUserIds) {
+        await this.recalculateTeacherStudentCount(tUserId);
+      }
+    }
   }
 
   /**
@@ -858,9 +898,9 @@ class AdminService {
   }
 
   /**
-   * Batch delete users
+   * Batch delete users (HARD DELETE)
    */
-  async batchDeleteUsers(userIds: string[], adminId: string) {
+  async batchDeleteUsers(userIds: string[]) {
     // Prevent deleting admin users
     const adminUsers = await prisma.user.findMany({
       where: { id: { in: userIds }, role: UserRole.ADMIN },
@@ -897,22 +937,37 @@ class AdminService {
       }
     }
 
-    // Soft delete by deactivating
-    await prisma.user.updateMany({
-      where: { id: { in: userIds } },
-      data: { isActive: false, updatedBy: adminId },
+    // Capture impacted teachers from students being deleted (to refresh their totalStudents)
+    const studentsToDelete = await prisma.user.findMany({
+      where: { id: { in: userIds }, role: UserRole.STUDENT },
+      select: { id: true },
     });
-
-    // Log the action
-    for (const userId of userIds) {
-      await prisma.userAuditLog.create({
-        data: {
-          adminId,
-          userId,
-          action: 'DELETE',
+    const studentIds = studentsToDelete.map((s) => s.id);
+    const impactedTeacherUserIds = new Set<string>();
+    if (studentIds.length > 0) {
+      const enrollments = await prisma.enrollment.findMany({
+        where: { userId: { in: studentIds } },
+        select: {
+          package: { select: { course: { select: { teacherProfile: { select: { userId: true } } } } } },
         },
       });
+      for (const e of enrollments) {
+        const tId = e.package?.course?.teacherProfile?.userId;
+        if (tId) impactedTeacherUserIds.add(tId);
+      }
     }
+
+    // Hard delete
+    await prisma.user.deleteMany({ where: { id: { in: userIds } } });
+
+    // Recalculate totalStudents for impacted teachers
+    if (impactedTeacherUserIds.size > 0) {
+      for (const tUserId of impactedTeacherUserIds) {
+        await this.recalculateTeacherStudentCount(tUserId);
+      }
+    }
+
+    // Optional: Do not write audit logs referencing deleted users to avoid FK/cascade
   }
 
   /**

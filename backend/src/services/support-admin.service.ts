@@ -1,6 +1,6 @@
 import prisma from '../config/database';
 import { NotFoundError, ValidationError } from '../utils/errors';
-import { SupportTicketStatus } from '@prisma/client';
+import { SupportTicketStatus, SupportTicketPriority, Prisma } from '@prisma/client';
 
 /**
  * Admin Support Ticket Management Service
@@ -16,12 +16,19 @@ class SupportAdminService {
     limit: number = 50,
     offset: number = 0
   ) {
-    const where: any = {};
-    if (status) {
-      where.status = status;
+    // sanitize pagination
+    const safeLimit = Number.isFinite(limit) ? Math.min(Math.max(Math.floor(limit), 1), 100) : 50;
+    const safeOffset = Number.isFinite(offset) && offset >= 0 ? Math.floor(offset) : 0;
+
+    // build filters with enum validation
+    const where: Prisma.SupportTicketWhereInput = {};
+
+    if (status && (Object.values(SupportTicketStatus) as string[]).includes(status)) {
+      where.status = status as SupportTicketStatus;
     }
-    if (priority) {
-      where.priority = priority;
+
+    if (priority && (Object.values(SupportTicketPriority) as string[]).includes(priority)) {
+      where.priority = priority as SupportTicketPriority;
     }
 
     const [tickets, total] = await Promise.all([
@@ -51,8 +58,8 @@ class SupportAdminService {
           },
         },
         orderBy: { createdAt: 'desc' },
-        take: limit,
-        skip: offset,
+        take: safeLimit,
+        skip: safeOffset,
       }),
       prisma.supportTicket.count({ where }),
     ]);
@@ -60,8 +67,8 @@ class SupportAdminService {
     return {
       tickets,
       total,
-      limit,
-      offset,
+      limit: safeLimit,
+      offset: safeOffset,
     };
   }
 
@@ -137,6 +144,7 @@ class SupportAdminService {
               },
             },
           },
+          orderBy: { createdAt: 'asc' },
         },
       },
     });
@@ -148,34 +156,42 @@ class SupportAdminService {
    * Add admin response to ticket
    */
   async addAdminResponse(ticketId: string, adminId: string, message: string) {
-    const ticket = await prisma.supportTicket.findUnique({
-      where: { id: ticketId },
-    });
+    const trimmed = (message ?? '').trim();
+    if (!trimmed) {
+      throw new ValidationError('Message is required');
+    }
 
-    if (!ticket) throw new NotFoundError('Support ticket not found');
-
-    const msg = await prisma.supportTicketMessage.create({
-      data: {
-        ticketId,
-        senderId: adminId,
-        message,
-      },
-      include: {
-        sender: {
-          select: {
-            id: true,
-            email: true,
-            firstName: true,
-            lastName: true,
+    // Create message and update ticket within a transaction
+    const [msg] = await prisma.$transaction([
+      prisma.supportTicketMessage.create({
+        data: {
+          ticketId,
+          senderId: adminId,
+          message: trimmed,
+        },
+        include: {
+          sender: {
+            select: {
+              id: true,
+              email: true,
+              firstName: true,
+              lastName: true,
+            },
           },
         },
-      },
-    });
+      }),
+      prisma.supportTicket.update({
+        where: { id: ticketId },
+        data: {
+          updatedAt: new Date(),
+        },
+      }),
+    ]);
 
-    // Update ticket's updatedAt
-    await prisma.supportTicket.update({
-      where: { id: ticketId },
-      data: { updatedAt: new Date() },
+    // Conditionally bump status to IN_PROGRESS if currently OPEN
+    await prisma.supportTicket.updateMany({
+      where: { id: ticketId, status: SupportTicketStatus.OPEN },
+      data: { status: SupportTicketStatus.IN_PROGRESS },
     });
 
     return msg;
@@ -199,7 +215,7 @@ class SupportAdminService {
       where: { id: ticketId },
       data: {
         status: SupportTicketStatus.RESOLVED,
-        resolution,
+        resolution: resolution.trim(),
         resolvedAt: new Date(),
         updatedAt: new Date(),
       },
@@ -223,6 +239,7 @@ class SupportAdminService {
               },
             },
           },
+          orderBy: { createdAt: 'asc' },
         },
       },
     });
@@ -266,6 +283,7 @@ class SupportAdminService {
               },
             },
           },
+          orderBy: { createdAt: 'asc' },
         },
       },
     });
@@ -295,4 +313,3 @@ class SupportAdminService {
 }
 
 export default new SupportAdminService();
-

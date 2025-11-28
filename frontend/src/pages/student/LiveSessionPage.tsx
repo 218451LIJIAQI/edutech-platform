@@ -71,7 +71,7 @@ const LiveSessionPage = () => {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           {/* Video Area */}
           <div className="lg:col-span-2">
-            <div className="card bg-black aspect-video flex items-center justify-center shadow-2xl rounded-2xl overflow-hidden">
+            <div className="card bg-black aspect-video flex items-center justify-center shadow-2xl border border-gray-800 rounded-2xl overflow-hidden">
               <div className="text-center">
                 <div className="w-20 h-20 bg-red-600 rounded-full flex items-center justify-center mx-auto mb-4 animate-pulse">
                   <span className="text-white text-2xl font-bold">LIVE</span>
@@ -83,7 +83,7 @@ const LiveSessionPage = () => {
           </div>
 
           {/* Chat Sidebar */}
-          <div className="card flex flex-col h-[600px] shadow-lg">
+          <div className="card flex flex-col h-[600px] shadow-xl border border-gray-100 rounded-2xl">
             <div className="border-b-2 border-gray-200 pb-4 mb-4">
               <h3 className="font-bold text-lg text-gray-900 flex items-center">
                 <div className="p-2 bg-primary-100 rounded-lg mr-3">

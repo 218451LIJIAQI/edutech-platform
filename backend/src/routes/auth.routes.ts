@@ -3,6 +3,7 @@ import authController from '../controllers/auth.controller';
 import { authenticate } from '../middleware/auth';
 import { validate } from '../middleware/validate';
 import { authLimiter } from '../middleware/rateLimiter';
+import asyncHandler from '../utils/asyncHandler';
 import {
   registerValidation,
   loginValidation,
@@ -22,43 +23,42 @@ router.post(
   '/register',
   authLimiter,
   validate(registerValidation),
-  authController.register
+  asyncHandler(authController.register)
 );
 
 router.post(
   '/login',
   authLimiter,
   validate(loginValidation),
-  authController.login
+  asyncHandler(authController.login)
 );
 
 router.post(
   '/refresh',
   validate(refreshTokenValidation),
-  authController.refreshToken
+  asyncHandler(authController.refreshToken)
 );
 
 // Protected routes
-router.get('/profile', authenticate, authController.getProfile);
+router.get('/profile', authenticate, asyncHandler(authController.getProfile));
 
 router.put(
   '/profile',
   authenticate,
   validate(updateProfileValidation),
-  authController.updateProfile
+  asyncHandler(authController.updateProfile)
 );
 
 router.post(
   '/change-password',
   authenticate,
   validate(changePasswordValidation),
-  authController.changePassword
+  asyncHandler(authController.changePassword)
 );
 
-router.post('/logout', authenticate, authController.logout);
+router.post('/logout', authenticate, asyncHandler(authController.logout));
 
 // Danger Zone: delete current account
-router.delete('/account', authenticate, authController.deleteAccount);
+router.delete('/account', authenticate, asyncHandler(authController.deleteAccount));
 
 export default router;
-

@@ -194,15 +194,15 @@ const AdminDashboard = () => {
         {/* Stats Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
           {statCards.map((stat, index) => (
-            <div key={index} className="card group hover:shadow-xl transition-all duration-300">
+            <div key={index} className="card group hover:shadow-2xl transition-all duration-300 transform hover:scale-105 border border-gray-100 hover:border-primary-200">
               <div className="flex items-center justify-between mb-4">
-                <div className={`${stat.color} p-4 rounded-xl text-white group-hover:scale-110 transition-transform duration-300`}>
-                  <stat.icon className="w-6 h-6" />
+                <div className={`${stat.color} p-4 rounded-xl text-white group-hover:scale-125 transition-transform duration-300 shadow-lg`}>
+                  <stat.icon className="w-7 h-7" />
                 </div>
               </div>
-              <h3 className="text-3xl font-bold mb-2 text-gray-900">{stat.value}</h3>
-              <p className="text-gray-600 text-sm mb-2 font-medium">{stat.title}</p>
-              <p className="text-xs text-gray-500 bg-gray-50 px-2 py-1 rounded-lg inline-block">{stat.change}</p>
+              <h3 className="text-4xl font-bold mb-3 text-gray-900">{stat.value}</h3>
+              <p className="text-gray-600 text-sm mb-3 font-bold uppercase tracking-wide">{stat.title}</p>
+              <p className="text-xs text-gray-600 bg-gray-50 px-3 py-2 rounded-lg inline-block font-medium">{stat.change}</p>
             </div>
           ))}
         </div>

@@ -150,7 +150,7 @@ const TeacherStudentManagementPage = () => {
         </div>
 
         {/* Filters */}
-        <div className="card mb-6">
+        <div className="card mb-6 shadow-xl border border-gray-100 rounded-2xl">
           <div className="flex flex-col md:flex-row md:items-center gap-4">
             <div className="relative">
               <Search className="w-5 h-5 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
@@ -189,7 +189,7 @@ const TeacherStudentManagementPage = () => {
         </div>
 
         {/* Table */}
-        <div className="card">
+        <div className="card shadow-xl border border-gray-100 rounded-2xl">
           {isLoading ? (
             <div className="py-12 text-center text-gray-600">Loading...</div>
           ) : filtered.length === 0 ? (

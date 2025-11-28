@@ -1,4 +1,4 @@
-import { UserRole } from '@prisma/client';
+import type { UserRole } from '@prisma/client';
 
 /**
  * Extend Express Request type to include authenticated user
@@ -19,4 +19,3 @@ declare global {
 
 // This export ensures the file is treated as a module
 export {};
-

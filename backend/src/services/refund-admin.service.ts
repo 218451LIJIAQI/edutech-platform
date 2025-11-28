@@ -1,6 +1,7 @@
 import prisma from '../config/database';
 import { NotFoundError, ValidationError } from '../utils/errors';
 import { RefundStatus, OrderStatus } from '@prisma/client';
+import config from '../config/env';
 
 /**
  * Admin Refund Management Service
@@ -258,6 +259,41 @@ class RefundAdminService {
       },
     });
 
+    // Debit teacher wallets proportional to refunded amount across order items
+    try {
+      const order = await prisma.order.findUnique({
+        where: { id: refund.orderId },
+        include: {
+          items: {
+            include: {
+              package: {
+                include: { course: { include: { teacherProfile: true } } },
+              },
+            },
+          },
+        },
+      });
+      if (order && order.items.length > 0) {
+        const walletService = (await import('./wallet.service')).default;
+        const totalItemsAmount = order.items.reduce((sum, it) => sum + it.finalPrice, 0) || order.totalAmount || 0;
+        const base = totalItemsAmount > 0 ? totalItemsAmount : 1;
+        for (const item of order.items) {
+          const teacherProfile = item.package?.course?.teacherProfile;
+          if (teacherProfile) {
+            const rate = teacherProfile.commissionRate ?? config.PLATFORM_COMMISSION_RATE; // fallback to platform rate
+            const itemPortion = (item.finalPrice / base) * refund.amount;
+            const teacherNet = itemPortion * (1 - rate / 100);
+            await walletService.debitForRefund(teacherProfile.userId, teacherNet, {
+              orderItemId: item.id,
+              refundId: refund.id,
+            });
+          }
+        }
+      }
+    } catch (e) {
+      // non-blocking wallet adjustment
+    }
+
     return updated;
   }
 
@@ -295,4 +331,3 @@ class RefundAdminService {
 }
 
 export default new RefundAdminService();
-

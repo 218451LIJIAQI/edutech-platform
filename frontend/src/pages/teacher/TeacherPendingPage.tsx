@@ -10,7 +10,7 @@ const TeacherPendingPage = () => {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 via-blue-50 to-indigo-50 px-4">
-      <div className="card max-w-xl text-center shadow-xl">
+      <div className="card max-w-xl text-center shadow-2xl border border-gray-100 rounded-2xl">
         <div className="mx-auto w-16 h-16 rounded-2xl bg-yellow-100 border-2 border-yellow-300 flex items-center justify-center mb-4">
           <ShieldAlert className="w-8 h-8 text-yellow-700" />
         </div>

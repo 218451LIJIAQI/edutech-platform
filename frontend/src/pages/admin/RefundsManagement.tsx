@@ -174,25 +174,25 @@ const RefundsManagement = () => {
       {/* Statistics */}
       {stats && (
         <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-          <div className="card p-4 bg-yellow-50 border-l-4 border-yellow-500">
-            <div className="text-sm text-gray-600">Pending</div>
-            <div className="text-2xl font-bold text-yellow-700">{stats.pending}</div>
+          <div className="card p-5 bg-gradient-to-br from-yellow-500 to-yellow-600 text-white border-l-4 border-yellow-400 shadow-lg hover:shadow-xl transition-all transform hover:scale-105 rounded-xl">
+            <div className="text-sm text-yellow-100 font-bold uppercase">Pending</div>
+            <div className="text-3xl font-bold text-white mt-2">{stats.pending}</div>
           </div>
-          <div className="card p-4 bg-blue-50 border-l-4 border-blue-500">
-            <div className="text-sm text-gray-600">Approved</div>
-            <div className="text-2xl font-bold text-blue-700">{stats.approved}</div>
+          <div className="card p-5 bg-gradient-to-br from-blue-500 to-blue-600 text-white border-l-4 border-blue-400 shadow-lg hover:shadow-xl transition-all transform hover:scale-105 rounded-xl">
+            <div className="text-sm text-blue-100 font-bold uppercase">Approved</div>
+            <div className="text-3xl font-bold text-white mt-2">{stats.approved}</div>
           </div>
-          <div className="card p-4 bg-purple-50 border-l-4 border-purple-500">
-            <div className="text-sm text-gray-600">Processing</div>
-            <div className="text-2xl font-bold text-purple-700">{stats.processing}</div>
+          <div className="card p-5 bg-gradient-to-br from-purple-500 to-purple-600 text-white border-l-4 border-purple-400 shadow-lg hover:shadow-xl transition-all transform hover:scale-105 rounded-xl">
+            <div className="text-sm text-purple-100 font-bold uppercase">Processing</div>
+            <div className="text-3xl font-bold text-white mt-2">{stats.processing}</div>
           </div>
-          <div className="card p-4 bg-green-50 border-l-4 border-green-500">
-            <div className="text-sm text-gray-600">Completed</div>
-            <div className="text-2xl font-bold text-green-700">{stats.completed}</div>
+          <div className="card p-5 bg-gradient-to-br from-green-500 to-green-600 text-white border-l-4 border-green-400 shadow-lg hover:shadow-xl transition-all transform hover:scale-105 rounded-xl">
+            <div className="text-sm text-green-100 font-bold uppercase">Completed</div>
+            <div className="text-3xl font-bold text-white mt-2">{stats.completed}</div>
           </div>
-          <div className="card p-4 bg-red-50 border-l-4 border-red-500">
-            <div className="text-sm text-gray-600">Rejected</div>
-            <div className="text-2xl font-bold text-red-700">{stats.rejected}</div>
+          <div className="card p-5 bg-gradient-to-br from-red-500 to-red-600 text-white border-l-4 border-red-400 shadow-lg hover:shadow-xl transition-all transform hover:scale-105 rounded-xl">
+            <div className="text-sm text-red-100 font-bold uppercase">Rejected</div>
+            <div className="text-3xl font-bold text-white mt-2">{stats.rejected}</div>
           </div>
         </div>
       )}
@@ -215,7 +215,7 @@ const RefundsManagement = () => {
       </div>
 
       {/* Refunds Table */}
-      <div className="card shadow-lg overflow-hidden">
+      <div className="card shadow-xl border border-gray-100 rounded-2xl overflow-hidden">
         {loading ? (
           <div className="flex items-center justify-center py-12">
             <div className="spinner"></div>

@@ -2,8 +2,9 @@
   "compilerOptions": {
     "target": "ES2020",
     "module": "commonjs",
-    "lib": ["ES2020", "DOM"],
+    "lib": ["ES2020"],
     "outDir": "./dist",
+    "rootDir": ".",
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
@@ -14,6 +15,7 @@
     "declaration": true,
     "declarationMap": true,
     "sourceMap": true,
+    "noEmitOnError": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "noImplicitReturns": true,
@@ -22,13 +24,13 @@
     "baseUrl": ".",
     "paths": {
       "@/*": ["src/*"]
-    }
+    },
+    "incremental": true
   },
   "ts-node": {
     "files": true,
     "transpileOnly": false
   },
-  "include": ["src/**/*", "prisma/**/*.ts"],
-  "exclude": ["node_modules", "dist", "**/*.test.ts"]
+  "include": ["src/**/*"],
+  "exclude": ["node_modules", "dist", "**/*.test.ts", "prisma/**"]
 }
-

@@ -5,16 +5,16 @@ import config from '../config/env';
  * General API rate limiter
  * In development mode, we use much more relaxed limits
  */
+const isDev = config.NODE_ENV === 'development';
+const isLocalIp = (ip?: string) => ip === '::1' || ip === '127.0.0.1';
+
 export const apiLimiter = rateLimit({
   windowMs: config.RATE_LIMIT_WINDOW_MS, // 15 minutes by default
-  max: config.NODE_ENV === 'development' ? 1000 : config.RATE_LIMIT_MAX_REQUESTS, // Much higher limit in development
-  message: 'Too many requests from this IP, please try again later.',
+  max: isDev ? 1000 : config.RATE_LIMIT_MAX_REQUESTS, // Much higher limit in development
   standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
   legacyHeaders: false, // Disable the `X-RateLimit-*` headers
-  skip: (req) => {
-    // Skip rate limiting for development if needed
-    return config.NODE_ENV === 'development' && req.ip === '::1'; // Skip for localhost in dev
-  },
+  message: { status: 'error', message: 'Too many requests from this IP, please try again later.' },
+  skip: (req) => isDev && isLocalIp(req.ip), // Skip for localhost in dev
 });
 
 /**
@@ -22,9 +22,11 @@ export const apiLimiter = rateLimit({
  */
 export const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: config.NODE_ENV === 'development' ? 50 : 5, // More attempts allowed in development
-  message: 'Too many login attempts, please try again later.',
+  max: isDev ? 50 : 5, // More attempts allowed in development
   skipSuccessfulRequests: true, // Don't count successful requests
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { status: 'error', message: 'Too many login attempts, please try again later.' },
 });
 
 /**
@@ -32,8 +34,10 @@ export const authLimiter = rateLimit({
  */
 export const uploadLimiter = rateLimit({
   windowMs: 60 * 60 * 1000, // 1 hour
-  max: config.NODE_ENV === 'development' ? 100 : 20, // More uploads allowed in development
-  message: 'Too many upload requests, please try again later.',
+  max: isDev ? 100 : 20, // More uploads allowed in development
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { status: 'error', message: 'Too many upload requests, please try again later.' },
 });
 
 export default {
@@ -41,4 +45,3 @@ export default {
   authLimiter,
   uploadLimiter,
 };
-

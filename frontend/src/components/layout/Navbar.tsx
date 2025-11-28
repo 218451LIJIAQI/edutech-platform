@@ -18,7 +18,22 @@ const Navbar = () => {
     if (isAuthenticated && user) {
       fetchUnreadMessageCount();
       const interval = setInterval(fetchUnreadMessageCount, 30000); // Poll every 30 seconds
-      return () => clearInterval(interval);
+
+      // Listen for explicit refresh events from message page
+      const handler = () => fetchUnreadMessageCount();
+      window.addEventListener('messages:unread-updated', handler as EventListener);
+
+      // Refresh on visibility change (user switches back to tab)
+      const onVisibility = () => {
+        if (document.visibilityState === 'visible') fetchUnreadMessageCount();
+      };
+      document.addEventListener('visibilitychange', onVisibility);
+
+      return () => {
+        clearInterval(interval);
+        window.removeEventListener('messages:unread-updated', handler as EventListener);
+        document.removeEventListener('visibilitychange', onVisibility);
+      };
     }
   }, [isAuthenticated, user]);
 
@@ -128,6 +143,13 @@ const Navbar = () => {
                   className="text-gray-700 hover:text-primary-600 font-medium transition-colors duration-300 relative group"
                 >
                   Student Management
+                  <span className="absolute bottom-0 left-0 w-0 h-0.5 bg-gradient-to-r from-primary-600 to-primary-800 group-hover:w-full transition-all duration-300"></span>
+                </Link>
+                <Link
+                  to="/teacher/wallet"
+                  className="text-gray-700 hover:text-primary-600 font-medium transition-colors duration-300 relative group"
+                >
+                  Wallet
                   <span className="absolute bottom-0 left-0 w-0 h-0.5 bg-gradient-to-r from-primary-600 to-primary-800 group-hover:w-full transition-all duration-300"></span>
                 </Link>
                 <Link

@@ -30,7 +30,9 @@ class EnrollmentController {
     const userId = req.user!.id;
     const { id } = req.params;
 
-    const enrollment = await enrollmentService.getEnrollmentById(id, userId);
+    const enrollmentId = typeof id === 'string' ? id.trim() : String(id);
+
+    const enrollment = await enrollmentService.getEnrollmentById(enrollmentId, userId);
 
     res.status(200).json({
       status: 'success',
@@ -45,13 +47,32 @@ class EnrollmentController {
   updateProgress = asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user!.id;
     const { id } = req.params;
-    const { completedLessons, progress } = req.body;
+    const { completedLessons, progress } = req.body as {
+      completedLessons?: string[] | number;
+      progress?: number | string;
+    };
+
+    const enrollmentId = typeof id === 'string' ? id.trim() : String(id);
+
+    // Accept either an array of lesson IDs or a numeric count
+    const completedCount = Array.isArray(completedLessons)
+      ? completedLessons.length
+      : typeof completedLessons === 'number'
+      ? completedLessons
+      : 0;
+
+    const normalizedProgress =
+      typeof progress === 'number'
+        ? progress
+        : progress != null
+        ? Number(progress)
+        : undefined as unknown as number;
 
     const enrollment = await enrollmentService.updateProgress(
-      id,
+      enrollmentId,
       userId,
-      completedLessons,
-      progress
+      completedCount,
+      normalizedProgress as number
     );
 
     res.status(200).json({
@@ -69,7 +90,10 @@ class EnrollmentController {
     const userId = req.user!.id;
     const { courseId } = req.params;
 
-    const hasAccess = await enrollmentService.checkAccess(userId, courseId);
+    const normalizedCourseId =
+      typeof courseId === 'string' ? courseId.trim() : String(courseId);
+
+    const hasAccess = await enrollmentService.checkAccess(userId, normalizedCourseId);
 
     res.status(200).json({
       status: 'success',
@@ -85,7 +109,10 @@ class EnrollmentController {
     const userId = req.user!.id;
     const { courseId } = req.params;
 
-    const students = await enrollmentService.getCourseStudents(userId, courseId);
+    const normalizedCourseId =
+      typeof courseId === 'string' ? courseId.trim() : String(courseId);
+
+    const students = await enrollmentService.getCourseStudents(userId, normalizedCourseId);
 
     res.status(200).json({
       status: 'success',
@@ -101,7 +128,10 @@ class EnrollmentController {
     const userId = req.user!.id;
     const { courseId } = req.params;
 
-    const stats = await enrollmentService.getCourseStats(userId, courseId);
+    const normalizedCourseId =
+      typeof courseId === 'string' ? courseId.trim() : String(courseId);
+
+    const stats = await enrollmentService.getCourseStats(userId, normalizedCourseId);
 
     res.status(200).json({
       status: 'success',
@@ -111,4 +141,3 @@ class EnrollmentController {
 }
 
 export default new EnrollmentController();
-

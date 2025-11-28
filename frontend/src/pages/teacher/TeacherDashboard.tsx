@@ -118,49 +118,49 @@ const TeacherDashboard = () => {
       {/* Stats Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
         {/* Total Revenue */}
-          <div className="card bg-gradient-to-br from-green-500 via-green-600 to-green-700 text-white shadow-lg hover:shadow-xl transition-all">
+          <div className="card bg-gradient-to-br from-green-500 via-green-600 to-green-700 text-white shadow-xl hover:shadow-2xl transition-all duration-300 transform hover:scale-105 border border-green-400/30">
             <div className="flex items-center justify-between mb-4">
-              <div className="p-3 bg-white bg-opacity-20 rounded-lg">
-                <DollarSign className="w-6 h-6" />
+              <div className="p-4 bg-white bg-opacity-20 rounded-xl">
+                <DollarSign className="w-7 h-7" />
               </div>
             </div>
-            <p className="text-green-100 text-sm font-medium mb-2">Total Earnings</p>
-            <span className="text-4xl font-bold">
+            <p className="text-green-100 text-sm font-bold mb-3 uppercase tracking-wide">Total Earnings</p>
+            <span className="text-5xl font-bold">
               {formatCurrency(totalEarnings || stats.totalRevenue)}
             </span>
         </div>
 
         {/* Total Students */}
-          <div className="card bg-gradient-to-br from-blue-500 via-blue-600 to-blue-700 text-white shadow-lg hover:shadow-xl transition-all">
+          <div className="card bg-gradient-to-br from-blue-500 via-blue-600 to-blue-700 text-white shadow-xl hover:shadow-2xl transition-all duration-300 transform hover:scale-105 border border-blue-400/30">
             <div className="flex items-center justify-between mb-4">
-              <div className="p-3 bg-white bg-opacity-20 rounded-lg">
-                <Users className="w-6 h-6" />
+              <div className="p-4 bg-white bg-opacity-20 rounded-xl">
+                <Users className="w-7 h-7" />
               </div>
           </div>
-            <p className="text-blue-100 text-sm font-medium mb-2">Total Students</p>
-            <span className="text-4xl font-bold">{stats.totalStudents}</span>
+            <p className="text-blue-100 text-sm font-bold mb-3 uppercase tracking-wide">Total Students</p>
+            <span className="text-5xl font-bold">{stats.totalStudents}</span>
         </div>
 
         {/* Total Courses */}
-          <div className="card bg-gradient-to-br from-purple-500 via-purple-600 to-purple-700 text-white shadow-lg hover:shadow-xl transition-all">
+          <div className="card bg-gradient-to-br from-purple-500 via-purple-600 to-purple-700 text-white shadow-xl hover:shadow-2xl transition-all duration-300 transform hover:scale-105 border border-purple-400/30">
             <div className="flex items-center justify-between mb-4">
-              <div className="p-3 bg-white bg-opacity-20 rounded-lg">
-                <BookOpen className="w-6 h-6" />
+              <div className="p-4 bg-white bg-opacity-20 rounded-xl">
+                <BookOpen className="w-7 h-7" />
               </div>
           </div>
-            <p className="text-purple-100 text-sm font-medium mb-2">Active Courses</p>
-            <span className="text-4xl font-bold">{stats.totalCourses}</span>
+            <p className="text-purple-100 text-sm font-bold mb-3 uppercase tracking-wide">Active Courses</p>
+            <span className="text-5xl font-bold">{stats.totalCourses}</span>
         </div>
 
         {/* Average Rating */}
-          <div className="card bg-gradient-to-br from-orange-500 via-orange-600 to-orange-700 text-white shadow-lg hover:shadow-xl transition-all">
+          <div className="card bg-gradient-to-br from-orange-500 via-orange-600 to-orange-700 text-white shadow-xl hover:shadow-2xl transition-all duration-300 transform hover:scale-105 border border-orange-400/30">
             <div className="flex items-center justify-between mb-4">
-              <div className="p-3 bg-white bg-opacity-20 rounded-lg">
-                <Star className="w-6 h-6" />
+              <div className="p-4 bg-white bg-opacity-20 rounded-xl">
+                <Star className="w-7 h-7" />
               </div>
             </div>
-            <p className="text-orange-100 text-sm font-medium mb-2">Average Rating</p>
-            <span className="text-4xl font-bold">
+            <p className="text-orange-100 text-sm font-bold mb-3 uppercase tracking-wide">Average Rating</p>
+            <span className="text-5xl font-bold">
               {stats.averageRating ? stats.averageRating.toFixed(1) : 'N/A'}
             </span>
         </div>

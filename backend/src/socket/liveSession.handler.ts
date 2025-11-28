@@ -1,6 +1,6 @@
 import { Server, Socket } from 'socket.io';
 import jwt from 'jsonwebtoken';
-import { UserRole } from '@prisma/client';
+import { UserRole, LiveSessionStatus } from '@prisma/client';
 import prisma from '../config/database';
 import config from '../config/env';
 import logger from '../utils/logger';
@@ -32,10 +32,19 @@ export class LiveSessionHandler {
     // Authentication middleware
     this.io.use(async (socket: AuthenticatedSocket, next) => {
       try {
-        const token = socket.handshake.auth.token;
+        let token = (socket.handshake.auth as any)?.token as string | undefined;
+        const authHeader = (socket.handshake.headers?.authorization as string | undefined) ?? undefined;
+
+        if (!token && authHeader?.startsWith('Bearer ')) {
+          token = authHeader.slice('Bearer '.length);
+        }
 
         if (!token) {
           return next(new Error('Authentication required'));
+        }
+
+        if (!config.JWT_SECRET) {
+          return next(new Error('Server misconfiguration'));
         }
 
         // Verify token
@@ -47,9 +56,9 @@ export class LiveSessionHandler {
         socket.userId = decoded.id;
         socket.userRole = decoded.role;
 
-        next();
+        return next();
       } catch (error) {
-        next(new Error('Invalid token'));
+        return next(new Error('Invalid token'));
       }
     });
 
@@ -58,33 +67,33 @@ export class LiveSessionHandler {
       logger.info(`User connected: ${socket.userId}`);
 
       // Join live session room
-      socket.on('join-session', async (data: { sessionId: string }) => {
-        await this.handleJoinSession(socket, data.sessionId);
+      socket.on('join-session', async (data: { sessionId?: string }) => {
+        await this.handleJoinSession(socket, data?.sessionId);
       });
 
       // Leave live session room
-      socket.on('leave-session', (data: { sessionId: string }) => {
-        this.handleLeaveSession(socket, data.sessionId);
+      socket.on('leave-session', (data: { sessionId?: string }) => {
+        this.handleLeaveSession(socket, data?.sessionId);
       });
 
       // Send chat message
-      socket.on('chat-message', async (data: { sessionId: string; message: string }) => {
-        await this.handleChatMessage(socket, data.sessionId, data.message);
+      socket.on('chat-message', async (data: { sessionId?: string; message?: string }) => {
+        await this.handleChatMessage(socket, data?.sessionId ?? '', data?.message ?? '');
       });
 
       // Raise hand
-      socket.on('raise-hand', (data: { sessionId: string }) => {
-        this.handleRaiseHand(socket, data.sessionId);
+      socket.on('raise-hand', (data: { sessionId?: string }) => {
+        this.handleRaiseHand(socket, data?.sessionId ?? '');
       });
 
       // Start session (Teacher only)
-      socket.on('start-session', async (data: { sessionId: string }) => {
-        await this.handleStartSession(socket, data.sessionId);
+      socket.on('start-session', async (data: { sessionId?: string }) => {
+        await this.handleStartSession(socket, data?.sessionId ?? '');
       });
 
       // End session (Teacher only)
-      socket.on('end-session', async (data: { sessionId: string }) => {
-        await this.handleEndSession(socket, data.sessionId);
+      socket.on('end-session', async (data: { sessionId?: string }) => {
+        await this.handleEndSession(socket, data?.sessionId ?? '');
       });
 
       // Disconnect handler
@@ -97,8 +106,13 @@ export class LiveSessionHandler {
   /**
    * Handle joining a live session
    */
-  private async handleJoinSession(socket: AuthenticatedSocket, sessionId: string) {
+  private async handleJoinSession(socket: AuthenticatedSocket, sessionId?: string) {
     try {
+      if (!sessionId || typeof sessionId !== 'string') {
+        socket.emit('error', { message: 'Invalid session identifier' });
+        return;
+      }
+
       // Get session details
       const session = await prisma.liveSession.findUnique({
         where: { id: sessionId },
@@ -123,17 +137,22 @@ export class LiveSessionHandler {
       // Check if user has access
       const isTeacher =
         socket.userRole === UserRole.TEACHER &&
+        !!session.lesson?.course?.teacherProfile &&
         session.lesson.course.teacherProfile.userId === socket.userId;
 
-      const hasEnrollment = await prisma.enrollment.findFirst({
-        where: {
-          userId: socket.userId!,
-          package: {
-            courseId: session.lesson.courseId,
+      let hasEnrollment = false;
+      if (!isTeacher) {
+        const enrollment = await prisma.enrollment.findFirst({
+          where: {
+            userId: socket.userId!,
+            package: {
+              courseId: session.lesson.courseId,
+            },
+            isActive: true,
           },
-          isActive: true,
-        },
-      });
+        });
+        hasEnrollment = !!enrollment;
+      }
 
       if (!isTeacher && !hasEnrollment) {
         socket.emit('error', { message: 'You do not have access to this session' });
@@ -157,7 +176,7 @@ export class LiveSessionHandler {
       // Notify room
       this.io.to(sessionId).emit('user-joined', {
         user,
-        timestamp: new Date(),
+        timestamp: new Date().toISOString(),
       });
 
       // Send session info to the user
@@ -182,12 +201,17 @@ export class LiveSessionHandler {
   /**
    * Handle leaving a live session
    */
-  private handleLeaveSession(socket: AuthenticatedSocket, sessionId: string) {
+  private handleLeaveSession(socket: AuthenticatedSocket, sessionId?: string) {
+    if (!sessionId || typeof sessionId !== 'string') {
+      socket.emit('error', { message: 'Invalid session identifier' });
+      return;
+    }
+
     socket.leave(sessionId);
 
     this.io.to(sessionId).emit('user-left', {
       userId: socket.userId,
-      timestamp: new Date(),
+      timestamp: new Date().toISOString(),
     });
 
     logger.info(`User ${socket.userId} left session ${sessionId}`);
@@ -202,6 +226,23 @@ export class LiveSessionHandler {
     message: string
   ) {
     try {
+      if (!sessionId || typeof sessionId !== 'string') {
+        socket.emit('error', { message: 'Invalid session identifier' });
+        return;
+      }
+
+      const text = (message ?? '').toString().trim();
+      if (!text) {
+        socket.emit('error', { message: 'Message cannot be empty' });
+        return;
+      }
+
+      // Optional: verify the user is in the room
+      if (!socket.rooms.has(sessionId)) {
+        socket.emit('error', { message: 'You are not in this session' });
+        return;
+      }
+
       // Get user details
       const user = await prisma.user.findUnique({
         where: { id: socket.userId! },
@@ -216,8 +257,8 @@ export class LiveSessionHandler {
       // Broadcast message to room
       this.io.to(sessionId).emit('chat-message', {
         user,
-        message,
-        timestamp: new Date(),
+        message: text,
+        timestamp: new Date().toISOString(),
       });
     } catch (error) {
       logger.error('Error sending chat message:', error);
@@ -229,9 +270,20 @@ export class LiveSessionHandler {
    * Handle raise hand
    */
   private handleRaiseHand(socket: AuthenticatedSocket, sessionId: string) {
+    if (!sessionId || typeof sessionId !== 'string') {
+      socket.emit('error', { message: 'Invalid session identifier' });
+      return;
+    }
+
+    // Optional: verify the user is in the room
+    if (!socket.rooms.has(sessionId)) {
+      socket.emit('error', { message: 'You are not in this session' });
+      return;
+    }
+
     this.io.to(sessionId).emit('hand-raised', {
       userId: socket.userId,
-      timestamp: new Date(),
+      timestamp: new Date().toISOString(),
     });
   }
 
@@ -240,24 +292,64 @@ export class LiveSessionHandler {
    */
   private async handleStartSession(socket: AuthenticatedSocket, sessionId: string) {
     try {
+      if (!sessionId || typeof sessionId !== 'string') {
+        socket.emit('error', { message: 'Invalid session identifier' });
+        return;
+      }
+
       if (socket.userRole !== UserRole.TEACHER) {
         socket.emit('error', { message: 'Only teachers can start sessions' });
         return;
       }
 
+      // Verify ownership
+      const session = await prisma.liveSession.findUnique({
+        where: { id: sessionId },
+        include: {
+          lesson: {
+            include: {
+              course: { include: { teacherProfile: true } },
+            },
+          },
+        },
+      });
+
+      if (!session) {
+        socket.emit('error', { message: 'Session not found' });
+        return;
+      }
+
+      const isOwner = !!session.lesson?.course?.teacherProfile &&
+        session.lesson.course.teacherProfile.userId === socket.userId;
+
+      if (!isOwner) {
+        socket.emit('error', { message: 'You are not authorized to start this session' });
+        return;
+      }
+
+      if (session.status === LiveSessionStatus.ONGOING) {
+        socket.emit('error', { message: 'Session already started' });
+        return;
+      }
+
+      if (session.status === LiveSessionStatus.COMPLETED) {
+        socket.emit('error', { message: 'Session already completed' });
+        return;
+      }
+
       // Update session status
-      const session = await prisma.liveSession.update({
+      const updated = await prisma.liveSession.update({
         where: { id: sessionId },
         data: {
-          status: 'ONGOING',
+          status: LiveSessionStatus.ONGOING,
           startedAt: new Date(),
         },
       });
 
       // Notify all participants
       this.io.to(sessionId).emit('session-started', {
-        session,
-        timestamp: new Date(),
+        session: updated,
+        timestamp: new Date().toISOString(),
       });
 
       logger.info(`Session ${sessionId} started by ${socket.userId}`);
@@ -272,24 +364,59 @@ export class LiveSessionHandler {
    */
   private async handleEndSession(socket: AuthenticatedSocket, sessionId: string) {
     try {
+      if (!sessionId || typeof sessionId !== 'string') {
+        socket.emit('error', { message: 'Invalid session identifier' });
+        return;
+      }
+
       if (socket.userRole !== UserRole.TEACHER) {
         socket.emit('error', { message: 'Only teachers can end sessions' });
         return;
       }
 
+      // Verify ownership
+      const session = await prisma.liveSession.findUnique({
+        where: { id: sessionId },
+        include: {
+          lesson: {
+            include: {
+              course: { include: { teacherProfile: true } },
+            },
+          },
+        },
+      });
+
+      if (!session) {
+        socket.emit('error', { message: 'Session not found' });
+        return;
+      }
+
+      const isOwner = !!session.lesson?.course?.teacherProfile &&
+        session.lesson.course.teacherProfile.userId === socket.userId;
+
+      if (!isOwner) {
+        socket.emit('error', { message: 'You are not authorized to end this session' });
+        return;
+      }
+
+      if (session.status === LiveSessionStatus.COMPLETED) {
+        socket.emit('error', { message: 'Session already completed' });
+        return;
+      }
+
       // Update session status
-      const session = await prisma.liveSession.update({
+      const updated = await prisma.liveSession.update({
         where: { id: sessionId },
         data: {
-          status: 'COMPLETED',
+          status: LiveSessionStatus.COMPLETED,
           endedAt: new Date(),
         },
       });
 
       // Notify all participants
       this.io.to(sessionId).emit('session-ended', {
-        session,
-        timestamp: new Date(),
+        session: updated,
+        timestamp: new Date().toISOString(),
       });
 
       logger.info(`Session ${sessionId} ended by ${socket.userId}`);
@@ -301,4 +428,3 @@ export class LiveSessionHandler {
 }
 
 export default LiveSessionHandler;
-

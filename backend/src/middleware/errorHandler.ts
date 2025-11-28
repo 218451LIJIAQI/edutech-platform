@@ -1,25 +1,31 @@
-import { Request, Response, NextFunction } from 'express';
+import type { ErrorRequestHandler, Request, Response, NextFunction } from 'express';
+import { Prisma } from '@prisma/client';
 import { AppError } from '../utils/errors';
 import logger from '../utils/logger';
 
 /**
  * Global error handling middleware
  */
-export const errorHandler = (
-  err: Error,
-  req: Request,
-  res: Response,
-  _next: NextFunction
+export const errorHandler: ErrorRequestHandler = (
+  err,
+  req,
+  res,
+  next
 ) => {
-  // Log error
-  logger.error('Error:', {
+  // Avoid handling if headers already sent
+  if (res.headersSent) return next(err);
+
+  // Log error with request context
+  logger.error('Unhandled error', {
     message: err.message,
+    name: err.name,
     stack: err.stack,
-    url: req.url,
+    url: req.originalUrl,
     method: req.method,
+    ip: req.ip,
   });
 
-  // Handle operational errors
+  // Operational errors thrown intentionally
   if (err instanceof AppError) {
     return res.status(err.statusCode).json({
       status: 'error',
@@ -27,40 +33,40 @@ export const errorHandler = (
     });
   }
 
-  // Handle Prisma errors
-  if (err.name === 'PrismaClientKnownRequestError') {
-    return res.status(400).json({
-      status: 'error',
-      message: 'Database operation failed',
-    });
+  // Prisma known request errors (e.g., unique constraint, not found)
+  if (err instanceof Prisma.PrismaClientKnownRequestError) {
+    // Map some common codes
+    const code = err.code;
+    if (code === 'P2002') {
+      return res.status(409).json({ status: 'error', message: 'Resource already exists' });
+    }
+    if (code === 'P2025') {
+      return res.status(404).json({ status: 'error', message: 'Resource not found' });
+    }
+    return res.status(400).json({ status: 'error', message: 'Database operation failed' });
   }
 
-  // Handle validation errors
-  if (err.name === 'ValidationError') {
-    return res.status(400).json({
-      status: 'error',
-      message: err.message,
-    });
+  // JWT errors
+  if (err.name === 'JsonWebTokenError' || err.name === 'TokenExpiredError') {
+    return res.status(401).json({ status: 'error', message: 'Authentication failed' });
   }
 
-  // Default to 500 server error
+  // Fallback 500 (avoid leaking details in production)
+  const isProd = (process.env.NODE_ENV || 'development') === 'production';
   return res.status(500).json({
     status: 'error',
-    message: process.env.NODE_ENV === 'production' 
-      ? 'Internal server error' 
-      : err.message,
+    message: isProd ? 'Internal server error' : err.message,
   });
 };
 
 /**
  * Handle 404 routes
  */
-export const notFound = (req: Request, res: Response, _next: NextFunction) => {
+export const notFound = (_req: Request, res: Response, _next: NextFunction) => {
   res.status(404).json({
     status: 'error',
-    message: `Route ${req.originalUrl} not found`,
+    message: 'Route not found',
   });
 };
 
 export default { errorHandler, notFound };
-

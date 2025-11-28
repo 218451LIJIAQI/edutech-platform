@@ -20,7 +20,7 @@ router.get(
   '/:id',
   authenticate,
   authorize(UserRole.STUDENT),
-  validate([param('id').isUUID().withMessage('Invalid order id')]),
+  validate([param('id').notEmpty().withMessage('id is required').isUUID().withMessage('Invalid order id')]),
   ordersController.getOrderById
 );
 
@@ -30,8 +30,8 @@ router.post(
   authenticate,
   authorize(UserRole.STUDENT),
   validate([
-    param('id').isUUID().withMessage('Invalid order id'),
-    body('reason').optional().isString().isLength({ max: 500 }),
+    param('id').notEmpty().withMessage('id is required').isUUID().withMessage('Invalid order id'),
+    body('reason').optional().trim().isString().isLength({ max: 500 }).withMessage('reason too long'),
   ]),
   ordersController.cancelOrder
 );
@@ -42,13 +42,13 @@ router.post(
   authenticate,
   authorize(UserRole.STUDENT),
   validate([
-    param('id').isUUID().withMessage('Invalid order id'),
-    body('amount').notEmpty().isFloat({ min: 0 }),
-    body('reason').optional().isString().isLength({ max: 500 }),
-    body('reasonCategory').optional().isString(),
-    body('refundMethod').optional().isString(),
-    body('bankDetails').optional().isString(),
-    body('notes').optional().isString().isLength({ max: 1000 }),
+    param('id').notEmpty().withMessage('id is required').isUUID().withMessage('Invalid order id'),
+    body('amount').notEmpty().withMessage('amount is required').isFloat({ min: 0 }).withMessage('amount must be >= 0'),
+    body('reason').optional().trim().isString().isLength({ max: 500 }).withMessage('reason too long'),
+    body('reasonCategory').optional().trim().isString(),
+    body('refundMethod').optional().trim().isString(),
+    body('bankDetails').optional().trim().isString(),
+    body('notes').optional().trim().isString().isLength({ max: 1000 }).withMessage('notes too long'),
   ]),
   ordersController.requestRefund
 );
@@ -58,7 +58,7 @@ router.get(
   '/:id/refund',
   authenticate,
   authorize(UserRole.STUDENT),
-  validate([param('id').isUUID().withMessage('Invalid order id')]),
+  validate([param('id').notEmpty().withMessage('id is required').isUUID().withMessage('Invalid order id')]),
   ordersController.getRefundByOrderId
 );
 
@@ -71,4 +71,3 @@ router.get(
 );
 
 export default router;
-

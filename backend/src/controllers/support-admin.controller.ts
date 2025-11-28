@@ -5,20 +5,36 @@ import supportAdminService from '../services/support-admin.service';
 class SupportAdminController {
   /**
    * Get all support tickets with optional filters
+   * GET /api/admin/support/tickets
    */
   getAllTickets = asyncHandler(async (req: Request, res: Response) => {
     const { status, priority, limit = '50', offset = '0' } = req.query as {
-      status?: string;
-      priority?: string;
-      limit?: string;
-      offset?: string;
+      status?: string | string[];
+      priority?: string | string[];
+      limit?: string | string[];
+      offset?: string | string[];
     };
 
+    const pickFirst = (v?: string | string[]) => (Array.isArray(v) ? v[0] : v);
+
+    const rawStatus = pickFirst(status);
+    const rawPriority = pickFirst(priority);
+    const rawLimit = pickFirst(limit) ?? '50';
+    const rawOffset = pickFirst(offset) ?? '0';
+
+    const parsedLimit = Number.parseInt(rawLimit, 10);
+    const parsedOffset = Number.parseInt(rawOffset, 10);
+
+    const safeLimit = Number.isFinite(parsedLimit)
+      ? Math.min(Math.max(parsedLimit, 1), 200)
+      : 50;
+    const safeOffset = Number.isFinite(parsedOffset) ? Math.max(parsedOffset, 0) : 0;
+
     const result = await supportAdminService.getAllTickets(
-      status,
-      priority,
-      parseInt(limit as string),
-      parseInt(offset as string)
+      rawStatus ? rawStatus.trim() : undefined,
+      rawPriority ? rawPriority.trim() : undefined,
+      safeLimit,
+      safeOffset
     );
 
     res.status(200).json({
@@ -29,10 +45,13 @@ class SupportAdminController {
 
   /**
    * Get support ticket by ID
+   * GET /api/admin/support/tickets/:id
    */
   getTicketById = asyncHandler(async (req: Request, res: Response) => {
-    const { id } = req.params as { id: string };
-    const ticket = await supportAdminService.getTicketById(id);
+    const { id } = req.params;
+    const ticketId = typeof id === 'string' ? id.trim() : String(id);
+
+    const ticket = await supportAdminService.getTicketById(ticketId);
 
     res.status(200).json({
       status: 'success',
@@ -42,12 +61,15 @@ class SupportAdminController {
 
   /**
    * Assign ticket to admin
+   * POST /api/admin/support/tickets/:id/assign
    */
   assignTicket = asyncHandler(async (req: Request, res: Response) => {
-    const { id } = req.params as { id: string };
+    const { id } = req.params;
+    const ticketId = typeof id === 'string' ? id.trim() : String(id);
+
     const adminId = req.user!.id;
 
-    const ticket = await supportAdminService.assignTicket(id, adminId);
+    const ticket = await supportAdminService.assignTicket(ticketId, adminId);
 
     res.status(200).json({
       status: 'success',
@@ -58,13 +80,20 @@ class SupportAdminController {
 
   /**
    * Add admin response to ticket
+   * POST /api/admin/support/tickets/:id/responses
    */
   addResponse = asyncHandler(async (req: Request, res: Response) => {
-    const { id } = req.params as { id: string };
-    const { message } = req.body as { message: string };
+    const { id } = req.params;
+    const ticketId = typeof id === 'string' ? id.trim() : String(id);
+
+    const { message } = (req.body || {}) as { message: string };
     const adminId = req.user!.id;
 
-    const msg = await supportAdminService.addAdminResponse(id, adminId, message);
+    const msg = await supportAdminService.addAdminResponse(
+      ticketId,
+      adminId,
+      typeof message === 'string' ? message.trim() : message
+    );
 
     res.status(201).json({
       status: 'success',
@@ -75,12 +104,18 @@ class SupportAdminController {
 
   /**
    * Resolve support ticket
+   * POST /api/admin/support/tickets/:id/resolve
    */
   resolveTicket = asyncHandler(async (req: Request, res: Response) => {
-    const { id } = req.params as { id: string };
-    const { resolution } = req.body as { resolution: string };
+    const { id } = req.params;
+    const ticketId = typeof id === 'string' ? id.trim() : String(id);
 
-    const ticket = await supportAdminService.resolveTicket(id, resolution);
+    const { resolution } = (req.body || {}) as { resolution: string };
+
+    const ticket = await supportAdminService.resolveTicket(
+      ticketId,
+      typeof resolution === 'string' ? resolution.trim() : resolution
+    );
 
     res.status(200).json({
       status: 'success',
@@ -91,11 +126,13 @@ class SupportAdminController {
 
   /**
    * Close support ticket
+   * POST /api/admin/support/tickets/:id/close
    */
   closeTicket = asyncHandler(async (req: Request, res: Response) => {
-    const { id } = req.params as { id: string };
+    const { id } = req.params;
+    const ticketId = typeof id === 'string' ? id.trim() : String(id);
 
-    const ticket = await supportAdminService.closeTicket(id);
+    const ticket = await supportAdminService.closeTicket(ticketId);
 
     res.status(200).json({
       status: 'success',
@@ -106,6 +143,7 @@ class SupportAdminController {
 
   /**
    * Get support ticket statistics
+   * GET /api/admin/support/tickets/stats
    */
   getStats = asyncHandler(async (_req: Request, res: Response) => {
     const stats = await supportAdminService.getTicketStats();
@@ -118,4 +156,3 @@ class SupportAdminController {
 }
 
 export default new SupportAdminController();
-

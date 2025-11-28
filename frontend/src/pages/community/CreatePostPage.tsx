@@ -120,7 +120,7 @@ const CreatePostPage = () => {
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 via-blue-50 to-indigo-50 py-8">
       <div className="container mx-auto px-4 max-w-3xl">
-        <div className="card shadow-lg">
+        <div className="card shadow-xl border border-gray-100 rounded-2xl">
           <h1 className="text-2xl font-bold mb-6 text-gray-900">Create Post</h1>
 
           <div className="space-y-6">

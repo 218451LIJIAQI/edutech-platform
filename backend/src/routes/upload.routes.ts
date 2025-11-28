@@ -2,6 +2,7 @@ import { Router } from 'express';
 import uploadController from '../controllers/upload.controller';
 import { authenticate } from '../middleware/auth';
 import { uploadAny } from '../middleware/upload';
+import asyncHandler from '../utils/asyncHandler';
 
 const router = Router();
 
@@ -15,7 +16,7 @@ router.post(
   '/',
   authenticate,
   uploadAny.single('file'),
-  uploadController.uploadFile
+  asyncHandler(uploadController.uploadFile)
 );
 
 // Multiple files upload
@@ -23,8 +24,7 @@ router.post(
   '/multiple',
   authenticate,
   uploadAny.array('files', 10),
-  uploadController.uploadMultipleFiles
+  asyncHandler(uploadController.uploadMultipleFiles)
 );
 
 export default router;
-

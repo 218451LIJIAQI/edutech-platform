@@ -47,8 +47,8 @@ const messageService = {
   },
 
   // Get or create thread with a user
-  async getOrCreateThread(withUserId: string): Promise<Thread> {
-    const res = await api.post<ApiResponse<Thread>>('/messages/threads', { withUserId });
+  async getOrCreateThread(contactId: string): Promise<Thread> {
+    const res = await api.post<ApiResponse<Thread>>('/messages/threads', { contactId });
     return res.data.data!;
   },
 

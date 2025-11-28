@@ -89,7 +89,7 @@ const ProfileCompletionPage = () => {
         {/* Status Cards */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
           {/* Profile Status */}
-          <div className="card shadow-lg">
+          <div className="card shadow-xl border border-gray-100 rounded-2xl">
             <div className="flex items-start space-x-3">
               {profile?.profileCompletionStatus === 'APPROVED' ? (
                 <CheckCircle className="w-6 h-6 text-green-600 flex-shrink-0 mt-1" />
@@ -112,7 +112,7 @@ const ProfileCompletionPage = () => {
           </div>
 
           {/* Verification Status */}
-          <div className="card shadow-lg">
+          <div className="card shadow-xl border border-gray-100 rounded-2xl">
             <div className="flex items-start space-x-3">
               {profile?.isVerified ? (
                 <CheckCircle className="w-6 h-6 text-green-600 flex-shrink-0 mt-1" />
@@ -132,7 +132,7 @@ const ProfileCompletionPage = () => {
 
           {/* Submitted Date */}
           {profile?.profileSubmittedAt && (
-            <div className="card shadow-lg">
+            <div className="card shadow-xl border border-gray-100 rounded-2xl">
               <div className="flex items-start space-x-3">
                 <Clock className="w-6 h-6 text-blue-600 flex-shrink-0 mt-1" />
                 <div>

@@ -32,31 +32,31 @@ class TeacherService {
 
     const skip = (page - 1) * limit;
 
-    // Build where clause
-    const where: any = {};
+    // Build where clause with proper typing
+    const where: Prisma.TeacherProfileWhereInput = {};
 
     if (isVerified !== undefined) {
       where.isVerified = isVerified;
     }
 
-    if (minRating) {
+    if (minRating !== undefined) {
       where.averageRating = { gte: minRating };
     }
 
     if (search) {
       where.OR = [
-        { user: { firstName: { contains: search, mode: 'insensitive' } } },
-        { user: { lastName: { contains: search, mode: 'insensitive' } } },
+        { user: { is: { firstName: { contains: search, mode: 'insensitive' } } } },
+        { user: { is: { lastName: { contains: search, mode: 'insensitive' } } } },
         { headline: { contains: search, mode: 'insensitive' } },
         { bio: { contains: search, mode: 'insensitive' } },
       ];
     }
 
-    // If category filter is provided, filter by courses
+    // If category filter is provided, filter by courses (case-sensitive equality)
     if (category) {
       where.courses = {
         some: {
-          category: { equals: category, mode: 'insensitive' },
+          category: { equals: category },
         },
       };
     }
@@ -700,29 +700,22 @@ class TeacherService {
     adminId: string,
     status: RegistrationStatus,
   ) {
-    // Mark adminId as intentionally unused for now (placeholder for future auditing)
-    void adminId;
-    const teacherProfile = await prisma.teacherProfile.findUnique({ where: { id: teacherProfileId } });
+    void adminId; // reserved for auditing
+
+    const teacherProfile = await prisma.teacherProfile.findUnique({ where: { id: teacherProfileId }, include: { user: true } });
     if (!teacherProfile) {
       throw new NotFoundError('Teacher profile not found');
     }
 
     const updated = await prisma.teacherProfile.update({
       where: { id: teacherProfileId },
-      data: {
-        registrationStatus: status,
-      },
-      include: {
-        user: {
-          select: { id: true, firstName: true, lastName: true, email: true, isActive: true },
-        },
-      },
+      data: { registrationStatus: status },
+      include: { user: { select: { id: true, firstName: true, lastName: true, email: true, isActive: true } } },
     });
 
-    // If registration is rejected, hard delete the user (and cascade related teacher entities)
     if (status === RegistrationStatus.REJECTED) {
-      await prisma.user.delete({ where: { id: updated.user.id } });
-      return { ...updated, user: { ...updated.user, isActive: false } } as any; // return shape-compatible object
+      // Do not hard-delete users; deactivate account instead and keep records for auditing
+      await prisma.user.update({ where: { id: updated.user.id }, data: { isActive: false } });
     }
 
     return updated;
@@ -763,7 +756,7 @@ class TeacherService {
       }),
     ]);
 
-    // For admin review: overlay pending draft payload onto the teacher object for display only
+    // Overlay pending draft payload onto the teacher object for display only
     const mapped = teachers.map((t) => {
       const draft = t.profileSubmissions?.[0]?.payload as any | undefined;
       const base = {
@@ -827,7 +820,6 @@ class TeacherService {
       const updated = await prisma.teacherProfile.update({
         where: { id: teacherProfileId },
         data: {
-          // Apply approved payload to live profile fields
           selfIntroduction: p.selfIntroduction ?? teacherProfile.selfIntroduction,
           educationBackground: p.educationBackground ?? teacherProfile.educationBackground,
           teachingExperience: p.teachingExperience ?? teacherProfile.teachingExperience,
@@ -852,7 +844,6 @@ class TeacherService {
         data: { status: VerificationStatus.APPROVED, reviewedBy: adminId, reviewedAt: new Date(), reviewNotes, payload: Prisma.DbNull },
       });
 
-      // Notify teacher of approval
       await prisma.notification.create({
         data: {
           userId: updated.user.id,
@@ -864,13 +855,11 @@ class TeacherService {
 
       return updated;
     } else if (status === VerificationStatus.REJECTED) {
-      // Mark submission rejected and clear payload; keep live profile unchanged
       await prisma.teacherProfileSubmission.update({
         where: { id: submission.id },
         data: { status: VerificationStatus.REJECTED, reviewedBy: adminId, reviewedAt: new Date(), reviewNotes, payload: Prisma.DbNull },
       });
 
-      // Preserve previously approved profile visibility: do not downgrade from APPROVED
       const nextStatus = teacherProfile.profileCompletionStatus === 'APPROVED' ? 'APPROVED' : 'INCOMPLETE';
       const updated = await prisma.teacherProfile.update({
         where: { id: teacherProfileId },
@@ -878,7 +867,6 @@ class TeacherService {
         include: { user: { select: { id: true, firstName: true, lastName: true, email: true } } },
       });
 
-      // Notify teacher of rejection
       await prisma.notification.create({
         data: {
           userId: updated.user.id,
@@ -890,7 +878,6 @@ class TeacherService {
 
       return updated;
     } else {
-      // PENDING maps to PENDING_REVIEW state (no-op for review action)
       const updated = await prisma.teacherProfile.update({
         where: { id: teacherProfileId },
         data: { profileCompletionStatus: 'PENDING_REVIEW', profileReviewedAt: new Date(), profileReviewNotes: reviewNotes },
@@ -916,17 +903,18 @@ class TeacherService {
 
     const skip = (page - 1) * limit;
 
-    const where: any = {
+    const where: Prisma.TeacherProfileWhereInput = {
       isVerified: true,
       profileCompletionStatus: 'APPROVED',
     };
 
     if (search) {
       where.OR = [
-        { user: { firstName: { contains: search, mode: 'insensitive' } } },
-        { user: { lastName: { contains: search, mode: 'insensitive' } } },
+        { user: { is: { firstName: { contains: search, mode: 'insensitive' } } } },
+        { user: { is: { lastName: { contains: search, mode: 'insensitive' } } } },
         { headline: { contains: search, mode: 'insensitive' } },
         { bio: { contains: search, mode: 'insensitive' } },
+        // specialties is a JSON string; contains works as substring search
         { specialties: { contains: search, mode: 'insensitive' } },
       ];
     }
@@ -956,7 +944,6 @@ class TeacherService {
       prisma.teacherProfile.count({ where }),
     ]);
 
-    // Calculate actual student counts for each teacher
     const teachersWithActualCounts = await Promise.all(
       teachers.map(async (t) => {
         const actualStudentCount = await this.calculateActualStudentCount(t.id);
@@ -984,4 +971,3 @@ class TeacherService {
 }
 
 export default new TeacherService();
-

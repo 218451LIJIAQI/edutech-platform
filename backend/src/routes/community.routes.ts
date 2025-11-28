@@ -1,28 +1,111 @@
 import { Router } from 'express';
 import communityController from '../controllers/community.controller';
-import { authenticate } from '../middleware/auth';
+import { authenticate, optionalAuth } from '../middleware/auth';
+import { validate } from '../middleware/validate';
+import { body, param, query } from 'express-validator';
 
 const router = Router();
 
 // ==================== TAGS ====================
 router.get('/tags', communityController.getTags);
-router.post('/tags', authenticate, communityController.addTag);
+router.post(
+  '/tags',
+  authenticate,
+  validate([
+    body('name').trim().notEmpty().withMessage('Tag name is required').isLength({ max: 50 }).withMessage('Tag name too long'),
+  ]),
+  communityController.addTag
+);
 
 // ==================== POSTS ====================
-router.get('/feed', communityController.getFeed);
-router.post('/posts', authenticate, communityController.createPost);
-router.get('/posts/:id', communityController.getPostById);
-router.post('/posts/:id/like', authenticate, communityController.likePost);
-router.post('/posts/:id/bookmark', authenticate, communityController.bookmarkPost);
+router.get(
+  '/feed',
+  optionalAuth,
+  validate([
+    query('page').optional().isInt({ min: 1 }).withMessage('page must be >= 1'),
+    query('limit').optional().isInt({ min: 1, max: 50 }).withMessage('limit must be 1-50'),
+    query('tag').optional().isString().isLength({ max: 50 }).withMessage('tag too long'),
+    query('userId').optional().isUUID().withMessage('Invalid userId'),
+    query('sort').optional().isIn(['latest', 'top']).withMessage('Invalid sort option'),
+  ]),
+  communityController.getFeed
+);
+
+router.post(
+  '/posts',
+  authenticate,
+  validate([
+    body('content').trim().notEmpty().withMessage('Content is required').isLength({ max: 2000 }).withMessage('Content too long'),
+    body('tags').optional().isArray({ max: 5 }).withMessage('Maximum 5 tags allowed'),
+    body('tags.*').optional().isString().isLength({ min: 1, max: 50 }).withMessage('Invalid tag'),
+  ]),
+  communityController.createPost
+);
+
+router.get(
+  '/posts/:id',
+  optionalAuth,
+  validate([param('id').notEmpty().withMessage('id is required').isUUID().withMessage('Invalid id')]),
+  communityController.getPostById
+);
+
+router.post(
+  '/posts/:id/like',
+  authenticate,
+  validate([param('id').notEmpty().withMessage('id is required').isUUID().withMessage('Invalid id')]),
+  communityController.likePost
+);
+
+router.post(
+  '/posts/:id/bookmark',
+  authenticate,
+  validate([param('id').notEmpty().withMessage('id is required').isUUID().withMessage('Invalid id')]),
+  communityController.bookmarkPost
+);
 
 // ==================== COMMENTS ====================
-router.get('/posts/:postId/comments', communityController.getComments);
-router.post('/posts/:postId/comments', authenticate, communityController.addComment);
+router.get(
+  '/posts/:postId/comments',
+  validate([
+    param('postId').notEmpty().withMessage('postId is required').isUUID().withMessage('Invalid postId'),
+    query('page').optional().isInt({ min: 1 }).withMessage('page must be >= 1'),
+    query('limit').optional().isInt({ min: 1, max: 50 }).withMessage('limit must be 1-50'),
+  ]),
+  communityController.getComments
+);
+
+router.post(
+  '/posts/:postId/comments',
+  authenticate,
+  validate([
+    param('postId').notEmpty().withMessage('postId is required').isUUID().withMessage('Invalid postId'),
+    body('content').trim().notEmpty().withMessage('Content is required').isLength({ max: 1000 }).withMessage('Content too long'),
+  ]),
+  communityController.addComment
+);
 
 // ==================== USERS ====================
-router.get('/users/:userId/profile', communityController.getUserProfile);
-router.get('/users/:userId/posts', communityController.getUserPosts);
-router.post('/users/:targetUserId/follow', authenticate, communityController.followUser);
+router.get(
+  '/users/:userId/profile',
+  validate([param('userId').notEmpty().withMessage('userId is required').isUUID().withMessage('Invalid userId')]),
+  communityController.getUserProfile
+);
+
+router.get(
+  '/users/:userId/posts',
+  validate([
+    param('userId').notEmpty().withMessage('userId is required').isUUID().withMessage('Invalid userId'),
+    query('page').optional().isInt({ min: 1 }).withMessage('page must be >= 1'),
+    query('limit').optional().isInt({ min: 1, max: 50 }).withMessage('limit must be 1-50'),
+  ]),
+  communityController.getUserPosts
+);
+
+router.post(
+  '/users/:targetUserId/follow',
+  authenticate,
+  validate([param('targetUserId').notEmpty().withMessage('targetUserId is required').isUUID().withMessage('Invalid targetUserId')]),
+  communityController.followUser
+);
 
 export default router;
-

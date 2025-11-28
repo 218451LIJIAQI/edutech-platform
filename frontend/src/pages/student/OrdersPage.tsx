@@ -117,12 +117,12 @@ const OrdersPage = () => {
           </div>
         ) : filtered.length === 0 ? (
           // Empty State
-          <div className="card p-12 text-center shadow-lg max-w-md mx-auto">
-            <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-              <span className="text-3xl">📦</span>
+          <div className="card p-16 text-center shadow-xl max-w-md mx-auto border border-gray-100 rounded-2xl">
+            <div className="w-24 h-24 bg-gradient-to-br from-primary-100 to-primary-50 rounded-full flex items-center justify-center mx-auto mb-6 shadow-lg">
+              <span className="text-5xl">📦</span>
             </div>
-            <h3 className="text-xl font-bold text-gray-900 mb-2">No orders found</h3>
-            <p className="text-gray-600">
+            <h3 className="text-2xl font-bold text-gray-900 mb-3">No orders found</h3>
+            <p className="text-gray-600 text-lg">
               {filter === 'ALL'
                 ? "You haven't placed any orders yet."
                 : `No ${filter.toLowerCase()} orders found.`}
@@ -135,7 +135,7 @@ const OrdersPage = () => {
               <Link
                 to={`/orders/${order.id}`}
                 key={order.id}
-                className="card block p-6 hover:shadow-xl transition-all hover:scale-[1.01] transform"
+                className="card block p-6 hover:shadow-2xl transition-all duration-300 transform hover:scale-102 border border-gray-100 hover:border-primary-200 rounded-2xl shadow-lg"
               >
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 items-center">
                   {/* Order Number and Status */}

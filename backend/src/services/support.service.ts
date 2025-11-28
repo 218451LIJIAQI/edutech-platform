@@ -7,7 +7,13 @@ import { SupportTicketStatus, SupportTicketPriority } from '@prisma/client';
  */
 const genTicketNo = () => {
   const now = new Date();
-  return `TKT-${now.getFullYear()}${(now.getMonth() + 1).toString().padStart(2, '0')}${now.getDate().toString().padStart(2, '0')}-${now.getTime()}-${Math.floor(Math.random() * 1000).toString().padStart(3, '0')}`;
+  return `TKT-${now.getFullYear()}${(now.getMonth() + 1)
+    .toString()
+    .padStart(2, '0')}${now.getDate().toString().padStart(2, '0')}-${now.getTime()}-${Math.floor(
+    Math.random() * 1000
+  )
+    .toString()
+    .padStart(3, '0')}`;
 };
 
 class SupportService {
@@ -22,15 +28,27 @@ class SupportService {
     orderId?: string,
     priority: string = 'MEDIUM'
   ) {
+    const trimmedSubject = (subject ?? '').trim();
+    const trimmedDescription = (description ?? '').trim();
+    const trimmedCategory = (category ?? '').trim();
+
+    if (!trimmedSubject) throw new ValidationError('Subject is required');
+    if (!trimmedDescription) throw new ValidationError('Description is required');
+    if (!trimmedCategory) throw new ValidationError('Category is required');
+
+    const validPriority = (Object.values(SupportTicketPriority) as string[]).includes(priority)
+      ? (priority as SupportTicketPriority)
+      : SupportTicketPriority.MEDIUM;
+
     const ticket = await prisma.supportTicket.create({
       data: {
         ticketNo: genTicketNo(),
         userId,
         orderId,
-        subject,
-        description,
-        category,
-        priority: priority as SupportTicketPriority,
+        subject: trimmedSubject,
+        description: trimmedDescription,
+        category: trimmedCategory,
+        priority: validPriority,
         status: SupportTicketStatus.OPEN,
       },
       include: {
@@ -85,11 +103,11 @@ class SupportService {
   }
 
   /**
-   * Get support ticket by ID
+   * Get support ticket by ID (scoped to current user)
    */
   async getTicketById(userId: string, ticketId: string) {
-    const ticket = await prisma.supportTicket.findUnique({
-      where: { id: ticketId },
+    const ticket = await prisma.supportTicket.findFirst({
+      where: { id: ticketId, userId },
       include: {
         messages: {
           include: {
@@ -116,7 +134,6 @@ class SupportService {
     });
 
     if (!ticket) throw new NotFoundError('Support ticket not found');
-    if (ticket.userId !== userId) throw new ValidationError('Unauthorized');
 
     return ticket;
   }
@@ -125,37 +142,40 @@ class SupportService {
    * Add message to support ticket
    */
   async addMessage(userId: string, ticketId: string, message: string, attachment?: string) {
-    const ticket = await prisma.supportTicket.findUnique({
-      where: { id: ticketId },
+    const ticket = await prisma.supportTicket.findFirst({
+      where: { id: ticketId, userId },
     });
 
     if (!ticket) throw new NotFoundError('Support ticket not found');
-    if (ticket.userId !== userId) throw new ValidationError('Unauthorized');
 
-    const msg = await prisma.supportTicketMessage.create({
-      data: {
-        ticketId,
-        senderId: userId,
-        message,
-        attachment,
-      },
-      include: {
-        sender: {
-          select: {
-            id: true,
-            email: true,
-            firstName: true,
-            lastName: true,
+    const trimmedMessage = (message ?? '').trim();
+    if (!trimmedMessage) throw new ValidationError('Message is required');
+
+    // Create message and update ticket timestamp atomically
+    const [msg] = await prisma.$transaction([
+      prisma.supportTicketMessage.create({
+        data: {
+          ticketId,
+          senderId: userId,
+          message: trimmedMessage,
+          attachment,
+        },
+        include: {
+          sender: {
+            select: {
+              id: true,
+              email: true,
+              firstName: true,
+              lastName: true,
+            },
           },
         },
-      },
-    });
-
-    // Update ticket's updatedAt timestamp
-    await prisma.supportTicket.update({
-      where: { id: ticketId },
-      data: { updatedAt: new Date() },
-    });
+      }),
+      prisma.supportTicket.update({
+        where: { id: ticketId },
+        data: { updatedAt: new Date() },
+      }),
+    ]);
 
     return msg;
   }
@@ -164,18 +184,19 @@ class SupportService {
    * Close support ticket
    */
   async closeTicket(userId: string, ticketId: string, resolution?: string) {
-    const ticket = await prisma.supportTicket.findUnique({
-      where: { id: ticketId },
+    const ticket = await prisma.supportTicket.findFirst({
+      where: { id: ticketId, userId },
     });
 
     if (!ticket) throw new NotFoundError('Support ticket not found');
-    if (ticket.userId !== userId) throw new ValidationError('Unauthorized');
+
+    const trimmedResolution = resolution?.trim();
 
     const updated = await prisma.supportTicket.update({
       where: { id: ticketId },
       data: {
         status: SupportTicketStatus.CLOSED,
-        resolution,
+        resolution: trimmedResolution,
         resolvedAt: new Date(),
       },
       include: {
@@ -234,7 +255,9 @@ class SupportService {
     const tickets = await prisma.supportTicket.findMany({
       where: { userId },
       include: {
-        messages: true,
+        messages: {
+          orderBy: { createdAt: 'asc' },
+        },
       },
     });
 
@@ -243,7 +266,7 @@ class SupportService {
       (t) => t.status === SupportTicketStatus.OPEN || t.status === SupportTicketStatus.IN_PROGRESS
     ).length;
     const resolvedConversations = tickets.filter(
-      (t) => t.status === SupportTicketStatus.RESOLVED
+      (t) => t.status === SupportTicketStatus.RESOLVED || t.status === SupportTicketStatus.CLOSED
     ).length;
 
     // Calculate average response time (in minutes)
@@ -256,7 +279,8 @@ class SupportService {
         for (let i = 1; i < ticket.messages.length; i++) {
           const prevMsg = ticket.messages[i - 1];
           const currMsg = ticket.messages[i];
-          const timeDiff = new Date(currMsg.createdAt).getTime() - new Date(prevMsg.createdAt).getTime();
+          const timeDiff =
+            new Date(currMsg.createdAt).getTime() - new Date(prevMsg.createdAt).getTime();
           totalResponseTime += timeDiff;
           responseCount++;
         }
@@ -265,7 +289,7 @@ class SupportService {
 
     const averageResponseTime = responseCount > 0 ? Math.round(totalResponseTime / responseCount / 60000) : 0;
 
-    // Calculate satisfaction rating (default to 4.5 if no ratings)
+    // Placeholder satisfaction metric; replace with real feedback aggregation when available
     const satisfactionRating = 4.5;
 
     return {
@@ -279,4 +303,3 @@ class SupportService {
 }
 
 export default new SupportService();
-

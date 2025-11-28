@@ -134,51 +134,51 @@ const ManageCoursesPage = () => {
 
           {/* Statistics Cards */}
           {courses.length > 0 && (
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
-              <div className="card shadow-md hover:shadow-lg transition-shadow">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+              <div className="card bg-gradient-to-br from-blue-500 to-blue-600 text-white shadow-xl hover:shadow-2xl transition-all duration-300 transform hover:scale-105 border border-blue-400/30 rounded-2xl">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-gray-600 text-sm font-medium mb-1">Total Courses</p>
-                    <p className="text-3xl font-bold text-gray-900">{stats.total}</p>
+                    <p className="text-blue-100 text-sm font-bold mb-2 uppercase tracking-wide">Total Courses</p>
+                    <p className="text-4xl font-bold text-white">{stats.total}</p>
                   </div>
-                  <div className="w-12 h-12 bg-gradient-to-br from-blue-100 to-blue-200 rounded-lg flex items-center justify-center">
-                    <BookOpen className="w-6 h-6 text-blue-600" />
+                  <div className="w-16 h-16 bg-white/20 rounded-xl flex items-center justify-center">
+                    <BookOpen className="w-8 h-8 text-blue-100" />
                   </div>
                 </div>
               </div>
 
-              <div className="card shadow-md hover:shadow-lg transition-shadow">
+              <div className="card bg-gradient-to-br from-green-500 to-green-600 text-white shadow-xl hover:shadow-2xl transition-all duration-300 transform hover:scale-105 border border-green-400/30 rounded-2xl">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-gray-600 text-sm font-medium mb-1">Published</p>
-                    <p className="text-3xl font-bold text-green-600">{stats.published}</p>
+                    <p className="text-green-100 text-sm font-bold mb-2 uppercase tracking-wide">Published</p>
+                    <p className="text-4xl font-bold text-white">{stats.published}</p>
                   </div>
-                  <div className="w-12 h-12 bg-gradient-to-br from-green-100 to-green-200 rounded-lg flex items-center justify-center">
-                    <Eye className="w-6 h-6 text-green-600" />
+                  <div className="w-16 h-16 bg-white/20 rounded-xl flex items-center justify-center">
+                    <Eye className="w-8 h-8 text-green-100" />
                   </div>
                 </div>
               </div>
 
-              <div className="card shadow-md hover:shadow-lg transition-shadow">
+              <div className="card bg-gradient-to-br from-yellow-500 to-yellow-600 text-white shadow-xl hover:shadow-2xl transition-all duration-300 transform hover:scale-105 border border-yellow-400/30 rounded-2xl">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-gray-600 text-sm font-medium mb-1">Drafts</p>
-                    <p className="text-3xl font-bold text-yellow-600">{stats.draft}</p>
+                    <p className="text-yellow-100 text-sm font-bold mb-2 uppercase tracking-wide">Drafts</p>
+                    <p className="text-4xl font-bold text-white">{stats.draft}</p>
                   </div>
-                  <div className="w-12 h-12 bg-gradient-to-br from-yellow-100 to-yellow-200 rounded-lg flex items-center justify-center">
-                    <Edit className="w-6 h-6 text-yellow-600" />
+                  <div className="w-16 h-16 bg-white/20 rounded-xl flex items-center justify-center">
+                    <Edit className="w-8 h-8 text-yellow-100" />
                   </div>
                 </div>
               </div>
 
-              <div className="card shadow-md hover:shadow-lg transition-shadow">
+              <div className="card bg-gradient-to-br from-primary-500 to-primary-600 text-white shadow-xl hover:shadow-2xl transition-all duration-300 transform hover:scale-105 border border-primary-400/30 rounded-2xl">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-gray-600 text-sm font-medium mb-1">Total Students</p>
-                    <p className="text-3xl font-bold text-primary-600">{stats.totalStudents}</p>
+                    <p className="text-primary-100 text-sm font-bold mb-2 uppercase tracking-wide">Total Students</p>
+                    <p className="text-4xl font-bold text-white">{stats.totalStudents}</p>
                   </div>
-                  <div className="w-12 h-12 bg-gradient-to-br from-primary-100 to-primary-200 rounded-lg flex items-center justify-center">
-                    <Users className="w-6 h-6 text-primary-600" />
+                  <div className="w-16 h-16 bg-white/20 rounded-xl flex items-center justify-center">
+                    <Users className="w-8 h-8 text-primary-100" />
                   </div>
                 </div>
               </div>
@@ -228,7 +228,7 @@ const ManageCoursesPage = () => {
             {filteredCourses.map((course) => (
               <div
                 key={course.id}
-                className="card shadow-lg hover:shadow-2xl transition-all duration-300 overflow-hidden group"
+                className="card shadow-xl hover:shadow-2xl transition-all duration-300 transform hover:scale-102 overflow-hidden group border border-gray-100 hover:border-primary-200 rounded-2xl"
               >
                 {/* Course Header with Thumbnail */}
                 <div className="relative h-40 overflow-hidden">

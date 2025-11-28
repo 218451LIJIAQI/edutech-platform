@@ -49,11 +49,17 @@ class CourseService {
     };
 
     if (category) {
-      where.category = { equals: category, mode: 'insensitive' };
+      // Prisma does not support mode on equals; use exact match for category
+      where.category = { equals: category };
     }
 
     if (teacherId) {
-      where.teacherProfileId = teacherId;
+      // Support both teacherProfileId and teacher userId filters
+      where.OR = [
+        { teacherProfileId: teacherId },
+        { teacherProfile: { is: { userId: teacherId } } },
+        ...(where.OR || []),
+      ];
     }
 
     if (courseType) {
@@ -64,13 +70,13 @@ class CourseService {
       where.OR = [
         { title: { contains: search, mode: 'insensitive' } },
         { description: { contains: search, mode: 'insensitive' } },
+        ...(where.OR || []),
       ];
     }
 
     if (minRating !== undefined) {
-      where.teacherProfile = {
-        averageRating: { gte: minRating },
-      };
+      // Proper relational filter for nested field
+      where.teacherProfile = { is: { averageRating: { gte: minRating } } };
     }
 
     if (minPrice !== undefined || maxPrice !== undefined) {
@@ -189,7 +195,7 @@ class CourseService {
             duration: true,
             orderIndex: true,
             isFree: true,
-            videoUrl: userId ? true : false, // Only include video URL if user is authenticated
+            videoUrl: true, // fetch and sanitize below
           },
         },
         packages: {
@@ -227,8 +233,15 @@ class CourseService {
       isEnrolled = !!enrollment;
     }
 
+    // Sanitize lessons' videoUrl visibility: only expose for free lessons or when enrolled
+    const lessons = course.lessons.map((l) => ({
+      ...l,
+      videoUrl: l.isFree || isEnrolled ? l.videoUrl : undefined,
+    }));
+
     return {
       ...course,
+      lessons,
       isEnrolled,
     };
   }
@@ -310,12 +323,13 @@ class CourseService {
   async deleteCourse(userId: string, courseId: string) {
     await this.validateCourseOwnership(userId, courseId);
 
-    // Check if course has enrollments
+    // Check if course has active enrollments
     const enrollmentCount = await prisma.enrollment.count({
       where: {
         package: {
           courseId,
         },
+        isActive: true,
       },
     });
 
@@ -443,13 +457,15 @@ class CourseService {
   ) {
     await this.validateCourseOwnership(userId, courseId);
 
+    const price = data.price;
     const discount = data.discount || 0;
-    const finalPrice = data.price - discount;
+    const finalPrice = Math.max(0, price - discount);
 
     const lessonPackage = await prisma.lessonPackage.create({
       data: {
         courseId,
         ...data,
+        discount,
         finalPrice,
       },
     });
@@ -489,9 +505,8 @@ class CourseService {
     let finalPrice = lessonPackage.finalPrice;
     if (data.price !== undefined || data.discount !== undefined) {
       const price = data.price !== undefined ? data.price : lessonPackage.price;
-      const discount =
-        data.discount !== undefined ? data.discount : lessonPackage.discount || 0;
-      finalPrice = price - discount;
+      const discount = data.discount !== undefined ? data.discount : lessonPackage.discount || 0;
+      finalPrice = Math.max(0, price - discount);
     }
 
     const updated = await prisma.lessonPackage.update({
@@ -522,7 +537,7 @@ class CourseService {
 
     // Check if package has enrollments
     const enrollmentCount = await prisma.enrollment.count({
-      where: { packageId },
+      where: { packageId, isActive: true },
     });
 
     if (enrollmentCount > 0) {
@@ -743,4 +758,3 @@ class CourseService {
 }
 
 export default new CourseService();
-

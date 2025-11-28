@@ -126,9 +126,9 @@ const ReviewCoursePage = () => {
             Back to My Courses
           </button>
 
-          <div className="card shadow-lg">
+          <div className="card shadow-xl border border-gray-100 rounded-2xl">
             {/* Course Info */}
-            <div className="flex items-start space-x-6 mb-10 pb-8 border-b border-gray-200">
+            <div className="flex items-start gap-6 mb-10 pb-8 border-b border-gray-200">
               {course.thumbnail && (
                 <img
                   src={course.thumbnail}

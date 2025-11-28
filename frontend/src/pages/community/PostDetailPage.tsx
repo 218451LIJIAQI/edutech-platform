@@ -94,7 +94,7 @@ const PostDetailPage = () => {
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 via-blue-50 to-indigo-50 py-8">
       <div className="container mx-auto px-4 max-w-3xl">
-        <div className="card shadow-lg">
+        <div className="card shadow-xl border border-gray-100 rounded-2xl">
           <div className="flex items-start gap-3 mb-4">
             <div className="w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center"><User className="w-5 h-5 text-gray-500" aria-label="user" /></div>
             <div className="flex-1">

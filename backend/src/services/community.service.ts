@@ -10,13 +10,16 @@ export const communityService = {
   },
 
   async addTag(name: string) {
+    const normalized = (name || '').trim();
+    if (!normalized) throw new BadRequestError('Tag name is required');
+
     const existing = await prisma.communityTag.findUnique({
-      where: { name },
+      where: { name: normalized },
     });
     if (existing) return existing;
 
     return prisma.communityTag.create({
-      data: { name },
+      data: { name: normalized },
     });
   },
 
@@ -40,6 +43,12 @@ export const communityService = {
           },
         },
       };
+    }
+
+    if (params.tab === 'weekly') {
+      const sevenDaysAgo = new Date();
+      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+      where.createdAt = { gte: sevenDaysAgo };
     }
 
     const [items, total] = await Promise.all([
@@ -126,23 +135,25 @@ export const communityService = {
         content: input.content,
         courseId: input.courseId,
         courseTitle: input.courseTitle,
-        tags: input.tags && input.tags.length > 0
-          ? {
-              create: input.tags.map((tag) => ({
-                tag: {
-                  connect: { id: tag.id },
-                },
-              })),
-            }
-          : undefined,
-        media: input.media && input.media.length > 0
-          ? {
-              create: input.media.map((m) => ({
-                type: m.type,
-                url: m.url,
-              })),
-            }
-          : undefined,
+        tags:
+          input.tags && input.tags.length > 0
+            ? {
+                create: input.tags.map((tag) => ({
+                  tag: {
+                    connect: { id: tag.id },
+                  },
+                })),
+              }
+            : undefined,
+        media:
+          input.media && input.media.length > 0
+            ? {
+                create: input.media.map((m) => ({
+                  type: m.type,
+                  url: m.url,
+                })),
+              }
+            : undefined,
       },
       include: {
         author: {
@@ -241,25 +252,27 @@ export const communityService = {
     });
 
     if (existingLike) {
-      await prisma.communityPostLike.delete({
-        where: {
-          postId_userId: { postId, userId },
-        },
-      });
-      await prisma.communityPost.update({
-        where: { id: postId },
-        data: { likes: { decrement: 1 } },
-      });
-      return { likes: post.likes - 1, hasLiked: false };
+      await prisma.$transaction([
+        prisma.communityPostLike.delete({
+          where: { postId_userId: { postId, userId } },
+        }),
+        prisma.communityPost.update({
+          where: { id: postId },
+          data: { likes: { decrement: 1 } },
+        }),
+      ]);
+      const updated = await prisma.communityPost.findUnique({ where: { id: postId }, select: { likes: true } });
+      return { likes: updated?.likes ?? Math.max(0, (post.likes || 0) - 1), hasLiked: false };
     } else {
-      await prisma.communityPostLike.create({
-        data: { postId, userId },
-      });
-      await prisma.communityPost.update({
-        where: { id: postId },
-        data: { likes: { increment: 1 } },
-      });
-      return { likes: post.likes + 1, hasLiked: true };
+      await prisma.$transaction([
+        prisma.communityPostLike.create({ data: { postId, userId } }),
+        prisma.communityPost.update({
+          where: { id: postId },
+          data: { likes: { increment: 1 } },
+        }),
+      ]);
+      const updated = await prisma.communityPost.findUnique({ where: { id: postId }, select: { likes: true } });
+      return { likes: updated?.likes ?? (post.likes || 0) + 1, hasLiked: true };
     }
   },
 
@@ -279,25 +292,27 @@ export const communityService = {
     });
 
     if (existingBookmark) {
-      await prisma.communityPostBookmark.delete({
-        where: {
-          postId_userId: { postId, userId },
-        },
-      });
-      await prisma.communityPost.update({
-        where: { id: postId },
-        data: { bookmarks: { decrement: 1 } },
-      });
-      return { bookmarks: post.bookmarks - 1, hasBookmarked: false };
+      await prisma.$transaction([
+        prisma.communityPostBookmark.delete({
+          where: { postId_userId: { postId, userId } },
+        }),
+        prisma.communityPost.update({
+          where: { id: postId },
+          data: { bookmarks: { decrement: 1 } },
+        }),
+      ]);
+      const updated = await prisma.communityPost.findUnique({ where: { id: postId }, select: { bookmarks: true } });
+      return { bookmarks: updated?.bookmarks ?? Math.max(0, (post.bookmarks || 0) - 1), hasBookmarked: false };
     } else {
-      await prisma.communityPostBookmark.create({
-        data: { postId, userId },
-      });
-      await prisma.communityPost.update({
-        where: { id: postId },
-        data: { bookmarks: { increment: 1 } },
-      });
-      return { bookmarks: post.bookmarks + 1, hasBookmarked: true };
+      await prisma.$transaction([
+        prisma.communityPostBookmark.create({ data: { postId, userId } }),
+        prisma.communityPost.update({
+          where: { id: postId },
+          data: { bookmarks: { increment: 1 } },
+        }),
+      ]);
+      const updated = await prisma.communityPost.findUnique({ where: { id: postId }, select: { bookmarks: true } });
+      return { bookmarks: updated?.bookmarks ?? (post.bookmarks || 0) + 1, hasBookmarked: true };
     }
   },
 
@@ -511,4 +526,3 @@ export const communityService = {
 };
 
 export default communityService;
-

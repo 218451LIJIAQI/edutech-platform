@@ -74,47 +74,47 @@ const StudentDashboard = () => {
       {/* Stats Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
         {/* Total Courses */}
-          <div className="card bg-gradient-to-br from-blue-500 via-blue-600 to-blue-700 text-white shadow-lg hover:shadow-xl transition-all">
+          <div className="card bg-gradient-to-br from-blue-500 via-blue-600 to-blue-700 text-white shadow-xl hover:shadow-2xl transition-all duration-300 transform hover:scale-105 border border-blue-400/30">
             <div className="flex items-center justify-between mb-4">
-              <div className="p-3 bg-white bg-opacity-20 rounded-lg">
-                <BookOpen className="w-6 h-6" />
+              <div className="p-4 bg-white bg-opacity-20 rounded-xl">
+                <BookOpen className="w-7 h-7" />
               </div>
           </div>
-            <p className="text-blue-100 text-sm font-medium mb-2">Enrolled Courses</p>
-            <span className="text-4xl font-bold">{stats.totalCourses}</span>
+            <p className="text-blue-100 text-sm font-bold mb-3 uppercase tracking-wide">Enrolled Courses</p>
+            <span className="text-5xl font-bold">{stats.totalCourses}</span>
         </div>
 
         {/* Average Progress */}
-          <div className="card bg-gradient-to-br from-green-500 via-green-600 to-green-700 text-white shadow-lg hover:shadow-xl transition-all">
+          <div className="card bg-gradient-to-br from-green-500 via-green-600 to-green-700 text-white shadow-xl hover:shadow-2xl transition-all duration-300 transform hover:scale-105 border border-green-400/30">
             <div className="flex items-center justify-between mb-4">
-              <div className="p-3 bg-white bg-opacity-20 rounded-lg">
-                <TrendingUp className="w-6 h-6" />
+              <div className="p-4 bg-white bg-opacity-20 rounded-xl">
+                <TrendingUp className="w-7 h-7" />
               </div>
           </div>
-            <p className="text-green-100 text-sm font-medium mb-2">Average Progress</p>
-            <span className="text-4xl font-bold">{stats.averageProgress}%</span>
+            <p className="text-green-100 text-sm font-bold mb-3 uppercase tracking-wide">Average Progress</p>
+            <span className="text-5xl font-bold">{stats.averageProgress}%</span>
         </div>
 
         {/* Completed */}
-          <div className="card bg-gradient-to-br from-purple-500 via-purple-600 to-purple-700 text-white shadow-lg hover:shadow-xl transition-all">
+          <div className="card bg-gradient-to-br from-purple-500 via-purple-600 to-purple-700 text-white shadow-xl hover:shadow-2xl transition-all duration-300 transform hover:scale-105 border border-purple-400/30">
             <div className="flex items-center justify-between mb-4">
-              <div className="p-3 bg-white bg-opacity-20 rounded-lg">
-                <Award className="w-6 h-6" />
+              <div className="p-4 bg-white bg-opacity-20 rounded-xl">
+                <Award className="w-7 h-7" />
               </div>
           </div>
-            <p className="text-purple-100 text-sm font-medium mb-2">Completed</p>
-            <span className="text-4xl font-bold">{stats.completedCourses}</span>
+            <p className="text-purple-100 text-sm font-bold mb-3 uppercase tracking-wide">Completed</p>
+            <span className="text-5xl font-bold">{stats.completedCourses}</span>
         </div>
 
         {/* Hours Learned */}
-          <div className="card bg-gradient-to-br from-orange-500 via-orange-600 to-orange-700 text-white shadow-lg hover:shadow-xl transition-all">
+          <div className="card bg-gradient-to-br from-orange-500 via-orange-600 to-orange-700 text-white shadow-xl hover:shadow-2xl transition-all duration-300 transform hover:scale-105 border border-orange-400/30">
             <div className="flex items-center justify-between mb-4">
-              <div className="p-3 bg-white bg-opacity-20 rounded-lg">
-                <Clock className="w-6 h-6" />
+              <div className="p-4 bg-white bg-opacity-20 rounded-xl">
+                <Clock className="w-7 h-7" />
               </div>
           </div>
-            <p className="text-orange-100 text-sm font-medium mb-2">Hours Learned</p>
-            <span className="text-4xl font-bold">{stats.hoursLearned}</span>
+            <p className="text-orange-100 text-sm font-bold mb-3 uppercase tracking-wide">Hours Learned</p>
+            <span className="text-5xl font-bold">{stats.hoursLearned}</span>
         </div>
       </div>
 

@@ -1,5 +1,6 @@
 import Stripe from 'stripe';
 import { PaymentStatus, OrderStatus } from '@prisma/client';
+import type { Payment as PaymentModel } from '@prisma/client';
 import prisma from '../config/database';
 import config from '../config/env';
 import {
@@ -8,6 +9,21 @@ import {
   InternalServerError,
 } from '../utils/errors';
 import ordersService from './orders.service';
+
+// Helper: safely convert Prisma.Decimal | string | number to number
+const toNum = (v: any): number => {
+  if (v && typeof v.toNumber === 'function') return v.toNumber();
+  return Number(v);
+};
+
+// Helper: normalize commission rate [0, 100]
+const getCommissionRate = (teacherProfile?: { commissionRate?: any }): number => {
+  const raw = (teacherProfile?.commissionRate ?? config.PLATFORM_COMMISSION_RATE ?? 0);
+  const n = toNum(raw);
+  if (!Number.isFinite(n) || n < 0) return 0;
+  if (n > 100) return 100;
+  return n;
+};
 
 // Initialize Stripe
 const stripe = config.STRIPE_SECRET_KEY
@@ -43,17 +59,43 @@ class PaymentService {
       throw new ValidationError('Your cart is empty');
     }
 
+    // Validate availability of all items (active package and published course)
+    const unavailable = cartItems.find(
+      (it) => !it.package || !it.package.isActive || !it.package.course?.isPublished
+    );
+    if (unavailable) {
+      throw new ValidationError('Some items are no longer available. Please update your cart.');
+    }
+
     // Create order from cart
     const order = await ordersService.createOrderFromCart(userId);
 
+    // Load order with items to compute accurate commissions (avoid relying on cart snapshot)
+    const orderWithItems = await prisma.order.findUnique({
+      where: { id: order.id },
+      include: {
+        items: {
+          include: {
+            package: {
+              include: {
+                course: { include: { teacherProfile: true } },
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!orderWithItems) {
+      throw new InternalServerError('Failed to load order items for commission calculation');
+    }
+
     // Calculate commission per item using teacher-specific commissionRate when present
-    const amount = order.totalAmount;
+    const amount = toNum(order.totalAmount);
     let platformCommission = 0;
-    for (const item of cartItems) {
-      const pkg = item.package;
-      const course = pkg?.course;
-      const teacherRate = course?.teacherProfile?.commissionRate ?? config.PLATFORM_COMMISSION_RATE;
-      platformCommission += (pkg.finalPrice * teacherRate) / 100;
+    for (const item of orderWithItems.items) {
+      const rate = getCommissionRate(item.package?.course?.teacherProfile);
+      platformCommission += (toNum(item.finalPrice) * rate) / 100;
     }
     const teacherEarning = amount - platformCommission;
 
@@ -88,7 +130,7 @@ class PaymentService {
           where: { id: payment.id },
           data: { stripePaymentId: paymentIntent.id },
         });
-      } catch (error) {
+      } catch {
         // Fallback: allow non-Stripe flow
       }
     }
@@ -100,7 +142,7 @@ class PaymentService {
       order: {
         id: order.id,
         orderNo: order.orderNo,
-        amount: order.totalAmount,
+        amount: toNum(order.totalAmount),
       },
     };
   }
@@ -125,7 +167,7 @@ class PaymentService {
       throw new NotFoundError('Package not found');
     }
 
-    if (!lessonPackage.isActive) {
+    if (!lessonPackage.isActive || !lessonPackage.course?.isPublished) {
       throw new ValidationError('This package is no longer available');
     }
 
@@ -143,8 +185,8 @@ class PaymentService {
     }
 
     // Calculate commission using teacher-specific rate when present
-    const amount = lessonPackage.finalPrice;
-    const teacherRate = lessonPackage.course?.teacherProfile?.commissionRate ?? config.PLATFORM_COMMISSION_RATE;
+    const amount = toNum(lessonPackage.finalPrice);
+    const teacherRate = getCommissionRate(lessonPackage.course?.teacherProfile);
     const platformCommission = (amount * teacherRate) / 100;
     const teacherEarning = amount - platformCommission;
 
@@ -181,10 +223,9 @@ class PaymentService {
           where: { id: payment.id },
           data: { stripePaymentId: paymentIntent.id },
         });
-      } catch (error) {
+      } catch {
         // Fallback: if Stripe fails (e.g., invalid key), continue without clientSecret
         // This allows non-Stripe (dev) flow to proceed
-        // Optionally log error via your logger
       }
     }
 
@@ -194,7 +235,7 @@ class PaymentService {
       package: {
         id: lessonPackage.id,
         name: lessonPackage.name,
-        price: lessonPackage.finalPrice,
+        price: toNum(lessonPackage.finalPrice),
       },
     };
   }
@@ -215,63 +256,130 @@ class PaymentService {
       throw new NotFoundError('Payment not found');
     }
 
+    // If already completed, make this method idempotent by returning the existing state
     if (payment.status === PaymentStatus.COMPLETED) {
-      throw new ValidationError('Payment already completed');
+      if (payment.packageId) {
+        const enrollment = await prisma.enrollment.findFirst({
+          where: { userId: payment.userId, packageId: payment.packageId },
+        });
+        return { payment, enrollment };
+      }
+      if (payment.orderId) {
+        return { payment, orderId: payment.orderId };
+      }
+      return { payment };
     }
 
     // Verify payment with Stripe if configured
-    if (stripe && stripePaymentId) {
+    if (stripe) {
       try {
-        const paymentIntent = await stripe.paymentIntents.retrieve(
-          stripePaymentId
-        );
+        const intentId = stripePaymentId ?? payment.stripePaymentId ?? undefined;
 
-        if (paymentIntent.status !== 'succeeded') {
-          throw new ValidationError('Payment not successful');
+        // If both provided and mismatch, fail early
+        if (stripePaymentId && payment.stripePaymentId && stripePaymentId !== payment.stripePaymentId) {
+          throw new ValidationError('Payment verification failed');
         }
+
+        if (intentId) {
+          const paymentIntent = await stripe.paymentIntents.retrieve(intentId);
+
+          if (paymentIntent.status !== 'succeeded') {
+            throw new ValidationError('Payment not successful');
+          }
+
+          const metaPaymentId = (paymentIntent.metadata as Record<string, string | null>)['paymentId'];
+          if (metaPaymentId !== payment.id) {
+            throw new ValidationError('Payment verification mismatch');
+          }
+
+          if (paymentIntent.amount !== Math.round(toNum(payment.amount) * 100)) {
+            throw new ValidationError('Payment amount mismatch');
+          }
+
+          if (!payment.stripePaymentId) {
+            await prisma.payment.update({
+              where: { id: payment.id },
+              data: { stripePaymentId: intentId },
+            });
+          }
+        }
+        // If Stripe is configured but no intent id is available, we allow non-Stripe/manual flows
       } catch (error) {
+        if (error instanceof ValidationError) throw error;
         throw new ValidationError('Failed to verify payment');
       }
     }
 
-    // Update payment status
-    const updatedPayment = await prisma.payment.update({
-      where: { id: paymentId },
-      data: {
-        status: PaymentStatus.COMPLETED,
-        paidAt: new Date(),
-      },
-    });
+    // Prepare results to return and wallet credit tasks to perform after commit
+    // Use Prisma model type for updatedPayment to avoid type mismatches with included relations
+    let updatedPayment: PaymentModel | null = null;
 
     // Single-package purchase flow
     if (payment.packageId && payment.package) {
-      const expiresAt = payment.package.duration
-        ? new Date(Date.now() + payment.package.duration * 24 * 60 * 60 * 1000)
+      const pkg = payment.package;
+      const expiresAt = pkg.duration
+        ? new Date(Date.now() + toNum(pkg.duration) * 24 * 60 * 60 * 1000)
         : null;
 
-      const enrollment = await prisma.enrollment.create({
-        data: {
-          userId: payment.userId,
-          packageId: payment.packageId,
-          expiresAt,
-        },
-      });
-
-      // Update teacher's total students and earnings
-      const course = await prisma.course.findUnique({
-        where: { id: payment.package.courseId },
-      });
-
-      if (course) {
-        await prisma.teacherProfile.update({
-          where: { id: course.teacherProfileId },
+      let enrollmentId: string | null = null;
+      const result = await prisma.$transaction(async (tx) => {
+        // Update payment status
+        const upPayment = await tx.payment.update({
+          where: { id: paymentId },
           data: {
-            totalStudents: { increment: 1 },
-            totalEarnings: { increment: payment.teacherEarning },
+            status: PaymentStatus.COMPLETED,
+            paidAt: new Date(),
           },
         });
+
+        // Upsert enrollment to guarantee idempotency
+        const enrollment = await tx.enrollment.upsert({
+          where: { userId_packageId: { userId: payment.userId, packageId: pkg.id } },
+          update: { isActive: true, expiresAt },
+          create: {
+            userId: payment.userId,
+            packageId: pkg.id,
+            expiresAt,
+          },
+        });
+
+        // Update teacher's total students and earnings
+        if (pkg.courseId) {
+          const courseEntity = await tx.course.findUnique({ where: { id: pkg.courseId } });
+          if (courseEntity) {
+            await tx.teacherProfile.update({
+              where: { id: courseEntity.teacherProfileId },
+              data: {
+                totalStudents: { increment: 1 },
+                totalEarnings: { increment: toNum(payment.teacherEarning) },
+              },
+            });
+          }
+        }
+
+        enrollmentId = enrollment.id;
+        return upPayment;
+      });
+
+      updatedPayment = result;
+
+      // Credit teacher wallet after transaction (non-blocking)
+      try {
+        if (pkg.courseId) {
+          const courseRecord = await prisma.course.findUnique({ where: { id: pkg.courseId } });
+          if (courseRecord) {
+            const teacher = await prisma.teacherProfile.findUnique({ where: { id: courseRecord.teacherProfileId } });
+            if (teacher) {
+              const walletService = (await import('./wallet.service')).default;
+              await walletService.creditForTeacher(teacher.userId, toNum(payment.teacherEarning), { paymentId: payment.id, packageId: payment.packageId! });
+            }
+          }
+        }
+      } catch {
+        // non-blocking
       }
 
+      const enrollment = await prisma.enrollment.findUnique({ where: { id: enrollmentId! } });
       return {
         payment: updatedPayment,
         enrollment,
@@ -299,48 +407,81 @@ class PaymentService {
         throw new NotFoundError('Order not found');
       }
 
-      // Create enrollments for each order item
-      for (const item of order.items) {
-        const pkg = item.package;
-        const expiresAt = pkg?.duration
-          ? new Date(Date.now() + (pkg.duration as number) * 24 * 60 * 60 * 1000)
-          : null;
-
-        // Upsert enrollment to prevent crashes if already enrolled
-        await prisma.enrollment.upsert({
-          where: { userId_packageId: { userId: payment.userId, packageId: item.packageId } },
-          update: { isActive: true, expiresAt },
-          create: {
-            userId: payment.userId,
-            packageId: item.packageId,
-            expiresAt,
+      // Perform DB changes atomically
+      const updatedPaymentLocal = await prisma.$transaction(async (tx) => {
+        // Update payment status
+        const upPayment = await tx.payment.update({
+          where: { id: paymentId },
+          data: {
+            status: PaymentStatus.COMPLETED,
+            paidAt: new Date(),
           },
         });
 
-        // Update teacher stats per course
-        if (pkg?.course) {
-          const teacherRate = pkg.course?.teacherProfile?.commissionRate ?? config.PLATFORM_COMMISSION_RATE;
-          const netTeacherEarning = item.finalPrice * (1 - teacherRate / 100);
-          await prisma.teacherProfile.update({
-            where: { id: pkg.course.teacherProfileId },
-            data: {
-              totalStudents: { increment: 1 },
-              totalEarnings: { increment: netTeacherEarning },
+        // Create enrollments for each order item
+        for (const item of order.items) {
+          const pkg = item.package;
+          const expiresAt = pkg?.duration
+            ? new Date(Date.now() + toNum(pkg.duration) * 24 * 60 * 60 * 1000)
+            : null;
+
+          await tx.enrollment.upsert({
+            where: { userId_packageId: { userId: payment.userId, packageId: item.packageId } },
+            update: { isActive: true, expiresAt },
+            create: {
+              userId: payment.userId,
+              packageId: item.packageId,
+              expiresAt,
             },
           });
-        }
-      }
 
-      // Mark order as PAID
-      await prisma.order.update({
-        where: { id: order.id },
-        data: { status: OrderStatus.PAID, paidAt: new Date() }
+          // Update teacher stats per course
+          if (pkg?.course) {
+            const rate = getCommissionRate(pkg.course?.teacherProfile);
+            const netTeacherEarning = toNum(item.finalPrice) * (1 - rate / 100);
+            await tx.teacherProfile.update({
+              where: { id: pkg.course.teacherProfileId },
+              data: {
+                totalStudents: { increment: 1 },
+                totalEarnings: { increment: netTeacherEarning },
+              },
+            });
+          }
+        }
+
+        // Mark order as PAID
+        await tx.order.update({
+          where: { id: order.id },
+          data: { status: OrderStatus.PAID, paidAt: new Date() }
+        });
+
+        // Clear user's cart
+        await tx.cartItem.deleteMany({ where: { userId: payment.userId } });
+
+        return upPayment;
       });
 
-      // Clear user's cart
-      await prisma.cartItem.deleteMany({ where: { userId: payment.userId } });
+      updatedPayment = updatedPaymentLocal;
 
-      return { payment: updatedPayment, orderId: order.id };
+      // Credit teacher wallets per item after commit
+      try {
+        const walletService = (await import('./wallet.service')).default;
+        for (const item of order.items) {
+          const pkg = item.package;
+          if (pkg?.course) {
+            const teacherProfile = await prisma.teacherProfile.findUnique({ where: { id: pkg.course.teacherProfileId } });
+            if (teacherProfile) {
+              const rate = getCommissionRate(teacherProfile);
+              const teacherNet = toNum(item.finalPrice) * (1 - rate / 100);
+              await walletService.creditForTeacher(teacherProfile.userId, teacherNet, { paymentId: payment.id, orderItemId: item.id });
+            }
+          }
+        }
+      } catch {
+        // non-blocking
+      }
+
+      return { payment: updatedPaymentLocal, orderId: order.id };
     }
 
     throw new ValidationError('Invalid payment state');
@@ -440,10 +581,10 @@ class PaymentService {
         ],
       },
       include: {
-        package: { include: { course: true } },
+        package: { include: { course: { include: { teacherProfile: true } } } },
         order: {
           include: {
-            items: { include: { package: { include: { course: true } } } },
+            items: { include: { package: { include: { course: { include: { teacherProfile: true } } } } } },
           },
         },
         user: {
@@ -454,14 +595,23 @@ class PaymentService {
     });
 
     // Flatten into per-course entries
-    const entries: any[] = [];
+    const entries: Array<{
+      id: string;
+      amount: number;
+      teacherEarning: number;
+      paidAt: Date | null;
+      status: PaymentStatus;
+      package: any;
+      user: { firstName: string | null; lastName: string | null; email: string } | null;
+    }> = [];
+
     for (const p of payments) {
       if (p.packageId && p.package && p.package.course.teacherProfileId === teacherProfile.id) {
         // Direct purchase
         entries.push({
           id: p.id,
-          amount: p.amount,
-          teacherEarning: p.teacherEarning,
+          amount: toNum(p.amount),
+          teacherEarning: toNum(p.teacherEarning),
           paidAt: p.paidAt,
           status: p.status,
           package: p.package,
@@ -473,10 +623,11 @@ class PaymentService {
         for (const item of p.order.items) {
           const pkg = item.package;
           if (pkg?.course && pkg.course.teacherProfileId === teacherProfile.id) {
-            const teacherEarning = item.finalPrice * (1 - ((teacherProfile.commissionRate ?? config.PLATFORM_COMMISSION_RATE) / 100));
+            const teacherRate = getCommissionRate(pkg.course?.teacherProfile);
+            const teacherEarning = toNum(item.finalPrice) * (1 - teacherRate / 100);
             entries.push({
               id: `${p.id}:${item.id}`,
-              amount: item.finalPrice,
+              amount: toNum(item.finalPrice),
               teacherEarning,
               paidAt: p.paidAt,
               status: p.status,
@@ -521,8 +672,8 @@ class PaymentService {
         ],
       },
       include: {
-        package: { include: { course: true } },
-        order: { include: { items: { include: { package: { include: { course: true } } } } } },
+        package: { include: { course: { include: { teacherProfile: true } } } },
+        order: { include: { items: { include: { package: { include: { course: { include: { teacherProfile: true } } } } } } } },
         user: { select: { firstName: true, lastName: true, email: true } },
       },
       orderBy: { paidAt: 'desc' },
@@ -565,12 +716,13 @@ class PaymentService {
     const entries: Entry[] = [];
     for (const p of payments) {
       if (p.packageId && p.package && p.package.course.teacherProfileId === teacherProfile.id) {
+        // Use stored teacherEarning for direct purchases to preserve historical accuracy
         const entry: Entry = {
           id: p.id,
-          amount: p.amount,
-          teacherEarning: p.teacherEarning,
+          amount: toNum(p.amount),
+          teacherEarning: toNum(p.teacherEarning),
           paidAt: p.paidAt,
-          package: { id: p.package.id, name: p.package.name, finalPrice: p.package.finalPrice, course: { id: p.package.course.id, title: p.package.course.title } },
+          package: { id: p.package.id, name: p.package.name, finalPrice: toNum(p.package.finalPrice), course: { id: p.package.course.id, title: p.package.course.title } },
           user: p.user,
         };
         entries.push(entry);
@@ -581,13 +733,14 @@ class PaymentService {
         for (const item of p.order.items) {
           const pkg = item.package;
           if (pkg?.course && pkg.course.teacherProfileId === teacherProfile.id) {
-            const teacherEarning = item.finalPrice * (1 - config.PLATFORM_COMMISSION_RATE / 100);
+            const tRate = getCommissionRate(pkg.course?.teacherProfile);
+            const teacherEarning = toNum(item.finalPrice) * (1 - tRate / 100);
             const entry: Entry = {
               id: `${p.id}:${item.id}`,
-              amount: item.finalPrice,
+              amount: toNum(item.finalPrice),
               teacherEarning,
               paidAt: p.paidAt,
-              package: { id: pkg.id, name: pkg.name, finalPrice: pkg.finalPrice, course: { id: pkg.course.id, title: pkg.course.title } },
+              package: { id: pkg.id, name: pkg.name, finalPrice: toNum(pkg.finalPrice), course: { id: pkg.course.id, title: pkg.course.title } },
               user: p.user,
             };
             entries.push(entry);
@@ -639,7 +792,7 @@ class PaymentService {
         await stripe.refunds.create({
           payment_intent: payment.stripePaymentId,
         });
-      } catch (error) {
+      } catch {
         throw new InternalServerError('Failed to process refund');
       }
     }
@@ -677,4 +830,3 @@ class PaymentService {
 }
 
 export default new PaymentService();
-

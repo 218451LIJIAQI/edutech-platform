@@ -105,17 +105,17 @@ const MyCoursesPage = () => {
               new Date(enrollment.expiresAt) < new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
 
             return (
-              <div key={enrollment.id} className="card shadow-lg hover:shadow-xl transition-all">
+              <div key={enrollment.id} className="card shadow-xl hover:shadow-2xl transition-all duration-300 transform hover:scale-102 border border-gray-100 hover:border-primary-200 rounded-2xl">
                 <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
                   {/* Course Info */}
                   <div className="lg:col-span-2">
-                    <div className="flex items-start space-x-4">
-                      <div className="w-20 h-20 bg-gradient-to-br from-primary-600 to-primary-700 rounded-xl flex items-center justify-center flex-shrink-0 shadow-md">
-                        <BookOpen className="w-10 h-10 text-white" />
+                    <div className="flex items-start gap-4">
+                      <div className="w-24 h-24 bg-gradient-to-br from-primary-600 to-primary-700 rounded-xl flex items-center justify-center flex-shrink-0 shadow-lg">
+                        <BookOpen className="w-12 h-12 text-white" />
                       </div>
                       <div className="flex-1">
-                        <h3 className="text-xl font-bold text-gray-900 mb-2">{course.title}</h3>
-                        <p className="text-gray-600 text-sm mb-3 line-clamp-2">
+                        <h3 className="text-2xl font-bold text-gray-900 mb-3">{course.title}</h3>
+                        <p className="text-gray-600 text-sm mb-4 line-clamp-2 leading-relaxed">
                           {course.description}
                         </p>
                         
@@ -180,23 +180,23 @@ const MyCoursesPage = () => {
                   </div>
 
                   {/* Actions */}
-                  <div className="lg:col-span-1 flex flex-col justify-center space-y-3">
+                  <div className="lg:col-span-1 flex flex-col justify-center gap-3">
                     <Link
                       to={`/courses/${course.id}`}
-                      className="btn-primary text-center"
+                      className="btn-primary text-center font-bold py-3 rounded-xl shadow-lg hover:shadow-xl transition-all transform hover:scale-105"
                     >
-                      {isCompleted ? 'Review Course' : 'Continue Learning'}
+                      {isCompleted ? '📖 Review Course' : '▶️ Continue Learning'}
                     </Link>
                     
                     {isCompleted && (
-                      <div className="flex items-center justify-center space-x-1 text-green-600 text-sm font-bold bg-green-50 px-3 py-2 rounded-lg">
-                        <CheckCircle className="w-4 h-4" />
+                      <div className="flex items-center justify-center gap-2 text-green-600 text-sm font-bold bg-green-50 px-4 py-3 rounded-xl border-2 border-green-200 shadow-md">
+                        <CheckCircle className="w-5 h-5" />
                         <span>Completed</span>
                       </div>
                     )}
                     
                     {isExpiring && !isCompleted && (
-                      <div className="text-center text-orange-600 text-sm font-bold bg-orange-50 px-3 py-2 rounded-lg">
+                      <div className="text-center text-orange-600 text-sm font-bold bg-orange-50 px-4 py-3 rounded-xl border-2 border-orange-200 shadow-md">
                         ⚠️ Expiring Soon!
                       </div>
                     )}
@@ -207,21 +207,21 @@ const MyCoursesPage = () => {
           })}
         </div>
       ) : (
-        <div className="card text-center py-12">
-          <BookOpen className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-          <h3 className="text-xl font-semibold mb-2">
+        <div className="card text-center py-20 shadow-lg border border-gray-100 rounded-2xl">
+          <BookOpen className="w-24 h-24 text-gray-300 mx-auto mb-6" />
+          <h3 className="text-3xl font-bold mb-4 text-gray-900">
             {filter === 'all'
               ? 'No courses yet'
               : filter === 'active'
               ? 'No active courses'
               : 'No completed courses'}
           </h3>
-          <p className="text-gray-600 mb-4">
+          <p className="text-gray-600 mb-8 text-lg">
             {filter === 'all'
               ? 'Start your learning journey by enrolling in a course'
               : 'Start learning to track your progress here'}
           </p>
-          <Link to="/courses" className="btn-primary inline-block">
+          <Link to="/courses" className="btn-primary btn-lg inline-block shadow-lg hover:shadow-xl transition-all transform hover:scale-105">
             Browse Courses
           </Link>
         </div>
