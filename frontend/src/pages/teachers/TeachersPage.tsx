@@ -129,29 +129,29 @@ const TeachersPage = () => {
               <Link
                 key={teacher.id}
                 to={`/teachers/${teacher.id}`}
-                className="card-hover shadow-lg"
+                className="card-hover shadow-xl hover:shadow-2xl transition-all duration-300 transform hover:scale-105 border border-gray-100 hover:border-primary-200 rounded-2xl"
               >
                 {/* Teacher Avatar */}
-                <div className="flex items-center space-x-4 mb-4">
+                <div className="flex items-center gap-4 mb-5">
                   {teacher.user?.avatar ? (
                     <img
                       src={teacher.user.avatar}
                       alt={`${teacher.user.firstName} ${teacher.user.lastName}`}
-                      className="w-16 h-16 rounded-full object-cover shadow-md"
+                      className="w-20 h-20 rounded-full object-cover shadow-lg border-2 border-primary-200"
                     />
                   ) : (
-                  <div className="w-16 h-16 bg-gradient-to-br from-primary-600 to-primary-700 text-white rounded-full flex items-center justify-center text-xl font-bold shadow-md">
+                  <div className="w-20 h-20 bg-gradient-to-br from-primary-600 to-primary-700 text-white rounded-full flex items-center justify-center text-2xl font-bold shadow-lg border-2 border-primary-300">
                     {teacher.user?.firstName?.[0]}{teacher.user?.lastName?.[0]}
                   </div>
                   )}
                   <div className="flex-1">
-                    <h3 className="font-bold text-lg text-gray-900">
+                    <h3 className="font-bold text-xl text-gray-900">
                       {teacher.user?.firstName} {teacher.user?.lastName}
                     </h3>
                     {teacher.isVerified && (
-                      <div className="flex items-center space-x-1 text-green-600 text-sm font-semibold">
+                      <div className="flex items-center gap-1 text-green-600 text-sm font-bold bg-green-50 px-2 py-1 rounded-lg w-fit mt-1">
                         <Award className="w-4 h-4" />
-                        <span>Verified Teacher</span>
+                        <span>Verified</span>
                       </div>
                     )}
                   </div>

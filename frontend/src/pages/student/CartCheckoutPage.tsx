@@ -243,7 +243,7 @@ const CartCheckoutPage = () => {
             </div>
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
               <div className="lg:col-span-2">
-                <div className="card shadow-lg">
+                <div className="card shadow-xl border border-gray-100 rounded-2xl">
                   <h2 className="text-2xl font-bold mb-6 flex items-center text-gray-900">
                     <div className="p-2 bg-primary-100 rounded-lg mr-3">
                       <CreditCard className="w-5 h-5 text-primary-600" />
@@ -254,7 +254,7 @@ const CartCheckoutPage = () => {
                 </div>
               </div>
               <div className="lg:col-span-1">
-                <div className="card sticky top-20 shadow-lg">
+                <div className="card sticky top-20 shadow-xl border border-gray-100 rounded-2xl">
                   <h2 className="text-2xl font-bold mb-6 text-gray-900">Order Summary</h2>
                   <div className="space-y-3 mb-6">
                     {cart.items.map(item => (

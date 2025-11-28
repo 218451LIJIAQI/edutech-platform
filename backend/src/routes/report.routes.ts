@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { UserRole, ReportType, ReportStatus } from '@prisma/client';
-import { body, query } from 'express-validator';
+import { body, query, param } from 'express-validator';
 import reportController from '../controllers/report.controller';
 import { authenticate, authorize } from '../middleware/auth';
 import { validate } from '../middleware/validate';
@@ -37,10 +37,7 @@ router.post(
       .optional()
       .isIn(['teacher', 'course', 'community_post', 'community_comment'])
       .withMessage('Invalid content type'),
-    body('contentId')
-      .optional()
-      .isUUID()
-      .withMessage('Invalid content ID'),
+    body('contentId').optional().isUUID().withMessage('Invalid content ID'),
   ]),
   reportController.submitReport
 );
@@ -54,7 +51,12 @@ router.get(
 );
 
 // Get report by ID
-router.get('/:id', authenticate, reportController.getReportById);
+router.get(
+  '/:id',
+  authenticate,
+  validate([param('id').notEmpty().withMessage('id is required').isUUID().withMessage('Invalid id')]),
+  reportController.getReportById
+);
 
 // Admin routes
 router.get(
@@ -70,10 +72,7 @@ router.get(
       .optional()
       .isIn(Object.values(ReportType))
       .withMessage('Invalid report type'),
-    query('page')
-      .optional()
-      .isInt({ min: 1 })
-      .withMessage('Page must be a positive integer'),
+    query('page').optional().isInt({ min: 1 }).withMessage('Page must be a positive integer'),
     query('limit')
       .optional()
       .isInt({ min: 1, max: 100 })
@@ -87,6 +86,7 @@ router.put(
   authenticate,
   authorize(UserRole.ADMIN),
   validate([
+    param('id').notEmpty().withMessage('id is required').isUUID().withMessage('Invalid id'),
     body('status')
       .notEmpty()
       .withMessage('Status is required')
@@ -105,8 +105,8 @@ router.get(
   '/teacher/:teacherId',
   authenticate,
   authorize(UserRole.ADMIN),
+  validate([param('teacherId').notEmpty().withMessage('teacherId is required').isUUID().withMessage('Invalid teacherId')]),
   reportController.getTeacherReports
 );
 
 export default router;
-

@@ -6,19 +6,33 @@ import { body } from 'express-validator';
 
 export const createReviewValidation = [
   body('enrollmentId')
+    .exists({ checkNull: true })
+    .withMessage('Enrollment ID is required')
+    .bail()
+    .isString()
+    .withMessage('Enrollment ID must be a string')
+    .bail()
+    .trim()
     .notEmpty()
     .withMessage('Enrollment ID is required')
+    .bail()
     .isUUID()
     .withMessage('Enrollment ID must be a valid UUID'),
 
   body('rating')
-    .notEmpty()
+    .exists({ checkNull: true })
     .withMessage('Rating is required')
+    .bail()
     .isInt({ min: 1, max: 5 })
-    .withMessage('Rating must be between 1 and 5'),
+    .withMessage('Rating must be between 1 and 5')
+    .bail()
+    .toInt(),
 
   body('comment')
-    .optional()
+    .optional({ nullable: true })
+    .isString()
+    .withMessage('Comment must be a string')
+    .bail()
     .trim()
     .isLength({ max: 1000 })
     .withMessage('Comment must not exceed 1000 characters'),
@@ -26,12 +40,17 @@ export const createReviewValidation = [
 
 export const updateReviewValidation = [
   body('rating')
-    .optional()
+    .optional({ nullable: true })
     .isInt({ min: 1, max: 5 })
-    .withMessage('Rating must be between 1 and 5'),
+    .withMessage('Rating must be between 1 and 5')
+    .bail()
+    .toInt(),
 
   body('comment')
-    .optional()
+    .optional({ nullable: true })
+    .isString()
+    .withMessage('Comment must be a string')
+    .bail()
     .trim()
     .isLength({ max: 1000 })
     .withMessage('Comment must not exceed 1000 characters'),
@@ -41,4 +60,3 @@ export default {
   createReviewValidation,
   updateReviewValidation,
 };
-

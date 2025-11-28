@@ -19,6 +19,9 @@ const router = Router();
  */
 
 // Public routes
+// Verified Teachers (for students) — placed before "/:id" to avoid route conflicts
+router.get('/verified', teacherController.getVerifiedTeachers);
+
 router.get(
   '/',
   validate(getTeachersValidation),
@@ -151,11 +154,4 @@ router.put(
   teacherController.reviewTeacherProfile
 );
 
-// Verified Teachers (for students)
-router.get(
-  '/verified',
-  teacherController.getVerifiedTeachers
-);
-
 export default router;
-

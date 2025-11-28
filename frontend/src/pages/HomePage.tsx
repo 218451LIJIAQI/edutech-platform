@@ -105,8 +105,8 @@ const HomePage = () => {
       <section className="py-24 md:py-32 bg-gradient-to-br from-gray-50 via-blue-50 to-indigo-50">
         <div className="container mx-auto px-4">
           <div className="text-center mb-16">
-            <h2 className="section-title">Why Choose Edutech?</h2>
-            <p className="section-subtitle">Experience the best online learning platform</p>
+            <h2 className="section-title text-5xl">Why Choose Edutech?</h2>
+            <p className="section-subtitle text-xl mt-4">Experience the best online learning platform</p>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
             {[
@@ -115,12 +115,12 @@ const HomePage = () => {
               { icon: Award, title: "Quality Assurance", desc: "Reviews and ratings ensure high teaching standards" },
               { icon: TrendingUp, title: "Track Progress", desc: "Monitor your learning journey with detailed analytics" }
             ].map((feature, idx) => (
-              <div key={idx} className="card-hover group">
-                <div className="inline-flex items-center justify-center w-20 h-20 bg-gradient-to-br from-primary-100 to-primary-50 text-primary-600 rounded-2xl mb-6 group-hover:from-primary-200 group-hover:to-primary-100 transition-all">
-                  <feature.icon className="w-10 h-10" />
+              <div key={idx} className="card-hover group bg-white rounded-2xl p-8 shadow-lg hover:shadow-2xl transition-all duration-300 transform hover:scale-105 border border-gray-100 hover:border-primary-200">
+                <div className="inline-flex items-center justify-center w-24 h-24 bg-gradient-to-br from-primary-100 to-primary-50 text-primary-600 rounded-2xl mb-6 group-hover:from-primary-200 group-hover:to-primary-100 transition-all duration-300 shadow-md">
+                  <feature.icon className="w-12 h-12" />
               </div>
-                <h3 className="text-xl font-bold mb-3 text-gray-900">{feature.title}</h3>
-                <p className="text-gray-600 leading-relaxed">
+                <h3 className="text-2xl font-bold mb-4 text-gray-900">{feature.title}</h3>
+                <p className="text-gray-600 leading-relaxed text-base">
                   {feature.desc}
               </p>
             </div>

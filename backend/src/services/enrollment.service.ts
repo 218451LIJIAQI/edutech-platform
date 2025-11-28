@@ -43,11 +43,11 @@ class EnrollmentService {
   }
 
   /**
-   * Get enrollment by ID
+   * Get enrollment by ID (scoped to the requesting user)
    */
   async getEnrollmentById(enrollmentId: string, userId: string) {
-    const enrollment = await prisma.enrollment.findUnique({
-      where: { id: enrollmentId },
+    const enrollment = await prisma.enrollment.findFirst({
+      where: { id: enrollmentId, userId },
       include: {
         package: {
           include: {
@@ -76,11 +76,8 @@ class EnrollmentService {
     });
 
     if (!enrollment) {
+      // Use NotFound to avoid leaking whether an enrollment exists for another user
       throw new NotFoundError('Enrollment not found');
-    }
-
-    if (enrollment.userId !== userId) {
-      throw new AuthorizationError('You can only access your own enrollments');
     }
 
     return enrollment;
@@ -95,23 +92,32 @@ class EnrollmentService {
     completedLessons: number,
     progress: number
   ) {
-    const enrollment = await prisma.enrollment.findUnique({
-      where: { id: enrollmentId },
+    // Scope lookup by id and userId to prevent accessing others' records
+    const enrollment = await prisma.enrollment.findFirst({
+      where: { id: enrollmentId, userId },
+      include: { package: { select: { courseId: true } } },
     });
 
     if (!enrollment) {
       throw new NotFoundError('Enrollment not found');
     }
 
-    if (enrollment.userId !== userId) {
-      throw new AuthorizationError('You can only update your own progress');
-    }
+    // Determine total lessons for the course to bound completedLessons
+    const totalLessons = await prisma.lesson.count({
+      where: { courseId: enrollment.package.courseId },
+    });
+
+    const safeCompleted = Number.isFinite(completedLessons) ? Math.floor(completedLessons) : 0;
+    const boundedCompleted = Math.max(0, Math.min(safeCompleted, totalLessons));
+
+    const safeProgress = Number.isFinite(progress) ? progress : 0;
+    const boundedProgress = Math.min(Math.max(safeProgress, 0), 100); // Ensure progress is between 0-100
 
     const updated = await prisma.enrollment.update({
       where: { id: enrollmentId },
       data: {
-        completedLessons,
-        progress: Math.min(Math.max(progress, 0), 100), // Ensure progress is between 0-100
+        completedLessons: boundedCompleted,
+        progress: boundedProgress,
       },
     });
 
@@ -149,7 +155,7 @@ class EnrollmentService {
       throw new NotFoundError('Course not found');
     }
 
-    if (course.teacherProfile.userId !== userId) {
+    if (!course.teacherProfile || course.teacherProfile.userId !== userId) {
       throw new AuthorizationError('You can only view your own course students');
     }
 
@@ -197,7 +203,7 @@ class EnrollmentService {
       throw new NotFoundError('Course not found');
     }
 
-    if (course.teacherProfile.userId !== userId) {
+    if (!course.teacherProfile || course.teacherProfile.userId !== userId) {
       throw new AuthorizationError('You can only view your own course statistics');
     }
 
@@ -225,4 +231,3 @@ class EnrollmentService {
 }
 
 export default new EnrollmentService();
-

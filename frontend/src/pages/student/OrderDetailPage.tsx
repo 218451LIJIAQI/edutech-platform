@@ -154,7 +154,7 @@ const OrderDetailPage = () => {
           {/* Main Content */}
           <div className="lg:col-span-2 space-y-6">
             {/* Order Header */}
-            <div className="card shadow-lg">
+            <div className="card shadow-xl border border-gray-100 rounded-2xl">
               <div className="flex items-center justify-between mb-6">
                 <div>
                   <div className="text-sm text-gray-600 mb-1">Order Number</div>
@@ -226,7 +226,7 @@ const OrderDetailPage = () => {
             </div>
 
             {/* Order Items */}
-            <div className="card shadow-lg">
+            <div className="card shadow-xl border border-gray-100 rounded-2xl">
               <h2 className="text-2xl font-bold mb-6 text-gray-900">Order Items</h2>
               <div className="space-y-4">
                 {order.items && order.items.length > 0 ? (

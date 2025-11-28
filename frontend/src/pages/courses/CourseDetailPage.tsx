@@ -184,7 +184,7 @@ const CourseDetailPage = () => {
           <div className="lg:col-span-2 space-y-8">
             {/* Preview Video */}
             {currentCourse.previewVideoUrl && (
-              <div className="card shadow-lg">
+              <div className="card shadow-xl border border-gray-100 rounded-2xl">
                 <h3 className="text-2xl font-bold mb-6 text-gray-900">Course Preview</h3>
                 <div className="rounded-xl overflow-hidden shadow-md">
                 <UniversalVideoPlayer 
@@ -197,7 +197,7 @@ const CourseDetailPage = () => {
             )}
 
             {/* Course Content */}
-            <div className="card shadow-lg">
+            <div className="card shadow-xl border border-gray-100 rounded-2xl">
               <h3 className="text-2xl font-bold mb-6 text-gray-900">Course Content</h3>
               {currentCourse.lessons && currentCourse.lessons.length > 0 ? (
                 <div className="space-y-3">
@@ -245,7 +245,7 @@ const CourseDetailPage = () => {
 
             {/* Learning Materials */}
             {currentCourse.materials && currentCourse.materials.length > 0 && (
-              <div className="card shadow-lg">
+              <div className="card shadow-xl border border-gray-100 rounded-2xl">
                 <h3 className="text-2xl font-bold mb-6 text-gray-900">Learning Materials</h3>
                 <div className="space-y-3">
                   {currentCourse.materials.map((material) => (

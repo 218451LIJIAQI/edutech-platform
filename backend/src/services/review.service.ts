@@ -43,7 +43,16 @@ class ReviewService {
       throw new AuthorizationError('You can only review your own enrollments');
     }
 
-    // Check if review already exists
+    if (!enrollment.package?.course?.teacherProfile) {
+      throw new ValidationError('Course teacher profile is missing');
+    }
+
+    // Validate rating (1-5)
+    if (!Number.isFinite(rating) || rating < 1 || rating > 5) {
+      throw new ValidationError('Rating must be a number between 1 and 5');
+    }
+
+    // Check if review already exists (one review per enrollment)
     const existingReview = await prisma.review.findUnique({
       where: { enrollmentId },
     });
@@ -52,7 +61,7 @@ class ReviewService {
       throw new ValidationError('You have already reviewed this course');
     }
 
-    // Create review
+    // Create review (default publish)
     const review = await prisma.review.create({
       data: {
         enrollmentId,
@@ -60,6 +69,7 @@ class ReviewService {
         teacherId: enrollment.package.course.teacherProfile.userId,
         rating,
         comment,
+        isPublished: true,
       },
     });
 
@@ -103,6 +113,12 @@ class ReviewService {
 
     if (review.reviewerId !== userId) {
       throw new AuthorizationError('You can only update your own reviews');
+    }
+
+    if (rating !== undefined) {
+      if (!Number.isFinite(rating) || rating < 1 || rating > 5) {
+        throw new ValidationError('Rating must be a number between 1 and 5');
+      }
     }
 
     const updated = await prisma.review.update({
@@ -172,7 +188,12 @@ class ReviewService {
     page: number = 1,
     limit: number = 10
   ) {
-    const skip = (page - 1) * limit;
+    const safePage = Number.isFinite(page) && page > 0 ? Math.floor(page) : 1;
+    const safeLimit = Number.isFinite(limit)
+      ? Math.min(Math.max(Math.floor(limit), 1), 100)
+      : 10;
+
+    const skip = (safePage - 1) * safeLimit;
 
     const [reviews, total] = await Promise.all([
       prisma.review.findMany({
@@ -181,7 +202,7 @@ class ReviewService {
           isPublished: true,
         },
         skip,
-        take: limit,
+        take: safeLimit,
         include: {
           reviewer: {
             select: {
@@ -219,9 +240,9 @@ class ReviewService {
       reviews,
       pagination: {
         total,
-        page,
-        limit,
-        totalPages: Math.ceil(total / limit),
+        page: safePage,
+        limit: safeLimit,
+        totalPages: Math.ceil(total / safeLimit),
       },
     };
   }
@@ -294,4 +315,3 @@ class ReviewService {
 }
 
 export default new ReviewService();
-

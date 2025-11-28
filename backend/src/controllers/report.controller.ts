@@ -15,7 +15,13 @@ class ReportController {
    */
   submitReport = asyncHandler(async (req: Request, res: Response) => {
     const reporterId = req.user!.id;
-    const { reportedId, type, description, contentType, contentId } = req.body;
+    const { reportedId, type, description, contentType, contentId } = req.body as {
+      reportedId: string;
+      type: ReportType;
+      description: string;
+      contentType?: string;
+      contentId?: string;
+    };
 
     const report = await reportService.submitReport(
       reporterId,
@@ -54,7 +60,7 @@ class ReportController {
    */
   getReportById = asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user!.id;
-    const { id } = req.params;
+    const { id } = req.params as { id: string };
     const isAdmin = req.user!.role === UserRole.ADMIN;
 
     const report = await reportService.getReportById(id, userId, isAdmin);
@@ -70,13 +76,18 @@ class ReportController {
    * GET /api/reports
    */
   getAllReports = asyncHandler(async (req: Request, res: Response) => {
-    const { status, type, page, limit } = req.query;
+    const { status, type, page, limit } = req.query as {
+      status?: string;
+      type?: string;
+      page?: string;
+      limit?: string;
+    };
 
     const result = await reportService.getAllReports(
       status as ReportStatus,
       type as ReportType,
-      page ? parseInt(page as string) : undefined,
-      limit ? parseInt(limit as string) : undefined
+      page ? parseInt(page, 10) : undefined,
+      limit ? parseInt(limit, 10) : undefined
     );
 
     res.status(200).json({
@@ -90,8 +101,8 @@ class ReportController {
    * PUT /api/reports/:id/status
    */
   updateReportStatus = asyncHandler(async (req: Request, res: Response) => {
-    const { id } = req.params;
-    const { status, resolution } = req.body;
+    const { id } = req.params as { id: string };
+    const { status, resolution } = req.body as { status: ReportStatus; resolution?: string };
 
     const report = await reportService.updateReportStatus(
       id,
@@ -111,7 +122,7 @@ class ReportController {
    * GET /api/reports/teacher/:teacherId
    */
   getTeacherReports = asyncHandler(async (req: Request, res: Response) => {
-    const { teacherId } = req.params;
+    const { teacherId } = req.params as { teacherId: string };
 
     const result = await reportService.getTeacherReports(teacherId);
 
@@ -123,4 +134,3 @@ class ReportController {
 }
 
 export default new ReportController();
-

@@ -1,5 +1,6 @@
 import prisma from '../config/database';
-import { NotFoundError, AuthorizationError } from '../utils/errors';
+import { NotFoundError } from '../utils/errors';
+import { Prisma } from '@prisma/client';
 
 /**
  * Notification Service
@@ -15,18 +16,22 @@ class NotificationService {
     limit: number = 20,
     unreadOnly: boolean = false
   ) {
-    const skip = (page - 1) * limit;
+    const safePage = Number.isFinite(page) && page > 0 ? Math.floor(page) : 1;
+    const safeLimit = Number.isFinite(limit)
+      ? Math.min(Math.max(Math.floor(limit), 1), 100)
+      : 20;
 
-    const where: any = { userId };
-    if (unreadOnly) {
-      where.isRead = false;
-    }
+    const skip = (safePage - 1) * safeLimit;
+
+    const where: Prisma.NotificationWhereInput = unreadOnly
+      ? { userId, isRead: false }
+      : { userId };
 
     const [notifications, total] = await Promise.all([
       prisma.notification.findMany({
         where,
         skip,
-        take: limit,
+        take: safeLimit,
         orderBy: { createdAt: 'desc' },
       }),
       prisma.notification.count({ where }),
@@ -36,9 +41,9 @@ class NotificationService {
       notifications,
       pagination: {
         total,
-        page,
-        limit,
-        totalPages: Math.ceil(total / limit),
+        page: safePage,
+        limit: safeLimit,
+        totalPages: Math.ceil(total / safeLimit),
       },
     };
   }
@@ -56,20 +61,19 @@ class NotificationService {
   }
 
   /**
-   * Mark notification as read
+   * Mark notification as read (idempotent, scoped to owner)
    */
   async markAsRead(notificationId: string, userId: string) {
-    const notification = await prisma.notification.findUnique({
-      where: { id: notificationId },
+    const notification = await prisma.notification.findFirst({
+      where: { id: notificationId, userId },
     });
 
     if (!notification) {
+      // Do not leak existence of notifications owned by others
       throw new NotFoundError('Notification not found');
     }
 
-    if (notification.userId !== userId) {
-      throw new AuthorizationError('You can only mark your own notifications as read');
-    }
+    if (notification.isRead) return notification;
 
     return await prisma.notification.update({
       where: { id: notificationId },
@@ -93,24 +97,17 @@ class NotificationService {
   }
 
   /**
-   * Delete notification
+   * Delete notification (scoped to owner)
    */
   async deleteNotification(notificationId: string, userId: string) {
-    const notification = await prisma.notification.findUnique({
-      where: { id: notificationId },
+    const { count } = await prisma.notification.deleteMany({
+      where: { id: notificationId, userId },
     });
 
-    if (!notification) {
+    if (count === 0) {
+      // Not found for this user
       throw new NotFoundError('Notification not found');
     }
-
-    if (notification.userId !== userId) {
-      throw new AuthorizationError('You can only delete your own notifications');
-    }
-
-    await prisma.notification.delete({
-      where: { id: notificationId },
-    });
   }
 
   /**
@@ -155,4 +152,3 @@ class NotificationService {
 }
 
 export default new NotificationService();
-

@@ -3,14 +3,19 @@
  */
 
 export class AppError extends Error {
-  public statusCode: number;
-  public isOperational: boolean;
+  public readonly statusCode: number;
+  public readonly isOperational: boolean;
 
   constructor(message: string, statusCode: number) {
     super(message);
+    // Set the prototype explicitly for proper instanceof checks when targeting ES5/ES2015
+    Object.setPrototypeOf(this, new.target.prototype);
+    this.name = new.target.name;
     this.statusCode = statusCode;
     this.isOperational = true;
-    Error.captureStackTrace(this, this.constructor);
+    if (Error.captureStackTrace) {
+      Error.captureStackTrace(this, this.constructor);
+    }
   }
 }
 
@@ -61,4 +66,3 @@ export class InternalServerError extends AppError {
     super(message, 500);
   }
 }
-

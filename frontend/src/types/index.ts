@@ -440,3 +440,82 @@ export interface PaymentWithDetails extends Payment {
   };
 }
 
+// Wallet & Payouts
+export enum WalletTransactionType {
+  CREDIT = 'CREDIT',
+  DEBIT = 'DEBIT',
+  FREEZE = 'FREEZE',
+  UNFREEZE = 'UNFREEZE',
+  ADJUSTMENT = 'ADJUSTMENT',
+}
+
+export enum WalletTransactionSource {
+  COURSE_SALE = 'COURSE_SALE',
+  REFUND = 'REFUND',
+  REVERSAL = 'REVERSAL',
+  ADMIN_ADJUSTMENT = 'ADMIN_ADJUSTMENT',
+  PAYOUT = 'PAYOUT',
+}
+
+export interface WalletSummary {
+  id: string;
+  userId: string;
+  availableBalance: number;
+  pendingPayout: number;
+  currency: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface WalletTransaction {
+  id: string;
+  walletId: string;
+  amount: number;
+  type: WalletTransactionType;
+  source: WalletTransactionSource;
+  referenceId?: string;
+  metadata?: any;
+  createdAt: string;
+}
+
+export enum PayoutMethodType {
+  BANK_TRANSFER = 'BANK_TRANSFER',
+  GRABPAY = 'GRABPAY',
+  TOUCH_N_GO = 'TOUCH_N_GO',
+  PAYPAL = 'PAYPAL',
+  OTHER = 'OTHER',
+}
+
+export interface PayoutMethod {
+  id: string;
+  walletId: string;
+  type: PayoutMethodType;
+  label: string;
+  details: any; // { bankName, accountNo, accountName } | { phone, walletId } etc.
+  isDefault: boolean;
+  isVerified: boolean;
+  createdAt: string;
+}
+
+export enum PayoutRequestStatus {
+  PENDING = 'PENDING',
+  APPROVED = 'APPROVED',
+  REJECTED = 'REJECTED',
+  PROCESSING = 'PROCESSING',
+  PAID = 'PAID',
+  CANCELLED = 'CANCELLED',
+}
+
+export interface PayoutRequest {
+  id: string;
+  walletId: string;
+  methodId?: string;
+  amount: number;
+  status: PayoutRequestStatus;
+  note?: string;
+  adminNote?: string;
+  externalReference?: string;
+  requestedAt: string;
+  processedAt?: string;
+}
+

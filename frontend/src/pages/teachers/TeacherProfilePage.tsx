@@ -151,7 +151,7 @@ const TeacherProfilePage = () => {
           <div className="lg:col-span-2 space-y-6">
             {/* Self Introduction */}
             {teacher.selfIntroduction && (
-              <div className="card shadow-lg">
+              <div className="card shadow-xl border border-gray-100 rounded-2xl">
                 <h2 className="text-2xl font-bold mb-6 text-gray-900">About Me</h2>
                 <p className="text-gray-700 whitespace-pre-line text-lg leading-relaxed">{teacher.selfIntroduction}</p>
               </div>
@@ -159,7 +159,7 @@ const TeacherProfilePage = () => {
 
             {/* Teaching Style */}
             {teacher.teachingStyle && (
-              <div className="card shadow-lg">
+              <div className="card shadow-xl border border-gray-100 rounded-2xl">
                 <h2 className="text-2xl font-bold mb-6 text-gray-900">Teaching Style</h2>
                 <p className="text-gray-700 whitespace-pre-line text-lg leading-relaxed">{teacher.teachingStyle}</p>
               </div>
@@ -167,7 +167,7 @@ const TeacherProfilePage = () => {
 
             {/* Education Background */}
             {teacher.educationBackground && (
-              <div className="card shadow-lg">
+              <div className="card shadow-xl border border-gray-100 rounded-2xl">
                 <div className="flex items-center space-x-3 mb-6">
                   <GraduationCap className="w-6 h-6 text-primary-600" />
                   <h2 className="text-2xl font-bold text-gray-900">Education Background</h2>
@@ -178,7 +178,7 @@ const TeacherProfilePage = () => {
 
             {/* Teaching Experience */}
             {teacher.teachingExperience && (
-              <div className="card shadow-lg">
+              <div className="card shadow-xl border border-gray-100 rounded-2xl">
                 <div className="flex items-center space-x-3 mb-6">
                   <Briefcase className="w-6 h-6 text-primary-600" />
                   <h2 className="text-2xl font-bold text-gray-900">Teaching Experience</h2>
@@ -189,14 +189,14 @@ const TeacherProfilePage = () => {
 
             {/* About */}
             {teacher.bio && (
-              <div className="card shadow-lg">
+              <div className="card shadow-xl border border-gray-100 rounded-2xl">
                 <h2 className="text-2xl font-bold mb-6 text-gray-900">Bio</h2>
                 <p className="text-gray-700 whitespace-pre-line text-lg leading-relaxed">{teacher.bio}</p>
               </div>
             )}
 
             {/* Courses */}
-            <div className="card shadow-lg">
+            <div className="card shadow-xl border border-gray-100 rounded-2xl">
               <h2 className="text-2xl font-bold mb-6 text-gray-900">Courses by this Teacher</h2>
               {courses.length > 0 ? (
                 <div className="space-y-4">
@@ -251,7 +251,7 @@ const TeacherProfilePage = () => {
 
             {/* Specialties */}
             {Array.isArray(teacher.specialties) && teacher.specialties.length > 0 && (
-              <div className="card shadow-lg">
+              <div className="card shadow-xl border border-gray-100 rounded-2xl">
                 <h3 className="text-lg font-bold mb-4 text-gray-900">Specialties</h3>
                 <div className="flex flex-wrap gap-2">
                   {teacher.specialties.map((specialty: string, idx: number) => (
@@ -265,7 +265,7 @@ const TeacherProfilePage = () => {
 
             {/* Languages */}
             {Array.isArray(teacher.languages) && teacher.languages.length > 0 && (
-              <div className="card shadow-lg">
+              <div className="card shadow-xl border border-gray-100 rounded-2xl">
                 <div className="flex items-center space-x-3 mb-4">
                   <Globe className="w-5 h-5 text-primary-600" />
                   <h3 className="text-lg font-bold text-gray-900">Languages</h3>
@@ -282,7 +282,7 @@ const TeacherProfilePage = () => {
 
             {/* Awards & Honors */}
             {Array.isArray(teacher.awards) && teacher.awards.length > 0 && (
-              <div className="card shadow-lg">
+              <div className="card shadow-xl border border-gray-100 rounded-2xl">
                 <h3 className="text-lg font-bold mb-4 text-gray-900">Awards & Honors</h3>
                 <div className="space-y-2">
                   {teacher.awards.map((award: string, idx: number) => (
@@ -297,7 +297,7 @@ const TeacherProfilePage = () => {
 
             {/* Certificate Photos */}
             {Array.isArray(teacher.certificatePhotos) && teacher.certificatePhotos.length > 0 && (
-              <div className="card shadow-lg">
+              <div className="card shadow-xl border border-gray-100 rounded-2xl">
                 <h3 className="text-lg font-bold mb-4 text-gray-900">Certificates</h3>
                 <div className="grid grid-cols-2 gap-3">
                   {teacher.certificatePhotos.map((photo: string, idx: number) => (
@@ -324,7 +324,7 @@ const TeacherProfilePage = () => {
 
             {/* Certifications */}
             {teacher.certifications && teacher.certifications.length > 0 && (
-              <div className="card shadow-lg">
+              <div className="card shadow-xl border border-gray-100 rounded-2xl">
                 <h3 className="text-xl font-bold mb-6 text-gray-900">Certifications</h3>
                 <div className="space-y-4">
                   {teacher.certifications.map((cert) => (

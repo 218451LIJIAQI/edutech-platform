@@ -5,223 +5,243 @@ import { LessonType } from '@prisma/client';
  * Validation rules for course endpoints
  */
 
+const COURSE_TYPES = ['LIVE', 'RECORDED', 'HYBRID'] as const;
+
+const validateUrlOrPath = (label: string) => (value: unknown) => {
+  if (value === undefined || value === null || value === '') return true;
+  if (typeof value !== 'string') {
+    throw new Error(`${label} must be a string URL or file path`);
+  }
+  const isUrl = /^https?:\/\/.+/.test(value);
+  const isRelativePath = value.startsWith('/');
+  if (!isUrl && !isRelativePath) {
+    throw new Error(`${label} must be a valid URL or file path`);
+  }
+  return true;
+};
+
 export const createCourseValidation = [
   body('title')
+    .isString().withMessage('Course title must be a string')
+    .bail()
     .trim()
     .notEmpty()
     .withMessage('Course title is required')
+    .bail()
     .isLength({ min: 5, max: 200 })
     .withMessage('Title must be between 5 and 200 characters'),
 
   body('description')
+    .isString().withMessage('Course description must be a string')
+    .bail()
     .trim()
     .notEmpty()
     .withMessage('Course description is required')
+    .bail()
     .isLength({ min: 20, max: 2000 })
     .withMessage('Description must be between 20 and 2000 characters'),
 
   body('category')
+    .isString().withMessage('Course category must be a string')
+    .bail()
     .trim()
     .notEmpty()
     .withMessage('Course category is required'),
 
   body('courseType')
-    .optional()
+    .optional({ nullable: true })
+    .isString().withMessage('Course type must be a string')
+    .bail()
     .trim()
-    .isIn(['LIVE', 'RECORDED', 'HYBRID'])
+    .isIn([...COURSE_TYPES])
     .withMessage('Course type must be LIVE, RECORDED, or HYBRID'),
 
   body('thumbnail')
-    .optional()
+    .optional({ nullable: true })
+    .isString().withMessage('Thumbnail must be a string URL or file path')
+    .bail()
     .trim()
-    .custom((value) => {
-      if (!value) return true;
-      // Allow both full URLs and relative paths
-      const isUrl = /^https?:\/\/.+/.test(value);
-      const isRelativePath = value.startsWith('/');
-      if (!isUrl && !isRelativePath) {
-        throw new Error('Thumbnail must be a valid URL or path');
-      }
-      return true;
-    })
-    .withMessage('Thumbnail must be a valid URL or file path'),
+    .custom(validateUrlOrPath('Thumbnail')),
 
   body('previewVideoUrl')
-    .optional()
+    .optional({ nullable: true })
+    .isString().withMessage('Preview video URL must be a string URL or file path')
+    .bail()
     .trim()
-    .custom((value) => {
-      if (!value) return true;
-      // Allow both full URLs and relative paths
-      const isUrl = /^https?:\/\/.+/.test(value);
-      const isRelativePath = value.startsWith('/');
-      if (!isUrl && !isRelativePath) {
-        throw new Error('Preview video URL must be a valid URL or path');
-      }
-      return true;
-    })
-    .withMessage('Preview video URL must be a valid URL or file path'),
+    .custom(validateUrlOrPath('Preview video URL')),
 ];
 
 export const updateCourseValidation = [
   body('title')
-    .optional()
+    .optional({ nullable: true })
+    .isString().withMessage('Title must be a string')
+    .bail()
     .trim()
     .isLength({ min: 5, max: 200 })
     .withMessage('Title must be between 5 and 200 characters'),
 
   body('description')
-    .optional()
+    .optional({ nullable: true })
+    .isString().withMessage('Description must be a string')
+    .bail()
     .trim()
     .isLength({ min: 20, max: 2000 })
     .withMessage('Description must be between 20 and 2000 characters'),
 
-  body('category').optional().trim().notEmpty().withMessage('Category cannot be empty'),
+  body('category')
+    .optional({ nullable: true })
+    .isString().withMessage('Category must be a string')
+    .bail()
+    .trim()
+    .notEmpty()
+    .withMessage('Category cannot be empty'),
 
   body('courseType')
-    .optional()
+    .optional({ nullable: true })
+    .isString().withMessage('Course type must be a string')
+    .bail()
     .trim()
-    .isIn(['LIVE', 'RECORDED', 'HYBRID'])
+    .isIn([...COURSE_TYPES])
     .withMessage('Course type must be LIVE, RECORDED, or HYBRID'),
 
   body('thumbnail')
-    .optional()
+    .optional({ nullable: true })
+    .isString().withMessage('Thumbnail must be a string URL or file path')
+    .bail()
     .trim()
-    .custom((value) => {
-      if (!value) return true;
-      // Allow both full URLs and relative paths
-      const isUrl = /^https?:\/\/.+/.test(value);
-      const isRelativePath = value.startsWith('/');
-      if (!isUrl && !isRelativePath) {
-        throw new Error('Thumbnail must be a valid URL or path');
-      }
-      return true;
-    })
-    .withMessage('Thumbnail must be a valid URL or file path'),
+    .custom(validateUrlOrPath('Thumbnail')),
 
   body('previewVideoUrl')
-    .optional()
+    .optional({ nullable: true })
+    .isString().withMessage('Preview video URL must be a string URL or file path')
+    .bail()
     .trim()
-    .custom((value) => {
-      if (!value) return true;
-      // Allow both full URLs and relative paths
-      const isUrl = /^https?:\/\/.+/.test(value);
-      const isRelativePath = value.startsWith('/');
-      if (!isUrl && !isRelativePath) {
-        throw new Error('Preview video URL must be a valid URL or path');
-      }
-      return true;
-    })
-    .withMessage('Preview video URL must be a valid URL or file path'),
+    .custom(validateUrlOrPath('Preview video URL')),
 
   body('isPublished')
-    .optional()
-    .isBoolean()
-    .withMessage('isPublished must be a boolean'),
+    .optional({ nullable: true })
+    .isBoolean().withMessage('isPublished must be a boolean')
+    .bail()
+    .toBoolean(),
 ];
 
 export const createLessonValidation = [
   body('title')
+    .isString().withMessage('Lesson title must be a string')
+    .bail()
     .trim()
     .notEmpty()
     .withMessage('Lesson title is required')
+    .bail()
     .isLength({ max: 200 })
     .withMessage('Title must not exceed 200 characters'),
 
   body('description')
-    .optional()
+    .optional({ nullable: true })
+    .isString().withMessage('Description must be a string')
+    .bail()
     .trim()
     .isLength({ max: 1000 })
     .withMessage('Description must not exceed 1000 characters'),
 
   body('type')
+    .isString().withMessage('Lesson type must be a string')
+    .bail()
     .notEmpty()
     .withMessage('Lesson type is required')
+    .bail()
     .isIn(Object.values(LessonType))
     .withMessage('Invalid lesson type'),
 
   body('duration')
-    .optional()
+    .optional({ nullable: true })
     .isInt({ min: 1 })
-    .withMessage('Duration must be a positive integer'),
+    .withMessage('Duration must be a positive integer')
+    .bail()
+    .toInt(),
 
   body('videoUrl')
-    .optional()
+    .optional({ nullable: true })
+    .isString().withMessage('Video URL must be a string URL or file path')
+    .bail()
     .trim()
-    .custom((value) => {
-      if (!value) return true;
-      const isUrl = /^https?:\/\/.+/.test(value);
-      const isRelativePath = value.startsWith('/');
-      if (!isUrl && !isRelativePath) {
-        throw new Error('Video URL must be a valid URL or path');
-      }
-      return true;
-    })
-    .withMessage('Video URL must be a valid URL or file path'),
+    .custom(validateUrlOrPath('Video URL')),
 
   body('isFree')
-    .optional()
-    .isBoolean()
-    .withMessage('isFree must be a boolean'),
+    .optional({ nullable: true })
+    .isBoolean().withMessage('isFree must be a boolean')
+    .bail()
+    .toBoolean(),
 ];
 
 export const updateLessonValidation = [
   body('title')
-    .optional()
+    .optional({ nullable: true })
+    .isString().withMessage('Title must be a string')
+    .bail()
     .trim()
     .isLength({ max: 200 })
     .withMessage('Title must not exceed 200 characters'),
 
   body('description')
-    .optional()
+    .optional({ nullable: true })
+    .isString().withMessage('Description must be a string')
+    .bail()
     .trim()
     .isLength({ max: 1000 })
     .withMessage('Description must not exceed 1000 characters'),
 
   body('type')
-    .optional()
+    .optional({ nullable: true })
+    .isString().withMessage('Lesson type must be a string')
+    .bail()
     .isIn(Object.values(LessonType))
     .withMessage('Invalid lesson type'),
 
   body('duration')
-    .optional()
+    .optional({ nullable: true })
     .isInt({ min: 1 })
-    .withMessage('Duration must be a positive integer'),
+    .withMessage('Duration must be a positive integer')
+    .bail()
+    .toInt(),
 
   body('videoUrl')
-    .optional()
+    .optional({ nullable: true })
+    .isString().withMessage('Video URL must be a string URL or file path')
+    .bail()
     .trim()
-    .custom((value) => {
-      if (!value) return true;
-      const isUrl = /^https?:\/\/.+/.test(value);
-      const isRelativePath = value.startsWith('/');
-      if (!isUrl && !isRelativePath) {
-        throw new Error('Video URL must be a valid URL or path');
-      }
-      return true;
-    })
-    .withMessage('Video URL must be a valid URL or file path'),
+    .custom(validateUrlOrPath('Video URL')),
 
   body('isFree')
-    .optional()
+    .optional({ nullable: true })
     .isBoolean()
-    .withMessage('isFree must be a boolean'),
+    .withMessage('isFree must be a boolean')
+    .bail()
+    .toBoolean(),
 
   body('orderIndex')
-    .optional()
+    .optional({ nullable: true })
     .isInt({ min: 1 })
-    .withMessage('Order index must be a positive integer'),
+    .withMessage('Order index must be a positive integer')
+    .bail()
+    .toInt(),
 ];
 
 export const createPackageValidation = [
   body('name')
+    .isString().withMessage('Package name must be a string')
+    .bail()
     .trim()
     .notEmpty()
     .withMessage('Package name is required')
+    .bail()
     .isLength({ max: 200 })
     .withMessage('Name must not exceed 200 characters'),
 
   body('description')
-    .optional()
+    .optional({ nullable: true })
+    .isString().withMessage('Description must be a string')
+    .bail()
     .trim()
     .isLength({ max: 1000 })
     .withMessage('Description must not exceed 1000 characters'),
@@ -229,94 +249,118 @@ export const createPackageValidation = [
   body('price')
     .notEmpty()
     .withMessage('Price is required')
+    .bail()
     .isFloat({ min: 0 })
-    .withMessage('Price must be a positive number'),
+    .withMessage('Price must be a positive number')
+    .bail()
+    .toFloat(),
 
   body('discount')
-    .optional()
+    .optional({ nullable: true })
     .isFloat({ min: 0 })
-    .withMessage('Discount must be a positive number'),
+    .withMessage('Discount must be a positive number')
+    .bail()
+    .toFloat(),
 
   body('duration')
-    .optional()
+    .optional({ nullable: true })
     .isInt({ min: 1 })
-    .withMessage('Duration must be a positive integer'),
+    .withMessage('Duration must be a positive integer')
+    .bail()
+    .toInt(),
 
   body('maxStudents')
-    .optional()
+    .optional({ nullable: true })
     .isInt({ min: 1 })
-    .withMessage('Max students must be a positive integer'),
+    .withMessage('Max students must be a positive integer')
+    .bail()
+    .toInt(),
 ];
 
 export const updatePackageValidation = [
   body('name')
-    .optional()
+    .optional({ nullable: true })
+    .isString().withMessage('Name must be a string')
+    .bail()
     .trim()
     .isLength({ max: 200 })
     .withMessage('Name must not exceed 200 characters'),
 
   body('description')
-    .optional()
+    .optional({ nullable: true })
+    .isString().withMessage('Description must be a string')
+    .bail()
     .trim()
     .isLength({ max: 1000 })
     .withMessage('Description must not exceed 1000 characters'),
 
   body('price')
-    .optional()
+    .optional({ nullable: true })
     .isFloat({ min: 0 })
-    .withMessage('Price must be a positive number'),
+    .withMessage('Price must be a positive number')
+    .bail()
+    .toFloat(),
 
   body('discount')
-    .optional()
+    .optional({ nullable: true })
     .isFloat({ min: 0 })
-    .withMessage('Discount must be a positive number'),
+    .withMessage('Discount must be a positive number')
+    .bail()
+    .toFloat(),
 
   body('duration')
-    .optional()
+    .optional({ nullable: true })
     .isInt({ min: 1 })
-    .withMessage('Duration must be a positive integer'),
+    .withMessage('Duration must be a positive integer')
+    .bail()
+    .toInt(),
 
   body('maxStudents')
-    .optional()
+    .optional({ nullable: true })
     .isInt({ min: 1 })
-    .withMessage('Max students must be a positive integer'),
+    .withMessage('Max students must be a positive integer')
+    .bail()
+    .toInt(),
 
   body('isActive')
-    .optional()
+    .optional({ nullable: true })
     .isBoolean()
-    .withMessage('isActive must be a boolean'),
+    .withMessage('isActive must be a boolean')
+    .bail()
+    .toBoolean(),
 ];
 
 export const uploadMaterialValidation = [
   body('title')
+    .isString().withMessage('Material title must be a string')
+    .bail()
     .trim()
     .notEmpty()
     .withMessage('Material title is required')
+    .bail()
     .isLength({ max: 200 })
     .withMessage('Title must not exceed 200 characters'),
 
   body('description')
-    .optional()
+    .optional({ nullable: true })
+    .isString().withMessage('Description must be a string')
+    .bail()
     .trim()
     .isLength({ max: 500 })
     .withMessage('Description must not exceed 500 characters'),
 
   body('fileUrl')
+    .isString().withMessage('File URL must be a string URL or file path')
+    .bail()
     .trim()
     .notEmpty()
     .withMessage('File URL is required')
-    .custom((value) => {
-      if (!value) return true;
-      const isUrl = /^https?:\/\/.+/.test(value);
-      const isRelativePath = value.startsWith('/');
-      if (!isUrl && !isRelativePath) {
-        throw new Error('File URL must be a valid URL or path');
-      }
-      return true;
-    })
-    .withMessage('File URL must be a valid URL or file path'),
+    .bail()
+    .custom(validateUrlOrPath('File URL')),
 
   body('fileType')
+    .isString().withMessage('File type must be a string')
+    .bail()
     .trim()
     .notEmpty()
     .withMessage('File type is required'),
@@ -324,95 +368,121 @@ export const uploadMaterialValidation = [
   body('fileSize')
     .notEmpty()
     .withMessage('File size is required')
+    .bail()
     .isInt({ min: 0 })
-    .withMessage('File size must be a non-negative integer'),
+    .withMessage('File size must be a non-negative integer')
+    .bail()
+    .toInt(),
 
   body('isDownloadable')
-    .optional()
+    .optional({ nullable: true })
     .isBoolean()
-    .withMessage('isDownloadable must be a boolean'),
+    .withMessage('isDownloadable must be a boolean')
+    .bail()
+    .toBoolean(),
 ];
 
 export const updateMaterialValidation = [
   body('title')
-    .optional()
+    .optional({ nullable: true })
+    .isString().withMessage('Title must be a string')
+    .bail()
     .trim()
     .isLength({ max: 200 })
     .withMessage('Title must not exceed 200 characters'),
 
   body('description')
-    .optional()
+    .optional({ nullable: true })
+    .isString().withMessage('Description must be a string')
+    .bail()
     .trim()
     .isLength({ max: 500 })
     .withMessage('Description must not exceed 500 characters'),
 
   body('fileUrl')
-    .optional()
+    .optional({ nullable: true })
+    .isString().withMessage('File URL must be a string URL or file path')
+    .bail()
     .trim()
-    .custom((value) => {
-      if (!value) return true;
-      const isUrl = /^https?:\/\/.+/.test(value);
-      const isRelativePath = value.startsWith('/');
-      if (!isUrl && !isRelativePath) {
-        throw new Error('File URL must be a valid URL or path');
-      }
-      return true;
-    })
-    .withMessage('File URL must be a valid URL or file path'),
+    .custom(validateUrlOrPath('File URL')),
 
   body('fileType')
-    .optional()
+    .optional({ nullable: true })
+    .isString().withMessage('File type must be a string')
+    .bail()
     .trim()
     .notEmpty()
     .withMessage('File type cannot be empty'),
 
   body('fileSize')
-    .optional()
+    .optional({ nullable: true })
     .isInt({ min: 0 })
-    .withMessage('File size must be a non-negative integer'),
+    .withMessage('File size must be a non-negative integer')
+    .bail()
+    .toInt(),
 
   body('isDownloadable')
-    .optional()
+    .optional({ nullable: true })
     .isBoolean()
-    .withMessage('isDownloadable must be a boolean'),
+    .withMessage('isDownloadable must be a boolean')
+    .bail()
+    .toBoolean(),
 ];
 
 export const getCoursesValidation = [
-  query('search').optional().isString(),
-  query('category').optional().isString(),
-  query('teacherId').optional().isUUID().withMessage('teacherId must be a valid UUID'),
+  query('search').optional({ nullable: true }).isString().trim(),
+  query('category').optional({ nullable: true }).isString().trim(),
+  query('teacherId').optional({ nullable: true }).isUUID().withMessage('teacherId must be a valid UUID'),
   query('courseType')
-    .optional()
-    .isIn(['LIVE', 'RECORDED', 'HYBRID'])
+    .optional({ nullable: true })
+    .isIn([...COURSE_TYPES])
     .withMessage('courseType must be LIVE, RECORDED, or HYBRID'),
   query('minRating')
-    .optional()
+    .optional({ nullable: true })
     .isFloat({ min: 0, max: 5 })
-    .withMessage('minRating must be between 0 and 5'),
+    .withMessage('minRating must be between 0 and 5')
+    .bail()
+    .toFloat(),
   query('minPrice')
-    .optional()
+    .optional({ nullable: true })
     .isFloat({ min: 0 })
-    .withMessage('minPrice must be a positive number'),
+    .withMessage('minPrice must be a positive number')
+    .bail()
+    .toFloat(),
   query('maxPrice')
-    .optional()
+    .optional({ nullable: true })
     .isFloat({ min: 0 })
-    .withMessage('maxPrice must be a positive number'),
+    .withMessage('maxPrice must be a positive number')
+    .bail()
+    .toFloat()
+    .custom((value, { req }) => {
+      const min = (req as any)?.query?.minPrice as unknown as number | undefined;
+      const max = value as unknown as number | undefined;
+      if (min !== undefined && max !== undefined && Number(min) > Number(max)) {
+        throw new Error('maxPrice must be greater than or equal to minPrice');
+      }
+      return true;
+    }),
   query('sortBy')
-    .optional()
+    .optional({ nullable: true })
     .isIn(['NEWEST', 'RATING', 'POPULARITY', 'PRICE_ASC', 'PRICE_DESC'])
     .withMessage('Invalid sortBy value'),
   query('sortOrder')
-    .optional()
+    .optional({ nullable: true })
     .isIn(['asc', 'desc'])
     .withMessage('sortOrder must be asc or desc'),
   query('page')
-    .optional()
+    .optional({ nullable: true })
     .isInt({ min: 1 })
-    .withMessage('Page must be a positive integer'),
+    .withMessage('Page must be a positive integer')
+    .bail()
+    .toInt(),
   query('limit')
-    .optional()
+    .optional({ nullable: true })
     .isInt({ min: 1, max: 100 })
-    .withMessage('Limit must be between 1 and 100'),
+    .withMessage('Limit must be between 1 and 100')
+    .bail()
+    .toInt(),
 ];
 
 export default {
@@ -425,4 +495,3 @@ export default {
   uploadMaterialValidation,
   getCoursesValidation,
 };
-

@@ -164,6 +164,7 @@ model User {
   sentMessages     Message[]
   auditLogs        UserAuditLog[]         @relation("AdminLogs")
   auditedLogs      UserAuditLog[]         @relation("UserLogs")
+  wallet           Wallet?
 
   @@index([email])
   @@index([role])
@@ -761,4 +762,110 @@ model Message {
   sender User          @relation(fields: [senderId], references: [id], onDelete: Cascade)
 
   @@map("messages")
+}
+
+// ================================
+// WALLET & PAYOUTS
+// ================================
+
+enum WalletTransactionType {
+  CREDIT
+  DEBIT
+  FREEZE
+  UNFREEZE
+  ADJUSTMENT
+}
+
+enum WalletTransactionSource {
+  COURSE_SALE
+  REFUND
+  REVERSAL
+  ADMIN_ADJUSTMENT
+  PAYOUT
+}
+
+enum PayoutMethodType {
+  BANK_TRANSFER
+  GRABPAY
+  TOUCH_N_GO
+  PAYPAL
+  OTHER
+}
+
+enum PayoutRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  PROCESSING
+  PAID
+  CANCELLED
+}
+
+model Wallet {
+  id              String   @id @default(uuid())
+  userId          String   @unique @map("user_id")
+  availableBalance Float   @default(0) @map("available_balance")
+  pendingPayout   Float    @default(0) @map("pending_payout")
+  currency        String   @default("USD")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  transactions    WalletTransaction[]
+  payoutMethods   PayoutMethod[]
+  payoutRequests  PayoutRequest[]
+
+  @@map("wallets")
+}
+
+model WalletTransaction {
+  id         String                   @id @default(uuid())
+  walletId   String                   @map("wallet_id")
+  amount     Float
+  type       WalletTransactionType
+  source     WalletTransactionSource
+  referenceId String?                 @map("reference_id")
+  metadata   Json?
+  createdAt  DateTime                 @default(now()) @map("created_at")
+
+  wallet     Wallet                   @relation(fields: [walletId], references: [id], onDelete: Cascade)
+
+  @@index([walletId, createdAt])
+  @@map("wallet_transactions")
+}
+
+model PayoutMethod {
+  id         String           @id @default(uuid())
+  walletId   String           @map("wallet_id")
+  type       PayoutMethodType
+  label      String
+  details    Json
+  isDefault  Boolean          @default(false) @map("is_default")
+  isVerified Boolean          @default(false) @map("is_verified")
+  createdAt  DateTime         @default(now()) @map("created_at")
+
+  wallet           Wallet           @relation(fields: [walletId], references: [id], onDelete: Cascade)
+  payoutRequests   PayoutRequest[]
+
+  @@index([walletId])
+  @@map("payout_methods")
+}
+
+model PayoutRequest {
+  id          String               @id @default(uuid())
+  walletId    String               @map("wallet_id")
+  methodId    String?              @map("method_id")
+  amount      Float
+  status      PayoutRequestStatus  @default(PENDING)
+  note        String?
+  adminNote   String?              @map("admin_note")
+  externalReference String?        @map("external_reference")
+  requestedAt DateTime             @default(now()) @map("requested_at")
+  processedAt DateTime?            @map("processed_at")
+
+  wallet      Wallet               @relation(fields: [walletId], references: [id], onDelete: Cascade)
+  method      PayoutMethod?        @relation(fields: [methodId], references: [id], onDelete: SetNull)
+
+  @@index([walletId, status])
+  @@map("payout_requests")
 }

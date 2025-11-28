@@ -1,6 +1,6 @@
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
-import { UserRole, RegistrationStatus, VerificationStatus } from '@prisma/client';
+import { UserRole, RegistrationStatus, VerificationStatus, Prisma } from '@prisma/client';
 import prisma from '../config/database';
 import config from '../config/env';
 import {
@@ -57,15 +57,15 @@ class AuthService {
 
     return { message: 'Account deleted successfully' };
   }
+
   /**
    * Register a new user
    */
   async register(data: RegisterData) {
-    // Check if user already exists
-    const existingUser = await prisma.user.findUnique({
-      where: { email: data.email },
-    });
+    const email = data.email.trim().toLowerCase();
 
+    // Check if user already exists
+    const existingUser = await prisma.user.findUnique({ where: { email } });
     if (existingUser) {
       throw new ConflictError('User with this email already exists');
     }
@@ -78,53 +78,58 @@ class AuthService {
     // Hash password
     const hashedPassword = await bcrypt.hash(data.password, 10);
 
-    // Create user
-    const user = await prisma.user.create({
-      data: {
-        email: data.email,
-        password: hashedPassword,
-        firstName: data.firstName,
-        lastName: data.lastName,
-        role: data.role,
-      },
-      select: {
-        id: true,
-        email: true,
-        firstName: true,
-        lastName: true,
-        role: true,
-        createdAt: true,
-      },
-    });
-
-    // Create teacher profile if role is TEACHER
-    if (data.role === UserRole.TEACHER) {
-      await prisma.teacherProfile.create({
+    try {
+      // Create user
+      const user = await prisma.user.create({
         data: {
-          userId: user.id,
-          registrationStatus: RegistrationStatus.PENDING,
-          verificationStatus: VerificationStatus.PENDING,
+          email,
+          password: hashedPassword,
+          firstName: data.firstName?.trim(),
+          lastName: data.lastName?.trim(),
+          role: data.role,
+        },
+        select: {
+          id: true,
+          email: true,
+          firstName: true,
+          lastName: true,
+          role: true,
+          createdAt: true,
         },
       });
+
+      // Create teacher profile if role is TEACHER
+      if (data.role === UserRole.TEACHER) {
+        await prisma.teacherProfile.create({
+          data: {
+            userId: user.id,
+            registrationStatus: RegistrationStatus.PENDING,
+            verificationStatus: VerificationStatus.PENDING,
+          },
+        });
+      }
+
+      // Generate tokens
+      const tokens = this.generateTokens(user.id, user.email, user.role);
+
+      return { user, tokens };
+    } catch (err) {
+      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+        // Unique constraint failed on the fields: (`email`)
+        throw new ConflictError('User with this email already exists');
+      }
+      throw err;
     }
-
-    // Generate tokens
-    const tokens = this.generateTokens(user.id, user.email, user.role);
-
-    return {
-      user,
-      tokens,
-    };
   }
 
   /**
    * Login user
    */
   async login(data: LoginData) {
+    const email = data.email.trim().toLowerCase();
+
     // Find user
-    const user = await prisma.user.findUnique({
-      where: { email: data.email },
-    });
+    const user = await prisma.user.findUnique({ where: { email } });
 
     if (!user) {
       throw new AuthenticationError('Invalid email or password');
@@ -137,10 +142,14 @@ class AuthService {
 
     // Verify password
     const isPasswordValid = await bcrypt.compare(data.password, user.password);
-
     if (!isPasswordValid) {
       throw new AuthenticationError('Invalid email or password');
     }
+
+    // Side effects: update last login time and count (best effort)
+    prisma.user
+      .update({ where: { id: user.id }, data: { lastLoginAt: new Date(), loginCount: (user.loginCount || 0) + 1 } })
+      .catch(() => void 0);
 
     // Generate tokens
     const tokens = this.generateTokens(user.id, user.email, user.role);
@@ -172,9 +181,7 @@ class AuthService {
       ) as { id: string; email: string; role: UserRole };
 
       // Get user
-      const user = await prisma.user.findUnique({
-        where: { id: decoded.id },
-      });
+      const user = await prisma.user.findUnique({ where: { id: decoded.id } });
 
       if (!user || !user.isActive) {
         throw new AuthenticationError('Invalid refresh token');
@@ -184,7 +191,7 @@ class AuthService {
       const tokens = this.generateTokens(user.id, user.email, user.role);
 
       return tokens;
-    } catch (error) {
+    } catch (_error) {
       throw new AuthenticationError('Invalid or expired refresh token');
     }
   }
@@ -216,7 +223,7 @@ class AuthService {
             isVerified: true,
             registrationStatus: true,
             verificationStatus: true,
-            profileCompletionStatus: true, 
+            profileCompletionStatus: true,
           },
         },
       },
@@ -242,7 +249,11 @@ class AuthService {
   ) {
     const user = await prisma.user.update({
       where: { id: userId },
-      data,
+      data: {
+        firstName: data.firstName?.trim(),
+        lastName: data.lastName?.trim(),
+        avatar: data.avatar,
+      },
       select: {
         id: true,
         email: true,
@@ -265,9 +276,7 @@ class AuthService {
     newPassword: string
   ) {
     // Get user
-    const user = await prisma.user.findUnique({
-      where: { id: userId },
-    });
+    const user = await prisma.user.findUnique({ where: { id: userId } });
 
     if (!user) {
       throw new NotFoundError('User not found');
@@ -320,4 +329,3 @@ class AuthService {
 }
 
 export default new AuthService();
-

@@ -142,7 +142,7 @@ const VerificationPage = () => {
           </div>
 
           {/* Benefits Section */}
-          <div className="card mb-8 bg-gradient-to-br from-primary-50 to-blue-50 border-2 border-primary-200 shadow-lg">
+          <div className="card mb-8 bg-gradient-to-br from-primary-50 to-blue-50 border-2 border-primary-200 shadow-xl rounded-2xl">
             <h2 className="text-xl font-bold mb-4 text-gray-900">Benefits of Verification</h2>
             <ul className="space-y-3">
               {[
@@ -163,7 +163,7 @@ const VerificationPage = () => {
 
           {/* Verification Form */}
           {!showForm ? (
-            <div className="card shadow-lg">
+            <div className="card shadow-xl border border-gray-100 rounded-2xl">
               <div className="text-center py-12">
                 <div className="w-20 h-20 bg-gradient-to-br from-primary-100 to-primary-200 rounded-full flex items-center justify-center mx-auto mb-6">
                   <Shield className="w-10 h-10 text-primary-600" />
@@ -179,7 +179,7 @@ const VerificationPage = () => {
               </div>
             </div>
           ) : (
-            <div className="card shadow-lg">
+            <div className="card shadow-xl border border-gray-100 rounded-2xl">
               <h2 className="text-2xl font-bold mb-6 text-gray-900">Upload Verification Document</h2>
               <form onSubmit={handleSubmitVerification} className="space-y-6">
                 {/* Document Type */}
@@ -293,7 +293,7 @@ const VerificationPage = () => {
 
           {/* Verification History */}
           {verifications.length > 0 && (
-            <div className="card mt-8 shadow-lg">
+            <div className="card mt-8 shadow-xl border border-gray-100 rounded-2xl">
               <h2 className="text-2xl font-bold mb-6 text-gray-900">Verification History</h2>
               <div className="space-y-4">
                 {verifications.map((verification) => (
@@ -346,7 +346,7 @@ const VerificationPage = () => {
           )}
 
           {/* FAQ Section */}
-          <div className="card mt-8 shadow-lg">
+          <div className="card mt-8 shadow-xl border border-gray-100 rounded-2xl">
             <h2 className="text-2xl font-bold mb-6 text-gray-900">Frequently Asked Questions</h2>
             <div className="space-y-5">
               <div className="p-4 bg-gray-50 rounded-xl">

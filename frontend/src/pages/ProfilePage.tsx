@@ -92,7 +92,7 @@ const ProfilePage = () => {
         </div>
 
         {/* Profile Card */}
-          <div className="card mb-6 shadow-lg">
+          <div className="card mb-6 shadow-xl border border-gray-100 rounded-2xl">
             <div className="flex items-center justify-between mb-8">
               <h2 className="text-2xl font-bold text-gray-900">Personal Information</h2>
             {!isEditing ? (

@@ -9,6 +9,15 @@ import prisma from '../config/database';
  */
 
 /**
+ * Helper function to generate consistent participant IDs
+ * Always sorts IDs to ensure consistent ordering
+ */
+function getParticipantIds(userId: string, otherUserId: string): string {
+  const ids = [userId, otherUserId].sort();
+  return JSON.stringify(ids);
+}
+
+/**
  * Get contacts for current user
  * Returns list of users they can message
  */
@@ -45,7 +54,7 @@ export const getContacts = asyncHandler(async (req: Request, res: Response) => {
   //   // No additional filter
   // }
 
-  const contacts = await prisma.user.findMany({
+  let contacts = await prisma.user.findMany({
     where,
     select: {
       id: true,
@@ -55,6 +64,35 @@ export const getContacts = asyncHandler(async (req: Request, res: Response) => {
       role: true,
     },
   });
+
+  // Ensure a primary Admin contact exists and is pinned for Students and Teachers
+  if (currentUser.role === 'STUDENT' || currentUser.role === 'TEACHER') {
+    const primaryAdmin = await prisma.user.findFirst({
+      where: { role: 'ADMIN', isActive: true },
+      orderBy: { createdAt: 'asc' },
+      select: {
+        id: true,
+        firstName: true,
+        lastName: true,
+        avatar: true,
+        role: true,
+      },
+    });
+
+    if (primaryAdmin && primaryAdmin.id !== userId) {
+      // Remove any duplicate admin(s) from list and insert primary at top
+      contacts = contacts.filter((c) => c.role !== 'ADMIN' || c.id === primaryAdmin.id);
+      const exists = contacts.some((c) => c.id === primaryAdmin.id);
+      if (!exists) {
+        contacts = [primaryAdmin, ...contacts];
+      } else {
+        // Move to front
+        const adminIndex = contacts.findIndex((c) => c.id === primaryAdmin.id);
+        const [adminContact] = contacts.splice(adminIndex, 1);
+        contacts = [adminContact, ...contacts];
+      }
+    }
+  }
 
   const formattedContacts = contacts.map((contact) => ({
     id: contact.id,
@@ -77,19 +115,19 @@ export const getContacts = asyncHandler(async (req: Request, res: Response) => {
  */
 export const getOrCreateThread = asyncHandler(async (req: Request, res: Response) => {
   const userId = req.user?.id;
-  const { withUserId } = req.body;
+  const { contactId } = req.body as { contactId?: string };
 
   if (!userId) {
     throw new AppError('User not authenticated', 401);
   }
 
-  if (!withUserId) {
-    throw new AppError('withUserId is required', 400);
+  if (!contactId) {
+    throw new AppError('contactId is required', 400);
   }
 
   // Check if other user exists
   const otherUser = await prisma.user.findUnique({
-    where: { id: withUserId },
+    where: { id: contactId },
   });
 
   if (!otherUser) {
@@ -97,12 +135,15 @@ export const getOrCreateThread = asyncHandler(async (req: Request, res: Response
   }
 
   // Create participant IDs array (sorted for consistency)
-  const participantIds = [userId, withUserId].sort();
+  const participantIdsStr = getParticipantIds(userId, contactId);
 
-  // Find existing thread
+  // Find existing thread via participants relation (robust against legacy participantIds formatting)
   let thread = await prisma.messageThread.findFirst({
     where: {
-      participantIds: JSON.stringify(participantIds),
+      AND: [
+        { participants: { some: { id: userId } } },
+        { participants: { some: { id: contactId } } },
+      ],
     },
     include: {
       participants: {
@@ -133,9 +174,9 @@ export const getOrCreateThread = asyncHandler(async (req: Request, res: Response
   if (!thread) {
     thread = await prisma.messageThread.create({
       data: {
-        participantIds: JSON.stringify(participantIds),
+        participantIds: participantIdsStr,
         participants: {
-          connect: [{ id: userId }, { id: withUserId }],
+          connect: [{ id: userId }, { id: contactId }],
         },
       },
       include: {
@@ -223,7 +264,7 @@ export const getMessages = asyncHandler(async (req: Request, res: Response) => {
     status: 'success',
     data: {
       items: messages.reverse(),
-      nextCursor: messages.length > 0 ? messages[0].id : null,
+      nextCursor: messages.length > 0 ? messages[0].id : null, // after reverse, messages[0] is oldest item
     },
   });
 });
@@ -234,7 +275,7 @@ export const getMessages = asyncHandler(async (req: Request, res: Response) => {
 export const sendMessage = asyncHandler(async (req: Request, res: Response) => {
   const userId = req.user?.id;
   const { threadId } = req.params;
-  const { content } = req.body;
+  const { content } = req.body as { content?: string };
 
   if (!userId) {
     throw new AppError('User not authenticated', 401);
@@ -365,17 +406,19 @@ export const markMessagesAsRead = asyncHandler(async (req: Request, res: Respons
  */
 export const getContactUnreadCount = asyncHandler(async (req: Request, res: Response) => {
   const userId = req.user?.id;
-  const { contactId } = req.params;
+  const { contactId } = req.params as { contactId: string };
 
   if (!userId) {
     throw new AppError('User not authenticated', 401);
   }
 
-  // Find thread with this contact
-  const participantIds = [userId, contactId].sort();
+  // Find thread with this contact using participants relation (handles legacy participantIds ordering)
   const thread = await prisma.messageThread.findFirst({
     where: {
-      participantIds: JSON.stringify(participantIds),
+      AND: [
+        { participants: { some: { id: userId } } },
+        { participants: { some: { id: contactId } } },
+      ],
     },
   });
 
@@ -465,4 +508,3 @@ export const getThreads = asyncHandler(async (req: Request, res: Response) => {
     data: formattedThreads,
   });
 });
-

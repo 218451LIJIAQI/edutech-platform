@@ -27,12 +27,29 @@ export const communityController = {
 
   // ==================== POSTS ====================
   getFeed: asyncHandler(async (req: Request, res: Response) => {
-    const { tab, tag, page, limit } = req.query;
+    // Support both legacy "tab" and new "sort" params
+    const { sort, tab, tag, page, limit } = req.query as {
+      sort?: 'latest' | 'top';
+      tab?: 'hot' | 'new' | 'weekly' | string;
+      tag?: string;
+      page?: string;
+      limit?: string;
+    };
+
+    let resolvedTab: 'hot' | 'new' | 'weekly' = 'hot';
+    if (typeof tab === 'string' && (tab === 'hot' || tab === 'new' || tab === 'weekly')) {
+      resolvedTab = tab;
+    } else if (sort === 'top') {
+      resolvedTab = 'hot';
+    } else {
+      resolvedTab = 'new';
+    }
+
     const result = await communityService.getFeed({
-      tab: (tab as any) || 'hot',
-      tag: tag as string,
-      page: parseInt(page as string) || 1,
-      limit: parseInt(limit as string) || 10,
+      tab: resolvedTab,
+      tag,
+      page: page ? parseInt(page, 10) : 1,
+      limit: limit ? parseInt(limit, 10) : 10,
     });
     res.json({
       status: 'success',
@@ -132,11 +149,7 @@ export const communityController = {
       throw new BadRequestError('Comment content is required');
     }
 
-    const comment = await communityService.addComment(
-      postId,
-      userId,
-      content.trim()
-    );
+    const comment = await communityService.addComment(postId, userId, content.trim());
     res.status(201).json({
       status: 'success',
       data: comment,
@@ -159,8 +172,8 @@ export const communityController = {
     const { page, limit } = req.query;
     const result = await communityService.getUserPosts(
       userId,
-      parseInt(page as string) || 1,
-      parseInt(limit as string) || 10
+      page ? parseInt(page as string, 10) : 1,
+      limit ? parseInt(limit as string, 10) : 10
     );
     res.json({
       status: 'success',
@@ -184,4 +197,3 @@ export const communityController = {
 };
 
 export default communityController;
-

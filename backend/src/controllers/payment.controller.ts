@@ -13,7 +13,7 @@ class PaymentController {
    */
   createPaymentIntent = asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user!.id;
-    const { packageId } = req.body;
+    const { packageId } = req.body as { packageId: string };
 
     const result = await paymentService.createPaymentIntent(userId, packageId);
 
@@ -44,7 +44,7 @@ class PaymentController {
    * POST /api/payments/confirm
    */
   confirmPayment = asyncHandler(async (req: Request, res: Response) => {
-    const { paymentId, stripePaymentId } = req.body;
+    const { paymentId, stripePaymentId } = req.body as { paymentId: string; stripePaymentId?: string };
 
     const result = await paymentService.confirmPayment(paymentId, stripePaymentId);
 
@@ -76,7 +76,7 @@ class PaymentController {
    */
   getPaymentById = asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user!.id;
-    const { id } = req.params;
+    const { id } = req.params as { id: string };
 
     const payment = await paymentService.getPaymentById(id, userId);
 
@@ -121,7 +121,7 @@ class PaymentController {
    * POST /api/payments/:id/refund
    */
   requestRefund = asyncHandler(async (req: Request, res: Response) => {
-    const { id } = req.params;
+    const { id } = req.params as { id: string };
 
     const payment = await paymentService.requestRefund(id);
 
@@ -134,4 +134,3 @@ class PaymentController {
 }
 
 export default new PaymentController();
-

@@ -95,7 +95,7 @@ const CoursesPage = () => {
 
       <div className="container mx-auto px-4 py-8 space-y-6">
         {/* Search & Sort Bar */}
-        <div className="card shadow-lg">
+        <div className="card shadow-xl border border-gray-100 rounded-2xl">
           <div className="flex flex-col md:flex-row gap-3 md:items-center">
             {/* Search */}
             <div className="relative flex-1">
@@ -139,7 +139,7 @@ const CoursesPage = () => {
 
         {/* Filters Panel */}
         {showFilters && (
-          <div className="card shadow-lg">
+          <div className="card shadow-xl border border-gray-100 rounded-2xl">
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
               {/* Category */}
               <div>
@@ -248,7 +248,7 @@ const CoursesPage = () => {
         {/* Results */}
         {courses.length === 0 ? (
           <div className="text-center py-20">
-            <div className="card shadow-lg max-w-md mx-auto">
+            <div className="card shadow-xl border border-gray-100 rounded-2xl max-w-md mx-auto">
               <BookOpen className="w-16 h-16 text-gray-300 mx-auto mb-4" />
               <h3 className="text-2xl font-bold text-gray-900 mb-2">No courses found</h3>
               <p className="text-gray-600">Try adjusting filters or search terms</p>
@@ -260,44 +260,45 @@ const CoursesPage = () => {
               <Link 
                 key={course.id} 
                 to={`/courses/${course.id}`} 
-                className="card-hover group overflow-hidden"
+                className="card-hover group overflow-hidden shadow-lg hover:shadow-2xl transition-all duration-300 transform hover:scale-105 border border-gray-100 hover:border-primary-200 rounded-2xl"
                 style={{ animationDelay: `${idx * 50}ms` }}
               >
             {/* Thumbnail */}
             {course.thumbnail && (
-                  <div className="aspect-video bg-gradient-to-br from-gray-200 to-gray-300 rounded-xl overflow-hidden mb-4 relative">
+                  <div className="aspect-video bg-gradient-to-br from-gray-200 to-gray-300 rounded-t-2xl overflow-hidden mb-4 relative">
                 <img 
                   src={course.thumbnail} 
                   alt={course.title} 
-                      className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
+                      className="w-full h-full object-cover group-hover:scale-125 transition-transform duration-500"
                 />
-                    <div className="absolute inset-0 bg-black opacity-0 group-hover:opacity-20 transition-opacity duration-300"></div>
+                    <div className="absolute inset-0 bg-black opacity-0 group-hover:opacity-30 transition-opacity duration-300"></div>
               </div>
             )}
             
-                <h3 className="text-lg font-bold mb-2 text-gray-900 group-hover:text-primary-600 transition-colors line-clamp-2">
+            <div className="p-5">
+                <h3 className="text-xl font-bold mb-3 text-gray-900 group-hover:text-primary-600 transition-colors line-clamp-2">
                   {course.title}
                 </h3>
                 <p className="text-gray-600 mb-4 line-clamp-2 text-sm leading-relaxed">{course.description}</p>
             
                 <div className="flex items-center flex-wrap gap-2 mb-4">
-              <span className="badge-primary">{course.category}</span>
+              <span className="badge-primary font-semibold">{course.category}</span>
               
               {/* Course Type Badge */}
               {course.courseType === CourseType.LIVE && (
-                    <span className="badge bg-gradient-to-r from-red-100 to-red-50 text-red-700 flex items-center gap-1 border border-red-200">
+                    <span className="badge bg-gradient-to-r from-red-100 to-red-50 text-red-700 flex items-center gap-1 border border-red-200 font-semibold">
                   <Radio className="w-3 h-3" />
                   Live
                 </span>
               )}
               {course.courseType === CourseType.RECORDED && (
-                    <span className="badge bg-gradient-to-r from-blue-100 to-blue-50 text-blue-700 flex items-center gap-1 border border-blue-200">
+                    <span className="badge bg-gradient-to-r from-blue-100 to-blue-50 text-blue-700 flex items-center gap-1 border border-blue-200 font-semibold">
                   <Video className="w-3 h-3" />
                   Recorded
                 </span>
               )}
               {course.courseType === CourseType.HYBRID && (
-                    <span className="badge bg-gradient-to-r from-purple-100 to-purple-50 text-purple-700 flex items-center gap-1 border border-purple-200">
+                    <span className="badge bg-gradient-to-r from-purple-100 to-purple-50 text-purple-700 flex items-center gap-1 border border-purple-200 font-semibold">
                   <PlayCircle className="w-3 h-3" />
                   Hybrid
                 </span>
@@ -305,12 +306,13 @@ const CoursesPage = () => {
             </div>
             
                 <div className="border-t pt-4 flex items-center justify-between">
-                  <div className="text-sm font-medium text-gray-600">📚 {course.lessons?.length || 0} lessons</div>
+                  <div className="text-sm font-bold text-gray-700">📚 {course.lessons?.length || 0} lessons</div>
               {course.packages && course.packages.length > 0 && (
-                    <span className="text-lg font-bold text-primary-600">
+                    <span className="text-2xl font-bold text-primary-600">
                   {formatCurrency(course.packages[0].finalPrice)}
                 </span>
               )}
+            </div>
             </div>
           </Link>
         ))}

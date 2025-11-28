@@ -1,26 +1,40 @@
 import { PrismaClient } from '@prisma/client';
 import logger from '../utils/logger';
 
-// Singleton pattern for Prisma Client to avoid multiple instances
+// Singleton pattern for Prisma Client to avoid multiple instances across hot reloads in dev
+// and to prevent duplicate event listeners.
+
 declare global {
-  var prisma: PrismaClient | undefined;
+  // Reuse Prisma client and a one-time hook flag in dev to avoid multiple instances and repeated logs
+  // eslint-disable-next-line no-var
+  var __PRISMA__: PrismaClient | undefined;
+  // eslint-disable-next-line no-var
+  var __PRISMA_BEFORE_EXIT_HOOK__: boolean | undefined;
 }
 
-const prismaClient = global.prisma || new PrismaClient({
-  log: process.env.NODE_ENV === 'development' 
-    ? ['query', 'error', 'warn'] 
-    : ['error'],
-});
+const isProduction = process.env.NODE_ENV === 'production';
 
-if (process.env.NODE_ENV !== 'production') {
-  global.prisma = prismaClient;
+const prismaClient = globalThis.__PRISMA__ ??
+  new PrismaClient({
+    log: isProduction ? ['error'] : ['query', 'warn', 'error'],
+  });
+
+if (!isProduction) {
+  globalThis.__PRISMA__ = prismaClient;
 }
 
-// Graceful shutdown
-process.on('beforeExit', async () => {
-  await prismaClient.$disconnect();
-  logger.info('Database connection closed');
-});
+// Graceful shutdown - ensure we only register this once
+if (!globalThis.__PRISMA_BEFORE_EXIT_HOOK__) {
+  process.on('beforeExit', async () => {
+    try {
+      await prismaClient.$disconnect();
+    } catch (e) {
+      logger.error('Error disconnecting Prisma', e as Error);
+    } finally {
+      logger.info('Database connection closed', { service: 'edutech-backend' });
+    }
+  });
+  globalThis.__PRISMA_BEFORE_EXIT_HOOK__ = true;
+}
 
 export default prismaClient;
-

@@ -13,13 +13,17 @@ class NotificationController {
    */
   getMyNotifications = asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user!.id;
-    const { page, limit, unreadOnly } = req.query;
+    const { page, limit, unreadOnly } = req.query as {
+      page?: string;
+      limit?: string;
+      unreadOnly?: string | boolean;
+    };
 
     const result = await notificationService.getUserNotifications(
       userId,
-      page ? parseInt(page as string) : undefined,
-      limit ? parseInt(limit as string) : undefined,
-      unreadOnly === 'true'
+      page ? parseInt(page, 10) : undefined,
+      limit ? parseInt(limit, 10) : undefined,
+      unreadOnly === 'true' || unreadOnly === true
     );
 
     res.status(200).json({
@@ -52,7 +56,7 @@ class NotificationController {
    */
   markAsRead = asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user!.id;
-    const { id } = req.params;
+    const { id } = req.params as { id: string };
 
     const notification = await notificationService.markAsRead(id, userId);
 
@@ -67,8 +71,8 @@ class NotificationController {
    * Mark all notifications as read
    * PUT /api/notifications/read-all
    */
-  markAllAsRead = asyncHandler(async (req: Request, res: Response) => {
-    const userId = req.user!.id;
+  markAllAsRead = asyncHandler(async (_req: Request, res: Response) => {
+    const userId = res.req.user!.id;
 
     await notificationService.markAllAsRead(userId);
 
@@ -84,7 +88,7 @@ class NotificationController {
    */
   deleteNotification = asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user!.id;
-    const { id } = req.params;
+    const { id } = req.params as { id: string };
 
     await notificationService.deleteNotification(id, userId);
 
@@ -99,7 +103,12 @@ class NotificationController {
    * POST /api/notifications
    */
   createNotification = asyncHandler(async (req: Request, res: Response) => {
-    const { userId, title, message, type } = req.body;
+    const { userId, title, message, type } = req.body as {
+      userId: string;
+      title: string;
+      message: string;
+      type?: string;
+    };
 
     const notification = await notificationService.createNotification(
       userId,
@@ -117,4 +126,3 @@ class NotificationController {
 }
 
 export default new NotificationController();
-

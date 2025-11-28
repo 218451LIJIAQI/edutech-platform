@@ -162,40 +162,40 @@ const CourseManagementPage = () => {
         </div>
 
         {/* Stats */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
-          <div className="card bg-gradient-to-br from-blue-50 to-blue-100 border-2 border-blue-200">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+          <div className="card bg-gradient-to-br from-blue-500 to-blue-600 text-white shadow-xl hover:shadow-2xl transition-all duration-300 transform hover:scale-105 border border-blue-400/30 rounded-2xl">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-blue-700 uppercase tracking-wide">Students Enrolled</p>
-                <p className="text-3xl font-bold text-blue-900 mt-2">
+                <p className="text-sm font-bold text-blue-100 uppercase tracking-wide">Students Enrolled</p>
+                <p className="text-4xl font-bold text-white mt-3">
                   {(course as Course & { _count?: { enrollments?: number } })._count?.enrollments || 0}
                 </p>
               </div>
-              <Users className="w-12 h-12 text-blue-300" />
+              <Users className="w-16 h-16 text-blue-200 opacity-50" />
             </div>
           </div>
 
-          <div className="card bg-gradient-to-br from-purple-50 to-purple-100 border-2 border-purple-200">
+          <div className="card bg-gradient-to-br from-purple-500 to-purple-600 text-white shadow-xl hover:shadow-2xl transition-all duration-300 transform hover:scale-105 border border-purple-400/30 rounded-2xl">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-purple-700 uppercase tracking-wide">Lessons</p>
-                <p className="text-3xl font-bold text-purple-900 mt-2">{course.lessons?.length || 0}</p>
+                <p className="text-sm font-bold text-purple-100 uppercase tracking-wide">Lessons</p>
+                <p className="text-4xl font-bold text-white mt-3">{course.lessons?.length || 0}</p>
               </div>
-              <BookOpen className="w-12 h-12 text-purple-300" />
+              <BookOpen className="w-16 h-16 text-purple-200 opacity-50" />
             </div>
           </div>
 
-          <div className="card bg-gradient-to-br from-green-50 to-green-100 border-2 border-green-200">
+          <div className="card bg-gradient-to-br from-green-500 to-green-600 text-white shadow-xl hover:shadow-2xl transition-all duration-300 transform hover:scale-105 border border-green-400/30 rounded-2xl">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-green-700 uppercase tracking-wide">Materials</p>
-                <p className="text-3xl font-bold text-green-900 mt-2">{course.materials?.length || 0}</p>
+                <p className="text-sm font-bold text-green-100 uppercase tracking-wide">Materials</p>
+                <p className="text-4xl font-bold text-white mt-3">{course.materials?.length || 0}</p>
               </div>
-              <FileText className="w-12 h-12 text-green-300" />
+              <FileText className="w-16 h-16 text-green-200 opacity-50" />
             </div>
           </div>
 
-          <div className="card bg-gradient-to-br from-orange-50 to-orange-100 border-2 border-orange-200">
+          <div className="card bg-gradient-to-br from-orange-500 to-orange-600 text-white shadow-xl hover:shadow-2xl transition-all duration-300 transform hover:scale-105 border border-orange-400/30 rounded-2xl">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-orange-700 uppercase tracking-wide">Pricing Options</p>

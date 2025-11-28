@@ -212,7 +212,7 @@ const StudentsPage = () => {
             </div>
 
             {/* Students Table */}
-            <div className="card shadow-lg">
+            <div className="card shadow-xl border border-gray-100 rounded-2xl">
               <div className="flex items-center justify-between mb-8">
                 <h2 className="text-2xl font-bold text-gray-900">Student List</h2>
                 <div className="flex items-center space-x-4">

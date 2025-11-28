@@ -33,6 +33,7 @@ import CreateCoursePage from './pages/teacher/CreateCoursePage';
 import CourseManagementPage from './pages/teacher/CourseManagementPage';
 import VerificationPage from './pages/teacher/VerificationPage';
 import StudentsPage from './pages/teacher/StudentsPage';
+import WalletPage from './pages/teacher/WalletPage';
 import TeacherStudentManagementPage from './pages/teacher/TeacherStudentManagementPage';
 import MessagesPage from './pages/messages/MessagesPage';
 import ProfileCompletionPage from './pages/teacher/ProfileCompletionPage';
@@ -311,6 +312,14 @@ function App() {
           element={
             <PrivateRoute allowedRoles={[UserRole.TEACHER]}>
               <TeacherDashboard />
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path="/teacher/wallet"
+          element={
+            <PrivateRoute allowedRoles={[UserRole.TEACHER]}>
+              <WalletPage />
             </PrivateRoute>
           }
         />

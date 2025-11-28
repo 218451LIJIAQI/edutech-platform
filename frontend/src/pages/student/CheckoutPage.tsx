@@ -355,7 +355,7 @@ const CheckoutPage = () => {
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
               {/* Payment Form */}
               <div className="lg:col-span-2">
-                <div className="card shadow-lg">
+                <div className="card shadow-xl border border-gray-100 rounded-2xl">
                   <h2 className="text-2xl font-bold mb-6 flex items-center text-gray-900">
                     <div className="p-2 bg-primary-100 rounded-lg mr-3">
                       <CreditCard className="w-5 h-5 text-primary-600" />

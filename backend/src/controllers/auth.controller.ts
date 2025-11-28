@@ -13,14 +13,16 @@ class AuthController {
    * POST /api/auth/register
    */
   register = asyncHandler(async (req: Request, res: Response) => {
-    const { email, password, firstName, lastName, role } = req.body;
+    const { email, password, firstName, lastName } = req.body;
 
+    // For security: do NOT accept role from client during self-registration
+    // Always register as STUDENT by default. Role elevation must be handled by admins.
     const result = await authService.register({
-      email,
+      email: typeof email === 'string' ? email.trim().toLowerCase() : email,
       password,
-      firstName,
-      lastName,
-      role: role || UserRole.STUDENT,
+      firstName: typeof firstName === 'string' ? firstName.trim() : firstName,
+      lastName: typeof lastName === 'string' ? lastName.trim() : lastName,
+      role: UserRole.STUDENT,
     });
 
     res.status(201).json({
@@ -37,7 +39,10 @@ class AuthController {
   login = asyncHandler(async (req: Request, res: Response) => {
     const { email, password } = req.body;
 
-    const result = await authService.login({ email, password });
+    const result = await authService.login({
+      email: typeof email === 'string' ? email.trim().toLowerCase() : email,
+      password,
+    });
 
     res.status(200).json({
       status: 'success',
@@ -51,9 +56,9 @@ class AuthController {
    * POST /api/auth/refresh
    */
   refreshToken = asyncHandler(async (req: Request, res: Response) => {
-    const { refreshToken } = req.body;
+    const { refreshToken: refreshTokenValue } = req.body;
 
-    const tokens = await authService.refreshToken(refreshToken);
+    const tokens = await authService.refreshToken(refreshTokenValue);
 
     res.status(200).json({
       status: 'success',
@@ -86,8 +91,8 @@ class AuthController {
     const { firstName, lastName, avatar } = req.body;
 
     const user = await authService.updateProfile(userId, {
-      firstName,
-      lastName,
+      firstName: typeof firstName === 'string' ? firstName.trim() : firstName,
+      lastName: typeof lastName === 'string' ? lastName.trim() : lastName,
       avatar,
     });
 
@@ -148,4 +153,3 @@ class AuthController {
 }
 
 export default new AuthController();
-

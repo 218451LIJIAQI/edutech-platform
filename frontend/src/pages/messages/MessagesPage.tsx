@@ -34,13 +34,8 @@ const MessagesPage = () => {
       try {
         let list = await messageService.getContacts();
 
-        // Students should not see admin in contacts
-        if (user?.role === UserRole.STUDENT) {
-          list = list.filter((c) => c.role !== 'ADMIN');
-        }
-
-        // Ensure admin pinned at top for teachers
-        if (user?.role === UserRole.TEACHER) {
+        // Ensure admin pinned at top for students and teachers
+        if (user?.role === UserRole.STUDENT || user?.role === UserRole.TEACHER) {
           const adminContactIndex = list.findIndex((c) => c.role === 'ADMIN');
           if (adminContactIndex > -1) {
             const adminContact = list.splice(adminContactIndex, 1)[0];
@@ -97,9 +92,36 @@ const MessagesPage = () => {
     );
   }, [searchText, contacts]);
 
+  const refreshContactUnreadCount = async (contactId: string) => {
+    try {
+      const unreadCount = await messageService.getContactUnreadCount(contactId);
+      setContacts((prev) =>
+        prev.map((c) =>
+          c.id === contactId ? { ...c, unreadCount } : c
+        )
+      );
+      setFiltered((prev) =>
+        prev.map((c) =>
+          c.id === contactId ? { ...c, unreadCount } : c
+        )
+      );
+    } catch (e) {
+      console.error(`Failed to refresh unread count for ${contactId}`, e);
+    }
+  };
+
   const openConversation = async (contact: Contact) => {
     setActiveContact(contact);
     setLoadingThread(true);
+
+    // Guard: if this is a pseudo contact (e.g., fallback admin without a real user id), inform the user
+    const looksLikeUUID = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$/.test(contact.id);
+    if (!looksLikeUUID) {
+      toast.error('This contact is not available yet. Please try another contact.');
+      setLoadingThread(false);
+      return;
+    }
+
     try {
       const t = await messageService.getOrCreateThread(contact.id);
       setThread(t);
@@ -109,6 +131,12 @@ const MessagesPage = () => {
       // Mark messages as read
       if (t.id) {
         await messageService.markMessagesAsRead(t.id);
+        
+        // Refresh the contact's unread count from server
+        await refreshContactUnreadCount(contact.id);
+        
+        // Notify global listeners (e.g., Navbar) to refresh unread badge immediately
+        window.dispatchEvent(new CustomEvent('messages:unread-updated'));
       }
       
       // scroll to bottom
@@ -144,12 +172,12 @@ const MessagesPage = () => {
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
           {/* Contacts */}
           <div className="lg:col-span-4">
-            <div className="card">
-              <div className="flex items-center gap-2 mb-4">
-                <Search className="w-4 h-4 text-gray-500" />
+            <div className="card shadow-lg border border-gray-100 rounded-2xl">
+              <div className="flex items-center gap-2 mb-4 px-4 py-3 bg-gradient-to-r from-primary-50 to-primary-100 rounded-xl border border-primary-200">
+                <Search className="w-5 h-5 text-primary-600" />
                 <input
-                  className="input w-full"
-                  placeholder="Search contacts"
+                  className="input w-full bg-transparent border-0 focus:ring-0 placeholder-gray-500 font-medium"
+                  placeholder="Search contacts..."
                   value={searchText}
                   onChange={(e) => setSearchText(e.target.value)}
                 />
@@ -208,7 +236,7 @@ const MessagesPage = () => {
 
           {/* Conversation */}
           <div className="lg:col-span-8">
-            <div className="card h-[70vh] flex flex-col">
+            <div className="card h-[70vh] flex flex-col shadow-lg border border-gray-100 rounded-2xl">
               {!activeContact ? (
                 <div className="flex-1 flex items-center justify-center text-gray-500">Select a contact to start chatting</div>
               ) : (

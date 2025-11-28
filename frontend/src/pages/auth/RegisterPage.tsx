@@ -87,24 +87,25 @@ const RegisterPage = () => {
 
       <div className="max-w-md w-full relative z-10">
         <div className="text-center mb-10">
-          <div className="inline-flex items-center justify-center w-20 h-20 bg-gradient-to-br from-primary-600 to-primary-700 text-white rounded-2xl mb-6 shadow-lg">
-            <BookOpen className="w-10 h-10" />
+          <div className="inline-flex items-center justify-center w-24 h-24 bg-gradient-to-br from-primary-600 via-primary-700 to-primary-800 text-white rounded-3xl mb-8 shadow-2xl hover:shadow-3xl transition-all duration-300 transform hover:scale-105">
+            <BookOpen className="w-12 h-12" />
           </div>
-          <h2 className="text-4xl font-bold text-gray-900 mb-2">Create Your Account</h2>
-          <p className="text-gray-600">Start your learning journey today</p>
+          <h2 className="text-5xl font-bold text-gray-900 mb-3 leading-tight">Create Your Account</h2>
+          <p className="text-gray-600 text-lg">Start your learning journey today</p>
         </div>
 
-        <div className="card shadow-lg-custom">
+        <div className="card shadow-2xl hover:shadow-3xl transition-all duration-300 border border-white/50">
           <form onSubmit={handleSubmit} className="space-y-5">
             {error && (
-              <div className="bg-gradient-to-r from-red-50 to-red-100 border-l-4 border-red-600 text-red-700 px-4 py-3 rounded-lg text-sm font-semibold">
+              <div className="bg-gradient-to-r from-red-50 to-red-100 border-l-4 border-red-600 text-red-700 px-4 py-4 rounded-xl text-sm font-semibold flex items-center gap-2 shadow-sm">
+                <span className="text-lg">⚠️</span>
                 {error}
               </div>
             )}
 
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label htmlFor="firstName" className="block text-sm font-semibold text-gray-700 mb-3">
+                <label htmlFor="firstName" className="block text-sm font-bold text-gray-800 mb-3 uppercase tracking-wide">
                   First Name
                 </label>
                 <input
@@ -112,7 +113,7 @@ const RegisterPage = () => {
                   name="firstName"
                   type="text"
                   required
-                  className="input"
+                  className="input w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-primary-600 focus:ring-2 focus:ring-primary-200 transition-all duration-200"
                   placeholder="John"
                   value={formData.firstName}
                   onChange={handleChange}
@@ -120,7 +121,7 @@ const RegisterPage = () => {
               </div>
 
               <div>
-                <label htmlFor="lastName" className="block text-sm font-semibold text-gray-700 mb-3">
+                <label htmlFor="lastName" className="block text-sm font-bold text-gray-800 mb-3 uppercase tracking-wide">
                   Last Name
                 </label>
                 <input
@@ -128,7 +129,7 @@ const RegisterPage = () => {
                   name="lastName"
                   type="text"
                   required
-                  className="input"
+                  className="input w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-primary-600 focus:ring-2 focus:ring-primary-200 transition-all duration-200"
                   placeholder="Doe"
                   value={formData.lastName}
                   onChange={handleChange}
@@ -137,7 +138,7 @@ const RegisterPage = () => {
             </div>
 
             <div>
-              <label htmlFor="email" className="block text-sm font-semibold text-gray-700 mb-3">
+              <label htmlFor="email" className="block text-sm font-bold text-gray-800 mb-3 uppercase tracking-wide">
                 Email Address
               </label>
               <input
@@ -145,7 +146,7 @@ const RegisterPage = () => {
                 name="email"
                 type="email"
                 required
-                className="input"
+                className="input w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-primary-600 focus:ring-2 focus:ring-primary-200 transition-all duration-200"
                 placeholder="you@example.com"
                 value={formData.email}
                 onChange={handleChange}
@@ -153,13 +154,13 @@ const RegisterPage = () => {
             </div>
 
             <div>
-              <label htmlFor="role" className="block text-sm font-semibold text-gray-700 mb-3">
+              <label htmlFor="role" className="block text-sm font-bold text-gray-800 mb-3 uppercase tracking-wide">
                 I want to
               </label>
               <select
                 id="role"
                 name="role"
-                className="input"
+                className="input w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-primary-600 focus:ring-2 focus:ring-primary-200 transition-all duration-200 bg-white"
                 value={formData.role}
                 onChange={handleChange}
               >
@@ -169,7 +170,7 @@ const RegisterPage = () => {
             </div>
 
             <div>
-              <label htmlFor="password" className="block text-sm font-semibold text-gray-700 mb-3">
+              <label htmlFor="password" className="block text-sm font-bold text-gray-800 mb-3 uppercase tracking-wide">
                 Password
               </label>
               <input
@@ -177,7 +178,7 @@ const RegisterPage = () => {
                 name="password"
                 type="password"
                 required
-                className="input"
+                className="input w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-primary-600 focus:ring-2 focus:ring-primary-200 transition-all duration-200"
                 placeholder="••••••••"
                 value={formData.password}
                 onChange={handleChange}
@@ -185,7 +186,7 @@ const RegisterPage = () => {
             </div>
 
             <div>
-              <label htmlFor="confirmPassword" className="block text-sm font-semibold text-gray-700 mb-3">
+              <label htmlFor="confirmPassword" className="block text-sm font-bold text-gray-800 mb-3 uppercase tracking-wide">
                 Confirm Password
               </label>
               <input
@@ -193,7 +194,7 @@ const RegisterPage = () => {
                 name="confirmPassword"
                 type="password"
                 required
-                className="input"
+                className="input w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-primary-600 focus:ring-2 focus:ring-primary-200 transition-all duration-200"
                 placeholder="••••••••"
                 value={formData.confirmPassword}
                 onChange={handleChange}
@@ -203,7 +204,7 @@ const RegisterPage = () => {
             <button
               type="submit"
               disabled={isLoading}
-              className="btn-primary w-full py-3 text-base font-semibold mt-6"
+              className="btn-primary w-full py-4 text-base font-bold uppercase tracking-wide rounded-xl hover:shadow-lg transition-all duration-300 transform hover:scale-105 disabled:opacity-70 disabled:cursor-not-allowed mt-6"
             >
               {isLoading ? (
                 <span className="flex items-center justify-center gap-2">
@@ -216,9 +217,9 @@ const RegisterPage = () => {
             </button>
           </form>
 
-          <div className="mt-8 pt-6 border-t border-gray-200 text-center text-sm">
-            <span className="text-gray-600">Already have an account? </span>
-            <Link to="/login" className="text-primary-600 hover:text-primary-700 font-semibold transition-colors">
+          <div className="mt-8 pt-6 border-t border-gray-200 text-center">
+            <span className="text-gray-600 text-sm">Already have an account? </span>
+            <Link to="/login" className="text-primary-600 hover:text-primary-700 font-bold transition-colors hover:underline">
               Sign in now
             </Link>
           </div>
@@ -226,7 +227,7 @@ const RegisterPage = () => {
 
         {/* Additional info */}
         <div className="mt-8 text-center text-xs text-gray-600">
-          <p>By creating an account, you agree to our Terms of Service and Privacy Policy</p>
+          <p>By creating an account, you agree to our <Link to="/terms" className="text-primary-600 hover:underline">Terms of Service</Link> and <Link to="/privacy" className="text-primary-600 hover:underline">Privacy Policy</Link></p>
         </div>
       </div>
     </div>

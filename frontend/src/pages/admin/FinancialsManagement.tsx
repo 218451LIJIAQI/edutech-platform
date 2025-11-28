@@ -270,7 +270,7 @@ const FinancialsManagement = () => {
         {tab === 'payments' ? (
           <>
             {/* Filters */}
-            <div className="card mb-6">
+            <div className="card mb-6 shadow-xl border border-gray-100 rounded-2xl">
               <div className="flex flex-col md:flex-row md:items-end gap-4">
                 <div className="flex-1">
                   <label className="block text-sm font-medium text-gray-700 mb-1">Start Date</label>

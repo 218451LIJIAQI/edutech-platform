@@ -120,41 +120,41 @@ const CommunityHomePage = () => {
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {posts.map(post => (
-              <div key={post.id} className="card hover:shadow-xl transition-all duration-300 flex flex-col">
+              <div key={post.id} className="card hover:shadow-2xl transition-all duration-300 transform hover:scale-105 flex flex-col shadow-lg border border-gray-100 hover:border-primary-200 rounded-2xl overflow-hidden">
                 {/* Media preview */}
                 {post.media && post.media.length > 0 && (
-                  <div className="mb-3">
+                  <div className="mb-3 h-48 overflow-hidden rounded-t-2xl">
                     {post.media[0].type === 'image' ? (
-                      <img src={post.media[0].url} alt="media" className="w-full h-44 object-cover rounded-xl" />
+                      <img src={post.media[0].url} alt="media" className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300" />
                     ) : (
-                      <video src={post.media[0].url} className="w-full h-44 object-cover rounded-xl" controls={false} muted />
+                      <video src={post.media[0].url} className="w-full h-full object-cover" controls={false} muted />
                     )}
                   </div>
                 )}
-                <div className="flex-1">
+                <div className="flex-1 p-5">
                   <Link to={`/community/post/${post.id}`} className="block">
-                    <h3 className="text-lg font-bold text-gray-900 mb-1 line-clamp-2">{post.title || post.content.slice(0, 60)}</h3>
+                    <h3 className="text-lg font-bold text-gray-900 mb-2 line-clamp-2 hover:text-primary-600 transition-colors">{post.title || post.content.slice(0, 60)}</h3>
                     <p className="text-sm text-gray-600 line-clamp-2">{post.content}</p>
                   </Link>
-                  <div className="mt-2 flex items-center gap-2 flex-wrap">
+                  <div className="mt-3 flex items-center gap-2 flex-wrap">
                     {post.tags?.map(t => (
-                      <span key={t.id} className="badge-primary text-xs">#{t.name}</span>
+                      <span key={t.id} className="badge-primary text-xs font-semibold">#{t.name}</span>
                     ))}
                     {post.courseTitle && (
-                      <Link to={`/courses/${post.courseId}`} className="text-xs text-primary-600 hover:underline">Linked course: {post.courseTitle}</Link>
+                      <Link to={`/courses/${post.courseId}`} className="text-xs text-primary-600 hover:underline font-semibold">📚 {post.courseTitle}</Link>
                     )}
                   </div>
                 </div>
-                <div className="mt-4 flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <button onClick={() => toggleLike(post.id)} className={`px-3 py-1 rounded-lg border text-sm inline-flex items-center gap-1 ${post.hasLiked ? 'bg-red-50 border-red-200 text-red-600' : 'bg-white border-gray-200 hover:bg-gray-50'}`}>
+                <div className="mt-4 px-5 pb-5 flex items-center justify-between border-t pt-4">
+                  <div className="flex items-center gap-2">
+                    <button onClick={() => toggleLike(post.id)} className={`px-3 py-2 rounded-lg border text-sm inline-flex items-center gap-1 font-semibold transition-all ${post.hasLiked ? 'bg-red-50 border-red-200 text-red-600 shadow-md' : 'bg-white border-gray-200 hover:bg-gray-50'}`}>
                       <Heart className={`w-4 h-4 ${post.hasLiked ? 'fill-red-500 text-red-500' : ''}`} /> {post.likes}
                     </button>
-                    <button onClick={() => toggleBookmark(post.id)} className={`px-3 py-1 rounded-lg border text-sm inline-flex items-center gap-1 ${post.hasBookmarked ? 'bg-yellow-50 border-yellow-200 text-yellow-700' : 'bg-white border-gray-200 hover:bg-gray-50'}`}>
+                    <button onClick={() => toggleBookmark(post.id)} className={`px-3 py-2 rounded-lg border text-sm inline-flex items-center gap-1 font-semibold transition-all ${post.hasBookmarked ? 'bg-yellow-50 border-yellow-200 text-yellow-700 shadow-md' : 'bg-white border-gray-200 hover:bg-gray-50'}`}>
                       <Bookmark className={`w-4 h-4 ${post.hasBookmarked ? 'fill-yellow-500 text-yellow-600' : ''}`} /> {post.bookmarks}
                     </button>
                   </div>
-                  <button onClick={() => onShare(post)} className="px-3 py-1 rounded-lg border text-sm inline-flex items-center gap-1 bg-white border-gray-200 hover:bg-gray-50">
+                  <button onClick={() => onShare(post)} className="px-3 py-2 rounded-lg border text-sm inline-flex items-center gap-1 bg-white border-gray-200 hover:bg-gray-50 font-semibold transition-all">
                     <Share2 className="w-4 h-4" /> Share
                   </button>
                 </div>

@@ -231,7 +231,7 @@ const CourseLearningPage = () => {
           {/* Main Content */}
           <div className="lg:col-span-2 space-y-6">
             {/* Lesson Info */}
-            <div className="card shadow-lg">
+            <div className="card shadow-xl border border-gray-100 rounded-2xl">
               <div className="flex items-start justify-between mb-6">
                 <div className="flex-1">
                   <h1 className="text-3xl font-bold mb-3 text-gray-900">{currentLesson.title}</h1>
@@ -278,7 +278,7 @@ const CourseLearningPage = () => {
 
             {/* Course Materials */}
             {course.materials && course.materials.length > 0 && (
-              <div className="card shadow-lg">
+              <div className="card shadow-xl border border-gray-100 rounded-2xl">
                 <h2 className="text-2xl font-bold mb-6 flex items-center text-gray-900">
                   <div className="p-2 bg-primary-100 rounded-lg mr-3">
                     <FileText className="w-5 h-5 text-primary-600" />
@@ -322,7 +322,7 @@ const CourseLearningPage = () => {
             )}
 
             {/* Course Info */}
-            <div className="card shadow-lg">
+            <div className="card shadow-xl border border-gray-100 rounded-2xl">
               <h2 className="text-2xl font-bold mb-4 text-gray-900">About This Course</h2>
               <p className="text-gray-700 leading-relaxed mb-4 text-lg">{course.description}</p>
               <div className="flex items-center space-x-4 text-sm">

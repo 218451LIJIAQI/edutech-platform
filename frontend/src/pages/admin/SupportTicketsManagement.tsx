@@ -245,7 +245,7 @@ const SupportTicketsManagement = () => {
       </div>
 
       {/* Tickets Table */}
-      <div className="card shadow-lg overflow-hidden">
+      <div className="card shadow-xl border border-gray-100 rounded-2xl overflow-hidden">
         {loading ? (
           <div className="flex items-center justify-center py-12">
             <div className="spinner"></div>

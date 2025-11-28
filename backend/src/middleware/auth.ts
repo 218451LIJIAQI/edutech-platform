@@ -14,6 +14,14 @@ interface JWTPayload {
   role: UserRole;
 }
 
+const getBearerToken = (req: Request): string | null => {
+  const authHeader = req.headers.authorization || (req.headers as any).Authorization;
+  if (!authHeader || typeof authHeader !== 'string') return null;
+  if (!authHeader.startsWith('Bearer ')) return null;
+  const token = authHeader.slice(7).trim();
+  return token || null;
+};
+
 /**
  * Middleware to verify JWT token and attach user to request
  */
@@ -23,14 +31,8 @@ export const authenticate = async (
   next: NextFunction
 ) => {
   try {
-    // Get token from header
-    const authHeader = req.headers.authorization;
-    
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      throw new AuthenticationError('No token provided');
-    }
-
-    const token = authHeader.substring(7);
+    const token = getBearerToken(req);
+    if (!token) throw new AuthenticationError('No token provided');
 
     // Verify token
     const decoded = jwt.verify(token, config.JWT_SECRET) as JWTPayload;
@@ -48,13 +50,8 @@ export const authenticate = async (
       },
     });
 
-    if (!user) {
-      throw new AuthenticationError('User not found');
-    }
-
-    if (!user.isActive) {
-      throw new AuthenticationError('User account is inactive');
-    }
+    if (!user) throw new AuthenticationError('User not found');
+    if (!user.isActive) throw new AuthenticationError('User account is inactive');
 
     // Attach user to request
     req.user = {
@@ -67,13 +64,14 @@ export const authenticate = async (
 
     next();
   } catch (error) {
-    if (error instanceof jwt.JsonWebTokenError) {
-      next(new AuthenticationError('Invalid token'));
-    } else if (error instanceof jwt.TokenExpiredError) {
-      next(new AuthenticationError('Token expired'));
-    } else {
-      next(error);
+    // Important: TokenExpiredError extends JsonWebTokenError, so check it first
+    if (error instanceof jwt.TokenExpiredError) {
+      return next(new AuthenticationError('Token expired'));
     }
+    if (error instanceof jwt.JsonWebTokenError) {
+      return next(new AuthenticationError('Invalid token'));
+    }
+    return next(error);
   }
 };
 
@@ -87,10 +85,10 @@ export const authorize = (...roles: UserRole[]) => {
       return next(new AuthenticationError('Authentication required'));
     }
 
-    if (!roles.includes(req.user.role)) {
+    if (!roles.length || !roles.includes(req.user.role)) {
       return next(
         new AuthorizationError(
-          `Access denied. Required role: ${roles.join(' or ')}`
+          roles.length ? `Access denied. Required role: ${roles.join(' or ')}` : 'Access denied'
         )
       );
     }
@@ -108,12 +106,9 @@ export const optionalAuth = async (
   next: NextFunction
 ) => {
   try {
-    const authHeader = req.headers.authorization;
-    
-    if (authHeader && authHeader.startsWith('Bearer ')) {
-      const token = authHeader.substring(7);
+    const token = getBearerToken(req);
+    if (token) {
       const decoded = jwt.verify(token, config.JWT_SECRET) as JWTPayload;
-      
       const user = await prisma.user.findUnique({
         where: { id: decoded.id },
         select: {
@@ -136,13 +131,12 @@ export const optionalAuth = async (
         };
       }
     }
-    
+
     next();
-  } catch (error) {
-    // Silently continue if token is invalid
+  } catch (_error) {
+    // Silently continue if token is invalid/expired
     next();
   }
 };
 
 export default { authenticate, authorize, optionalAuth };
-

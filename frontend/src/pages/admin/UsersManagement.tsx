@@ -211,7 +211,7 @@ const UsersManagement = () => {
         </div>
 
         {/* Search and Filter */}
-        <div className="card mb-8 shadow-lg">
+        <div className="card mb-8 shadow-xl border border-gray-100 rounded-2xl">
           <SearchFilter
             placeholder="Search by name, email, or phone..."
             onSearch={setSearch}
@@ -222,23 +222,23 @@ const UsersManagement = () => {
 
         {/* Stats */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-          <div className="card bg-gradient-to-br from-blue-500 to-blue-600 text-white shadow-lg">
+          <div className="card bg-gradient-to-br from-blue-500 to-blue-600 text-white shadow-xl">
             <h3 className="text-sm font-semibold text-blue-100 mb-3">Total Users</h3>
             <p className="text-4xl font-bold">{pagination.total || 0}</p>
           </div>
-          <div className="card bg-gradient-to-br from-green-500 to-green-600 text-white shadow-lg">
+          <div className="card bg-gradient-to-br from-green-500 to-green-600 text-white shadow-xl">
             <h3 className="text-sm font-semibold text-green-100 mb-3">Active Users</h3>
             <p className="text-4xl font-bold">
               {users.filter((u) => u.isActive).length}
             </p>
           </div>
-          <div className="card bg-gradient-to-br from-purple-500 to-purple-600 text-white shadow-lg">
+          <div className="card bg-gradient-to-br from-purple-500 to-purple-600 text-white shadow-xl">
             <h3 className="text-sm font-semibold text-purple-100 mb-3">Teachers</h3>
             <p className="text-4xl font-bold">
               {users.filter((u) => u.role === 'TEACHER').length}
             </p>
           </div>
-          <div className="card bg-gradient-to-br from-orange-500 to-orange-600 text-white shadow-lg">
+          <div className="card bg-gradient-to-br from-orange-500 to-orange-600 text-white shadow-xl">
             <h3 className="text-sm font-semibold text-orange-100 mb-3">Students</h3>
             <p className="text-4xl font-bold">
               {users.filter((u) => u.role === 'STUDENT').length}
@@ -292,7 +292,7 @@ const UsersManagement = () => {
         </div>
 
         {/* Users Table */}
-        <div className="card overflow-hidden shadow-lg">
+        <div className="card overflow-hidden shadow-xl">
           {isLoading ? (
             <div className="flex items-center justify-center py-16">
               <div className="flex flex-col items-center space-y-4">

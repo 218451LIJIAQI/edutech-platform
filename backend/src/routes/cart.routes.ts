@@ -8,12 +8,7 @@ import cartController from '../controllers/cart.controller';
 const router = Router();
 
 // Get my cart
-router.get(
-  '/',
-  authenticate,
-  authorize(UserRole.STUDENT),
-  cartController.getCart
-);
+router.get('/', authenticate, authorize(UserRole.STUDENT), cartController.getCart);
 
 // Add item
 router.post(
@@ -21,7 +16,11 @@ router.post(
   authenticate,
   authorize(UserRole.STUDENT),
   validate([
-    body('packageId').notEmpty().isUUID().withMessage('Invalid packageId'),
+    body('packageId')
+      .notEmpty()
+      .withMessage('packageId is required')
+      .isUUID()
+      .withMessage('Invalid packageId'),
   ]),
   cartController.addItem
 );
@@ -31,17 +30,17 @@ router.delete(
   '/items/:packageId',
   authenticate,
   authorize(UserRole.STUDENT),
-  validate([param('packageId').isUUID().withMessage('Invalid packageId')]),
+  validate([
+    param('packageId')
+      .notEmpty()
+      .withMessage('packageId is required')
+      .isUUID()
+      .withMessage('Invalid packageId'),
+  ]),
   cartController.removeItem
 );
 
 // Clear cart
-router.delete(
-  '/clear',
-  authenticate,
-  authorize(UserRole.STUDENT),
-  cartController.clearCart
-);
+router.delete('/clear', authenticate, authorize(UserRole.STUDENT), cartController.clearCart);
 
 export default router;
-

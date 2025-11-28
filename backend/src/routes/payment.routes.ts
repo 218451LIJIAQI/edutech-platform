@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { UserRole } from '@prisma/client';
-import { body } from 'express-validator';
+import { body, param } from 'express-validator';
 import paymentController from '../controllers/payment.controller';
 import { authenticate, authorize } from '../middleware/auth';
 import { validate } from '../middleware/validate';
@@ -82,6 +82,7 @@ router.get(
   '/:id',
   authenticate,
   authorize(UserRole.STUDENT),
+  validate([param('id').notEmpty().withMessage('id is required').isUUID().withMessage('Invalid id')]),
   paymentController.getPaymentById
 );
 
@@ -90,8 +91,8 @@ router.post(
   '/:id/refund',
   authenticate,
   authorize(UserRole.ADMIN),
+  validate([param('id').notEmpty().withMessage('id is required').isUUID().withMessage('Invalid id')]),
   paymentController.requestRefund
 );
 
 export default router;
-

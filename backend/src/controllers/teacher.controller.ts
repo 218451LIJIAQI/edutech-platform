@@ -13,23 +13,23 @@ class TeacherController {
    * GET /api/teachers
    */
   getAllTeachers = asyncHandler(async (req: Request, res: Response) => {
-    const {
-      isVerified,
-      category,
-      minRating,
-      search,
-      page,
-      limit,
-    } = req.query;
+    const { isVerified, category, minRating, search, page, limit } = req.query as {
+      isVerified?: string;
+      category?: string;
+      minRating?: string;
+      search?: string;
+      page?: string;
+      limit?: string;
+    };
 
     const result = await teacherService.getAllTeachers({
       // Only apply isVerified filter if the query param is provided
       isVerified: typeof isVerified === 'string' ? isVerified === 'true' : undefined,
-      category: category as string,
-      minRating: minRating ? parseFloat(minRating as string) : undefined,
-      search: search as string,
-      page: page ? parseInt(page as string) : undefined,
-      limit: limit ? parseInt(limit as string) : undefined,
+      category,
+      minRating: minRating ? parseFloat(minRating) : undefined,
+      search,
+      page: page ? parseInt(page, 10) : undefined,
+      limit: limit ? parseInt(limit, 10) : undefined,
     });
 
     res.status(200).json({
@@ -43,7 +43,7 @@ class TeacherController {
    * GET /api/teachers/:id
    */
   getTeacherById = asyncHandler(async (req: Request, res: Response) => {
-    const { id } = req.params;
+    const { id } = req.params as { id: string };
 
     const teacher = await teacherService.getTeacherById(id);
 
@@ -74,7 +74,11 @@ class TeacherController {
    */
   updateProfile = asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user!.id;
-    const { bio, headline, hourlyRate } = req.body;
+    const { bio, headline, hourlyRate } = req.body as {
+      bio?: string;
+      headline?: string;
+      hourlyRate?: number;
+    };
 
     const teacher = await teacherService.updateTeacherProfile(userId, {
       bio,
@@ -95,8 +99,14 @@ class TeacherController {
    */
   addCertification = asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user!.id;
-    const { title, issuer, issueDate, expiryDate, credentialId, credentialUrl } =
-      req.body;
+    const { title, issuer, issueDate, expiryDate, credentialId, credentialUrl } = req.body as {
+      title: string;
+      issuer: string;
+      issueDate: string;
+      expiryDate?: string;
+      credentialId?: string;
+      credentialUrl?: string;
+    };
 
     const certification = await teacherService.addCertification(userId, {
       title,
@@ -120,7 +130,7 @@ class TeacherController {
    */
   deleteCertification = asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user!.id;
-    const { id } = req.params;
+    const { id } = req.params as { id: string };
 
     const result = await teacherService.deleteCertification(userId, id);
 
@@ -136,7 +146,7 @@ class TeacherController {
    */
   submitVerification = asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user!.id;
-    const { documentType, documentUrl } = req.body;
+    const { documentType, documentUrl } = req.body as { documentType: string; documentUrl: string };
 
     const verification = await teacherService.submitVerification(
       userId,
@@ -199,9 +209,12 @@ class TeacherController {
    * PUT /api/teachers/verifications/:id/review
    */
   reviewVerification = asyncHandler(async (req: Request, res: Response) => {
-    const { id } = req.params;
+    const { id } = req.params as { id: string };
     const adminId = req.user!.id;
-    const { status, reviewNotes } = req.body;
+    const { status, reviewNotes } = req.body as {
+      status: VerificationStatus;
+      reviewNotes?: string;
+    };
 
     const verification = await teacherService.reviewVerification(
       id,
@@ -234,7 +247,18 @@ class TeacherController {
       yearsOfExperience,
       profilePhoto,
       certificatePhotos,
-    } = req.body;
+    } = req.body as {
+      selfIntroduction?: string;
+      educationBackground?: string;
+      teachingExperience?: string;
+      awards?: string[];
+      specialties?: string[];
+      teachingStyle?: string;
+      languages?: string[];
+      yearsOfExperience?: number;
+      profilePhoto?: string;
+      certificatePhotos?: string[];
+    };
 
     const profile = await teacherService.submitExtendedProfile(userId, {
       selfIntroduction,
@@ -288,7 +312,18 @@ class TeacherController {
       yearsOfExperience,
       profilePhoto,
       certificatePhotos,
-    } = req.body;
+    } = req.body as {
+      selfIntroduction?: string;
+      educationBackground?: string;
+      teachingExperience?: string;
+      awards?: string[];
+      specialties?: string[];
+      teachingStyle?: string;
+      languages?: string[];
+      yearsOfExperience?: number;
+      profilePhoto?: string;
+      certificatePhotos?: string[];
+    };
 
     const profile = await teacherService.updateExtendedProfile(userId, {
       selfIntroduction,
@@ -315,11 +350,11 @@ class TeacherController {
    * GET /api/teachers/admin/pending-profiles
    */
   getPendingProfileVerifications = asyncHandler(async (req: Request, res: Response) => {
-    const { page, limit } = req.query;
+    const { page, limit } = req.query as { page?: string; limit?: string };
 
     const result = await teacherService.getPendingProfileVerifications(
-      page ? parseInt(page as string) : 1,
-      limit ? parseInt(limit as string) : 10
+      page ? parseInt(page, 10) : 1,
+      limit ? parseInt(limit, 10) : 10
     );
 
     res.status(200).json({
@@ -333,9 +368,9 @@ class TeacherController {
    * PUT /api/teachers/admin/profiles/:id/review
    */
   reviewTeacherProfile = asyncHandler(async (req: Request, res: Response) => {
-    const { id } = req.params;
+    const { id } = req.params as { id: string };
     const adminId = req.user!.id;
-    const { status, reviewNotes } = req.body;
+    const { status, reviewNotes } = req.body as { status: VerificationStatus; reviewNotes?: string };
 
     const profile = await teacherService.reviewTeacherProfile(
       id,
@@ -356,12 +391,12 @@ class TeacherController {
    * GET /api/teachers/verified
    */
   getVerifiedTeachers = asyncHandler(async (req: Request, res: Response) => {
-    const { search, page, limit } = req.query;
+    const { search, page, limit } = req.query as { search?: string; page?: string; limit?: string };
 
     const result = await teacherService.getVerifiedTeachers({
-      search: search as string,
-      page: page ? parseInt(page as string) : 1,
-      limit: limit ? parseInt(limit as string) : 10,
+      search,
+      page: page ? parseInt(page, 10) : 1,
+      limit: limit ? parseInt(limit, 10) : 10,
     });
 
     res.status(200).json({
@@ -374,11 +409,11 @@ class TeacherController {
    * GET /api/teachers/admin/pending-registrations
    */
   getPendingRegistrations = asyncHandler(async (req: Request, res: Response) => {
-    const { page, limit } = req.query;
+    const { page, limit } = req.query as { page?: string; limit?: string };
 
     const result = await teacherService.getPendingRegistrations(
-      page ? parseInt(page as string) : 1,
-      limit ? parseInt(limit as string) : 10
+      page ? parseInt(page, 10) : 1,
+      limit ? parseInt(limit, 10) : 10
     );
 
     res.status(200).json({
@@ -392,9 +427,9 @@ class TeacherController {
    * PUT /api/teachers/admin/registrations/:id/review
    */
   reviewRegistration = asyncHandler(async (req: Request, res: Response) => {
-    const { id } = req.params;
+    const { id } = req.params as { id: string };
     const adminId = req.user!.id;
-    const { status } = req.body;
+    const { status } = req.body as { status: RegistrationStatus };
 
     const updated = await teacherService.reviewRegistration(
       id,
@@ -411,4 +446,3 @@ class TeacherController {
 }
 
 export default new TeacherController();
-

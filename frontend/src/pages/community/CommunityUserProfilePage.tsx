@@ -83,7 +83,7 @@ const CommunityUserProfilePage = () => {
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 via-blue-50 to-indigo-50 py-8">
       <div className="container mx-auto px-4 max-w-4xl">
-        <div className="card shadow-lg mb-6">
+        <div className="card shadow-xl border border-gray-100 rounded-2xl mb-6">
           <div className="flex items-center gap-4">
             <div className="w-16 h-16 rounded-full bg-gray-200 flex items-center justify-center">
               <UserIcon className="w-8 h-8 text-gray-500" />
@@ -115,11 +115,11 @@ const CommunityUserProfilePage = () => {
         </div>
 
         {posts.length === 0 ? (
-          <div className="card text-center py-16">No posts yet</div>
+          <div className="card shadow-xl border border-gray-100 rounded-2xl text-center py-16">No posts yet</div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {posts.map(post => (
-              <div key={post.id} className="card hover:shadow-xl transition-all duration-300 flex flex-col">
+              <div key={post.id} className="card shadow-xl border border-gray-100 rounded-2xl hover:shadow-2xl transition-all duration-300 transform hover:scale-105 flex flex-col">
                 {post.media && post.media[0] && (
                   post.media[0].type === 'image' ? (
                     <img src={post.media[0].url} alt="post media" className="w-full h-44 object-cover rounded-xl mb-3" />

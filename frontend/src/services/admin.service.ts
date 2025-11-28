@@ -83,8 +83,8 @@ export const adminService = {
   /**
    * Delete user
    */
-  deleteUser: async (id: string): Promise<void> => {
-    await api.delete(`/admin/users/${id}`);
+  deleteUser: async (id: string, opts?: { force?: boolean }): Promise<void> => {
+    await api.delete(`/admin/users/${id}`, { params: opts?.force ? { force: true } : undefined });
   },
 
   /**

@@ -17,13 +17,13 @@ class UploadController {
     }
 
     const file = req.file;
-    // Use actual stored subfolder based on fieldname ('file' by default)
+    // Derive subfolder from fieldname to match storage config (e.g., multer field)
     const folder = file.fieldname || 'file';
 
-    // Generate public URL that matches storage location
+    // Public URL relative to static uploads root
     const fileUrl = `/uploads/${folder}/${file.filename}`;
 
-    res.status(200).json({
+    res.status(201).json({
       status: 'success',
       message: 'File uploaded successfully',
       data: {
@@ -41,28 +41,36 @@ class UploadController {
    * POST /api/v1/upload/multiple
    */
   uploadMultipleFiles = asyncHandler(async (req: Request, res: Response) => {
-    if (!req.files || !Array.isArray(req.files) || req.files.length === 0) {
+    // Multer can provide files as an array or a dictionary of arrays by field name
+    const rawFiles = (req.files ?? []) as
+      | Express.Multer.File[]
+      | Record<string, Express.Multer.File[]>;
+
+    const filesArray: Express.Multer.File[] = Array.isArray(rawFiles)
+      ? rawFiles
+      : Object.values(rawFiles).flat();
+
+    if (!filesArray.length) {
       throw new ValidationError('No files uploaded');
     }
 
-    const files = req.files as Express.Multer.File[];
-    const folder = req.body.folder || 'general';
+    const uploadedFiles = filesArray.map((file) => {
+      const folder = file.fieldname || 'file';
+      return {
+        url: `/uploads/${folder}/${file.filename}`,
+        filename: file.filename,
+        size: file.size,
+        mimeType: file.mimetype,
+        originalName: file.originalname,
+      };
+    });
 
-    const uploadedFiles = files.map((file) => ({
-      url: `/uploads/${folder}/${file.filename}`,
-      filename: file.filename,
-      size: file.size,
-      mimeType: file.mimetype,
-      originalName: file.originalname,
-    }));
-
-    res.status(200).json({
+    res.status(201).json({
       status: 'success',
-      message: `${files.length} files uploaded successfully`,
+      message: `${filesArray.length} files uploaded successfully`,
       data: uploadedFiles,
     });
   });
 }
 
 export default new UploadController();
-
