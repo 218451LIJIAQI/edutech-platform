@@ -31,17 +31,29 @@ const CreatePostPage = () => {
 
   useEffect(() => {
     (async () => {
-      try { setAllTags(await communityService.getTags()); } catch {}
+      try {
+        setAllTags(await communityService.getTags());
+      } catch (error) {
+        console.error('Failed to load tags:', error);
+        toast.error('Failed to load tags');
+      }
     })();
   }, []);
 
   useEffect(() => {
+    if (!courseQuery.trim()) {
+      setCourseOptions([]);
+      return;
+    }
     const timer = setTimeout(async () => {
       try {
         const res = await courseService.getAllCourses({ search: courseQuery, limit: 5, page: 1 });
         const items = (res.items || res.courses || []).map((c: any) => ({ id: c.id, title: c.title }));
         setCourseOptions(items);
-      } catch {}
+      } catch (error) {
+        console.error('Failed to search courses:', error);
+        setCourseOptions([]);
+      }
     }, 300);
     return () => clearTimeout(timer);
   }, [courseQuery]);
@@ -49,13 +61,19 @@ const CreatePostPage = () => {
   const addTag = async () => {
     const name = tagInput.trim();
     if (!name) return;
-    if (tags.find(t => t.name === name)) return;
+    if (tags.find(t => t.name === name)) {
+      toast.error('Tag already added');
+      return;
+    }
     try {
       const t = await communityService.addTag(name);
       setTags(prev => [...prev, t]);
       if (!allTags.find(x => x.id === t.id)) setAllTags(prev => [...prev, t]);
       setTagInput('');
-    } catch { toast.error('Failed to add tag'); }
+    } catch (error) {
+      console.error('Failed to add tag:', error);
+      toast.error('Failed to add tag');
+    }
   };
 
   const removeTag = (id: string) => setTags(prev => prev.filter(t => t.id !== id));
@@ -76,10 +94,12 @@ const CreatePostPage = () => {
         url: uploadedUrl,
       };
       setMedia(prev => [...prev, m]);
-    } catch (e) {
-      console.error(e);
-      toast.error('Upload failed');
-    } finally { setIsUploading(false); }
+    } catch (error) {
+      console.error('Upload failed:', error);
+      toast.error('Upload failed. Please try again.');
+    } finally {
+      setIsUploading(false);
+    }
   };
 
   const removeMedia = (id: string) => setMedia(prev => prev.filter(m => m.id !== id));
@@ -98,22 +118,21 @@ const CreatePostPage = () => {
 
     const payload = {
       authorId: user.id,
-      author: user as any,
       title: title.trim() || undefined,
       content: trimmed,
       tags,
       media,
       courseId: linkedCourse?.id,
       courseTitle: linkedCourse?.title,
-    } as Omit<CommunityPost, 'id' | 'likes' | 'bookmarks' | 'commentsCount' | 'createdAt'>;
+    } as Omit<CommunityPost, 'id' | 'likes' | 'bookmarks' | 'commentsCount' | 'createdAt' | 'author'>;
 
     try {
       const created = await communityService.createPost(payload);
       toast.success('Posted successfully');
       navigate(`/community/post/${created.id}`);
-    } catch (e) {
-      console.error(e);
-      toast.error('Failed to create post');
+    } catch (error) {
+      console.error('Failed to create post:', error);
+      toast.error('Failed to create post. Please try again.');
     }
   };
 
@@ -142,11 +161,19 @@ const CreatePostPage = () => {
                 {/* Local upload */}
                 <label className="btn-outline btn-sm inline-flex items-center gap-2 cursor-pointer">
                   <ImagePlus className="w-4 h-4" /> Upload Image
-                  <input type="file" accept="image/*" hidden onChange={(e) => e.target.files && onUpload(e.target.files[0])} />
+                  <input type="file" accept="image/*" hidden onChange={(e) => {
+                  if (e.target.files && e.target.files[0]) {
+                    onUpload(e.target.files[0]);
+                  }
+                }} />
                 </label>
                 <label className="btn-outline btn-sm inline-flex items-center gap-2 cursor-pointer">
                   <Video className="w-4 h-4" /> Upload Video
-                  <input type="file" accept="video/*" hidden onChange={(e) => e.target.files && onUpload(e.target.files[0])} />
+                  <input type="file" accept="video/*" hidden onChange={(e) => {
+                  if (e.target.files && e.target.files[0]) {
+                    onUpload(e.target.files[0]);
+                  }
+                }} />
                 </label>
 
                 {/* Add by URL */}
@@ -163,14 +190,20 @@ const CreatePostPage = () => {
                     onClick={() => {
                       const el = document.getElementById('mediaUrlInput') as HTMLInputElement | null;
                       const url = el?.value.trim();
-                      if (!url) return;
+                      if (!url) {
+                        toast.error('Please enter a valid URL');
+                        return;
+                      }
                       // Detect media type by extension or known hosts
                       const isImage = /\.(png|jpe?g|gif|webp|avif)(\?.*)?$/i.test(url);
                       const isDirectVideo = /\.(mp4|webm|m3u8|mov|ogg)(\?.*)?$/i.test(url);
                       const isYouTube = /(?:youtube\.com\/(?:watch\?v=|embed\/)|youtu\.be\/)/i.test(url);
                       const isVimeo = /vimeo\.com\//i.test(url);
                       const type: 'image' | 'video' | undefined = isImage ? 'image' : (isDirectVideo || isYouTube || isVimeo) ? 'video' : undefined;
-                      if (!type) { toast.error('Unsupported media URL'); return; }
+                      if (!type) {
+                        toast.error('Unsupported media URL. Please use image or video URLs.');
+                        return;
+                      }
                       const m: CommunityMedia = {
                         id: (crypto.randomUUID?.() || String(Date.now())),
                         type,
@@ -178,6 +211,7 @@ const CreatePostPage = () => {
                       };
                       setMedia(prev => [...prev, m]);
                       if (el) el.value = '';
+                      toast.success('Media added successfully');
                     }}
                   >
                     Add by URL

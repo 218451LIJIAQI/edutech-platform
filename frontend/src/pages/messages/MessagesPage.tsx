@@ -42,10 +42,16 @@ const MessagesPage = () => {
             list = [adminContact, ...list];
           } else {
             // Fallback pseudo admin contact (until backend provides it)
-            list = [
-              { id: 'admin', firstName: 'Platform', lastName: 'Admin', role: 'ADMIN', avatar: undefined, lastMessageAt: undefined, unreadCount: 0 },
-              ...list,
-            ];
+            const fallbackAdmin: Contact = {
+              id: 'admin',
+              firstName: 'Platform',
+              lastName: 'Admin',
+              role: 'ADMIN',
+              avatar: undefined,
+              lastMessageAt: undefined,
+              unreadCount: 0
+            };
+            list = [fallbackAdmin, ...list];
           }
         }
 
@@ -81,7 +87,7 @@ const MessagesPage = () => {
       }
     };
     init();
-  }, []);
+  }, [user?.role, query]);
 
   // Filter contacts
   useEffect(() => {
@@ -129,7 +135,7 @@ const MessagesPage = () => {
       setMessages(data.items);
       
       // Mark messages as read
-      if (t.id) {
+      if (t?.id) {
         await messageService.markMessagesAsRead(t.id);
         
         // Refresh the contact's unread count from server
@@ -199,7 +205,7 @@ const MessagesPage = () => {
                       >
                         <div className="relative">
                           {c.avatar ? (
-                            <img src={c.avatar} className="w-10 h-10 rounded-full" />
+                            <img src={c.avatar} alt={`${c.firstName} ${c.lastName}`} className="w-10 h-10 rounded-full" />
                           ) : (
                             <div className="w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center">
                               <User className="w-5 h-5 text-gray-500" />
@@ -243,7 +249,7 @@ const MessagesPage = () => {
                 <>
                   <div className="border-b pb-3 mb-3 flex items-center gap-3">
                     {activeContact.avatar ? (
-                      <img src={activeContact.avatar} className="w-8 h-8 rounded-full" />
+                      <img src={activeContact.avatar} alt={`${activeContact.firstName} ${activeContact.lastName}`} className="w-8 h-8 rounded-full" />
                     ) : (
                       <div className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center">
                         <User className="w-4 h-4 text-gray-500" />

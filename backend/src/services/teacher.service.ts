@@ -1,8 +1,10 @@
 import { Prisma, VerificationStatus, RegistrationStatus } from '@prisma/client';
 import prisma from '../config/database';
+import type { TeacherProfile, Certification, TeacherVerification, Course } from '@prisma/client';
 import {
   NotFoundError,
   AuthorizationError,
+  ValidationError,
 } from '../utils/errors';
 
 /**
@@ -20,7 +22,25 @@ class TeacherService {
     search?: string;
     page?: number;
     limit?: number;
-  }) {
+  }): Promise<{
+    teachers: Array<TeacherProfile & {
+      user: {
+        id: string;
+        firstName: string;
+        lastName: string;
+        email: string;
+        avatar: string | null;
+      };
+      certifications: Certification[];
+      _count: { courses: number };
+    }>;
+    pagination: {
+      total: number;
+      page: number;
+      limit: number;
+      totalPages: number;
+    };
+  }> {
     const {
       isVerified,
       category,
@@ -117,9 +137,12 @@ class TeacherService {
   /**
    * Get teacher profile by ID
    */
-  async getTeacherById(teacherId: string) {
+  async getTeacherById(teacherId: string): Promise<any> {
+    if (!teacherId || !teacherId.trim()) {
+      throw new ValidationError('Teacher ID is required');
+    }
     const teacher = await prisma.teacherProfile.findUnique({
-      where: { id: teacherId },
+      where: { id: teacherId.trim() },
       include: {
         user: {
           select: {
@@ -151,16 +174,17 @@ class TeacherService {
     }
 
     // Get actual student count
-    const actualStudentCount = await this.calculateActualStudentCount(teacherId);
+    const actualStudentCount = await this.calculateActualStudentCount(teacherId.trim());
 
     // Only expose extended profile fields to students when approved
     const approved = teacher.profileCompletionStatus === 'APPROVED';
 
     // Helper function to safely parse JSON
-    const safeParseJSON = (jsonString: string | null | undefined): any[] => {
+    const safeParseJSON = (jsonString: string | null | undefined): unknown[] => {
       if (!jsonString) return [];
       try {
-        return JSON.parse(jsonString);
+        const parsed = JSON.parse(jsonString);
+        return Array.isArray(parsed) ? parsed : [];
       } catch {
         return [];
       }
@@ -186,9 +210,24 @@ class TeacherService {
   /**
    * Get teacher profile by user ID
    */
-  async getTeacherByUserId(userId: string) {
+  async getTeacherByUserId(userId: string): Promise<TeacherProfile & {
+    user: {
+      id: string;
+      firstName: string;
+      lastName: string;
+      email: string;
+      avatar: string | null;
+      createdAt: Date;
+    };
+    certifications: Certification[];
+    courses: Course[];
+    verifications: TeacherVerification[];
+  }> {
+    if (!userId || !userId.trim()) {
+      throw new ValidationError('User ID is required');
+    }
     const teacher = await prisma.teacherProfile.findUnique({
-      where: { userId },
+      where: { userId: userId.trim() },
       include: {
         user: {
           select: {
@@ -229,9 +268,20 @@ class TeacherService {
       headline?: string;
       hourlyRate?: number;
     }
-  ) {
+  ): Promise<TeacherProfile & {
+    user: {
+      id: string;
+      firstName: string;
+      lastName: string;
+      email: string;
+      avatar: string | null;
+    };
+  }> {
+    if (!userId || !userId.trim()) {
+      throw new ValidationError('User ID is required');
+    }
     const teacherProfile = await prisma.teacherProfile.findUnique({
-      where: { userId },
+      where: { userId: userId.trim() },
     });
 
     if (!teacherProfile) {
@@ -239,7 +289,7 @@ class TeacherService {
     }
 
     const updated = await prisma.teacherProfile.update({
-      where: { userId },
+      where: { userId: userId.trim() },
       data,
       include: {
         user: {
@@ -270,9 +320,12 @@ class TeacherService {
       credentialId?: string;
       credentialUrl?: string;
     }
-  ) {
+  ): Promise<Certification> {
+    if (!userId || !userId.trim()) {
+      throw new ValidationError('User ID is required');
+    }
     const teacherProfile = await prisma.teacherProfile.findUnique({
-      where: { userId },
+      where: { userId: userId.trim() },
     });
 
     if (!teacherProfile) {
@@ -292,9 +345,15 @@ class TeacherService {
   /**
    * Delete certification
    */
-  async deleteCertification(userId: string, certificationId: string) {
+  async deleteCertification(userId: string, certificationId: string): Promise<{ message: string }> {
+    if (!userId || !userId.trim()) {
+      throw new ValidationError('User ID is required');
+    }
+    if (!certificationId || !certificationId.trim()) {
+      throw new ValidationError('Certification ID is required');
+    }
     const teacherProfile = await prisma.teacherProfile.findUnique({
-      where: { userId },
+      where: { userId: userId.trim() },
     });
 
     if (!teacherProfile) {
@@ -302,7 +361,7 @@ class TeacherService {
     }
 
     const certification = await prisma.certification.findUnique({
-      where: { id: certificationId },
+      where: { id: certificationId.trim() },
     });
 
     if (!certification || certification.teacherProfileId !== teacherProfile.id) {
@@ -310,7 +369,7 @@ class TeacherService {
     }
 
     await prisma.certification.delete({
-      where: { id: certificationId },
+      where: { id: certificationId.trim() },
     });
 
     return { message: 'Certification deleted successfully' };
@@ -323,9 +382,18 @@ class TeacherService {
     userId: string,
     documentType: string,
     documentUrl: string
-  ) {
+  ): Promise<TeacherVerification> {
+    if (!userId || !userId.trim()) {
+      throw new ValidationError('User ID is required');
+    }
+    if (!documentType || !documentType.trim()) {
+      throw new ValidationError('Document type is required');
+    }
+    if (!documentUrl || !documentUrl.trim()) {
+      throw new ValidationError('Document URL is required');
+    }
     const teacherProfile = await prisma.teacherProfile.findUnique({
-      where: { userId },
+      where: { userId: userId.trim() },
     });
 
     if (!teacherProfile) {
@@ -335,8 +403,8 @@ class TeacherService {
     const verification = await prisma.teacherVerification.create({
       data: {
         teacherProfileId: teacherProfile.id,
-        documentType,
-        documentUrl,
+        documentType: documentType.trim(),
+        documentUrl: documentUrl.trim(),
         status: VerificationStatus.PENDING,
       },
     });
@@ -347,9 +415,12 @@ class TeacherService {
   /**
    * Get teacher's verifications
    */
-  async getVerifications(userId: string) {
+  async getVerifications(userId: string): Promise<TeacherVerification[]> {
+    if (!userId || !userId.trim()) {
+      throw new ValidationError('User ID is required');
+    }
     const teacherProfile = await prisma.teacherProfile.findUnique({
-      where: { userId },
+      where: { userId: userId.trim() },
     });
 
     if (!teacherProfile) {
@@ -372,9 +443,15 @@ class TeacherService {
     adminId: string,
     status: VerificationStatus,
     reviewNotes?: string
-  ) {
+  ): Promise<TeacherVerification> {
+    if (!verificationId || !verificationId.trim()) {
+      throw new ValidationError('Verification ID is required');
+    }
+    if (!adminId || !adminId.trim()) {
+      throw new ValidationError('Admin ID is required');
+    }
     const verification = await prisma.teacherVerification.findUnique({
-      where: { id: verificationId },
+      where: { id: verificationId.trim() },
       include: { teacherProfile: true },
     });
 
@@ -384,10 +461,10 @@ class TeacherService {
 
     // Update verification status
     const updated = await prisma.teacherVerification.update({
-      where: { id: verificationId },
+      where: { id: verificationId.trim() },
       data: {
         status,
-        reviewedBy: adminId,
+        reviewedBy: adminId.trim(),
         reviewNotes,
         reviewedAt: new Date(),
       },
@@ -419,7 +496,16 @@ class TeacherService {
   /**
    * Get all pending verifications (Admin only)
    */
-  async getPendingVerifications() {
+  async getPendingVerifications(): Promise<Array<TeacherVerification & {
+    teacherProfile: TeacherProfile & {
+      user: {
+        id: string;
+        firstName: string;
+        lastName: string;
+        email: string;
+      };
+    };
+  }>> {
     const verifications = await prisma.teacherVerification.findMany({
       where: { status: VerificationStatus.PENDING },
       include: {
@@ -464,9 +550,19 @@ class TeacherService {
   /**
    * Get teacher statistics
    */
-  async getTeacherStats(userId: string) {
+  async getTeacherStats(userId: string): Promise<{
+    totalCourses: number;
+    totalEnrollments: number;
+    totalRevenue: number;
+    averageRating: number;
+    totalStudents: number;
+    isVerified: boolean;
+  }> {
+    if (!userId || !userId.trim()) {
+      throw new ValidationError('User ID is required');
+    }
     const teacherProfile = await prisma.teacherProfile.findUnique({
-      where: { userId },
+      where: { userId: userId.trim() },
     });
 
     if (!teacherProfile) {
@@ -508,9 +604,19 @@ class TeacherService {
       profilePhoto?: string;
       certificatePhotos?: string[];
     }
-  ) {
+  ): Promise<TeacherProfile & {
+    user: {
+      id: string;
+      firstName: string;
+      lastName: string;
+      email: string;
+    };
+  }> {
+    if (!userId || !userId.trim()) {
+      throw new ValidationError('User ID is required');
+    }
     const teacherProfile = await prisma.teacherProfile.findUnique({
-      where: { userId },
+      where: { userId: userId.trim() },
     });
 
     if (!teacherProfile) {
@@ -563,9 +669,12 @@ class TeacherService {
   /**
    * Get extended profile for teacher
    */
-  async getExtendedProfile(userId: string) {
+  async getExtendedProfile(userId: string): Promise<any> {
+    if (!userId || !userId.trim()) {
+      throw new ValidationError('User ID is required');
+    }
     const teacherProfile = await prisma.teacherProfile.findUnique({
-      where: { userId },
+      where: { userId: userId.trim() },
       include: {
         user: {
           select: {
@@ -585,10 +694,11 @@ class TeacherService {
     }
 
     // Helper function to safely parse JSON
-    const safeParseJSON = (jsonString: string | null | undefined): any[] => {
+    const safeParseJSON = (jsonString: string | null | undefined): unknown[] => {
       if (!jsonString) return [];
       try {
-        return JSON.parse(jsonString);
+        const parsed = JSON.parse(jsonString);
+        return Array.isArray(parsed) ? parsed : [];
       } catch {
         return [];
       }
@@ -622,9 +732,19 @@ class TeacherService {
       profilePhoto?: string;
       certificatePhotos?: string[];
     }
-  ) {
+  ): Promise<TeacherProfile & {
+    user: {
+      id: string;
+      firstName: string;
+      lastName: string;
+      email: string;
+    };
+  }> {
+    if (!userId || !userId.trim()) {
+      throw new ValidationError('User ID is required');
+    }
     const teacherProfile = await prisma.teacherProfile.findUnique({
-      where: { userId },
+      where: { userId: userId.trim() },
     });
 
     if (!teacherProfile) {
@@ -678,7 +798,23 @@ class TeacherService {
   /**
    * Get pending teacher registrations (Admin only)
    */
-  async getPendingRegistrations(page = 1, limit = 10) {
+  async getPendingRegistrations(page = 1, limit = 10): Promise<{
+    teachers: Array<TeacherProfile & {
+      user: {
+        id: string;
+        firstName: string;
+        lastName: string;
+        email: string;
+        avatar: string | null;
+      };
+    }>;
+    pagination: {
+      total: number;
+      page: number;
+      limit: number;
+      totalPages: number;
+    };
+  }> {
     const safePage = Number.isFinite(page) && page > 0 ? Math.floor(page) : 1;
     const safeLimit = Number.isFinite(limit)
       ? Math.min(Math.max(Math.floor(limit), 1), 100)
@@ -724,16 +860,28 @@ class TeacherService {
     teacherProfileId: string,
     adminId: string,
     status: RegistrationStatus,
-  ) {
-    void adminId; // reserved for auditing
-
-    const teacherProfile = await prisma.teacherProfile.findUnique({ where: { id: teacherProfileId }, include: { user: true } });
+  ): Promise<TeacherProfile & {
+    user: {
+      id: string;
+      firstName: string;
+      lastName: string;
+      email: string;
+      isActive: boolean;
+    };
+  }> {
+    if (!teacherProfileId || !teacherProfileId.trim()) {
+      throw new ValidationError('Teacher profile ID is required');
+    }
+    if (!adminId || !adminId.trim()) {
+      throw new ValidationError('Admin ID is required');
+    }
+    const teacherProfile = await prisma.teacherProfile.findUnique({ where: { id: teacherProfileId.trim() }, include: { user: true } });
     if (!teacherProfile) {
       throw new NotFoundError('Teacher profile not found');
     }
 
     const updated = await prisma.teacherProfile.update({
-      where: { id: teacherProfileId },
+      where: { id: teacherProfileId.trim() },
       data: { registrationStatus: status },
       include: { user: { select: { id: true, firstName: true, lastName: true, email: true, isActive: true } } },
     });
@@ -749,7 +897,15 @@ class TeacherService {
   /**
    * Get all teachers pending profile verification (Admin only)
    */
-  async getPendingProfileVerifications(page = 1, limit = 10) {
+  async getPendingProfileVerifications(page = 1, limit = 10): Promise<{
+    teachers: any[];
+    pagination: {
+      total: number;
+      page: number;
+      limit: number;
+      totalPages: number;
+    };
+  }> {
     const safePage = Number.isFinite(page) && page > 0 ? Math.floor(page) : 1;
     const safeLimit = Number.isFinite(limit)
       ? Math.min(Math.max(Math.floor(limit), 1), 100)
@@ -786,10 +942,11 @@ class TeacherService {
     ]);
 
     // Helper function to safely parse JSON
-    const safeParseJSON = (jsonString: string | null | undefined): any[] => {
+    const safeParseJSON = (jsonString: string | null | undefined): unknown[] => {
       if (!jsonString) return [];
       try {
-        return JSON.parse(jsonString);
+        const parsed = JSON.parse(jsonString);
+        return Array.isArray(parsed) ? parsed : [];
       } catch {
         return [];
       }
@@ -797,14 +954,14 @@ class TeacherService {
 
     // Overlay pending draft payload onto the teacher object for display only
     const mapped = teachers.map((t) => {
-      const draft = t.profileSubmissions?.[0]?.payload as Record<string, any> | undefined;
+      const draft = t.profileSubmissions?.[0]?.payload as Record<string, unknown> | undefined;
       const base = {
         ...t,
         awards: safeParseJSON(t.awards),
         specialties: safeParseJSON(t.specialties),
         languages: safeParseJSON(t.languages),
         certificatePhotos: safeParseJSON(t.certificatePhotos),
-      } as Record<string, any>;
+      } as Record<string, unknown>;
 
       if (draft) {
         base.selfIntroduction = draft.selfIntroduction ?? base.selfIntroduction;
@@ -840,8 +997,21 @@ class TeacherService {
     adminId: string,
     status: VerificationStatus,
     reviewNotes?: string
-  ) {
-    const teacherProfile = await prisma.teacherProfile.findUnique({ where: { id: teacherProfileId } });
+  ): Promise<TeacherProfile & {
+    user: {
+      id: string;
+      firstName: string;
+      lastName: string;
+      email: string;
+    };
+  }> {
+    if (!teacherProfileId || !teacherProfileId.trim()) {
+      throw new ValidationError('Teacher profile ID is required');
+    }
+    if (!adminId || !adminId.trim()) {
+      throw new ValidationError('Admin ID is required');
+    }
+    const teacherProfile = await prisma.teacherProfile.findUnique({ where: { id: teacherProfileId.trim() } });
     if (!teacherProfile) throw new NotFoundError('Teacher profile not found');
 
     // Get latest submission (draft payload)
@@ -855,9 +1025,9 @@ class TeacherService {
     }
 
     if (status === VerificationStatus.APPROVED) {
-      const p = (submission.payload as any) || {};
+      const p = (submission.payload as Record<string, unknown>) || {};
       const updated = await prisma.teacherProfile.update({
-        where: { id: teacherProfileId },
+        where: { id: teacherProfileId.trim() },
         data: {
           selfIntroduction: p.selfIntroduction ?? teacherProfile.selfIntroduction,
           educationBackground: p.educationBackground ?? teacherProfile.educationBackground,
@@ -880,7 +1050,7 @@ class TeacherService {
 
       await prisma.teacherProfileSubmission.update({
         where: { id: submission.id },
-        data: { status: VerificationStatus.APPROVED, reviewedBy: adminId, reviewedAt: new Date(), reviewNotes, payload: Prisma.DbNull },
+        data: { status: VerificationStatus.APPROVED, reviewedBy: adminId.trim(), reviewedAt: new Date(), reviewNotes, payload: Prisma.DbNull },
       });
 
       await prisma.notification.create({
@@ -896,7 +1066,7 @@ class TeacherService {
     } else if (status === VerificationStatus.REJECTED) {
       await prisma.teacherProfileSubmission.update({
         where: { id: submission.id },
-        data: { status: VerificationStatus.REJECTED, reviewedBy: adminId, reviewedAt: new Date(), reviewNotes, payload: Prisma.DbNull },
+        data: { status: VerificationStatus.REJECTED, reviewedBy: adminId.trim(), reviewedAt: new Date(), reviewNotes, payload: Prisma.DbNull },
       });
 
       const nextStatus = teacherProfile.profileCompletionStatus === 'APPROVED' ? 'APPROVED' : 'INCOMPLETE';
@@ -918,7 +1088,7 @@ class TeacherService {
       return updated;
     } else {
       const updated = await prisma.teacherProfile.update({
-        where: { id: teacherProfileId },
+        where: { id: teacherProfileId.trim() },
         data: { profileCompletionStatus: 'PENDING_REVIEW', profileReviewedAt: new Date(), profileReviewNotes: reviewNotes },
         include: { user: { select: { id: true, firstName: true, lastName: true, email: true } } },
       });
@@ -933,7 +1103,29 @@ class TeacherService {
     search?: string;
     page?: number;
     limit?: number;
-  }) {
+  }): Promise<{
+    teachers: Array<Omit<TeacherProfile, 'awards' | 'specialties' | 'languages' | 'certificatePhotos'> & {
+      user: {
+        id: string;
+        firstName: string;
+        lastName: string;
+        email: string;
+        avatar: string | null;
+      };
+      certifications: Certification[];
+      _count: { courses: number };
+      awards: unknown[];
+      specialties: unknown[];
+      languages: unknown[];
+      certificatePhotos: unknown[];
+    }>;
+    pagination: {
+      total: number;
+      page: number;
+      limit: number;
+      totalPages: number;
+    };
+  }> {
     const {
       search,
       page = 1,
@@ -988,10 +1180,11 @@ class TeacherService {
     ]);
 
     // Helper function to safely parse JSON
-    const safeParseJSON = (jsonString: string | null | undefined): any[] => {
+    const safeParseJSON = (jsonString: string | null | undefined): unknown[] => {
       if (!jsonString) return [];
       try {
-        return JSON.parse(jsonString);
+        const parsed = JSON.parse(jsonString);
+        return Array.isArray(parsed) ? parsed : [];
       } catch {
         return [];
       }

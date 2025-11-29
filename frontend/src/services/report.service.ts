@@ -1,5 +1,5 @@
 import api from './api';
-import { Report } from '@/types';
+import { Report, ApiResponse } from '@/types';
 
 /**
  * Report Service
@@ -17,24 +17,33 @@ class ReportService {
     contentType?: string;
     contentId?: string;
   }): Promise<Report> {
-    const response = await api.post('/reports', data);
-    return (response.data as any).data;
+    const response = await api.post<ApiResponse<Report>>('/reports', data);
+    if (!response.data.data) {
+      throw new Error('Failed to submit report');
+    }
+    return response.data.data;
   }
 
   /**
    * Get user's submitted reports
    */
   async getMyReports(): Promise<Report[]> {
-    const response = await api.get('/reports/my-reports');
-    return (response.data as any).data;
+    const response = await api.get<ApiResponse<Report[]>>('/reports/my-reports');
+    if (!response.data.data) {
+      throw new Error('Failed to get reports');
+    }
+    return response.data.data;
   }
 
   /**
    * Get report by ID
    */
   async getReportById(id: string): Promise<Report> {
-    const response = await api.get(`/reports/${id}`);
-    return (response.data as any).data;
+    const response = await api.get<ApiResponse<Report>>(`/reports/${id}`);
+    if (!response.data.data) {
+      throw new Error('Failed to get report details');
+    }
+    return response.data.data;
   }
 
   /**
@@ -45,9 +54,22 @@ class ReportService {
     type?: string;
     page?: number;
     limit?: number;
-  }): Promise<any> {
-    const response = await api.get('/reports', { params });
-    return (response.data as any).data;
+  }): Promise<{
+    reports: Report[];
+    total: number;
+    page: number;
+    limit: number;
+  }> {
+    const response = await api.get<ApiResponse<{
+      reports: Report[];
+      total: number;
+      page: number;
+      limit: number;
+    }>>('/reports', { params });
+    if (!response.data.data) {
+      throw new Error('Failed to get all reports');
+    }
+    return response.data.data;
   }
 
   /**
@@ -57,16 +79,22 @@ class ReportService {
     id: string,
     data: { status: string; resolution?: string }
   ): Promise<Report> {
-    const response = await api.put(`/reports/${id}/status`, data);
-    return (response.data as any).data;
+    const response = await api.put<ApiResponse<Report>>(`/reports/${id}/status`, data);
+    if (!response.data.data) {
+      throw new Error('Failed to update report status');
+    }
+    return response.data.data;
   }
 
   /**
    * Get reports against a teacher (Admin only)
    */
-  async getTeacherReports(teacherId: string): Promise<any> {
-    const response = await api.get(`/reports/teacher/${teacherId}`);
-    return (response.data as any).data;
+  async getTeacherReports(teacherId: string): Promise<Report[]> {
+    const response = await api.get<ApiResponse<Report[]>>(`/reports/teacher/${teacherId}`);
+    if (!response.data.data) {
+      throw new Error('Failed to get teacher reports');
+    }
+    return response.data.data;
   }
 }
 

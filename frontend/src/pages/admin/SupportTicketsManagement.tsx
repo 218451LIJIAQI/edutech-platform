@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import toast from 'react-hot-toast';
 import adminSupportService from '@/services/admin-support.service';
-import { SupportTicket, SupportTicketStatus } from '@/types';
+import { SupportTicket } from '@/types';
 
 /**
  * Support Tickets Management Page Component
@@ -14,14 +14,30 @@ const SupportTicketsManagement = () => {
   const [filterStatus, setFilterStatus] = useState<string>('OPEN');
   const [filterPriority, setFilterPriority] = useState<string>('');
   const [selectedTicket, setSelectedTicket] = useState<SupportTicket | null>(null);
-  const [stats, setStats] = useState<any>(null);
+  const [stats, setStats] = useState<{
+    open: number;
+    inProgress: number;
+    resolved: number;
+    closed: number;
+    total: number;
+  } | null>(null);
   const [responseMessage, setResponseMessage] = useState('');
   const [resolutionText, setResolutionText] = useState('');
 
   /**
+   * Extract error message from error object
+   */
+  const getErrorMessage = useCallback((e: unknown): string | undefined => {
+    if (e instanceof Error && 'response' in e) {
+      return (e as { response?: { data?: { message?: string } } }).response?.data?.message;
+    }
+    return undefined;
+  }, []);
+
+  /**
    * Load tickets and stats
    */
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     setLoading(true);
     try {
       const [ticketsData, statsData] = await Promise.all([
@@ -34,19 +50,16 @@ const SupportTicketsManagement = () => {
       setTickets(ticketsData.tickets);
       setStats(statsData);
     } catch (e) {
-      const message =
-        e instanceof Error && 'response' in e
-          ? (e as { response?: { data?: { message?: string } } }).response?.data?.message
-          : undefined;
+      const message = getErrorMessage(e);
       toast.error(message || 'Failed to load tickets');
     } finally {
       setLoading(false);
     }
-  };
+  }, [filterStatus, filterPriority, getErrorMessage]);
 
   useEffect(() => {
     loadData();
-  }, [filterStatus, filterPriority]);
+  }, [loadData]);
 
   /**
    * Assign ticket to self
@@ -60,10 +73,7 @@ const SupportTicketsManagement = () => {
       setSelectedTicket(null);
       await loadData();
     } catch (e) {
-      const message =
-        e instanceof Error && 'response' in e
-          ? (e as { response?: { data?: { message?: string } } }).response?.data?.message
-          : undefined;
+      const message = getErrorMessage(e);
       toast.error(message || 'Failed to assign ticket');
     } finally {
       setWorking(false);
@@ -87,10 +97,7 @@ const SupportTicketsManagement = () => {
       const updated = await adminSupportService.getTicketById(selectedTicket.id);
       setSelectedTicket(updated);
     } catch (e) {
-      const message =
-        e instanceof Error && 'response' in e
-          ? (e as { response?: { data?: { message?: string } } }).response?.data?.message
-          : undefined;
+      const message = getErrorMessage(e);
       toast.error(message || 'Failed to add response');
     } finally {
       setWorking(false);
@@ -113,10 +120,7 @@ const SupportTicketsManagement = () => {
       setSelectedTicket(null);
       await loadData();
     } catch (e) {
-      const message =
-        e instanceof Error && 'response' in e
-          ? (e as { response?: { data?: { message?: string } } }).response?.data?.message
-          : undefined;
+      const message = getErrorMessage(e);
       toast.error(message || 'Failed to resolve ticket');
     } finally {
       setWorking(false);
@@ -128,7 +132,7 @@ const SupportTicketsManagement = () => {
    */
   const handleClose = async () => {
     if (!selectedTicket) return;
-    if (!confirm('Are you sure you want to close this ticket?')) return;
+    if (!window.confirm('Are you sure you want to close this ticket?')) return;
     setWorking(true);
     try {
       await adminSupportService.closeTicket(selectedTicket.id);
@@ -136,10 +140,7 @@ const SupportTicketsManagement = () => {
       setSelectedTicket(null);
       await loadData();
     } catch (e) {
-      const message =
-        e instanceof Error && 'response' in e
-          ? (e as { response?: { data?: { message?: string } } }).response?.data?.message
-          : undefined;
+      const message = getErrorMessage(e);
       toast.error(message || 'Failed to close ticket');
     } finally {
       setWorking(false);

@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import cartService, { CartSummaryDTO } from '@/services/cart.service';
 import toast from 'react-hot-toast';
+import { formatCurrency } from '@/utils/helpers';
 
 const CartPage = () => {
   const navigate = useNavigate();
@@ -9,7 +10,7 @@ const CartPage = () => {
   const [loading, setLoading] = useState(true);
   const [working, setWorking] = useState(false);
 
-  const load = async () => {
+  const load = useCallback(async () => {
     setLoading(true);
     try {
       const data = await cartService.getCart();
@@ -22,11 +23,11 @@ const CartPage = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     load();
-  }, []);
+  }, [load]);
 
   const handleRemove = async (packageId: string) => {
     setWorking(true);
@@ -92,15 +93,21 @@ const CartPage = () => {
         ) : (
           <div className="space-y-6">
             {items.map((it) => (
-              <div key={it.id} className="card shadow-lg hover:shadow-2xl transition-all duration-300 transform hover:scale-102 border border-gray-100 hover:border-primary-200">
+              <div key={it.id} className="card shadow-lg hover:shadow-2xl transition-all duration-300 transform hover:scale-105 border border-gray-100 hover:border-primary-200">
                 <div className="flex items-center justify-between">
                   <div className="flex-1">
                     <div className="font-bold text-xl text-gray-900 mb-2">{it.package?.name || 'Package'}</div>
                     <div className="text-sm text-gray-600 font-medium">{it.package?.course?.title || ''}</div>
                   </div>
                   <div className="flex items-center space-x-6">
-                    <div className="text-3xl font-bold text-primary-600">${it.package?.finalPrice?.toFixed(2)}</div>
-                    <button className="btn-sm btn-outline hover:bg-red-50 hover:text-red-600 hover:border-red-300 transition-all" disabled={working} onClick={() => handleRemove(it.packageId)}>Remove</button>
+                    <div className="text-3xl font-bold text-primary-600">{formatCurrency(it.package?.finalPrice || 0)}</div>
+                    <button
+                      className="btn-sm btn-outline hover:bg-red-50 hover:text-red-600 hover:border-red-300 transition-all"
+                      disabled={working}
+                      onClick={() => handleRemove(it.packageId)}
+                    >
+                      Remove
+                    </button>
                   </div>
                 </div>
               </div>
@@ -109,13 +116,25 @@ const CartPage = () => {
             <div className="card bg-gradient-to-r from-primary-600 to-primary-700 text-white border-2 border-primary-400 shadow-2xl">
               <div className="flex items-center justify-between">
                 <div className="font-bold text-2xl">Total Amount</div>
-                <div className="text-4xl font-bold">${total.toFixed(2)}</div>
+                <div className="text-4xl font-bold">{formatCurrency(total)}</div>
               </div>
             </div>
 
             <div className="flex items-center justify-end space-x-3">
-              <button className="btn-outline hover:bg-red-50 hover:text-red-600 hover:border-red-300 transition-all" onClick={handleClear} disabled={working}>Clear Cart</button>
-              <button className="btn-primary btn-lg shadow-lg hover:shadow-xl transition-all transform hover:scale-105" onClick={() => navigate('/cart/checkout')} disabled={items.length===0}>Proceed to Checkout</button>
+              <button
+                className="btn-outline hover:bg-red-50 hover:text-red-600 hover:border-red-300 transition-all"
+                onClick={handleClear}
+                disabled={working}
+              >
+                Clear Cart
+              </button>
+              <button
+                className="btn-primary btn-lg shadow-lg hover:shadow-xl transition-all transform hover:scale-105"
+                onClick={() => navigate('/cart/checkout')}
+                disabled={items.length === 0}
+              >
+                Proceed to Checkout
+              </button>
             </div>
           </div>
         )}

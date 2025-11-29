@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Wallet as WalletIcon, DollarSign, ArrowDownToLine, ArrowUpRight, Settings, Plus, CheckCircle, XCircle, CreditCard, Building2 } from 'lucide-react';
 import walletService from '@/services/wallet.service';
-import { PayoutMethod, PayoutMethodType, PayoutRequest, PayoutRequestStatus, WalletSummary, WalletTransaction, WalletTransactionSource, WalletTransactionType } from '@/types';
+import { PayoutMethod, PayoutMethodType, PayoutRequest, WalletSummary, WalletTransaction, WalletTransactionSource, WalletTransactionType } from '@/types';
 import toast from 'react-hot-toast';
 
 const currency = (v: number, ccy = 'USD') => new Intl.NumberFormat(undefined, { style: 'currency', currency: ccy }).format(v || 0);
@@ -56,7 +56,10 @@ const WalletPage = () => {
     }
   };
 
-  useEffect(() => { loadAll(); }, []);
+  useEffect(() => {
+    loadAll();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const filteredTxns = useMemo(() => {
     let items = txns.items || [];
@@ -201,7 +204,7 @@ const WalletPage = () => {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
-                    {payouts.items!.map((p) => (
+                    {payouts.items?.map((p) => (
                       <tr key={p.id}>
                         <td className="px-4 py-3 text-sm text-gray-600">{new Date(p.requestedAt).toLocaleString()}</td>
                         <td className="px-4 py-3 font-bold text-gray-900">{currency(p.amount, summary?.currency)}</td>
@@ -281,35 +284,35 @@ const WalletPage = () => {
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-2">Type</label>
-                <select value={methodType} onChange={e=>setMethodType(e.target.value as any)} className="input">
+                <select value={methodType} onChange={(e) => setMethodType(e.target.value as PayoutMethodType)} className="input">
                   {Object.values(PayoutMethodType).map(t => (<option key={t} value={t}>{t}</option>))}
                 </select>
               </div>
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-2">Label</label>
-                <input className="input" value={methodLabel} onChange={e=>setMethodLabel(e.target.value)} placeholder="e.g. HSBC Personal, Grab Wallet" />
+                <input className="input" value={methodLabel} onChange={(e) => setMethodLabel(e.target.value)} placeholder="e.g. HSBC Personal, Grab Wallet" />
               </div>
 
               {/* Simple dynamic detail fields */}
               {methodType === PayoutMethodType.BANK_TRANSFER ? (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  <input className="input" placeholder="Bank Name" onChange={e=>setMethodDetails((d:any)=>({ ...d, bankName: e.target.value }))} />
-                  <input className="input" placeholder="Account Name" onChange={e=>setMethodDetails((d:any)=>({ ...d, accountName: e.target.value }))} />
-                  <input className="input md:col-span-2" placeholder="Account Number" onChange={e=>setMethodDetails((d:any)=>({ ...d, accountNo: e.target.value }))} />
+                  <input className="input" placeholder="Bank Name" onChange={(e) => setMethodDetails((d: any) => ({ ...d, bankName: e.target.value }))} />
+                  <input className="input" placeholder="Account Name" onChange={(e) => setMethodDetails((d: any) => ({ ...d, accountName: e.target.value }))} />
+                  <input className="input md:col-span-2" placeholder="Account Number" onChange={(e) => setMethodDetails((d: any) => ({ ...d, accountNo: e.target.value }))} />
                 </div>
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  <input className="input" placeholder="Wallet ID / Phone" onChange={e=>setMethodDetails((d:any)=>({ ...d, walletId: e.target.value }))} />
-                  <input className="input" placeholder="Holder Name (optional)" onChange={e=>setMethodDetails((d:any)=>({ ...d, holder: e.target.value }))} />
+                  <input className="input" placeholder="Wallet ID / Phone" onChange={(e) => setMethodDetails((d: any) => ({ ...d, walletId: e.target.value }))} />
+                  <input className="input" placeholder="Holder Name (optional)" onChange={(e) => setMethodDetails((d: any) => ({ ...d, holder: e.target.value }))} />
                 </div>
               )}
 
               <label className="inline-flex items-center gap-2 text-sm">
-                <input type="checkbox" checked={methodIsDefault} onChange={e=>setMethodIsDefault(e.target.checked)} /> Set as default
+                <input type="checkbox" checked={methodIsDefault} onChange={(e) => setMethodIsDefault(e.target.checked)} /> Set as default
               </label>
 
               <div className="flex items-center justify-end gap-3">
-                <button className="btn-outline" onClick={()=>setMethodModalOpen(false)}>Cancel</button>
+                <button className="btn-outline" onClick={() => setMethodModalOpen(false)}>Cancel</button>
                 <button className="btn-primary" onClick={addMethod}><Plus className="w-4 h-4 mr-1" /> Add</button>
               </div>
             </div>
@@ -330,23 +333,23 @@ const WalletPage = () => {
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-2">Amount</label>
                 <input type="number" min={0} max={summary?.availableBalance || 0} value={payoutAmount}
-                       onChange={e=>setPayoutAmount(Number(e.target.value))} className="input" />
+                       onChange={(e) => setPayoutAmount(Number(e.target.value))} className="input" />
                 <p className="text-xs text-gray-500 mt-1">Available: {currency(summary?.availableBalance || 0, summary?.currency)}</p>
               </div>
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-2">Payout Method</label>
-                <select value={payoutMethodId} onChange={e=>setPayoutMethodId(e.target.value)} className="input">
+                <select value={payoutMethodId} onChange={(e) => setPayoutMethodId(e.target.value)} className="input">
                   <option value="">Default Method</option>
                   {methods.map(m => (<option key={m.id} value={m.id}>{m.label}</option>))}
                 </select>
               </div>
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-2">Note (optional)</label>
-                <textarea className="input" rows={3} placeholder="Anything we should know?" value={payoutNote} onChange={e=>setPayoutNote(e.target.value)} />
+                <textarea className="input" rows={3} placeholder="Anything we should know?" value={payoutNote} onChange={(e) => setPayoutNote(e.target.value)} />
               </div>
 
               <div className="flex items-center justify-end gap-3">
-                <button className="btn-outline" onClick={()=>setPayoutModalOpen(false)}>Cancel</button>
+                <button className="btn-outline" onClick={() => setPayoutModalOpen(false)}>Cancel</button>
                 <button className="btn-primary" onClick={submitPayout} disabled={isSubmitting}>
                   {isSubmitting ? 'Submitting...' : 'Submit Request'}
                 </button>

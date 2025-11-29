@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { CheckCircle, XCircle, Clock, Eye, AlertCircle, Loader, UserPlus } from 'lucide-react';
+import { useEffect, useState, useCallback } from 'react';
+import { CheckCircle, XCircle, Clock, Eye, AlertCircle, Loader, UserPlus, X } from 'lucide-react';
 import teacherService from '@/services/teacher.service';
 import { TeacherProfile, VerificationStatus, RegistrationStatus } from '@/types';
 
@@ -33,17 +33,8 @@ const VerificationTeachersManagement = () => {
   const [successMessage, setSuccessMessage] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
 
-  useEffect(() => {
-    if (activeTab === 'registrations') {
-      fetchPendingRegistrations();
-    } else {
-      fetchPendingProfiles();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTab, regPage, profPage]);
-
   // Fetch pending teacher registrations
-  const fetchPendingRegistrations = async () => {
+  const fetchPendingRegistrations = useCallback(async () => {
     setIsLoadingRegistrations(true);
     try {
       const result = await teacherService.getPendingRegistrations({ page: regPage, limit: 10 });
@@ -52,13 +43,14 @@ const VerificationTeachersManagement = () => {
     } catch (error) {
       console.error('Failed to fetch pending registrations:', error);
       setErrorMessage('Failed to load pending teacher registrations.');
+      setTimeout(() => setErrorMessage(''), 5000);
     } finally {
       setIsLoadingRegistrations(false);
     }
-  };
+  }, [regPage]);
 
   // Fetch pending extended profiles
-  const fetchPendingProfiles = async () => {
+  const fetchPendingProfiles = useCallback(async () => {
     setIsLoadingProfiles(true);
     try {
       const result = await teacherService.getPendingProfileVerifications({ page: profPage, limit: 10 });
@@ -67,10 +59,19 @@ const VerificationTeachersManagement = () => {
     } catch (error) {
       console.error('Failed to fetch pending profiles:', error);
       setErrorMessage('Failed to load pending profile verifications.');
+      setTimeout(() => setErrorMessage(''), 5000);
     } finally {
       setIsLoadingProfiles(false);
     }
-  };
+  }, [profPage]);
+
+  useEffect(() => {
+    if (activeTab === 'registrations') {
+      fetchPendingRegistrations();
+    } else {
+      fetchPendingProfiles();
+    }
+  }, [activeTab, regPage, profPage, fetchPendingRegistrations, fetchPendingProfiles]);
 
   // Approve/Reject Registration
   const handleReviewRegistration = async (teacherProfileId: string, status: RegistrationStatus) => {
@@ -78,12 +79,22 @@ const VerificationTeachersManagement = () => {
     try {
       await teacherService.reviewRegistration(teacherProfileId, status);
       setSuccessMessage(`Registration ${status === RegistrationStatus.APPROVED ? 'approved' : 'rejected'} successfully.`);
+      setTimeout(() => setSuccessMessage(''), 5000);
       fetchPendingRegistrations();
-    } catch (error: any) {
-      setErrorMessage(error?.response?.data?.message || 'Failed to review registration.');
+    } catch (error) {
+      let errorMessage = 'Failed to review registration.';
+      if (error instanceof Error) {
+        if ('response' in error) {
+          const responseError = error as { response?: { data?: { message?: string } } };
+          errorMessage = responseError.response?.data?.message || errorMessage;
+        } else {
+          errorMessage = error.message || errorMessage;
+        }
+      }
+      setErrorMessage(errorMessage);
+      setTimeout(() => setErrorMessage(''), 5000);
     } finally {
       setRegSubmittingId(null);
-      setTimeout(() => setSuccessMessage(''), 2500);
     }
   };
 
@@ -102,23 +113,74 @@ const VerificationTeachersManagement = () => {
     try {
       await teacherService.reviewTeacherProfile(selectedTeacher.id, profileReviewStatus, profileReviewNotes);
       setSuccessMessage(`Profile ${profileReviewStatus === VerificationStatus.APPROVED ? 'approved' : 'rejected'} successfully.`);
+      setTimeout(() => setSuccessMessage(''), 5000);
       setIsProfileReviewModalOpen(false);
       fetchPendingProfiles();
-    } catch (error: any) {
-      setErrorMessage(error?.response?.data?.message || 'Failed to review profile.');
+    } catch (error) {
+      let errorMessage = 'Failed to review profile.';
+      if (error instanceof Error) {
+        if ('response' in error) {
+          const responseError = error as { response?: { data?: { message?: string } } };
+          errorMessage = responseError.response?.data?.message || errorMessage;
+        } else {
+          errorMessage = error.message || errorMessage;
+        }
+      }
+      setErrorMessage(errorMessage);
+      setTimeout(() => setErrorMessage(''), 5000);
     } finally {
       setIsSubmittingProfileReview(false);
-      setTimeout(() => setSuccessMessage(''), 2500);
     }
   };
 
   // Helpers
-  const parseField = (field: any) => {
+  const parseField = useCallback((field: string | string[] | undefined): string[] => {
+    if (!field) return [];
     if (typeof field === 'string') {
-      try { return JSON.parse(field); } catch { return []; }
+      try {
+        const parsed = JSON.parse(field);
+        return Array.isArray(parsed) ? parsed : [];
+      } catch {
+        return [];
+      }
     }
     return Array.isArray(field) ? field : [];
-  };
+  }, []);
+
+  const formatDate = useCallback((date: string | Date | undefined): string => {
+    if (!date) return 'N/A';
+    try {
+      const dateObj = typeof date === 'string' ? new Date(date) : date;
+      if (isNaN(dateObj.getTime())) return 'N/A';
+      return dateObj.toLocaleDateString();
+    } catch {
+      return 'N/A';
+    }
+  }, []);
+
+  const handleBackdropClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    if (e.target === e.currentTarget) {
+      setIsProfileReviewModalOpen(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && isProfileReviewModalOpen) {
+        setIsProfileReviewModalOpen(false);
+      }
+    };
+
+    if (isProfileReviewModalOpen) {
+      document.addEventListener('keydown', handleEscape);
+      document.body.style.overflow = 'hidden';
+    }
+
+    return () => {
+      document.removeEventListener('keydown', handleEscape);
+      document.body.style.overflow = 'unset';
+    };
+  }, [isProfileReviewModalOpen]);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 via-blue-50 to-indigo-50 py-8">
@@ -201,13 +263,15 @@ const VerificationTeachersManagement = () => {
                             </div>
                           </td>
                           <td className="px-6 py-4 text-sm text-gray-600">{t.user?.email}</td>
-                          <td className="px-6 py-4 text-sm text-gray-600">{t.createdAt ? new Date(t.createdAt as unknown as string).toLocaleDateString() : 'N/A'}</td>
+                          <td className="px-6 py-4 text-sm text-gray-600">{formatDate(t.createdAt)}</td>
                           <td className="px-6 py-4">
                             <div className="flex items-center gap-2">
                               <button
                                 disabled={regSubmittingId === t.id}
                                 onClick={() => handleReviewRegistration(t.id, RegistrationStatus.APPROVED)}
-                                className="px-3 py-2 rounded-lg bg-green-600 text-white hover:bg-green-700 disabled:opacity-50 flex items-center gap-2"
+                                className="px-3 py-2 rounded-lg bg-green-600 text-white hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 transition-colors"
+                                type="button"
+                                aria-label="Approve registration"
                               >
                                 {regSubmittingId === t.id ? <Loader className="w-4 h-4 animate-spin" /> : <UserPlus className="w-4 h-4" />}
                                 Approve
@@ -215,7 +279,9 @@ const VerificationTeachersManagement = () => {
                               <button
                                 disabled={regSubmittingId === t.id}
                                 onClick={() => handleReviewRegistration(t.id, RegistrationStatus.REJECTED)}
-                                className="px-3 py-2 rounded-lg bg-red-600 text-white hover:bg-red-700 disabled:opacity-50 flex items-center gap-2"
+                                className="px-3 py-2 rounded-lg bg-red-600 text-white hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 transition-colors"
+                                type="button"
+                                aria-label="Reject registration"
                               >
                                 {regSubmittingId === t.id ? <Loader className="w-4 h-4 animate-spin" /> : <XCircle className="w-4 h-4" />}
                                 Reject
@@ -291,14 +357,14 @@ const VerificationTeachersManagement = () => {
                           <td className="px-6 py-4">
                             <div className="flex flex-wrap gap-1">
                               {parseField(teacher.specialties).slice(0, 2).map((spec: string, idx: number) => (
-                                <span key={idx} className="badge-primary text-xs">{spec}</span>
+                                <span key={idx} className="px-2 py-1 bg-primary-100 text-primary-800 rounded-full text-xs font-medium">{spec}</span>
                               ))}
                               {parseField(teacher.specialties).length > 2 && (
                                 <span className="text-xs text-gray-600">+{parseField(teacher.specialties).length - 2} more</span>
                               )}
                             </div>
                           </td>
-                          <td className="px-6 py-4 text-sm text-gray-600">{teacher.profileSubmittedAt ? new Date(teacher.profileSubmittedAt as unknown as string).toLocaleDateString() : 'N/A'}</td>
+                          <td className="px-6 py-4 text-sm text-gray-600">{formatDate(teacher.profileSubmittedAt)}</td>
                           <td className="px-6 py-4">
                             <div className="flex items-center space-x-2">
                               <Clock className="w-4 h-4 text-yellow-600" />
@@ -306,7 +372,12 @@ const VerificationTeachersManagement = () => {
                             </div>
                           </td>
                           <td className="px-6 py-4">
-                            <button onClick={() => openProfileReviewModal(teacher)} className="btn-primary flex items-center gap-2 text-sm">
+                            <button 
+                              onClick={() => openProfileReviewModal(teacher)} 
+                              className="btn-primary flex items-center gap-2 text-sm"
+                              type="button"
+                              aria-label="Review profile"
+                            >
                               <Eye className="w-4 h-4" /> Review
                             </button>
                           </td>
@@ -337,12 +408,25 @@ const VerificationTeachersManagement = () => {
 
       {/* Profile Review Modal */}
       {isProfileReviewModalOpen && selectedTeacher && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+        <div 
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+          onClick={handleBackdropClick}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="profile-review-title"
+        >
           <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
             {/* Modal Header */}
             <div className="sticky top-0 bg-gradient-to-r from-primary-600 to-primary-700 text-white px-6 py-4 flex items-center justify-between">
-              <h2 className="text-2xl font-bold">Review Teacher Profile</h2>
-              <button onClick={() => setIsProfileReviewModalOpen(false)} className="text-white hover:text-gray-200">✕</button>
+              <h2 id="profile-review-title" className="text-2xl font-bold">Review Teacher Profile</h2>
+              <button 
+                onClick={() => setIsProfileReviewModalOpen(false)} 
+                className="text-white hover:text-gray-200 transition-colors"
+                aria-label="Close profile review modal"
+                type="button"
+              >
+                <X className="w-6 h-6" />
+              </button>
             </div>
 
             {/* Modal Content */}
@@ -390,7 +474,7 @@ const VerificationTeachersManagement = () => {
                   <h3 className="font-bold text-gray-900 mb-2">Specialties</h3>
                   <div className="flex flex-wrap gap-2">
                     {parseField(selectedTeacher.specialties).map((spec: string, idx: number) => (
-                      <span key={idx} className="badge-primary">{spec}</span>
+                      <span key={idx} className="px-2 py-1 bg-primary-100 text-primary-800 rounded-full text-sm font-medium">{spec}</span>
                     ))}
                   </div>
                 </div>
@@ -402,7 +486,7 @@ const VerificationTeachersManagement = () => {
                   <h3 className="font-bold text-gray-900 mb-2">Languages</h3>
                   <div className="flex flex-wrap gap-2">
                     {parseField(selectedTeacher.languages).map((lang: string, idx: number) => (
-                      <span key={idx} className="badge-primary">{lang}</span>
+                      <span key={idx} className="px-2 py-1 bg-primary-100 text-primary-800 rounded-full text-sm font-medium">{lang}</span>
                     ))}
                   </div>
                 </div>
@@ -410,38 +494,62 @@ const VerificationTeachersManagement = () => {
             </div>
 
             {/* Modal Footer */}
-            <div className="sticky bottom-0 bg-gray-50 border-t border-gray-200 px-6 py-4 flex gap-4 justify-end">
-              <button onClick={() => setIsProfileReviewModalOpen(false)} className="btn-outline">Cancel</button>
-              <button onClick={submitProfileReview} disabled={isSubmittingProfileReview} className="btn-primary flex items-center gap-2">
-                {isSubmittingProfileReview ? (
-                  <>
-                    <Loader className="w-4 h-4 animate-spin" /> Submitting...
-                  </>
-                ) : (
-                  <>
-                    {profileReviewStatus === VerificationStatus.APPROVED ? (
-                      <>
-                        <CheckCircle className="w-4 h-4" /> Approve
-                      </>
-                    ) : (
-                      <>
-                        <XCircle className="w-4 h-4" /> Reject
-                      </>
-                    )}
-                  </>
-                )}
-              </button>
-              <select value={profileReviewStatus} onChange={(e) => setProfileReviewStatus(e.target.value as VerificationStatus)} className="input w-40">
-                <option value={VerificationStatus.APPROVED}>Approve</option>
-                <option value={VerificationStatus.REJECTED}>Reject</option>
-              </select>
-              <input
-                type="text"
-                className="input flex-1"
-                placeholder="Review notes (optional)"
-                value={profileReviewNotes}
-                onChange={(e) => setProfileReviewNotes(e.target.value)}
-              />
+            <div className="sticky bottom-0 bg-gray-50 border-t border-gray-200 px-6 py-4 space-y-4">
+              <div className="flex gap-4">
+                <label htmlFor="review-status" className="flex items-center gap-2 text-sm font-medium text-gray-700">
+                  Status:
+                  <select 
+                    id="review-status"
+                    value={profileReviewStatus} 
+                    onChange={(e) => setProfileReviewStatus(e.target.value as VerificationStatus)} 
+                    className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  >
+                    <option value={VerificationStatus.APPROVED}>Approve</option>
+                    <option value={VerificationStatus.REJECTED}>Reject</option>
+                  </select>
+                </label>
+                <input
+                  type="text"
+                  className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  placeholder="Review notes (optional)"
+                  value={profileReviewNotes}
+                  onChange={(e) => setProfileReviewNotes(e.target.value)}
+                  aria-label="Review notes"
+                />
+              </div>
+              <div className="flex gap-4 justify-end">
+                <button 
+                  onClick={() => setIsProfileReviewModalOpen(false)} 
+                  className="btn-outline"
+                  type="button"
+                >
+                  Cancel
+                </button>
+                <button 
+                  onClick={submitProfileReview} 
+                  disabled={isSubmittingProfileReview} 
+                  className="btn-primary flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                  type="button"
+                >
+                  {isSubmittingProfileReview ? (
+                    <>
+                      <Loader className="w-4 h-4 animate-spin" /> Submitting...
+                    </>
+                  ) : (
+                    <>
+                      {profileReviewStatus === VerificationStatus.APPROVED ? (
+                        <>
+                          <CheckCircle className="w-4 h-4" /> Approve
+                        </>
+                      ) : (
+                        <>
+                          <XCircle className="w-4 h-4" /> Reject
+                        </>
+                      )}
+                    </>
+                  )}
+                </button>
+              </div>
             </div>
           </div>
         </div>

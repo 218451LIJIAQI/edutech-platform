@@ -23,7 +23,12 @@ const adminRefundService = {
         offset: number;
       }>
     >(`/admin/refunds?${params.toString()}`);
-    return res.data.data!;
+    
+    if (!res.data.data) {
+      throw new Error('Failed to fetch refunds: No data returned');
+    }
+    
+    return res.data.data;
   },
 
   /**
@@ -31,7 +36,12 @@ const adminRefundService = {
    */
   getRefundById: async (id: string): Promise<Refund> => {
     const res = await api.get<ApiResponse<Refund>>(`/admin/refunds/${id}`);
-    return res.data.data!;
+    
+    if (!res.data.data) {
+      throw new Error('Failed to fetch refund: No data returned');
+    }
+    
+    return res.data.data;
   },
 
   /**
@@ -41,7 +51,12 @@ const adminRefundService = {
     const res = await api.post<ApiResponse<Refund>>(`/admin/refunds/${id}/approve`, {
       adminNotes,
     });
-    return res.data.data!;
+    
+    if (!res.data.data) {
+      throw new Error('Failed to approve refund: No data returned');
+    }
+    
+    return res.data.data;
   },
 
   /**
@@ -51,7 +66,12 @@ const adminRefundService = {
     const res = await api.post<ApiResponse<Refund>>(`/admin/refunds/${id}/reject`, {
       rejectionReason,
     });
-    return res.data.data!;
+    
+    if (!res.data.data) {
+      throw new Error('Failed to reject refund: No data returned');
+    }
+    
+    return res.data.data;
   },
 
   /**
@@ -61,7 +81,12 @@ const adminRefundService = {
     const res = await api.post<ApiResponse<Refund>>(`/admin/refunds/${id}/processing`, {
       adminNotes,
     });
-    return res.data.data!;
+    
+    if (!res.data.data) {
+      throw new Error('Failed to mark refund as processing: No data returned');
+    }
+    
+    return res.data.data;
   },
 
   /**
@@ -71,7 +96,12 @@ const adminRefundService = {
     const res = await api.post<ApiResponse<Refund>>(`/admin/refunds/${id}/complete`, {
       adminNotes,
     });
-    return res.data.data!;
+    
+    if (!res.data.data) {
+      throw new Error('Failed to complete refund: No data returned');
+    }
+    
+    return res.data.data;
   },
 
   /**
@@ -97,7 +127,12 @@ const adminRefundService = {
         completedRefundAmount: number;
       }>
     >('/admin/refunds/stats');
-    return res.data.data!;
+    
+    if (!res.data.data) {
+      throw new Error('Failed to fetch refund stats: No data returned');
+    }
+    
+    return res.data.data;
   },
 };
 

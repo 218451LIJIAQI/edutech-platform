@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 import { useForm } from 'react-hook-form';
@@ -76,20 +76,24 @@ const LessonModal: React.FC<LessonModalProps> = ({
 
   const onSubmit = async (data: LessonFormData) => {
     setIsSubmitting(true);
+    let loadingToastId: string | undefined;
     try {
       let videoUrl = '';
 
       // Handle video based on selected type
       if (videoType === 'upload' && videoFile) {
-        toast.loading('Uploading video...');
+        loadingToastId = toast.loading('Uploading video...');
         videoUrl = await uploadService.uploadVideo(videoFile, setUploadProgress);
+        if (loadingToastId) {
+          toast.dismiss(loadingToastId);
+        }
       } else if (videoType === 'link' && videoLink.trim()) {
         videoUrl = videoLink.trim();
       }
 
       // Convert duration to number if it's a string
       const duration = typeof data.duration === 'string' 
-        ? parseInt(data.duration, 10) 
+        ? parseInt(data.duration, 10) || 0
         : data.duration;
 
       const lessonData = {
@@ -109,6 +113,9 @@ const LessonModal: React.FC<LessonModalProps> = ({
       onSuccess();
       onClose();
     } catch (error) {
+      if (loadingToastId) {
+        toast.dismiss(loadingToastId);
+      }
       console.error('Failed to save lesson:', error);
       const message = error instanceof Error && 'response' in error 
         ? (error as { response?: { data?: { message?: string } } }).response?.data?.message 
@@ -215,8 +222,10 @@ const LessonModal: React.FC<LessonModalProps> = ({
                   value="upload"
                   checked={videoType === 'upload'}
                   onChange={(e) => {
-                    setVideoType(e.target.value as 'upload');
-                    setVideoLink('');
+                    if (e.target.value === 'upload' || e.target.value === 'link') {
+                      setVideoType(e.target.value);
+                      setVideoLink('');
+                    }
                   }}
                   className="form-radio text-primary-600 w-4 h-4"
                 />
@@ -228,8 +237,10 @@ const LessonModal: React.FC<LessonModalProps> = ({
                   value="link"
                   checked={videoType === 'link'}
                   onChange={(e) => {
-                    setVideoType(e.target.value as 'link');
-                    setVideoFile(null);
+                    if (e.target.value === 'upload' || e.target.value === 'link') {
+                      setVideoType(e.target.value);
+                      setVideoFile(null);
+                    }
                   }}
                   className="form-radio text-primary-600 w-4 h-4"
                 />

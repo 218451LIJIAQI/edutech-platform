@@ -18,7 +18,7 @@ const CoursesPage = () => {
   const [searchQuery, setSearchQuery] = useState(searchParams.get('q') || '');
   const [category, setCategory] = useState(searchParams.get('category') || '');
   const [courseType, setCourseType] = useState<'' | 'LIVE' | 'RECORDED' | 'HYBRID'>(
-    (searchParams.get('type') as any) || ''
+    (searchParams.get('type') as '' | 'LIVE' | 'RECORDED' | 'HYBRID') || ''
   );
   const [minRating, setMinRating] = useState<number | ''>(
     searchParams.get('minRating') ? Number(searchParams.get('minRating')) : ''
@@ -31,7 +31,7 @@ const CoursesPage = () => {
   );
   const [sortBy, setSortBy] = useState<
     'NEWEST' | 'RATING' | 'POPULARITY' | 'PRICE_ASC' | 'PRICE_DESC'
-  >((searchParams.get('sortBy') as any) || 'NEWEST');
+  >((searchParams.get('sortBy') as 'NEWEST' | 'RATING' | 'POPULARITY' | 'PRICE_ASC' | 'PRICE_DESC') || 'NEWEST');
 
   const [showFilters, setShowFilters] = useState(false);
 
@@ -114,7 +114,7 @@ const CoursesPage = () => {
               <select
                 className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-600"
                 value={sortBy}
-                onChange={(e) => setSortBy(e.target.value as any)}
+                onChange={(e) => setSortBy(e.target.value as 'NEWEST' | 'RATING' | 'POPULARITY' | 'PRICE_ASC' | 'PRICE_DESC')}
               >
                 <option value="NEWEST">Newest</option>
                 <option value="RATING">Top Rated</option>
@@ -161,7 +161,7 @@ const CoursesPage = () => {
                 <label className="block text-sm font-semibold text-gray-700 mb-2">Course Type</label>
                 <select
                   value={courseType}
-                  onChange={(e) => setCourseType(e.target.value as any)}
+                  onChange={(e) => setCourseType(e.target.value as '' | 'LIVE' | 'RECORDED' | 'HYBRID')}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-600"
                 >
                   <option value="">All</option>
@@ -210,38 +210,38 @@ const CoursesPage = () => {
                     placeholder="1000"
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-600"
                   />
+                  </div>
                 </div>
-        </div>
-      </div>
+              </div>
 
-            {/* Active filters summary */}
-            <div className="mt-4 flex flex-wrap items-center gap-2">
-              {searchQuery && (
-                <span className="badge-primary">Search: {searchQuery}</span>
-              )}
-              {category && <span className="badge-primary">Category: {category}</span>}
-              {courseType && <span className="badge-primary">Type: {courseType}</span>}
-              {minRating !== '' && <span className="badge-primary">Rating: {minRating}+</span>}
-              {minPrice !== '' && <span className="badge-primary">Min ${minPrice}</span>}
-              {maxPrice !== '' && <span className="badge-primary">Max ${maxPrice}</span>}
+                {/* Active filters summary */}
+              <div className="mt-4 flex flex-wrap items-center gap-2">
+                {searchQuery && (
+                  <span className="px-3 py-1 bg-primary-100 text-primary-700 rounded-full text-xs font-semibold">Search: {searchQuery}</span>
+                )}
+                {category && <span className="px-3 py-1 bg-primary-100 text-primary-700 rounded-full text-xs font-semibold">Category: {category}</span>}
+                {courseType && <span className="px-3 py-1 bg-primary-100 text-primary-700 rounded-full text-xs font-semibold">Type: {courseType}</span>}
+                {minRating !== '' && <span className="px-3 py-1 bg-primary-100 text-primary-700 rounded-full text-xs font-semibold">Rating: {minRating}+</span>}
+                {minPrice !== '' && <span className="px-3 py-1 bg-primary-100 text-primary-700 rounded-full text-xs font-semibold">Min ${minPrice}</span>}
+                {maxPrice !== '' && <span className="px-3 py-1 bg-primary-100 text-primary-700 rounded-full text-xs font-semibold">Max ${maxPrice}</span>}
 
-              {(searchQuery || category || courseType || minRating !== '' || minPrice !== '' || maxPrice !== '') && (
-                <button
-                  className="ml-auto text-sm text-primary-600 hover:text-primary-700 font-medium"
-                  onClick={() => {
-                    setSearchQuery('');
-                    setCategory('');
-                    setCourseType('');
-                    setMinRating('');
-                    setMinPrice('');
-                    setMaxPrice('');
-                    setSortBy('NEWEST');
-                  }}
-                >
-                  Clear all
-                </button>
-              )}
-            </div>
+                {(searchQuery || category || courseType || minRating !== '' || minPrice !== '' || maxPrice !== '') && (
+                  <button
+                    className="ml-auto text-sm text-primary-600 hover:text-primary-700 font-medium"
+                    onClick={() => {
+                      setSearchQuery('');
+                      setCategory('');
+                      setCourseType('');
+                      setMinRating('');
+                      setMinPrice('');
+                      setMaxPrice('');
+                      setSortBy('NEWEST');
+                    }}
+                  >
+                    Clear all
+                  </button>
+                )}
+              </div>
           </div>
         )}
 
@@ -282,28 +282,28 @@ const CoursesPage = () => {
                 <p className="text-gray-600 mb-4 line-clamp-2 text-sm leading-relaxed">{course.description}</p>
             
                 <div className="flex items-center flex-wrap gap-2 mb-4">
-              <span className="badge-primary font-semibold">{course.category}</span>
-              
-              {/* Course Type Badge */}
-              {course.courseType === CourseType.LIVE && (
-                    <span className="badge bg-gradient-to-r from-red-100 to-red-50 text-red-700 flex items-center gap-1 border border-red-200 font-semibold">
-                  <Radio className="w-3 h-3" />
-                  Live
-                </span>
-              )}
-              {course.courseType === CourseType.RECORDED && (
-                    <span className="badge bg-gradient-to-r from-blue-100 to-blue-50 text-blue-700 flex items-center gap-1 border border-blue-200 font-semibold">
-                  <Video className="w-3 h-3" />
-                  Recorded
-                </span>
-              )}
-              {course.courseType === CourseType.HYBRID && (
-                    <span className="badge bg-gradient-to-r from-purple-100 to-purple-50 text-purple-700 flex items-center gap-1 border border-purple-200 font-semibold">
-                  <PlayCircle className="w-3 h-3" />
-                  Hybrid
-                </span>
-              )}
-            </div>
+                  <span className="px-3 py-1 bg-primary-100 text-primary-700 rounded-full text-xs font-semibold">{course.category}</span>
+                  
+                  {/* Course Type Badge */}
+                  {course.courseType === CourseType.LIVE && (
+                    <span className="px-3 py-1 bg-gradient-to-r from-red-100 to-red-50 text-red-700 rounded-full text-xs flex items-center gap-1 border border-red-200 font-semibold">
+                      <Radio className="w-3 h-3" />
+                      Live
+                    </span>
+                  )}
+                  {course.courseType === CourseType.RECORDED && (
+                    <span className="px-3 py-1 bg-gradient-to-r from-blue-100 to-blue-50 text-blue-700 rounded-full text-xs flex items-center gap-1 border border-blue-200 font-semibold">
+                      <Video className="w-3 h-3" />
+                      Recorded
+                    </span>
+                  )}
+                  {course.courseType === CourseType.HYBRID && (
+                    <span className="px-3 py-1 bg-gradient-to-r from-purple-100 to-purple-50 text-purple-700 rounded-full text-xs flex items-center gap-1 border border-purple-200 font-semibold">
+                      <PlayCircle className="w-3 h-3" />
+                      Hybrid
+                    </span>
+                  )}
+                </div>
             
                 <div className="border-t pt-4 flex items-center justify-between">
                   <div className="text-sm font-bold text-gray-700">📚 {course.lessons?.length || 0} lessons</div>

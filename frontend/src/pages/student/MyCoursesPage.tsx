@@ -17,6 +17,7 @@ const MyCoursesPage = () => {
 
   useEffect(() => {
     fetchEnrollments();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const fetchEnrollments = async () => {
@@ -101,11 +102,12 @@ const MyCoursesPage = () => {
 
             const teacher = course.teacherProfile;
             const isCompleted = enrollment.progress === 100;
-            const isExpiring = enrollment.expiresAt && 
-              new Date(enrollment.expiresAt) < new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+            const isExpiring = enrollment.expiresAt 
+              ? new Date(enrollment.expiresAt).getTime() < Date.now() + 7 * 24 * 60 * 60 * 1000
+              : false;
 
             return (
-              <div key={enrollment.id} className="card shadow-xl hover:shadow-2xl transition-all duration-300 transform hover:scale-102 border border-gray-100 hover:border-primary-200 rounded-2xl">
+              <div key={enrollment.id} className="card shadow-xl hover:shadow-2xl transition-all duration-300 transform hover:scale-[1.02] border border-gray-100 hover:border-primary-200 rounded-2xl">
                 <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
                   {/* Course Info */}
                   <div className="lg:col-span-2">
@@ -123,10 +125,11 @@ const MyCoursesPage = () => {
                         {teacher && (
                           <div className="flex items-center space-x-2 text-sm">
                             <div className="w-8 h-8 bg-gradient-to-br from-gray-400 to-gray-500 rounded-full flex items-center justify-center text-xs font-bold text-white">
-                              {teacher.user?.firstName?.[0]}{teacher.user?.lastName?.[0]}
+                              {(teacher.user?.firstName?.[0] || 'T')}{(teacher.user?.lastName?.[0] || '')}
                             </div>
                             <span className="text-gray-700 font-medium">
-                              {teacher.user?.firstName} {teacher.user?.lastName}
+                              {teacher.user?.firstName || ''} {teacher.user?.lastName || ''}
+                              {!teacher.user?.firstName && !teacher.user?.lastName && 'Teacher'}
                             </span>
                           </div>
                         )}
@@ -182,7 +185,7 @@ const MyCoursesPage = () => {
                   {/* Actions */}
                   <div className="lg:col-span-1 flex flex-col justify-center gap-3">
                     <Link
-                      to={`/courses/${course.id}`}
+                      to={`/courses/${course.id}/learn`}
                       className="btn-primary text-center font-bold py-3 rounded-xl shadow-lg hover:shadow-xl transition-all transform hover:scale-105"
                     >
                       {isCompleted ? '📖 Review Course' : '▶️ Continue Learning'}

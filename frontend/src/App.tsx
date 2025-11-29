@@ -67,18 +67,26 @@ function App() {
 
   // Initialize authentication on app load
   useEffect(() => {
+    let isMounted = true;
+
     const initAuth = async () => {
       const token = localStorage.getItem('accessToken');
-      if (token && !isAuthenticated) {
+      if (token && !isAuthenticated && isMounted) {
         try {
           await fetchProfile();
         } catch (error) {
-          console.error('Failed to fetch profile:', error);
+          if (isMounted) {
+            console.error('Failed to fetch profile:', error);
+          }
         }
       }
     };
 
     initAuth();
+
+    return () => {
+      isMounted = false;
+    };
   }, [isAuthenticated, fetchProfile]);
 
   return (

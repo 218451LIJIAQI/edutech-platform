@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Search, Filter, X } from 'lucide-react';
 
 interface FilterOption {
@@ -32,6 +32,11 @@ const SearchFilter = ({
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedFilters, setSelectedFilters] = useState<Record<string, string>>(initialFilters);
   const [showFilters, setShowFilters] = useState(false);
+
+  // Sync selectedFilters with initialFilters when it changes
+  useEffect(() => {
+    setSelectedFilters(initialFilters);
+  }, [JSON.stringify(initialFilters)]);
 
   const handleSearch = (query: string) => {
     setSearchQuery(query);

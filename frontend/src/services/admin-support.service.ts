@@ -25,7 +25,12 @@ const adminSupportService = {
         offset: number;
       }>
     >(`/admin/support?${params.toString()}`);
-    return res.data.data!;
+    
+    if (!res.data.data) {
+      throw new Error('Failed to fetch support tickets: No data returned');
+    }
+    
+    return res.data.data;
   },
 
   /**
@@ -33,7 +38,12 @@ const adminSupportService = {
    */
   getTicketById: async (id: string): Promise<SupportTicket> => {
     const res = await api.get<ApiResponse<SupportTicket>>(`/admin/support/${id}`);
-    return res.data.data!;
+    
+    if (!res.data.data) {
+      throw new Error('Failed to fetch support ticket: No data returned');
+    }
+    
+    return res.data.data;
   },
 
   /**
@@ -41,7 +51,12 @@ const adminSupportService = {
    */
   assignTicket: async (id: string): Promise<SupportTicket> => {
     const res = await api.post<ApiResponse<SupportTicket>>(`/admin/support/${id}/assign`);
-    return res.data.data!;
+    
+    if (!res.data.data) {
+      throw new Error('Failed to assign ticket: No data returned');
+    }
+    
+    return res.data.data;
   },
 
   /**
@@ -51,7 +66,12 @@ const adminSupportService = {
     const res = await api.post<ApiResponse<SupportTicketMessage>>(`/admin/support/${id}/response`, {
       message,
     });
-    return res.data.data!;
+    
+    if (!res.data.data) {
+      throw new Error('Failed to add response: No data returned');
+    }
+    
+    return res.data.data;
   },
 
   /**
@@ -61,7 +81,12 @@ const adminSupportService = {
     const res = await api.post<ApiResponse<SupportTicket>>(`/admin/support/${id}/resolve`, {
       resolution,
     });
-    return res.data.data!;
+    
+    if (!res.data.data) {
+      throw new Error('Failed to resolve ticket: No data returned');
+    }
+    
+    return res.data.data;
   },
 
   /**
@@ -69,7 +94,12 @@ const adminSupportService = {
    */
   closeTicket: async (id: string): Promise<SupportTicket> => {
     const res = await api.post<ApiResponse<SupportTicket>>(`/admin/support/${id}/close`);
-    return res.data.data!;
+    
+    if (!res.data.data) {
+      throw new Error('Failed to close ticket: No data returned');
+    }
+    
+    return res.data.data;
   },
 
   /**
@@ -91,7 +121,12 @@ const adminSupportService = {
         total: number;
       }>
     >('/admin/support/stats');
-    return res.data.data!;
+    
+    if (!res.data.data) {
+      throw new Error('Failed to fetch support ticket stats: No data returned');
+    }
+    
+    return res.data.data;
   },
 };
 

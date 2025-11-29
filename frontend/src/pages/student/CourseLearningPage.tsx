@@ -38,17 +38,32 @@ const CourseLearningPage = () => {
   const [showReviewModal, setShowReviewModal] = useState(false);
 
   // Live interactions (frontend-only stub)
-  const [chatMessages, setChatMessages] = useState<Array<any>>([]);
+  interface ChatMessage {
+    id: string;
+    user: string;
+    type: 'text' | 'reaction' | 'system';
+    text: string;
+    timestamp: number;
+  }
+
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [chatInput, setChatInput] = useState("");
   const [showEmojis, setShowEmojis] = useState(false);
   const [handRaised, setHandRaised] = useState(false);
   const [micEnabled, setMicEnabled] = useState(false);
 
+  const generateId = (): string => {
+    if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+      return crypto.randomUUID();
+    }
+    return `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+  };
+
   const handleSendMessage = () => {
     if (!chatInput.trim()) return;
     setChatMessages((prev) => [
       ...prev,
-      { id: crypto.randomUUID?.() || String(Date.now()), user: "You", type: "text", text: chatInput.trim(), timestamp: Date.now() },
+      { id: generateId(), user: "You", type: "text" as const, text: chatInput.trim(), timestamp: Date.now() },
     ]);
     setChatInput("");
     setShowEmojis(false);
@@ -57,35 +72,39 @@ const CourseLearningPage = () => {
   const addReaction = (emoji: string) => {
     setChatMessages((prev) => [
       ...prev,
-      { id: crypto.randomUUID?.() || String(Date.now()), user: "You", type: "reaction", text: emoji, timestamp: Date.now() },
+      { id: generateId(), user: "You", type: "reaction" as const, text: emoji, timestamp: Date.now() },
     ]);
   };
 
   const toggleHand = () => {
-    setHandRaised((v) => !v);
-    const nowRaised = !handRaised;
-    setChatMessages((prev) => [
-      ...prev,
-      { id: crypto.randomUUID?.() || String(Date.now()), user: "System", type: "system", text: nowRaised ? "You raised your hand" : "You lowered your hand", timestamp: Date.now() },
-    ]);
-    toast.success(nowRaised ? "Hand raised" : "Hand lowered");
+    setHandRaised((prev) => {
+      const nowRaised = !prev;
+      setChatMessages((messages) => [
+        ...messages,
+        { id: generateId(), user: "System", type: "system" as const, text: nowRaised ? "You raised your hand" : "You lowered your hand", timestamp: Date.now() },
+      ]);
+      toast.success(nowRaised ? "Hand raised" : "Hand lowered");
+      return nowRaised;
+    });
   };
 
   const toggleMic = () => {
-    setMicEnabled((v) => !v);
-    const now = !micEnabled;
-    toast(
-      now
-        ? "Mic requested (teacher approval required in real session)"
-        : "Mic off"
-    );
+    setMicEnabled((prev) => {
+      const now = !prev;
+      toast(
+        now
+          ? "Mic requested (teacher approval required in real session)"
+          : "Mic off"
+      );
+      return now;
+    });
   };
 
   useEffect(() => {
     if (courseId) {
       fetchCourseData();
     }
-  }, [courseId]);
+  }, [courseId, navigate]);
 
   const fetchCourseData = async () => {
     if (!courseId) {
@@ -259,7 +278,7 @@ const CourseLearningPage = () => {
             <div className="flex items-center justify-between">
               <button
                 onClick={handlePreviousLesson}
-                disabled={course.lessons?.[0].id === currentLesson.id}
+                disabled={!course.lessons || course.lessons.length === 0 || course.lessons[0]?.id === currentLesson.id}
                 className="btn-outline disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Previous Lesson
@@ -267,7 +286,7 @@ const CourseLearningPage = () => {
               <button
                 onClick={handleNextLesson}
                 disabled={
-                  course.lessons?.[course.lessons.length - 1].id === currentLesson.id
+                  !course.lessons || course.lessons.length === 0 || course.lessons[course.lessons.length - 1]?.id === currentLesson.id
                 }
                 className="btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
               >
@@ -455,7 +474,7 @@ const CourseLearningPage = () => {
                 <input
                   value={chatInput}
                   onChange={(e) => setChatInput(e.target.value)}
-                  onKeyDown={(e) => { if ((e as any).key === 'Enter') handleSendMessage(); }}
+                  onKeyDown={(e) => { if (e.key === 'Enter') handleSendMessage(); }}
                   className="input flex-1"
                   placeholder="Message the class..."
                 />

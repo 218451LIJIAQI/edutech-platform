@@ -1,4 +1,4 @@
-import axios, { AxiosInstance, AxiosError } from 'axios';
+import axios, { AxiosInstance, AxiosError, InternalAxiosRequestConfig } from 'axios';
 import toast from 'react-hot-toast';
 
 /**
@@ -14,12 +14,35 @@ const api: AxiosInstance = axios.create({
 });
 
 /**
+ * Extended request config with retry flag
+ */
+interface ExtendedRequestConfig extends InternalAxiosRequestConfig {
+  _retry?: boolean;
+}
+
+/**
+ * Refresh token response type
+ */
+interface RefreshTokenResponse {
+  data?: {
+    accessToken?: string;
+  };
+}
+
+/**
+ * Error response type
+ */
+interface ErrorResponse {
+  message?: string;
+}
+
+/**
  * Request interceptor to add auth token
  */
 api.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem('accessToken');
-    if (token) {
+    if (token && config.headers) {
       config.headers.Authorization = `Bearer ${token}`;
     }
     return config;
@@ -34,8 +57,12 @@ api.interceptors.request.use(
  */
 api.interceptors.response.use(
   (response) => response,
-  async (error: AxiosError) => {
-    const originalRequest = error.config as { _retry?: boolean; headers?: Record<string, string> } & typeof error.config;
+  async (error: AxiosError<ErrorResponse>) => {
+    const originalRequest = error.config as ExtendedRequestConfig | undefined;
+
+    if (!originalRequest) {
+      return Promise.reject(error);
+    }
 
     // Handle token expiration
     if (error.response?.status === 401 && !originalRequest._retry) {
@@ -44,20 +71,20 @@ api.interceptors.response.use(
       try {
         const refreshToken = localStorage.getItem('refreshToken');
         if (refreshToken) {
-          const response = await axios.post(`${API_URL}/auth/refresh`, {
-            refreshToken,
-          });
+          const response = await axios.post<RefreshTokenResponse>(
+            `${API_URL}/auth/refresh`,
+            { refreshToken }
+          );
 
-          const responseData = response.data as { data?: { accessToken?: string } };
-          const accessToken = responseData.data?.accessToken;
+          const accessToken = response.data?.data?.accessToken;
           if (accessToken) {
             localStorage.setItem('accessToken', accessToken);
-          }
 
-          // Retry original request
-          if (accessToken && originalRequest.headers) {
-            originalRequest.headers.Authorization = `Bearer ${accessToken}`;
-            return api(originalRequest);
+            // Retry original request
+            if (originalRequest.headers) {
+              originalRequest.headers.Authorization = `Bearer ${accessToken}`;
+              return api(originalRequest);
+            }
           }
         }
       } catch (refreshError) {
@@ -72,13 +99,15 @@ api.interceptors.response.use(
 
     // Handle other errors
     const status = error.response?.status;
-    const errorData = error.response?.data as { message?: string } | undefined;
+    const errorData = error.response?.data;
     let errorMessage = errorData?.message || 'An error occurred. Please try again.';
 
     // Determine if we should suppress 404 toast for Community when fallback is enabled
-    const reqUrl = (error.config as any)?.url || '';
+    const reqUrl = originalRequest.url || '';
     const suppressCommunity404 = typeof reqUrl === 'string' && reqUrl.includes('/community/');
-    const suppress404Header = (error.config as any)?.headers?.['X-Suppress-404'] || (error.config as any)?.headers?.['x-suppress-404'];
+    const suppress404Header = 
+      originalRequest.headers?.['X-Suppress-404'] || 
+      originalRequest.headers?.['x-suppress-404'];
     const suppress404 = suppressCommunity404 || !!suppress404Header;
     
     // Customize error messages based on status code

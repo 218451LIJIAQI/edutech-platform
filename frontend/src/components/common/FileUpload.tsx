@@ -47,13 +47,23 @@ const FileUpload: React.FC<FileUploadProps> = ({
     if (preview && (file.type.startsWith('image/') || file.type.startsWith('video/'))) {
       const reader = new FileReader();
       reader.onloadend = () => {
-        setPreviewUrl(reader.result as string);
+        if (reader.result) {
+          setPreviewUrl(reader.result as string);
+        }
+      };
+      reader.onerror = () => {
+        toast.error('Failed to generate preview');
+        console.error('FileReader error:', reader.error);
       };
       reader.readAsDataURL(file);
     }
   };
 
   const handleClearFile = () => {
+    // Revoke object URL to prevent memory leaks (only for blob URLs)
+    if (previewUrl && previewUrl.startsWith('blob:')) {
+      URL.revokeObjectURL(previewUrl);
+    }
     setSelectedFile(null);
     setPreviewUrl('');
     if (fileInputRef.current) {
@@ -86,7 +96,10 @@ const FileUpload: React.FC<FileUploadProps> = ({
 
       const data = await response.json();
       toast.success('File uploaded successfully!');
-      onUploadComplete?.(data.data.url);
+      const fileUrl = data?.data?.url || data?.url;
+      if (fileUrl) {
+        onUploadComplete?.(fileUrl);
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to upload file';
       toast.error(message);

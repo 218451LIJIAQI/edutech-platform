@@ -138,16 +138,20 @@ const TeacherProfileCompletionForm = ({
 
     setUploadingPhoto(true);
     try {
-      const uploadedUrl = await uploadService.uploadFile(file, 'teacher-profiles');
+      const uploadResult = await uploadService.uploadFile(file, 'teacher-profiles');
       setFormData((prev) => ({
         ...prev,
-        profilePhoto: uploadedUrl,
+        profilePhoto: uploadResult.url,
       }));
     } catch (error) {
       onError('Failed to upload profile photo');
       console.error('Profile photo upload error:', error);
     } finally {
       setUploadingPhoto(false);
+      // Reset input to allow re-uploading the same file
+      if (profilePhotoInputRef.current) {
+        profilePhotoInputRef.current.value = '';
+      }
     }
   };
 
@@ -156,14 +160,14 @@ const TeacherProfileCompletionForm = ({
    */
   const handleCertificatePhotosUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
-    if (!files) return;
+    if (!files || files.length === 0) return;
 
     setUploadingCerts(true);
     try {
       const uploadedUrls: string[] = [];
       for (let i = 0; i < files.length; i++) {
-        const url = await uploadService.uploadFile(files[i], 'teacher-certificates');
-        uploadedUrls.push(url);
+        const uploadResult = await uploadService.uploadFile(files[i], 'teacher-certificates');
+        uploadedUrls.push(uploadResult.url);
       }
       setFormData((prev) => ({
         ...prev,
@@ -174,6 +178,10 @@ const TeacherProfileCompletionForm = ({
       console.error('Certificate photos upload error:', error);
     } finally {
       setUploadingCerts(false);
+      // Reset input to allow re-uploading the same files
+      if (certificatePhotosInputRef.current) {
+        certificatePhotosInputRef.current.value = '';
+      }
     }
   };
 
@@ -220,8 +228,13 @@ const TeacherProfileCompletionForm = ({
         profile = await teacherService.submitExtendedProfile(formData);
       }
       onSuccess(profile);
-    } catch (error: any) {
-      onError(error.response?.data?.message || 'Failed to submit profile');
+    } catch (error) {
+      const errorMessage = error instanceof Error && 'response' in error
+        ? (error as { response?: { data?: { message?: string } } }).response?.data?.message || 'Failed to submit profile'
+        : error instanceof Error
+        ? error.message
+        : 'Failed to submit profile';
+      onError(errorMessage);
       console.error('Profile submission error:', error);
     } finally {
       setIsSubmitting(false);
@@ -240,6 +253,7 @@ const TeacherProfileCompletionForm = ({
           placeholder="Tell students about yourself, your teaching philosophy, and what makes you a great teacher..."
           className="input min-h-32"
           required
+          maxLength={500}
         />
         <p className="text-sm text-gray-500 mt-2">
           {formData.selfIntroduction.length}/500 characters
@@ -273,15 +287,16 @@ const TeacherProfileCompletionForm = ({
       {/* Years of Experience */}
       <div className="card shadow-lg">
         <h3 className="text-xl font-bold mb-4 text-gray-900">Years of Experience</h3>
-        <input
-          type="number"
-          name="yearsOfExperience"
-          value={formData.yearsOfExperience}
-          onChange={handleInputChange}
-          min="0"
-          max="70"
-          className="input"
-        />
+          <input
+            type="number"
+            name="yearsOfExperience"
+            value={formData.yearsOfExperience}
+            onChange={handleInputChange}
+            min="0"
+            max="70"
+            className="input"
+            required
+          />
       </div>
 
       {/* Teaching Style */}
@@ -306,7 +321,12 @@ const TeacherProfileCompletionForm = ({
             onChange={(e) => setNewSpecialty(e.target.value)}
             placeholder="Add a specialty (e.g., Mathematics, Web Development)"
             className="input flex-1"
-            onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), addSpecialty())}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                addSpecialty();
+              }
+            }}
           />
           <button
             type="button"
@@ -346,7 +366,12 @@ const TeacherProfileCompletionForm = ({
             onChange={(e) => setNewLanguage(e.target.value)}
             placeholder="Add a language (e.g., English, Spanish)"
             className="input flex-1"
-            onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), addLanguage())}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                addLanguage();
+              }
+            }}
           />
           <button
             type="button"
@@ -386,7 +411,12 @@ const TeacherProfileCompletionForm = ({
             onChange={(e) => setNewAward(e.target.value)}
             placeholder="Add an award or honor"
             className="input flex-1"
-            onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), addAward())}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                addAward();
+              }
+            }}
           />
           <button
             type="button"

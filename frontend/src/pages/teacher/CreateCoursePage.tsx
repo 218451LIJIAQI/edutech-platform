@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import {
@@ -70,13 +70,7 @@ const CreateCoursePage = () => {
     formState: { errors },
   } = useForm<CourseFormData>();
 
-  useEffect(() => {
-    if (isEditMode) {
-      fetchCourse();
-    }
-  }, [courseId]);
-
-  const fetchCourse = async () => {
+  const fetchCourse = useCallback(async () => {
     setIsLoading(true);
     try {
       const data = await courseService.getCourseById(courseId!);
@@ -118,7 +112,13 @@ const CreateCoursePage = () => {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [courseId, setValue]);
+
+  useEffect(() => {
+    if (isEditMode && courseId) {
+      fetchCourse();
+    }
+  }, [isEditMode, courseId, fetchCourse]);
 
   const onSubmit = async (data: CourseFormData) => {
     setIsSaving(true);
@@ -132,14 +132,20 @@ const CreateCoursePage = () => {
       
       // Handle preview video based on selected type
       if (previewVideoType === 'upload' && previewVideoFile) {
-        toast.loading('Uploading preview video...');
-        data.previewVideoUrl = await uploadService.uploadVideo(previewVideoFile);
+        const loadingToast = toast.loading('Uploading preview video...');
+        try {
+          data.previewVideoUrl = await uploadService.uploadVideo(previewVideoFile);
+          toast.dismiss(loadingToast);
+        } catch (uploadError) {
+          toast.dismiss(loadingToast);
+          throw uploadError;
+        }
       } else if (previewVideoType === 'link' && previewVideoLink.trim()) {
         data.previewVideoUrl = previewVideoLink.trim();
       }
 
       // Remove empty strings to avoid validation errors
-      const cleanData: Partial<Course> = {
+      const cleanData: Record<string, unknown> = {
         title: data.title,
         description: data.description,
         category: data.category,
@@ -164,7 +170,7 @@ const CreateCoursePage = () => {
       }
 
       setCourse(savedCourse);
-      if (!isEditMode) {
+      if (!isEditMode && savedCourse.id) {
         navigate(`/teacher/courses/${savedCourse.id}/edit`);
       }
     } catch (error) {
@@ -605,23 +611,45 @@ const CreateCoursePage = () => {
                       <div className="mt-2">
                         <p className="text-xs font-medium text-gray-700 mb-1">Preview:</p>
                         <div className="aspect-video bg-gray-100 rounded-lg overflow-hidden">
-                          {previewVideoLink.includes('youtube.com') || previewVideoLink.includes('youtu.be') ? (
-                            <iframe
-                              src={previewVideoLink.replace('watch?v=', 'embed/').replace('youtu.be/', 'youtube.com/embed/')}
-                              className="w-full h-full"
-                              allowFullScreen
-                              title="Preview"
-                            />
-                          ) : previewVideoLink.includes('vimeo.com') ? (
-                            <iframe
-                              src={previewVideoLink.replace('vimeo.com/', 'player.vimeo.com/video/')}
-                              className="w-full h-full"
-                              allowFullScreen
-                              title="Preview"
-                            />
-                          ) : (
-                            <video src={previewVideoLink} controls className="w-full h-full" />
-                          )}
+                          {(() => {
+                            try {
+                              const url = new URL(previewVideoLink);
+                              if (url.hostname.includes('youtube.com') || url.hostname.includes('youtu.be')) {
+                                let videoId = '';
+                                if (url.hostname.includes('youtu.be')) {
+                                  videoId = url.pathname.slice(1);
+                                } else {
+                                  videoId = url.searchParams.get('v') || '';
+                                }
+                                if (videoId) {
+                                  return (
+                                    <iframe
+                                      src={`https://www.youtube.com/embed/${videoId}`}
+                                      className="w-full h-full"
+                                      allowFullScreen
+                                      title="Preview"
+                                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                                    />
+                                  );
+                                }
+                              } else if (url.hostname.includes('vimeo.com')) {
+                                const videoId = url.pathname.split('/').filter(Boolean).pop() || '';
+                                if (videoId) {
+                                  return (
+                                    <iframe
+                                      src={`https://player.vimeo.com/video/${videoId}`}
+                                      className="w-full h-full"
+                                      allowFullScreen
+                                      title="Preview"
+                                    />
+                                  );
+                                }
+                              }
+                              return <video src={previewVideoLink} controls className="w-full h-full" />;
+                            } catch {
+                              return <video src={previewVideoLink} controls className="w-full h-full" />;
+                            }
+                          })()}
                         </div>
                       </div>
                     )}

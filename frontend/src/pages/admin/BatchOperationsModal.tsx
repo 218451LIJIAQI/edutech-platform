@@ -61,8 +61,10 @@ const BatchOperationsModal = ({
   const details = getOperationDetails();
 
   const handleConfirm = async () => {
-    if (confirmText !== details?.confirmText) {
-      toast.error(`Please type "${details?.confirmText}" to confirm`);
+    if (!details) return;
+    
+    if (confirmText !== details.confirmText) {
+      toast.error(`Please type "${details.confirmText}" to confirm`);
       return;
     }
 
@@ -82,11 +84,18 @@ const BatchOperationsModal = ({
       }
       onSuccess();
       onClose();
-    } catch (error) {
-      const message = error instanceof Error && 'response' in error 
-        ? (error as { response?: { data?: { message?: string } } }).response?.data?.message 
-        : undefined;
-      toast.error(message || 'Operation failed');
+      setConfirmText('');
+    } catch (error: unknown) {
+      let errorMessage = 'Operation failed';
+      if (error && typeof error === 'object' && 'response' in error) {
+        const response = (error as { response?: { data?: { message?: string } } }).response;
+        if (response?.data?.message) {
+          errorMessage = response.data.message;
+        }
+      } else if (error instanceof Error) {
+        errorMessage = error.message;
+      }
+      toast.error(errorMessage);
     } finally {
       setIsLoading(false);
     }
@@ -94,13 +103,15 @@ const BatchOperationsModal = ({
 
   if (!isOpen || !details) return null;
 
-  const colorClasses = {
+  type ColorKey = 'red' | 'yellow' | 'green';
+  
+  const colorClasses: Record<ColorKey, string> = {
     red: 'text-red-600 bg-red-50 border-red-200',
     yellow: 'text-yellow-600 bg-yellow-50 border-yellow-200',
     green: 'text-green-600 bg-green-50 border-green-200',
   };
 
-  const buttonClasses = {
+  const buttonClasses: Record<ColorKey, string> = {
     red: 'bg-red-600 hover:bg-red-700',
     yellow: 'bg-yellow-600 hover:bg-yellow-700',
     green: 'bg-green-600 hover:bg-green-700',
@@ -123,7 +134,7 @@ const BatchOperationsModal = ({
         {/* Content */}
         <div className="p-6 space-y-4">
           {/* Warning */}
-          <div className={`p-4 rounded-lg border flex gap-3 ${colorClasses[details.color as keyof typeof colorClasses]}`}>
+          <div className={`p-4 rounded-lg border flex gap-3 ${colorClasses[details.color as ColorKey]}`}>
             <AlertTriangle className="w-5 h-5 flex-shrink-0 mt-0.5" />
             <div>
               <p className="font-medium">{details.description}</p>
@@ -161,7 +172,7 @@ const BatchOperationsModal = ({
               onClick={handleConfirm}
               disabled={isLoading || confirmText !== details.confirmText}
               className={`flex-1 px-4 py-2 text-white rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
-                buttonClasses[details.color as keyof typeof buttonClasses]
+                buttonClasses[details.color as ColorKey]
               }`}
             >
               {isLoading ? 'Processing...' : details.title}

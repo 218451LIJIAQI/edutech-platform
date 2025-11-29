@@ -19,11 +19,14 @@ const PrivateRoute = ({ children, allowedRoles }: PrivateRouteProps) => {
     return <Navigate to="/login" replace />;
   }
 
-  if (allowedRoles && user && !allowedRoles.includes(user.role)) {
-    return <Navigate to="/" replace />;
+  // If allowedRoles is specified, user must exist and have a valid role
+  if (allowedRoles) {
+    if (!user || !allowedRoles.includes(user.role)) {
+      return <Navigate to="/" replace />;
+    }
   }
 
-  return <>{children}</>;
+  return children;
 };
 
 export default PrivateRoute;

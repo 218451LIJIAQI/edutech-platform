@@ -6,6 +6,16 @@ import { User, AuthTokens, LoginCredentials, RegisterData, ApiResponse } from '@
  * Handles all authentication-related API calls
  */
 
+/**
+ * Helper function to extract data from API response with error handling
+ */
+function extractData<T>(response: { data: ApiResponse<T> }): T {
+  if (!response.data.data) {
+    throw new Error(response.data.message || 'No data received from server');
+  }
+  return response.data.data;
+}
+
 export const authService = {
   /**
    * Register a new user
@@ -15,7 +25,7 @@ export const authService = {
       '/auth/register',
       data
     );
-    return response.data.data!;
+    return extractData(response);
   },
 
   /**
@@ -26,7 +36,7 @@ export const authService = {
       '/auth/login',
       credentials
     );
-    return response.data.data!;
+    return extractData(response);
   },
 
   /**
@@ -34,7 +44,7 @@ export const authService = {
    */
   getProfile: async (): Promise<User> => {
     const response = await api.get<ApiResponse<User>>('/auth/profile');
-    return response.data.data!;
+    return extractData(response);
   },
 
   /**
@@ -42,7 +52,7 @@ export const authService = {
    */
   updateProfile: async (data: Partial<User>): Promise<User> => {
     const response = await api.put<ApiResponse<User>>('/auth/profile', data);
-    return response.data.data!;
+    return extractData(response);
   },
 
   /**
@@ -76,7 +86,7 @@ export const authService = {
     const response = await api.post<ApiResponse<AuthTokens>>('/auth/refresh', {
       refreshToken,
     });
-    return response.data.data!;
+    return extractData(response);
   },
 };
 

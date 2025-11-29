@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell } from 'recharts';
 import adminService from '@/services/admin.service';
 import toast from 'react-hot-toast';
@@ -6,14 +6,53 @@ import { Calendar } from 'lucide-react';
 
 const COLORS = ['#0284c7', '#0ea5e9', '#38bdf8', '#7dd3fc'];
 
+interface RevenueTrendData {
+  date: string;
+  totalRevenue: number;
+  platformEarnings: number;
+  teacherEarnings: number;
+}
+
+interface TopTeacherData {
+  name: string;
+  earnings: number;
+}
+
+interface TopCourseData {
+  title: string;
+  revenue: number;
+}
+
+interface RevenueBreakdownData {
+  type: string;
+  revenue: number;
+}
+
+interface AnalyticsData {
+  revenueTrend?: RevenueTrendData[];
+  topTeachers?: TopTeacherData[];
+  topCourses?: TopCourseData[];
+  revenueBreakdown?: RevenueBreakdownData[];
+}
+
 const RevenueAnalytics = () => {
-  const [data, setData] = useState<any>(null);
+  const [data, setData] = useState<AnalyticsData | null>(null);
   const [loading, setLoading] = useState(true);
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [groupBy, setGroupBy] = useState<'day' | 'week' | 'month'>('day');
 
-  const loadAnalytics = async () => {
+  /**
+   * Extract error message from error object
+   */
+  const getErrorMessage = useCallback((e: unknown): string | undefined => {
+    if (e instanceof Error && 'response' in e) {
+      return (e as { response?: { data?: { message?: string } } }).response?.data?.message;
+    }
+    return undefined;
+  }, []);
+
+  const loadAnalytics = useCallback(async () => {
     setLoading(true);
     try {
       const analyticsData = await adminService.getRevenueAnalytics({
@@ -21,18 +60,19 @@ const RevenueAnalytics = () => {
         endDate: endDate || undefined,
         groupBy,
       });
-      setData(analyticsData);
+      setData(analyticsData as AnalyticsData);
     } catch (error) {
-      toast.error('Failed to load analytics data');
+      console.error('Error loading analytics data:', error);
+      const message = getErrorMessage(error);
+      toast.error(message || 'Failed to load analytics data');
     } finally {
       setLoading(false);
     }
-  };
+  }, [startDate, endDate, groupBy, getErrorMessage]);
 
   useEffect(() => {
     loadAnalytics();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [groupBy]);
+  }, [loadAnalytics]);
 
   const formatMoney = (value: number) => `$${value.toLocaleString()}`;
 
@@ -60,7 +100,11 @@ const RevenueAnalytics = () => {
         </div>
         <div className="flex-1">
           <label className="block text-sm font-medium text-gray-700 mb-1">Group By</label>
-          <select value={groupBy} onChange={(e) => setGroupBy(e.target.value as any)} className="input py-2">
+          <select 
+            value={groupBy} 
+            onChange={(e) => setGroupBy(e.target.value as 'day' | 'week' | 'month')} 
+            className="input py-2"
+          >
             <option value="day">Day</option>
             <option value="week">Week</option>
             <option value="month">Month</option>
@@ -123,8 +167,8 @@ const RevenueAnalytics = () => {
         <h3 className="text-xl font-bold mb-4">Revenue Breakdown by Course Type</h3>
         <ResponsiveContainer width="100%" height={300}>
           <PieChart>
-            <Pie data={data?.revenueBreakdown ?? []} dataKey="revenue" nameKey="type" cx="50%" cy="50%" outerRadius={100} label>
-              {(data?.revenueBreakdown ?? []).map((entry: any, index: number) => (
+            <Pie data={(data?.revenueBreakdown ?? []) as unknown as Record<string, unknown>[]} dataKey="revenue" nameKey="type" cx="50%" cy="50%" outerRadius={100} label>
+              {(data?.revenueBreakdown ?? []).map((_entry: RevenueBreakdownData, index: number) => (
                 <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
               ))}
             </Pie>

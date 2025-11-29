@@ -45,7 +45,12 @@ export const adminService = {
    */
   getStats: async (): Promise<PlatformStats> => {
     const response = await api.get<ApiResponse<PlatformStats>>('/admin/stats');
-    return response.data.data!;
+    
+    if (!response.data.data) {
+      throw new Error('Failed to fetch platform stats: No data returned');
+    }
+    
+    return response.data.data;
   },
 
   /**
@@ -67,7 +72,12 @@ export const adminService = {
    */
   getUserById: async (id: string): Promise<User> => {
     const response = await api.get<ApiResponse<User>>(`/admin/users/${id}`);
-    return response.data.data!;
+    
+    if (!response.data.data) {
+      throw new Error('Failed to fetch user: No data returned');
+    }
+    
+    return response.data.data;
   },
 
   /**
@@ -77,7 +87,12 @@ export const adminService = {
     const response = await api.put<ApiResponse<User>>(`/admin/users/${id}/status`, {
       isActive,
     });
-    return response.data.data!;
+    
+    if (!response.data.data) {
+      throw new Error('Failed to update user status: No data returned');
+    }
+    
+    return response.data.data;
   },
 
   /**
@@ -109,7 +124,12 @@ export const adminService = {
     const response = await api.put<ApiResponse<Course>>(`/admin/courses/${id}/publish`, {
       isPublished,
     });
-    return response.data.data!;
+    
+    if (!response.data.data) {
+      throw new Error('Failed to update course status: No data returned');
+    }
+    
+    return response.data.data;
   },
 
   /**
@@ -143,7 +163,12 @@ export const adminService = {
       status,
       reviewNotes,
     });
-    return response.data.data!;
+    
+    if (!response.data.data) {
+      throw new Error('Failed to review verification: No data returned');
+    }
+    
+    return response.data.data;
   },
 
   /**
@@ -171,7 +196,12 @@ export const adminService = {
       status,
       resolution,
     });
-    return response.data.data!;
+    
+    if (!response.data.data) {
+      throw new Error('Failed to update report status: No data returned');
+    }
+    
+    return response.data.data;
   },
 
   /**
@@ -184,7 +214,12 @@ export const adminService = {
     const response = await api.get<ApiResponse<FinancialStats>>('/admin/financials', {
       params,
     });
-    return response.data.data!;
+    
+    if (!response.data.data) {
+      throw new Error('Failed to fetch financial stats: No data returned');
+    }
+    
+    return response.data.data;
   },
 
   /**
@@ -213,7 +248,12 @@ export const adminService = {
       }>;
       pagination: { total: number; page: number; limit: number; totalPages: number; hasMore: boolean };
     }>>('/admin/activities', { params });
-    return response.data.data!;
+    
+    if (!response.data.data) {
+      throw new Error('Failed to fetch recent activities: No data returned');
+    }
+    
+    return response.data.data;
   },
 
   /**
@@ -230,15 +270,25 @@ export const adminService = {
     department?: string;
   }): Promise<User> => {
     const response = await api.post<ApiResponse<User>>('/admin/users', data);
-    return response.data.data!;
+    
+    if (!response.data.data) {
+      throw new Error('Failed to create user: No data returned');
+    }
+    
+    return response.data.data;
   },
 
   /**
    * Update user information
    */
-  updateUser: async (id: string, data: any): Promise<User> => {
+  updateUser: async (id: string, data: Partial<Pick<User, 'firstName' | 'lastName' | 'avatar' | 'role'>> & { phone?: string; address?: string; department?: string }): Promise<User> => {
     const response = await api.put<ApiResponse<User>>(`/admin/users/${id}`, data);
-    return response.data.data!;
+    
+    if (!response.data.data) {
+      throw new Error('Failed to update user: No data returned');
+    }
+    
+    return response.data.data;
   },
 
   /**
@@ -248,7 +298,12 @@ export const adminService = {
     const response = await api.put<ApiResponse<User>>(`/admin/users/${id}/password`, {
       newPassword,
     });
-    return response.data.data!;
+    
+    if (!response.data.data) {
+      throw new Error('Failed to reset user password: No data returned');
+    }
+    
+    return response.data.data;
   },
 
   /**
@@ -259,7 +314,12 @@ export const adminService = {
       lock,
       reason,
     });
-    return response.data.data!;
+    
+    if (!response.data.data) {
+      throw new Error('Failed to lock/unlock user account: No data returned');
+    }
+    
+    return response.data.data;
   },
 
   /**
@@ -285,8 +345,22 @@ export const adminService = {
     action?: string;
     page?: number;
     limit?: number;
-  }): Promise<PaginatedResponse<any>['data']> => {
-    const response = await api.get<PaginatedResponse<any>>('/admin/users/audit-logs', {
+  }): Promise<PaginatedResponse<{
+    id: string;
+    userId: string;
+    adminId?: string;
+    action: string;
+    details?: Record<string, unknown>;
+    createdAt: string;
+  }>['data']> => {
+    const response = await api.get<PaginatedResponse<{
+      id: string;
+      userId: string;
+      adminId?: string;
+      action: string;
+      details?: Record<string, unknown>;
+      createdAt: string;
+    }>>('/admin/users/audit-logs', {
       params,
     });
     return response.data.data;
@@ -298,8 +372,22 @@ export const adminService = {
     search?: string;
     page?: number;
     limit?: number;
-  }): Promise<PaginatedResponse<any>['data']> => {
-    const response = await api.get<PaginatedResponse<any>>('/admin/financials/commissions', {
+  }): Promise<PaginatedResponse<{
+    userId: string;
+    teacherName: string;
+    commissionRate: number;
+    totalEarnings: number;
+    platformEarnings: number;
+    teacherEarnings: number;
+  }>['data']> => {
+    const response = await api.get<PaginatedResponse<{
+      userId: string;
+      teacherName: string;
+      commissionRate: number;
+      totalEarnings: number;
+      platformEarnings: number;
+      teacherEarnings: number;
+    }>>('/admin/financials/commissions', {
       params,
     });
     return response.data.data;
@@ -308,10 +396,23 @@ export const adminService = {
   /**
    * Update a teacher commission rate (percent). Pass null to reset to platform default.
    */
-  updateTeacherCommission: async (userId: string, commissionRate: number | null): Promise<any> => {
-    const response = await api.put<ApiResponse<any>>(`/admin/financials/commissions/${userId}`, {
+  updateTeacherCommission: async (userId: string, commissionRate: number | null): Promise<{
+    userId: string;
+    commissionRate: number | null;
+    updatedAt: string;
+  }> => {
+    const response = await api.put<ApiResponse<{
+      userId: string;
+      commissionRate: number | null;
+      updatedAt: string;
+    }>>(`/admin/financials/commissions/${userId}`, {
       commissionRate,
     });
+    
+    if (!response.data.data) {
+      throw new Error('Failed to update teacher commission: No data returned');
+    }
+    
     return response.data.data;
   },
 
@@ -323,8 +424,22 @@ export const adminService = {
     endDate?: string;
     page?: number;
     limit?: number;
-  }): Promise<PaginatedResponse<any>['data']> => {
-    const response = await api.get<PaginatedResponse<any>>('/admin/financials/settlements', { params });
+  }): Promise<PaginatedResponse<{
+    teacherId: string;
+    teacherName: string;
+    totalAmount: number;
+    settledAmount: number;
+    pendingAmount: number;
+    settlementDate?: string;
+  }>['data']> => {
+    const response = await api.get<PaginatedResponse<{
+      teacherId: string;
+      teacherName: string;
+      totalAmount: number;
+      settledAmount: number;
+      pendingAmount: number;
+      settlementDate?: string;
+    }>>('/admin/financials/settlements', { params });
     return response.data.data;
   },
 
@@ -337,8 +452,8 @@ export const adminService = {
     page?: number;
     limit?: number;
     search?: string;
-  }): Promise<PaginatedResponse<any>['data']> => {
-    const response = await api.get<PaginatedResponse<any>>('/admin/financials/invoices', { params });
+  }): Promise<PaginatedResponse<PaymentWithDetails>['data']> => {
+    const response = await api.get<PaginatedResponse<PaymentWithDetails>>('/admin/financials/invoices', { params });
     return response.data.data;
   },
 
@@ -349,8 +464,25 @@ export const adminService = {
     startDate?: string;
     endDate?: string;
     groupBy?: 'day' | 'week' | 'month';
-  }): Promise<any> => {
-    const response = await api.get<ApiResponse<any>>('/admin/financials/analytics', { params });
+  }): Promise<{
+    period: string;
+    revenue: number;
+    platformEarnings: number;
+    teacherEarnings: number;
+    transactionCount: number;
+  }[]> => {
+    const response = await api.get<ApiResponse<{
+      period: string;
+      revenue: number;
+      platformEarnings: number;
+      teacherEarnings: number;
+      transactionCount: number;
+    }[]>>('/admin/financials/analytics', { params });
+    
+    if (!response.data.data) {
+      throw new Error('Failed to fetch revenue analytics: No data returned');
+    }
+    
     return response.data.data;
   },
 };

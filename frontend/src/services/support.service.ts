@@ -19,7 +19,10 @@ const supportService = {
       orderId,
       priority,
     });
-    return res.data.data!;
+    if (!res.data.data) {
+      throw new Error('Failed to create support ticket');
+    }
+    return res.data.data;
   },
 
   /**
@@ -27,7 +30,10 @@ const supportService = {
    */
   getUserTickets: async (): Promise<SupportTicket[]> => {
     const res = await api.get<ApiResponse<SupportTicket[]>>('/support');
-    return res.data.data!;
+    if (!res.data.data) {
+      throw new Error('Failed to get support tickets');
+    }
+    return res.data.data;
   },
 
   /**
@@ -35,7 +41,10 @@ const supportService = {
    */
   getTicketById: async (id: string): Promise<SupportTicket> => {
     const res = await api.get<ApiResponse<SupportTicket>>(`/support/${id}`);
-    return res.data.data!;
+    if (!res.data.data) {
+      throw new Error('Failed to get support ticket');
+    }
+    return res.data.data;
   },
 
   /**
@@ -53,7 +62,10 @@ const supportService = {
         attachment,
       }
     );
-    return res.data.data!;
+    if (!res.data.data) {
+      throw new Error('Failed to add message to ticket');
+    }
+    return res.data.data;
   },
 
   /**
@@ -63,7 +75,10 @@ const supportService = {
     const res = await api.post<ApiResponse<SupportTicket>>(`/support/${ticketId}/close`, {
       resolution,
     });
-    return res.data.data!;
+    if (!res.data.data) {
+      throw new Error('Failed to close support ticket');
+    }
+    return res.data.data;
   },
 
   /**
@@ -71,9 +86,11 @@ const supportService = {
    */
   getTicketsByOrderId: async (orderId: string): Promise<SupportTicket[]> => {
     const res = await api.get<ApiResponse<SupportTicket[]>>(`/support/order/${orderId}`);
-    return res.data.data!;
+    if (!res.data.data) {
+      throw new Error('Failed to get support tickets for order');
+    }
+    return res.data.data;
   },
 };
 
 export default supportService;
-

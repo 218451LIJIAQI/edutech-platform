@@ -22,7 +22,6 @@ const VerificationPage = () => {
   // Form state
   const [documentType, setDocumentType] = useState('');
   const [documentFile, setDocumentFile] = useState<File | null>(null);
-  const [uploadProgress, setUploadProgress] = useState(0);
 
   useEffect(() => {
     fetchVerifications();
@@ -55,10 +54,11 @@ const VerificationPage = () => {
     }
 
     setIsSubmitting(true);
+    const loadingToast = toast.loading('Uploading document...');
     try {
       // Upload document
-      toast.loading('Uploading document...');
       const documentUrl = await uploadService.uploadVerificationDoc(documentFile);
+      toast.dismiss(loadingToast);
 
       // Submit verification
       await teacherService.submitVerification(documentType, documentUrl);
@@ -71,11 +71,11 @@ const VerificationPage = () => {
       // Refresh verifications
       await fetchVerifications();
     } catch (error) {
+      toast.dismiss(loadingToast);
       console.error('Failed to submit verification:', error);
       toast.error('Failed to submit verification. Please try again.');
     } finally {
       setIsSubmitting(false);
-      setUploadProgress(0);
     }
   };
 
@@ -216,21 +216,6 @@ const VerificationPage = () => {
                   </p>
                 </div>
 
-                {/* Upload Progress */}
-                {uploadProgress > 0 && uploadProgress < 100 && (
-                  <div>
-                    <div className="flex items-center justify-between text-sm mb-2">
-                      <span className="text-gray-600 font-medium">Uploading...</span>
-                      <span className="font-bold text-primary-600">{uploadProgress}%</span>
-                    </div>
-                    <div className="w-full bg-gray-300 rounded-full h-3">
-                      <div
-                        className="bg-gradient-to-r from-primary-600 to-primary-700 h-3 rounded-full transition-all duration-500"
-                        style={{ width: `${uploadProgress}%` }}
-                      ></div>
-                    </div>
-                  </div>
-                )}
 
                 {/* Guidelines */}
                 <div className="bg-gradient-to-r from-blue-50 to-blue-100 border-2 border-blue-200 rounded-xl p-5">

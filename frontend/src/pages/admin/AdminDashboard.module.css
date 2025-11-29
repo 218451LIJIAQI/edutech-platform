@@ -1,7 +1,14 @@
+/**
+ * Progress Bar Component Styles
+ * Uses CSS custom property --progress-width to set the width dynamically
+ */
 .progressBar {
   width: var(--progress-width, 0%);
+  min-width: 0;
+  max-width: 100%;
   transition: width 0.5s ease-in-out;
   display: block;
   height: 100%;
+  box-sizing: border-box;
 }
 

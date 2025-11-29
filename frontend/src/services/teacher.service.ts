@@ -5,8 +5,7 @@ import {
   ApiResponse, 
   PaginatedResponse,
   TeacherStats,
-  TeacherVerification,
-  TeacherProfileSubmission
+  TeacherVerification
 } from '@/types';
 
 /**
@@ -27,6 +26,9 @@ export const teacherService = {
     limit?: number;
   }): Promise<PaginatedResponse<TeacherProfile>['data']> => {
     const response = await api.get<PaginatedResponse<TeacherProfile>>('/teachers', { params });
+    if (!response.data.data) {
+      throw new Error('Failed to get teachers');
+    }
     return response.data.data;
   },
 
@@ -35,7 +37,10 @@ export const teacherService = {
    */
   getTeacherById: async (id: string): Promise<TeacherProfile> => {
     const response = await api.get<ApiResponse<TeacherProfile>>(`/teachers/${id}`);
-    return response.data.data!;
+    if (!response.data.data) {
+      throw new Error('Failed to get teacher profile');
+    }
+    return response.data.data;
   },
 
   /**
@@ -43,7 +48,10 @@ export const teacherService = {
    */
   getMyProfile: async (): Promise<TeacherProfile> => {
     const response = await api.get<ApiResponse<TeacherProfile>>('/teachers/me/profile');
-    return response.data.data!;
+    if (!response.data.data) {
+      throw new Error('Failed to get teacher profile');
+    }
+    return response.data.data;
   },
 
   /**
@@ -54,7 +62,10 @@ export const teacherService = {
       '/teachers/me/profile',
       data
     );
-    return response.data.data!;
+    if (!response.data.data) {
+      throw new Error('Failed to update teacher profile');
+    }
+    return response.data.data;
   },
 
   /**
@@ -62,7 +73,10 @@ export const teacherService = {
    */
   getStats: async (): Promise<TeacherStats> => {
     const response = await api.get<ApiResponse<TeacherStats>>('/teachers/me/stats');
-    return response.data.data!;
+    if (!response.data.data) {
+      throw new Error('Failed to get teacher statistics');
+    }
+    return response.data.data;
   },
 
   /**
@@ -73,7 +87,10 @@ export const teacherService = {
       '/teachers/me/certifications',
       data
     );
-    return response.data.data!;
+    if (!response.data.data) {
+      throw new Error('Failed to add certification');
+    }
+    return response.data.data;
   },
 
   /**
@@ -91,7 +108,10 @@ export const teacherService = {
       documentType,
       documentUrl,
     });
-    return response.data.data!;
+    if (!response.data.data) {
+      throw new Error('Failed to submit verification');
+    }
+    return response.data.data;
   },
 
   /**
@@ -99,7 +119,10 @@ export const teacherService = {
    */
   getMyVerifications: async (): Promise<TeacherVerification[]> => {
     const response = await api.get<ApiResponse<TeacherVerification[]>>('/teachers/me/verifications');
-    return response.data.data!;
+    if (!response.data.data) {
+      throw new Error('Failed to get verifications');
+    }
+    return response.data.data;
   },
 
   /**
@@ -121,7 +144,10 @@ export const teacherService = {
       '/teachers/me/profile/submit',
       data
     );
-    return response.data.data!;
+    if (!response.data.data) {
+      throw new Error('Failed to submit extended profile');
+    }
+    return response.data.data;
   },
 
   /**
@@ -129,7 +155,10 @@ export const teacherService = {
    */
   getExtendedProfile: async (): Promise<TeacherProfile> => {
     const response = await api.get<ApiResponse<TeacherProfile>>('/teachers/me/profile/extended');
-    return response.data.data!;
+    if (!response.data.data) {
+      throw new Error('Failed to get extended profile');
+    }
+    return response.data.data;
   },
 
   /**
@@ -151,7 +180,10 @@ export const teacherService = {
       '/teachers/me/profile/update',
       data
     );
-    return response.data.data!;
+    if (!response.data.data) {
+      throw new Error('Failed to update extended profile');
+    }
+    return response.data.data;
   },
 
   /**
@@ -163,6 +195,9 @@ export const teacherService = {
     limit?: number;
   }): Promise<PaginatedResponse<TeacherProfile>['data']> => {
     const response = await api.get<PaginatedResponse<TeacherProfile>>('/teachers/verified', { params });
+    if (!response.data.data) {
+      throw new Error('Failed to get verified teachers');
+    }
     return response.data.data;
   },
 
@@ -174,6 +209,9 @@ export const teacherService = {
     limit?: number;
   }): Promise<PaginatedResponse<TeacherProfile>['data']> => {
     const response = await api.get<PaginatedResponse<TeacherProfile>>('/teachers/admin/pending-registrations', { params });
+    if (!response.data.data) {
+      throw new Error('Failed to get pending registrations');
+    }
     return response.data.data;
   },
 
@@ -188,7 +226,10 @@ export const teacherService = {
       `/teachers/admin/registrations/${teacherProfileId}/review`,
       { status }
     );
-    return response.data.data!;
+    if (!response.data.data) {
+      throw new Error('Failed to review registration');
+    }
+    return response.data.data;
   },
 
   /**
@@ -199,6 +240,9 @@ export const teacherService = {
     limit?: number;
   }): Promise<PaginatedResponse<TeacherProfile>['data']> => {
     const response = await api.get<PaginatedResponse<TeacherProfile>>('/teachers/admin/pending-profiles', { params });
+    if (!response.data.data) {
+      throw new Error('Failed to get pending profile verifications');
+    }
     return response.data.data;
   },
 
@@ -214,9 +258,11 @@ export const teacherService = {
       `/teachers/admin/profiles/${teacherProfileId}/review`,
       { status, reviewNotes }
     );
-    return response.data.data!;
+    if (!response.data.data) {
+      throw new Error('Failed to review teacher profile');
+    }
+    return response.data.data;
   },
 };
 
 export default teacherService;
-

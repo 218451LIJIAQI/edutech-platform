@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import toast from 'react-hot-toast';
 import supportService from '@/services/support.service';
-import { SupportTicket, SupportTicketPriority } from '@/types';
+import { SupportTicket, SupportTicketPriority, SupportTicketStatus } from '@/types';
 
 interface CustomerServiceModalProps {
   isOpen: boolean;
@@ -25,50 +25,53 @@ const CustomerServiceModal = ({ isOpen, onClose, orderId }: CustomerServiceModal
   const [subject, setSubject] = useState('');
   const [description, setDescription] = useState('');
   const [category, setCategory] = useState('OTHER');
-  const [priority, setPriority] = useState<SupportTicketPriority>('MEDIUM');
+  const [priority, setPriority] = useState<SupportTicketPriority>(SupportTicketPriority.MEDIUM);
   const [newMessage, setNewMessage] = useState('');
+
+  /**
+   * Extract error message from error object
+   */
+  const getErrorMessage = useCallback((error: unknown, defaultMessage: string): string => {
+    if (error instanceof Error && 'response' in error) {
+      const apiError = error as { response?: { data?: { message?: string } } };
+      return apiError.response?.data?.message || defaultMessage;
+    }
+    return defaultMessage;
+  }, []);
+
+  /**
+   * Load all support tickets
+   */
+  const loadTickets = useCallback(async () => {
+    setLoading(true);
+    try {
+      const data = await supportService.getUserTickets();
+      setTickets(data);
+    } catch (error) {
+      toast.error(getErrorMessage(error, 'Failed to load tickets'));
+    } finally {
+      setLoading(false);
+    }
+  }, [getErrorMessage]);
 
   // Load tickets on mount
   useEffect(() => {
     if (isOpen) {
       loadTickets();
     }
-  }, [isOpen]);
-
-  /**
-   * Load all support tickets
-   */
-  const loadTickets = async () => {
-    setLoading(true);
-    try {
-      const data = await supportService.getUserTickets();
-      setTickets(data);
-    } catch (e) {
-      const message =
-        e instanceof Error && 'response' in e
-          ? (e as { response?: { data?: { message?: string } } }).response?.data?.message
-          : undefined;
-      toast.error(message || 'Failed to load tickets');
-    } finally {
-      setLoading(false);
-    }
-  };
+  }, [isOpen, loadTickets]);
 
   /**
    * Load ticket details
    */
-  const loadTicketDetails = async (ticketId: string) => {
+  const loadTicketDetails = useCallback(async (ticketId: string) => {
     try {
       const data = await supportService.getTicketById(ticketId);
       setSelectedTicket(data);
-    } catch (e) {
-      const message =
-        e instanceof Error && 'response' in e
-          ? (e as { response?: { data?: { message?: string } } }).response?.data?.message
-          : undefined;
-      toast.error(message || 'Failed to load ticket');
+    } catch (error) {
+      toast.error(getErrorMessage(error, 'Failed to load ticket'));
     }
-  };
+  }, [getErrorMessage]);
 
   /**
    * Create new support ticket
@@ -81,7 +84,7 @@ const CustomerServiceModal = ({ isOpen, onClose, orderId }: CustomerServiceModal
 
     setWorking(true);
     try {
-      const ticket = await supportService.createTicket(
+      await supportService.createTicket(
         subject,
         description,
         category,
@@ -93,15 +96,11 @@ const CustomerServiceModal = ({ isOpen, onClose, orderId }: CustomerServiceModal
       setSubject('');
       setDescription('');
       setCategory('OTHER');
-      setPriority('MEDIUM');
+      setPriority(SupportTicketPriority.MEDIUM);
       setActiveTab('tickets');
       await loadTickets();
-    } catch (e) {
-      const message =
-        e instanceof Error && 'response' in e
-          ? (e as { response?: { data?: { message?: string } } }).response?.data?.message
-          : undefined;
-      toast.error(message || 'Failed to create ticket');
+    } catch (error) {
+      toast.error(getErrorMessage(error, 'Failed to create ticket'));
     } finally {
       setWorking(false);
     }
@@ -122,12 +121,8 @@ const CustomerServiceModal = ({ isOpen, onClose, orderId }: CustomerServiceModal
       toast.success('Message sent');
       setNewMessage('');
       await loadTicketDetails(selectedTicket.id);
-    } catch (e) {
-      const message =
-        e instanceof Error && 'response' in e
-          ? (e as { response?: { data?: { message?: string } } }).response?.data?.message
-          : undefined;
-      toast.error(message || 'Failed to send message');
+    } catch (error) {
+      toast.error(getErrorMessage(error, 'Failed to send message'));
     } finally {
       setWorking(false);
     }
@@ -147,12 +142,8 @@ const CustomerServiceModal = ({ isOpen, onClose, orderId }: CustomerServiceModal
       toast.success('Ticket closed');
       setSelectedTicket(null);
       await loadTickets();
-    } catch (e) {
-      const message =
-        e instanceof Error && 'response' in e
-          ? (e as { response?: { data?: { message?: string } } }).response?.data?.message
-          : undefined;
-      toast.error(message || 'Failed to close ticket');
+    } catch (error) {
+      toast.error(getErrorMessage(error, 'Failed to close ticket'));
     } finally {
       setWorking(false);
     }
@@ -228,11 +219,11 @@ const CustomerServiceModal = ({ isOpen, onClose, orderId }: CustomerServiceModal
                       <h3 className="font-bold text-lg text-gray-900">{selectedTicket.ticketNo}</h3>
                       <span
                         className={`px-3 py-1 rounded-full text-sm font-semibold ${
-                          selectedTicket.status === 'OPEN'
+                          selectedTicket.status === SupportTicketStatus.OPEN
                             ? 'bg-blue-100 text-blue-700'
-                            : selectedTicket.status === 'IN_PROGRESS'
+                            : selectedTicket.status === SupportTicketStatus.IN_PROGRESS
                               ? 'bg-yellow-100 text-yellow-700'
-                              : selectedTicket.status === 'RESOLVED'
+                              : selectedTicket.status === SupportTicketStatus.RESOLVED
                                 ? 'bg-green-100 text-green-700'
                                 : 'bg-gray-100 text-gray-700'
                         }`}
@@ -280,15 +271,15 @@ const CustomerServiceModal = ({ isOpen, onClose, orderId }: CustomerServiceModal
                   </div>
 
                   {/* Message Input */}
-                  {selectedTicket.status !== 'CLOSED' && (
+                  {selectedTicket.status !== SupportTicketStatus.CLOSED && (
                     <div className="flex gap-2">
-                      <input
-                        type="text"
+                      <textarea
                         value={newMessage}
                         onChange={(e) => setNewMessage(e.target.value)}
                         placeholder="Type your message..."
-                        className="input flex-1"
+                        className="input flex-1 min-h-[60px] resize-none"
                         disabled={working}
+                        rows={3}
                       />
                       <button
                         onClick={handleSendMessage}
@@ -301,7 +292,7 @@ const CustomerServiceModal = ({ isOpen, onClose, orderId }: CustomerServiceModal
                   )}
 
                   {/* Close Button */}
-                  {selectedTicket.status !== 'CLOSED' && (
+                  {selectedTicket.status !== SupportTicketStatus.CLOSED && (
                     <button
                       onClick={handleCloseTicket}
                       disabled={working}
@@ -334,11 +325,11 @@ const CustomerServiceModal = ({ isOpen, onClose, orderId }: CustomerServiceModal
                         <span className="font-bold text-gray-900">{ticket.ticketNo}</span>
                         <span
                           className={`px-2 py-1 rounded text-xs font-semibold ${
-                            ticket.status === 'OPEN'
+                            ticket.status === SupportTicketStatus.OPEN
                               ? 'bg-blue-100 text-blue-700'
-                              : ticket.status === 'IN_PROGRESS'
+                              : ticket.status === SupportTicketStatus.IN_PROGRESS
                                 ? 'bg-yellow-100 text-yellow-700'
-                                : ticket.status === 'RESOLVED'
+                                : ticket.status === SupportTicketStatus.RESOLVED
                                   ? 'bg-green-100 text-green-700'
                                   : 'bg-gray-100 text-gray-700'
                           }`}
@@ -395,17 +386,17 @@ const CustomerServiceModal = ({ isOpen, onClose, orderId }: CustomerServiceModal
                 <label className="block text-sm font-semibold text-gray-900 mb-2">
                   Priority
                 </label>
-                <select
-                  value={priority}
-                  onChange={(e) => setPriority(e.target.value as SupportTicketPriority)}
-                  className="input w-full"
-                  disabled={working}
-                >
-                  <option value="LOW">Low</option>
-                  <option value="MEDIUM">Medium</option>
-                  <option value="HIGH">High</option>
-                  <option value="URGENT">Urgent</option>
-                </select>
+                  <select
+                    value={priority}
+                    onChange={(e) => setPriority(e.target.value as SupportTicketPriority)}
+                    className="input w-full"
+                    disabled={working}
+                  >
+                    <option value={SupportTicketPriority.LOW}>Low</option>
+                    <option value={SupportTicketPriority.MEDIUM}>Medium</option>
+                    <option value={SupportTicketPriority.HIGH}>High</option>
+                    <option value={SupportTicketPriority.URGENT}>Urgent</option>
+                  </select>
               </div>
 
               <div>

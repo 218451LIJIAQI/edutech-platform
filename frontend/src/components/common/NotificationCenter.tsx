@@ -1,7 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Bell, Check, CheckCheck, Trash2 } from 'lucide-react';
 import notificationService, { Notification } from '@/services/notification.service';
-import { formatDistanceToNow } from 'date-fns';
+import { formatDistanceToNow, isValid } from 'date-fns';
 import toast from 'react-hot-toast';
 
 /**
@@ -14,26 +14,26 @@ const NotificationCenter = () => {
   const [unreadCount, setUnreadCount] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
 
-  useEffect(() => {
-    fetchUnreadCount();
-    const interval = setInterval(fetchUnreadCount, 60000); // Poll every minute
-    return () => clearInterval(interval);
-  }, []);
-
-  useEffect(() => {
-    if (isOpen) {
-      fetchNotifications();
-    }
-  }, [isOpen]);
-
-  const fetchUnreadCount = async () => {
+  const fetchUnreadCount = useCallback(async () => {
     try {
       const count = await notificationService.getUnreadCount();
       setUnreadCount(count);
     } catch (error) {
       console.error('Failed to fetch unread count:', error);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    fetchUnreadCount();
+    const interval = setInterval(fetchUnreadCount, 60000); // Poll every minute
+    return () => clearInterval(interval);
+  }, [fetchUnreadCount]);
+
+  useEffect(() => {
+    if (isOpen) {
+      fetchNotifications();
+    }
+  }, [isOpen]);
 
   const fetchNotifications = async () => {
     setIsLoading(true);
@@ -50,11 +50,18 @@ const NotificationCenter = () => {
 
   const handleMarkAsRead = async (id: string) => {
     try {
+      const notification = notifications.find((n) => n.id === id);
+      // Only decrement if notification was previously unread
+      const wasUnread = notification && !notification.isRead;
+      
       await notificationService.markAsRead(id);
       setNotifications((prev) =>
         prev.map((n) => (n.id === id ? { ...n, isRead: true } : n))
       );
-      setUnreadCount((prev) => Math.max(0, prev - 1));
+      
+      if (wasUnread) {
+        setUnreadCount((prev) => Math.max(0, prev - 1));
+      }
     } catch (error) {
       toast.error('Failed to mark as read');
     }
@@ -200,9 +207,12 @@ const NotificationCenter = () => {
                             {notification.message}
                           </p>
                           <p className="text-xs text-gray-400 mt-1">
-                            {formatDistanceToNow(new Date(notification.createdAt), {
-                              addSuffix: true,
-                            })}
+                            {(() => {
+                              const date = new Date(notification.createdAt);
+                              return isValid(date)
+                                ? formatDistanceToNow(date, { addSuffix: true })
+                                : 'Recently';
+                            })()}
                           </p>
                         </div>
                       </div>

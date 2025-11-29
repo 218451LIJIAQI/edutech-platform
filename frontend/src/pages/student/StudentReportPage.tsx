@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import { AlertCircle, CheckCircle, Clock, XCircle, ChevronRight } from 'lucide-react';
 import { Report, ReportStatus, ReportType } from '@/types';
 import reportService from '@/services/report.service';
@@ -14,26 +14,30 @@ import CustomerSupportChat from '@/components/common/CustomerSupportChat';
 const StudentReportPage = () => {
   const [reports, setReports] = useState<Report[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [selectedReport, setSelectedReport] = useState<Report | null>(null);
   const [filterStatus, setFilterStatus] = useState<ReportStatus | 'ALL'>('ALL');
   const [showChat, setShowChat] = useState(false);
 
-  useEffect(() => {
-    fetchReports();
-  }, []);
-
-  const fetchReports = async () => {
+  const fetchReports = useCallback(async () => {
     setIsLoading(true);
+    setError(null);
     try {
       const data = await reportService.getMyReports();
       setReports(data);
-    } catch (error) {
-      console.error('Failed to fetch reports:', error);
-      toast.error('Failed to load reports');
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to load reports';
+      console.error('Failed to fetch reports:', err);
+      setError(errorMessage);
+      toast.error(errorMessage);
     } finally {
       setIsLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    fetchReports();
+  }, [fetchReports]);
 
   const getStatusIcon = (status: ReportStatus) => {
     switch (status) {
@@ -76,10 +80,11 @@ const StudentReportPage = () => {
     return labels[type];
   };
 
-  const filteredReports =
-    filterStatus === 'ALL'
+  const filteredReports = useMemo(() => {
+    return filterStatus === 'ALL'
       ? reports
       : reports.filter((r) => r.status === filterStatus);
+  }, [reports, filterStatus]);
 
   if (isLoading) {
     return (
@@ -110,6 +115,25 @@ const StudentReportPage = () => {
           </div>
         </div>
 
+        {/* Error State */}
+        {error && (
+          <div className="card p-6 mb-8 bg-red-50 border border-red-200 rounded-2xl">
+            <div className="flex items-center gap-3">
+              <span className="text-2xl">⚠️</span>
+              <div>
+                <h3 className="font-bold text-red-900 mb-1">Error loading reports</h3>
+                <p className="text-red-700 text-sm">{error}</p>
+                <button
+                  onClick={fetchReports}
+                  className="mt-3 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors text-sm font-semibold"
+                >
+                  Retry
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Main Content Grid */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-8">
           {/* Reports Section */}
@@ -129,7 +153,7 @@ const StudentReportPage = () => {
                     : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
                 }`}
               >
-                {status === 'ALL' ? 'All Reports' : status.replace('_', ' ')}
+                {status === 'ALL' ? 'All Reports' : status.replace(/_/g, ' ')}
                 <span className="ml-2 text-sm">
                   ({reports.filter((r) => status === 'ALL' || r.status === status).length})
                 </span>
@@ -161,7 +185,7 @@ const StudentReportPage = () => {
                         <div className="flex items-center gap-3 mb-3">
                           {getStatusIcon(report.status)}
                           <span className="text-sm font-semibold text-gray-700">
-                            {report.status.replace('_', ' ')}
+                            {report.status.replace(/_/g, ' ')}
                           </span>
                           <span className="text-xs bg-gray-200 text-gray-800 px-2 py-1 rounded">
                             {getReportTypeLabel(report.type)}
@@ -199,7 +223,7 @@ const StudentReportPage = () => {
                 <p className="text-gray-600">
                   {filterStatus === 'ALL'
                     ? "You haven't submitted any reports yet."
-                    : `No ${filterStatus.toLowerCase().replace('_', ' ')} reports.`}
+                    : `No ${filterStatus.toLowerCase().replace(/_/g, ' ')} reports.`}
                 </p>
               </div>
             )}
@@ -237,7 +261,7 @@ const StudentReportPage = () => {
                   <div className="flex items-center gap-2 mb-2">
                     {getStatusIcon(selectedReport.status)}
                     <span className="font-semibold">
-                      {selectedReport.status.replace('_', ' ')}
+                      {selectedReport.status.replace(/_/g, ' ')}
                     </span>
                   </div>
                   <p className="text-sm">

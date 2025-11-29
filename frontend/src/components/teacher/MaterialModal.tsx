@@ -29,7 +29,6 @@ const MaterialModal: React.FC<MaterialModalProps> = ({
   const [materialFile, setMaterialFile] = useState<File | null>(null);
   const [materialType, setMaterialType] = useState<'upload' | 'link'>('upload');
   const [materialLink, setMaterialLink] = useState('');
-  const [uploadProgress, setUploadProgress] = useState(0);
 
   const {
     register,
@@ -43,6 +42,7 @@ const MaterialModal: React.FC<MaterialModalProps> = ({
 
   const onSubmit = async (data: MaterialFormData) => {
     setIsSubmitting(true);
+    let loadingToastId: string | undefined;
     try {
       let fileUrl = '';
       let fileType = '';
@@ -50,30 +50,43 @@ const MaterialModal: React.FC<MaterialModalProps> = ({
 
       // Handle file based on selected type
       if (materialType === 'upload' && materialFile) {
-        toast.loading('Uploading material...');
+        loadingToastId = toast.loading('Uploading material...');
         const uploadResult = await uploadService.uploadDocument(materialFile);
+        if (loadingToastId) {
+          toast.dismiss(loadingToastId);
+        }
         fileUrl = uploadResult.url;
         fileType = uploadResult.mimeType || 'application/octet-stream';
         fileSize = uploadResult.size;
       } else if (materialType === 'link' && materialLink.trim()) {
         fileUrl = materialLink.trim();
         // Try to determine file type from URL
-        const urlParts = fileUrl.split('.');
-        const extension = urlParts[urlParts.length - 1].toLowerCase();
-        
-        const mimeTypes: { [key: string]: string } = {
-          'pdf': 'application/pdf',
-          'doc': 'application/msword',
-          'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-          'xls': 'application/vnd.ms-excel',
-          'xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-          'ppt': 'application/vnd.ms-powerpoint',
-          'pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
-          'zip': 'application/zip',
-          'txt': 'text/plain',
-        };
-        
-        fileType = mimeTypes[extension] || 'application/octet-stream';
+        try {
+          const url = new URL(fileUrl);
+          const pathname = url.pathname;
+          const lastDotIndex = pathname.lastIndexOf('.');
+          const extension = lastDotIndex !== -1 
+            ? pathname.substring(lastDotIndex + 1).toLowerCase().split('?')[0]
+            : '';
+          
+          const mimeTypes: { [key: string]: string } = {
+            'pdf': 'application/pdf',
+            'doc': 'application/msword',
+            'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            'xls': 'application/vnd.ms-excel',
+            'xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'ppt': 'application/vnd.ms-powerpoint',
+            'pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+            'zip': 'application/zip',
+            'txt': 'text/plain',
+          };
+          
+          fileType = extension && mimeTypes[extension] 
+            ? mimeTypes[extension] 
+            : 'application/octet-stream';
+        } catch {
+          fileType = 'application/octet-stream';
+        }
         fileSize = 0; // Unknown for external links
       } else {
         toast.error('Please upload a file or provide a link');
@@ -99,6 +112,9 @@ const MaterialModal: React.FC<MaterialModalProps> = ({
       onSuccess();
       onClose();
     } catch (error) {
+      if (loadingToastId) {
+        toast.dismiss(loadingToastId);
+      }
       console.error('Failed to save material:', error);
       const message = error instanceof Error && 'response' in error 
         ? (error as { response?: { data?: { message?: string } } }).response?.data?.message 
@@ -108,7 +124,6 @@ const MaterialModal: React.FC<MaterialModalProps> = ({
       toast.error(message || 'Failed to save material');
     } finally {
       setIsSubmitting(false);
-      setUploadProgress(0);
     }
   };
 
@@ -166,8 +181,10 @@ const MaterialModal: React.FC<MaterialModalProps> = ({
                   value="upload"
                   checked={materialType === 'upload'}
                   onChange={(e) => {
-                    setMaterialType(e.target.value as 'upload');
-                    setMaterialLink('');
+                    if (e.target.value === 'upload' || e.target.value === 'link') {
+                      setMaterialType(e.target.value);
+                      setMaterialLink('');
+                    }
                   }}
                   className="form-radio text-primary-600"
                 />
@@ -179,8 +196,10 @@ const MaterialModal: React.FC<MaterialModalProps> = ({
                   value="link"
                   checked={materialType === 'link'}
                   onChange={(e) => {
-                    setMaterialType(e.target.value as 'link');
-                    setMaterialFile(null);
+                    if (e.target.value === 'upload' || e.target.value === 'link') {
+                      setMaterialType(e.target.value);
+                      setMaterialFile(null);
+                    }
                   }}
                   className="form-radio text-primary-600"
                 />
@@ -193,25 +212,17 @@ const MaterialModal: React.FC<MaterialModalProps> = ({
               <>
                 <input
                   type="file"
+                  accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.zip,.txt"
                   onChange={(e) => setMaterialFile(e.target.files?.[0] || null)}
                   className="input"
                 />
                 <p className="text-xs text-gray-500 mt-1">
                   Supported formats: PDF, DOC, DOCX, XLS, XLSX, PPT, PPTX, ZIP, TXT (max 50MB)
                 </p>
-                {uploadProgress > 0 && uploadProgress < 100 && (
-                  <div className="mt-2">
-                    <div className="flex items-center justify-between text-sm mb-1">
-                      <span>Uploading...</span>
-                      <span>{uploadProgress}%</span>
-                    </div>
-                    <div className="w-full bg-gray-200 rounded-full h-2">
-                      <div
-                        className="bg-primary-600 h-2 rounded-full transition-all"
-                        style={{ width: `${uploadProgress}%` }}
-                      ></div>
-                    </div>
-                  </div>
+                {materialFile && (
+                  <p className="text-sm text-green-600 font-medium mt-2">
+                    ✓ Selected: {materialFile.name}
+                  </p>
                 )}
               </>
             )}

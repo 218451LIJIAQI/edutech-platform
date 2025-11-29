@@ -1,10 +1,43 @@
-import { ReportStatus, ReportType, Prisma } from '@prisma/client';
+import { ReportStatus, ReportType, Prisma, Report } from '@prisma/client';
 import prisma from '../config/database';
 import {
   NotFoundError,
   ValidationError,
   AuthorizationError,
 } from '../utils/errors';
+
+// Type definitions for reports with relations
+type ReportWithUsers = Report & {
+  reporter: {
+    id: string;
+    firstName: string;
+    lastName: string;
+    email: string;
+  };
+  reported: {
+    id: string;
+    firstName: string;
+    lastName: string;
+    email: string;
+  };
+};
+
+type ReportWithReporter = Report & {
+  reporter: {
+    id: string;
+    firstName: string;
+    lastName: string;
+    email: string;
+  };
+};
+
+type ReportWithReportedBasic = Report & {
+  reported: {
+    id: string;
+    firstName: string;
+    lastName: string;
+  };
+};
 
 /**
  * Report Service
@@ -22,7 +55,7 @@ class ReportService {
     description: string,
     contentType?: string,
     contentId?: string
-  ): Promise<any> {
+  ): Promise<ReportWithUsers> {
     // Validate inputs
     if (!reporterId || !reporterId.trim()) {
       throw new ValidationError('Reporter ID is required');
@@ -114,7 +147,7 @@ class ReportService {
   /**
    * Get user's submitted reports
    */
-  async getUserReports(userId: string): Promise<any[]> {
+  async getUserReports(userId: string): Promise<ReportWithReportedBasic[]> {
     if (!userId || !userId.trim()) {
       throw new ValidationError('User ID is required');
     }
@@ -138,7 +171,7 @@ class ReportService {
   /**
    * Get report by ID
    */
-  async getReportById(reportId: string, userId: string, isAdmin: boolean = false): Promise<any> {
+  async getReportById(reportId: string, userId: string, isAdmin: boolean = false): Promise<ReportWithUsers> {
     if (!reportId || !reportId.trim()) {
       throw new ValidationError('Report ID is required');
     }
@@ -188,7 +221,7 @@ class ReportService {
     page: number = 1,
     limit: number = 20
   ): Promise<{
-    reports: any[];
+    reports: ReportWithUsers[];
     pagination: {
       total: number;
       page: number;
@@ -254,7 +287,7 @@ class ReportService {
     reportId: string,
     status: ReportStatus,
     resolution?: string
-  ): Promise<any> {
+  ): Promise<Report> {
     if (!reportId || !reportId.trim()) {
       throw new ValidationError('Report ID is required');
     }
@@ -287,7 +320,7 @@ class ReportService {
    * Get reports against a specific teacher (Admin only)
    */
   async getTeacherReports(teacherId: string): Promise<{
-    reports: any[];
+    reports: ReportWithReporter[];
     stats: {
       total: number;
       open: number;

@@ -1,11 +1,11 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { User } from '@/types';
 import { MoreVertical, Edit, Lock, Unlock, Key, Trash2, Eye, Flame } from 'lucide-react';
 import toast from 'react-hot-toast';
 import adminService from '@/services/admin.service';
 
 interface UserActionsMenuProps {
-  user: User;
+  user: User & { isLocked?: boolean };
   onEdit: (user: User) => void;
   onViewDetails: (user: User) => void;
   onRefresh: () => void;
@@ -24,8 +24,18 @@ const UserActionsMenu = ({
   const [isOpen, setIsOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
 
+  /**
+   * Extract error message from error object
+   */
+  const getErrorMessage = useCallback((e: unknown): string | undefined => {
+    if (e instanceof Error && 'response' in e) {
+      return (e as { response?: { data?: { message?: string } } }).response?.data?.message;
+    }
+    return undefined;
+  }, []);
+
   const handleResetPassword = async () => {
-    if (!confirm('Are you sure you want to reset this user\'s password?')) return;
+    if (!window.confirm('Are you sure you want to reset this user\'s password?')) return;
 
     setIsLoading(true);
     try {
@@ -35,9 +45,7 @@ const UserActionsMenu = ({
       toast.success(`Password reset to: ${tempPassword}`);
       onRefresh();
     } catch (error) {
-      const message = error instanceof Error && 'response' in error 
-        ? (error as { response?: { data?: { message?: string } } }).response?.data?.message 
-        : undefined;
+      const message = getErrorMessage(error);
       toast.error(message || 'Failed to reset password');
     } finally {
       setIsLoading(false);
@@ -46,17 +54,16 @@ const UserActionsMenu = ({
   };
 
   const handleLockAccount = async () => {
-    if (!confirm(`Are you sure you want to ${user.isLocked ? 'unlock' : 'lock'} this account?`)) return;
+    const isLocked = user.isLocked ?? false;
+    if (!window.confirm(`Are you sure you want to ${isLocked ? 'unlock' : 'lock'} this account?`)) return;
 
     setIsLoading(true);
     try {
-      await adminService.lockUserAccount(user.id, !user.isLocked);
-      toast.success(`Account ${user.isLocked ? 'unlocked' : 'locked'} successfully`);
+      await adminService.lockUserAccount(user.id, !isLocked);
+      toast.success(`Account ${isLocked ? 'unlocked' : 'locked'} successfully`);
       onRefresh();
     } catch (error) {
-      const message = error instanceof Error && 'response' in error 
-        ? (error as { response?: { data?: { message?: string } } }).response?.data?.message 
-        : undefined;
+      const message = getErrorMessage(error);
       toast.error(message || 'Failed to update account lock status');
     } finally {
       setIsLoading(false);
@@ -65,7 +72,7 @@ const UserActionsMenu = ({
   };
 
   const handleDelete = async () => {
-    if (!confirm('Are you sure you want to delete this user? This action cannot be undone.')) return;
+    if (!window.confirm('Are you sure you want to delete this user? This action cannot be undone.')) return;
 
     setIsLoading(true);
     try {
@@ -73,9 +80,7 @@ const UserActionsMenu = ({
       toast.success('User deleted successfully');
       onRefresh();
     } catch (error) {
-      const message = error instanceof Error && 'response' in error 
-        ? (error as { response?: { data?: { message?: string } } }).response?.data?.message 
-        : undefined;
+      const message = getErrorMessage(error);
       toast.error(message || 'Failed to delete user');
     } finally {
       setIsLoading(false);
@@ -89,12 +94,12 @@ const UserActionsMenu = ({
       return;
     }
 
-    const ok = confirm(
+    const ok = window.confirm(
       'DANGER: You are about to FORCE DELETE this teacher.\n\nThis will permanently remove:\n- The teacher account\n- All courses created by this teacher\n- All lessons, packages, and materials under those courses\n- All enrollments and related payments for those courses\n- Related messages and contacts\n\nThis action CANNOT be undone. Do you want to continue?'
     );
     if (!ok) return;
 
-    const phrase = prompt('Type exactly: FORCE DELETE to confirm');
+    const phrase = window.prompt('Type exactly: FORCE DELETE to confirm');
     if ((phrase || '').trim().toUpperCase() !== 'FORCE DELETE') {
       toast.error('Confirmation phrase did not match. Aborted.');
       return;
@@ -106,9 +111,7 @@ const UserActionsMenu = ({
       toast.success('Teacher force deleted with cascade');
       onRefresh();
     } catch (error) {
-      const message = error instanceof Error && 'response' in error 
-        ? (error as { response?: { data?: { message?: string } } }).response?.data?.message 
-        : undefined;
+      const message = getErrorMessage(error);
       toast.error(message || 'Failed to force delete teacher');
     } finally {
       setIsLoading(false);
@@ -165,7 +168,7 @@ const UserActionsMenu = ({
             disabled={isLoading}
             className="w-full text-left px-4 py-2 hover:bg-gray-50 flex items-center gap-2 text-gray-700 border-b disabled:opacity-50"
           >
-            {user.isLocked ? (
+            {(user.isLocked ?? false) ? (
               <>
                 <Unlock className="w-4 h-4" />
                 Unlock Account

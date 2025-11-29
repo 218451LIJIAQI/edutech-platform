@@ -2,12 +2,14 @@
  * TypeScript interfaces and types for the Edutech Platform frontend
  */
 
+/** User role enumeration for access control */
 export enum UserRole {
   STUDENT = 'STUDENT',
   TEACHER = 'TEACHER',
   ADMIN = 'ADMIN',
 }
 
+/** Course delivery type enumeration */
 export enum CourseType {
   LIVE = 'LIVE',       // Online live sessions
   RECORDED = 'RECORDED', // Pre-recorded video courses
@@ -90,357 +92,392 @@ export enum ReportStatus {
   DISMISSED = 'DISMISSED',
 }
 
+/** User account information */
 export interface User {
-  id: string;
-  email: string;
-  firstName: string;
-  lastName: string;
-  role: UserRole;
-  avatar?: string;
-  isActive: boolean;
-  createdAt: string;
-  updatedAt: string;
-  teacherProfile?: TeacherProfile;
+  readonly id: string;
+  readonly email: string;
+  readonly firstName: string;
+  readonly lastName: string;
+  readonly role: UserRole;
+  readonly avatar?: string;
+  readonly isActive: boolean;
+  readonly isLocked?: boolean;
+  readonly phone?: string;
+  readonly address?: string;
+  readonly department?: string;
+  readonly lastLoginAt?: string;
+  readonly loginCount?: number;
+  readonly createdAt: string;
+  readonly updatedAt: string;
+  readonly teacherProfile?: TeacherProfile;
 }
 
+/** Teacher profile information and verification status */
 export interface TeacherProfile {
-  id: string;
-  userId: string;
-  bio?: string;
-  headline?: string;
-  hourlyRate?: number;
-  totalStudents: number;
-  averageRating: number;
-  totalEarnings: number;
-  commissionRate?: number; // percent override for platform commission
-  isVerified: boolean;
-  verificationStatus?: VerificationStatus;
-  registrationStatus?: 'PENDING' | 'APPROVED' | 'REJECTED';
+  readonly id: string;
+  readonly userId: string;
+  readonly createdAt?: string;
+  readonly bio?: string;
+  readonly headline?: string;
+  readonly hourlyRate?: number;
+  readonly totalStudents: number;
+  readonly averageRating: number;
+  readonly totalEarnings: number;
+  readonly commissionRate?: number; // percent override for platform commission
+  readonly isVerified: boolean;
+  readonly verificationStatus?: VerificationStatus;
+  readonly registrationStatus?: RegistrationStatus;
   
   // Extended Profile Fields
-  selfIntroduction?: string;
-  educationBackground?: string;
-  teachingExperience?: string;
-  awards?: string[] | string; // JSON array or string
-  specialties?: string[] | string; // JSON array or string
-  teachingStyle?: string;
-  languages?: string[] | string; // JSON array or string
-  yearsOfExperience?: number;
-  profilePhoto?: string;
-  certificatePhotos?: string[] | string; // JSON array or string
+  readonly selfIntroduction?: string;
+  readonly educationBackground?: string;
+  readonly teachingExperience?: string;
+  readonly awards?: string[] | string; // JSON array or string
+  readonly specialties?: string[] | string; // JSON array or string
+  readonly teachingStyle?: string;
+  readonly languages?: string[] | string; // JSON array or string
+  readonly yearsOfExperience?: number;
+  readonly profilePhoto?: string;
+  readonly certificatePhotos?: string[] | string; // JSON array or string
   
   // Profile Completion Status
-  profileCompletionStatus?: string; // INCOMPLETE, PENDING_REVIEW, APPROVED, REJECTED
-  profileSubmittedAt?: string;
-  profileReviewedAt?: string;
-  profileReviewNotes?: string;
+  readonly profileCompletionStatus?: string; // INCOMPLETE, PENDING_REVIEW, APPROVED, REJECTED
+  readonly profileSubmittedAt?: string;
+  readonly profileReviewedAt?: string;
+  readonly profileReviewNotes?: string;
   
-  user?: User;
-  certifications?: Certification[];
+  readonly user?: User;
+  readonly certifications?: Certification[];
 }
 
+/** Teacher certification information */
 export interface Certification {
-  id: string;
-  teacherProfileId: string;
-  title: string;
-  issuer: string;
-  issueDate: string;
-  expiryDate?: string;
-  credentialId?: string;
-  credentialUrl?: string;
+  readonly id: string;
+  readonly teacherProfileId: string;
+  readonly title: string;
+  readonly issuer: string;
+  readonly issueDate: string;
+  readonly expiryDate?: string;
+  readonly credentialId?: string;
+  readonly credentialUrl?: string;
 }
 
+/** Course information with lessons and packages */
 export interface Course {
-  id: string;
-  teacherProfileId: string;
-  title: string;
-  description: string;
-  category: string;
-  courseType: CourseType; // LIVE, RECORDED, or HYBRID
-  thumbnail?: string;
-  previewVideoUrl?: string;
-  isPublished: boolean;
-  createdAt: string;
-  updatedAt: string;
-  teacherProfile?: TeacherProfile;
-  lessons?: Lesson[];
-  packages?: LessonPackage[];
-  materials?: Material[];
-  isEnrolled?: boolean;
+  readonly id: string;
+  readonly teacherProfileId: string;
+  readonly title: string;
+  readonly description: string;
+  readonly category: string;
+  readonly courseType: CourseType; // LIVE, RECORDED, or HYBRID
+  readonly thumbnail?: string;
+  readonly previewVideoUrl?: string;
+  readonly isPublished: boolean;
+  readonly createdAt: string;
+  readonly updatedAt: string;
+  readonly teacherProfile?: TeacherProfile;
+  readonly lessons?: Lesson[];
+  readonly packages?: LessonPackage[];
+  readonly materials?: Material[];
+  readonly isEnrolled?: boolean;
 }
 
+/** Individual lesson within a course */
 export interface Lesson {
-  id: string;
-  courseId: string;
-  title: string;
-  description?: string;
-  type: LessonType;
-  duration?: number;
-  videoUrl?: string;
-  orderIndex: number;
-  isFree: boolean;
+  readonly id: string;
+  readonly courseId: string;
+  readonly title: string;
+  readonly description?: string;
+  readonly type: LessonType;
+  readonly duration?: number;
+  readonly videoUrl?: string;
+  readonly orderIndex: number;
+  readonly isFree: boolean;
 }
 
+/** Lesson package with pricing and features */
 export interface LessonPackage {
-  id: string;
-  courseId: string;
-  name: string;
-  description?: string;
-  price: number;
-  discount?: number;
-  finalPrice: number;
-  duration?: number;
-  maxStudents?: number;
-  features?: string[];
-  isActive: boolean;
+  readonly id: string;
+  readonly courseId: string;
+  readonly name: string;
+  readonly description?: string;
+  readonly price: number;
+  readonly discount?: number;
+  readonly finalPrice: number;
+  readonly duration?: number;
+  readonly maxStudents?: number;
+  readonly features?: string[];
+  readonly isActive: boolean;
 }
 
+/** Student enrollment in a course package */
 export interface Enrollment {
-  id: string;
-  userId: string;
-  packageId: string;
-  enrolledAt: string;
-  expiresAt?: string;
-  progress: number;
-  completedLessons: number;
-  isActive: boolean;
-  package?: LessonPackage & { course?: Course };
+  readonly id: string;
+  readonly userId: string;
+  readonly packageId: string;
+  readonly enrolledAt: string;
+  readonly expiresAt?: string;
+  readonly progress: number;
+  readonly completedLessons: number;
+  readonly isActive: boolean;
+  readonly package?: LessonPackage & { course?: Course };
 }
 
+/** Payment transaction record */
 export interface Payment {
-  id: string;
-  userId: string;
-  packageId?: string; // optional for order payments
-  amount: number;
-  platformCommission: number;
-  teacherEarning: number;
-  currency: string;
-  status: PaymentStatus;
-  paidAt?: string;
-  createdAt: string;
+  readonly id: string;
+  readonly userId: string;
+  readonly packageId?: string; // optional for order payments
+  readonly amount: number;
+  readonly platformCommission: number;
+  readonly teacherEarning: number;
+  readonly currency: string;
+  readonly status: PaymentStatus;
+  readonly paidAt?: string;
+  readonly createdAt: string;
 }
 
 // Cart
+/** Shopping cart item */
 export interface CartItem {
-  id: string;
-  userId: string;
-  packageId: string;
-  quantity: number;
-  addedAt: string;
-  package?: LessonPackage & { course?: Course };
+  readonly id: string;
+  readonly userId: string;
+  readonly packageId: string;
+  readonly quantity: number;
+  readonly addedAt: string;
+  readonly package?: LessonPackage & { course?: Course };
 }
 
+/** Shopping cart summary */
 export interface CartSummary {
-  items: CartItem[];
-  totalAmount: number;
-  currency: string;
+  readonly items: CartItem[];
+  readonly totalAmount: number;
+  readonly currency: string;
 }
 
 // Orders
+/** Individual item in an order */
 export interface OrderItem {
-  id: string;
-  orderId: string;
-  packageId: string;
-  price: number;
-  discount?: number;
-  finalPrice: number;
-  package?: LessonPackage & { course?: Course };
+  readonly id: string;
+  readonly orderId: string;
+  readonly packageId: string;
+  readonly price: number;
+  readonly discount?: number;
+  readonly finalPrice: number;
+  readonly package?: LessonPackage & { course?: Course };
 }
 
+/** Customer order */
 export interface Order {
-  id: string;
-  orderNo: string;
-  userId: string;
-  status: OrderStatus;
-  totalAmount: number;
-  currency: string;
-  createdAt: string;
-  paidAt?: string;
-  canceledAt?: string;
-  cancelReason?: string;
-  refundedAt?: string;
-  refundAmount?: number;
-  refundReason?: string;
-  items?: OrderItem[];
+  readonly id: string;
+  readonly orderNo: string;
+  readonly userId: string;
+  readonly status: OrderStatus;
+  readonly totalAmount: number;
+  readonly currency: string;
+  readonly createdAt: string;
+  readonly paidAt?: string;
+  readonly canceledAt?: string;
+  readonly cancelReason?: string;
+  readonly refundedAt?: string;
+  readonly refundAmount?: number;
+  readonly refundReason?: string;
+  readonly items?: OrderItem[];
 }
 
+/** Refund request and processing */
 export interface Refund {
-  id: string;
-  orderId: string;
-  amount: number;
-  reason?: string;
-  reasonCategory?: string;
-  status: RefundStatus;
-  refundMethod: RefundMethod;
-  bankDetails?: string;
-  notes?: string;
-  createdAt: string;
-  processedAt?: string;
-  completedAt?: string;
+  readonly id: string;
+  readonly orderId: string;
+  readonly amount: number;
+  readonly reason?: string;
+  readonly reasonCategory?: string;
+  readonly status: RefundStatus;
+  readonly refundMethod: RefundMethod;
+  readonly bankDetails?: string;
+  readonly notes?: string;
+  readonly createdAt: string;
+  readonly processedAt?: string;
+  readonly completedAt?: string;
   // Expanded details for admin views
-  order?: Order & { user?: User };
+  readonly order?: Order & { user?: User };
 }
 
+/** Support ticket message */
 export interface SupportTicketMessage {
-  id: string;
-  ticketId: string;
-  senderId: string;
-  message: string;
-  attachment?: string;
-  createdAt: string;
-  sender?: User;
+  readonly id: string;
+  readonly ticketId: string;
+  readonly senderId: string;
+  readonly message: string;
+  readonly attachment?: string;
+  readonly createdAt: string;
+  readonly sender?: User;
 }
 
+/** Support ticket for customer issues */
 export interface SupportTicket {
-  id: string;
-  ticketNo: string;
-  userId: string;
-  orderId?: string;
-  subject: string;
-  description: string;
-  category: string;
-  priority: SupportTicketPriority;
-  status: SupportTicketStatus;
-  assignedTo?: string;
-  resolution?: string;
-  createdAt: string;
-  updatedAt: string;
-  resolvedAt?: string;
-  messages?: SupportTicketMessage[];
-  user?: User;
+  readonly id: string;
+  readonly ticketNo: string;
+  readonly userId: string;
+  readonly orderId?: string;
+  readonly subject: string;
+  readonly description: string;
+  readonly category: string;
+  readonly priority: SupportTicketPriority;
+  readonly status: SupportTicketStatus;
+  readonly assignedTo?: string;
+  readonly resolution?: string;
+  readonly createdAt: string;
+  readonly updatedAt: string;
+  readonly resolvedAt?: string;
+  readonly messages?: SupportTicketMessage[];
+  readonly user?: User;
 }
 
+/** Course review from student */
 export interface Review {
-  id: string;
-  enrollmentId: string;
-  reviewerId: string;
-  teacherId: string;
-  rating: number;
-  comment?: string;
-  isPublished: boolean;
-  createdAt: string;
-  reviewer?: User;
-  enrollment?: Enrollment;
+  readonly id: string;
+  readonly enrollmentId: string;
+  readonly reviewerId: string;
+  readonly teacherId: string;
+  readonly rating: number;
+  readonly comment?: string;
+  readonly isPublished: boolean;
+  readonly createdAt: string;
+  readonly reviewer?: User;
+  readonly enrollment?: Enrollment;
 }
 
+/** User report for inappropriate content or issues */
 export interface Report {
-  id: string;
-  reporterId: string;
-  reportedId: string;
-  type: ReportType;
-  description: string;
-  status: ReportStatus;
-  resolution?: string;
-  createdAt: string;
-  resolvedAt?: string;
-  reporter?: User;
-  reported?: User;
+  readonly id: string;
+  readonly reporterId: string;
+  readonly reportedId: string;
+  readonly type: ReportType;
+  readonly description: string;
+  readonly status: ReportStatus;
+  readonly resolution?: string;
+  readonly createdAt: string;
+  readonly resolvedAt?: string;
+  readonly reporter?: User;
+  readonly reported?: User;
 }
 
+/** Course material (documents, resources) */
 export interface Material {
-  id: string;
-  courseId: string;
-  title: string;
-  description?: string;
-  fileUrl: string;
-  fileType: string;
-  fileSize: number;
-  isDownloadable: boolean;
-  uploadedAt: string;
+  readonly id: string;
+  readonly courseId: string;
+  readonly title: string;
+  readonly description?: string;
+  readonly fileUrl: string;
+  readonly fileType: string;
+  readonly fileSize: number;
+  readonly isDownloadable: boolean;
+  readonly uploadedAt: string;
 }
 
+/** Generic API response wrapper */
 export interface ApiResponse<T> {
-  status: 'success' | 'error';
-  message?: string;
-  data?: T;
-  errors?: Record<string, string[]>;
+  readonly status: 'success' | 'error';
+  readonly message?: string;
+  readonly data?: T;
+  readonly errors?: Record<string, string[]>;
 }
 
+/** Paginated API response */
 export interface PaginatedResponse<T> {
-  status: 'success';
-  data: {
-    items?: T[];
-    teachers?: T[];
-    courses?: T[];
-    reviews?: T[];
-    reports?: T[];
-    pagination: {
-      total: number;
-      page: number;
-      limit: number;
-      totalPages: number;
+  readonly status: 'success';
+  readonly data: {
+    readonly items?: T[];
+    readonly teachers?: T[];
+    readonly courses?: T[];
+    readonly reviews?: T[];
+    readonly reports?: T[];
+    readonly pagination: {
+      readonly total: number;
+      readonly page: number;
+      readonly limit: number;
+      readonly totalPages: number;
     };
   };
 }
 
+/** Authentication tokens */
 export interface AuthTokens {
-  accessToken: string;
-  refreshToken: string;
+  readonly accessToken: string;
+  readonly refreshToken: string;
 }
 
+/** Login credentials */
 export interface LoginCredentials {
-  email: string;
-  password: string;
+  readonly email: string;
+  readonly password: string;
 }
 
+/** User registration data */
 export interface RegisterData {
-  email: string;
-  password: string;
-  firstName: string;
-  lastName: string;
-  role: UserRole;
+  readonly email: string;
+  readonly password: string;
+  readonly firstName: string;
+  readonly lastName: string;
+  readonly role: UserRole;
 }
 
 // Teacher Statistics
+/** Teacher performance statistics */
 export interface TeacherStats {
-  totalCourses: number;
-  totalEnrollments: number;
-  totalRevenue: number;
-  averageRating: number;
-  totalStudents: number;
-  isVerified: boolean;
+  readonly totalCourses: number;
+  readonly totalEnrollments: number;
+  readonly totalRevenue: number;
+  readonly averageRating: number;
+  readonly totalStudents: number;
+  readonly isVerified: boolean;
 }
 
 // Verification Document
+/** Teacher verification document */
 export interface TeacherVerification {
-  id: string;
-  teacherProfileId: string;
-  documentType: string;
-  documentUrl: string;
-  status: VerificationStatus;
-  reviewedBy?: string;
-  reviewNotes?: string;
-  submittedAt: string;
-  reviewedAt?: string;
+  readonly id: string;
+  readonly teacherProfileId: string;
+  readonly documentType: string;
+  readonly documentUrl: string;
+  readonly status: VerificationStatus;
+  readonly reviewedBy?: string;
+  readonly reviewNotes?: string;
+  readonly submittedAt: string;
+  readonly reviewedAt?: string;
 }
 
 // Teacher Profile Submission
+/** Teacher profile submission for review */
 export interface TeacherProfileSubmission {
-  id: string;
-  teacherProfileId: string;
-  status: VerificationStatus;
-  submittedAt: string;
-  reviewedBy?: string;
-  reviewedAt?: string;
-  reviewNotes?: string;
+  readonly id: string;
+  readonly teacherProfileId: string;
+  readonly status: VerificationStatus;
+  readonly submittedAt: string;
+  readonly reviewedBy?: string;
+  readonly reviewedAt?: string;
+  readonly reviewNotes?: string;
 }
 
 // Payment with expanded details
+/** Payment with user and package details */
 export interface PaymentWithDetails extends Payment {
-  user?: {
-    firstName: string;
-    lastName: string;
-    email: string;
+  readonly user?: {
+    readonly firstName: string;
+    readonly lastName: string;
+    readonly email: string;
   };
-  package?: {
-    name: string;
-    course?: {
-      title: string;
+  readonly package?: {
+    readonly name: string;
+    readonly course?: {
+      readonly title: string;
     };
   };
 }
 
 // Wallet & Payouts
+/** Wallet transaction type enumeration */
 export enum WalletTransactionType {
   CREDIT = 'CREDIT',
   DEBIT = 'DEBIT',
@@ -449,6 +486,7 @@ export enum WalletTransactionType {
   ADJUSTMENT = 'ADJUSTMENT',
 }
 
+/** Wallet transaction source enumeration */
 export enum WalletTransactionSource {
   COURSE_SALE = 'COURSE_SALE',
   REFUND = 'REFUND',
@@ -457,27 +495,30 @@ export enum WalletTransactionSource {
   PAYOUT = 'PAYOUT',
 }
 
+/** Wallet summary for teacher earnings */
 export interface WalletSummary {
-  id: string;
-  userId: string;
-  availableBalance: number;
-  pendingPayout: number;
-  currency: string;
-  createdAt: string;
-  updatedAt: string;
+  readonly id: string;
+  readonly userId: string;
+  readonly availableBalance: number;
+  readonly pendingPayout: number;
+  readonly currency: string;
+  readonly createdAt: string;
+  readonly updatedAt: string;
 }
 
+/** Individual wallet transaction */
 export interface WalletTransaction {
-  id: string;
-  walletId: string;
-  amount: number;
-  type: WalletTransactionType;
-  source: WalletTransactionSource;
-  referenceId?: string;
-  metadata?: any;
-  createdAt: string;
+  readonly id: string;
+  readonly walletId: string;
+  readonly amount: number;
+  readonly type: WalletTransactionType;
+  readonly source: WalletTransactionSource;
+  readonly referenceId?: string;
+  readonly metadata?: Record<string, unknown>;
+  readonly createdAt: string;
 }
 
+/** Payout method type enumeration */
 export enum PayoutMethodType {
   BANK_TRANSFER = 'BANK_TRANSFER',
   GRABPAY = 'GRABPAY',
@@ -486,17 +527,19 @@ export enum PayoutMethodType {
   OTHER = 'OTHER',
 }
 
+/** Payout method configuration */
 export interface PayoutMethod {
-  id: string;
-  walletId: string;
-  type: PayoutMethodType;
-  label: string;
-  details: any; // { bankName, accountNo, accountName } | { phone, walletId } etc.
-  isDefault: boolean;
-  isVerified: boolean;
-  createdAt: string;
+  readonly id: string;
+  readonly walletId: string;
+  readonly type: PayoutMethodType;
+  readonly label: string;
+  readonly details: Record<string, string | number | boolean>; // { bankName, accountNo, accountName } | { phone, walletId } etc.
+  readonly isDefault: boolean;
+  readonly isVerified: boolean;
+  readonly createdAt: string;
 }
 
+/** Payout request status enumeration */
 export enum PayoutRequestStatus {
   PENDING = 'PENDING',
   APPROVED = 'APPROVED',
@@ -506,16 +549,17 @@ export enum PayoutRequestStatus {
   CANCELLED = 'CANCELLED',
 }
 
+/** Payout request from teacher */
 export interface PayoutRequest {
-  id: string;
-  walletId: string;
-  methodId?: string;
-  amount: number;
-  status: PayoutRequestStatus;
-  note?: string;
-  adminNote?: string;
-  externalReference?: string;
-  requestedAt: string;
-  processedAt?: string;
+  readonly id: string;
+  readonly walletId: string;
+  readonly methodId?: string;
+  readonly amount: number;
+  readonly status: PayoutRequestStatus;
+  readonly note?: string;
+  readonly adminNote?: string;
+  readonly externalReference?: string;
+  readonly requestedAt: string;
+  readonly processedAt?: string;
 }
 

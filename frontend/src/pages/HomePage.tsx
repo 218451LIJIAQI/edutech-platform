@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom';
 import { BookOpen, Users, Award, TrendingUp, ArrowRight } from 'lucide-react';
+import { useMemo } from 'react';
 import { useAuthStore } from '@/store/authStore';
 import { UserRole } from '@/types';
 
@@ -7,10 +8,18 @@ import { UserRole } from '@/types';
  * Home Page Component
  * Landing page of the application
  */
+
+const FEATURES = [
+  { icon: Users, title: "Verified Teachers", desc: "All teachers are verified and certified professionals" },
+  { icon: BookOpen, title: "Flexible Learning", desc: "Choose between live classes and recorded lessons" },
+  { icon: Award, title: "Quality Assurance", desc: "Reviews and ratings ensure high teaching standards" },
+  { icon: TrendingUp, title: "Track Progress", desc: "Monitor your learning journey with detailed analytics" }
+] as const;
+
 const HomePage = () => {
   const { user, isAuthenticated } = useAuthStore();
 
-  const getDashboardLink = () => {
+  const dashboardLink = useMemo(() => {
     if (!user) return '/';
     switch (user.role) {
       case UserRole.STUDENT:
@@ -22,9 +31,9 @@ const HomePage = () => {
       default:
         return '/';
     }
-  };
+  }, [user]);
 
-  const getDashboardLabel = () => {
+  const dashboardLabel = useMemo(() => {
     if (!user) return 'Dashboard';
     switch (user.role) {
       case UserRole.STUDENT:
@@ -36,7 +45,7 @@ const HomePage = () => {
       default:
         return 'Dashboard';
     }
-  };
+  }, [user]);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 via-blue-50 to-indigo-50">
@@ -60,10 +69,10 @@ const HomePage = () => {
                 </p>
                 <div className="flex flex-wrap gap-4">
                   <Link 
-                    to={getDashboardLink()} 
+                    to={dashboardLink} 
                     className="btn border-2 border-white/80 bg-white/10 backdrop-blur-sm text-white hover:bg-white hover:text-primary-600 hover:border-white btn-lg shadow-lg hover:shadow-xl transition-all duration-300 inline-flex items-center gap-2"
                   >
-                    Go to {getDashboardLabel()}
+                    Go to {dashboardLabel}
                     <ArrowRight className="w-5 h-5" />
                   </Link>
                   {user?.role === UserRole.STUDENT && (
@@ -109,22 +118,20 @@ const HomePage = () => {
             <p className="section-subtitle text-xl mt-4">Experience the best online learning platform</p>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
-            {[
-              { icon: Users, title: "Verified Teachers", desc: "All teachers are verified and certified professionals" },
-              { icon: BookOpen, title: "Flexible Learning", desc: "Choose between live classes and recorded lessons" },
-              { icon: Award, title: "Quality Assurance", desc: "Reviews and ratings ensure high teaching standards" },
-              { icon: TrendingUp, title: "Track Progress", desc: "Monitor your learning journey with detailed analytics" }
-            ].map((feature, idx) => (
-              <div key={idx} className="card-hover group bg-white rounded-2xl p-8 shadow-lg hover:shadow-2xl transition-all duration-300 transform hover:scale-105 border border-gray-100 hover:border-primary-200">
-                <div className="inline-flex items-center justify-center w-24 h-24 bg-gradient-to-br from-primary-100 to-primary-50 text-primary-600 rounded-2xl mb-6 group-hover:from-primary-200 group-hover:to-primary-100 transition-all duration-300 shadow-md">
-                  <feature.icon className="w-12 h-12" />
-              </div>
-                <h3 className="text-2xl font-bold mb-4 text-gray-900">{feature.title}</h3>
-                <p className="text-gray-600 leading-relaxed text-base">
-                  {feature.desc}
-              </p>
-            </div>
-            ))}
+            {FEATURES.map((feature) => {
+              const IconComponent = feature.icon;
+              return (
+                <div key={feature.title} className="card-hover group bg-white rounded-2xl p-8 shadow-lg hover:shadow-2xl transition-all duration-300 transform hover:scale-105 border border-gray-100 hover:border-primary-200">
+                  <div className="inline-flex items-center justify-center w-24 h-24 bg-gradient-to-br from-primary-100 to-primary-50 text-primary-600 rounded-2xl mb-6 group-hover:from-primary-200 group-hover:to-primary-100 transition-all duration-300 shadow-md">
+                    <IconComponent className="w-12 h-12" />
+                  </div>
+                  <h3 className="text-2xl font-bold mb-4 text-gray-900">{feature.title}</h3>
+                  <p className="text-gray-600 leading-relaxed text-base">
+                    {feature.desc}
+                  </p>
+                </div>
+              );
+            })}
           </div>
         </div>
       </section>

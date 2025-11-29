@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Plus, Edit, Trash2, Eye, EyeOff, Users, Video, Radio, PlayCircle, Search, Filter, BookOpen, TrendingUp } from 'lucide-react';
 import courseService from '@/services/course.service';
@@ -17,11 +17,7 @@ const ManageCoursesPage = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [filterStatus, setFilterStatus] = useState<'all' | 'published' | 'draft'>('all');
 
-  useEffect(() => {
-    fetchMyCourses();
-  }, []);
-
-  const fetchMyCourses = async () => {
+  const fetchMyCourses = useCallback(async () => {
     setIsLoading(true);
     try {
       const courses = await courseService.getMyCourses();
@@ -32,7 +28,11 @@ const ManageCoursesPage = () => {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    fetchMyCourses();
+  }, [fetchMyCourses]);
 
   const handleTogglePublish = async (courseId: string, currentStatus: boolean) => {
     try {
@@ -69,41 +69,50 @@ const ManageCoursesPage = () => {
     }
   };
 
+  // Type helper for course with enrollment count
+  type CourseWithCount = Course & { _count?: { enrollments?: number } };
+
   // Filter and search courses
-  const filteredCourses = courses.filter((course) => {
-    const matchesSearch = course.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                         course.description?.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesStatus = filterStatus === 'all' || 
-                         (filterStatus === 'published' && course.isPublished) ||
-                         (filterStatus === 'draft' && !course.isPublished);
-    return matchesSearch && matchesStatus;
-  });
+  const filteredCourses = useMemo(() => {
+    const query = searchQuery.toLowerCase();
+    return courses.filter((course) => {
+      const matchesSearch = course.title.toLowerCase().includes(query) ||
+                           course.description?.toLowerCase().includes(query);
+      const matchesStatus = filterStatus === 'all' || 
+                           (filterStatus === 'published' && course.isPublished) ||
+                           (filterStatus === 'draft' && !course.isPublished);
+      return matchesSearch && matchesStatus;
+    });
+  }, [courses, searchQuery, filterStatus]);
 
   // Calculate statistics
-  const stats = {
+  const stats = useMemo(() => ({
     total: courses.length,
     published: courses.filter(c => c.isPublished).length,
     draft: courses.filter(c => !c.isPublished).length,
-    totalStudents: courses.reduce((sum, c) => sum + ((c as Course & { _count?: { enrollments?: number } })._count?.enrollments || 0), 0),
-  };
+    totalStudents: courses.reduce((sum, c) => {
+      const courseWithCount = c as CourseWithCount;
+      return sum + (courseWithCount._count?.enrollments || 0);
+    }, 0),
+  }), [courses]);
 
   // Resolve asset URL (handles absolute and relative paths like /uploads/...)
-  const resolveAssetUrl = (path?: string) => {
+  const resolveAssetUrl = useCallback((path?: string): string => {
     if (!path) return '';
     if (/^https?:\/\//i.test(path)) return path;
-    const apiUrl = (import.meta as any).env?.VITE_API_URL || 'http://localhost:3000/api/v1';
+    const apiUrl = (import.meta.env?.VITE_API_URL as string) || 'http://localhost:3000/api/v1';
     // Remove trailing /api/... from API URL to get server origin
     const origin = apiUrl.replace(/\/api(\/.*)?$/i, '');
     return `${origin}${path.startsWith('/') ? path : `/${path}`}`;
-  };
+  }, []);
 
   // Build a placeholder cover when no thumbnail is set
-  const getCourseCover = (course: Course) => {
+  const getCourseCover = useCallback((course: Course): string => {
     if (course.thumbnail) return resolveAssetUrl(course.thumbnail);
     const keyword = encodeURIComponent(course.category || course.title || 'education');
     // Unsplash dynamic placeholder
     return `https://source.unsplash.com/featured/800x450?${keyword}`;
-  };
+  }, [resolveAssetUrl]);
 
   if (isLoading) {
     return (
@@ -228,7 +237,7 @@ const ManageCoursesPage = () => {
             {filteredCourses.map((course) => (
               <div
                 key={course.id}
-                className="card shadow-xl hover:shadow-2xl transition-all duration-300 transform hover:scale-102 overflow-hidden group border border-gray-100 hover:border-primary-200 rounded-2xl"
+                className="card shadow-xl hover:shadow-2xl transition-all duration-300 transform hover:scale-[1.02] overflow-hidden group border border-gray-100 hover:border-primary-200 rounded-2xl"
               >
                 {/* Course Header with Thumbnail */}
                 <div className="relative h-40 overflow-hidden">
@@ -307,7 +316,7 @@ const ManageCoursesPage = () => {
                     <div className="text-center">
                       <p className="text-gray-500 text-xs font-medium mb-1">Students</p>
                       <p className="text-2xl font-bold text-gray-900">
-                        {(course as Course & { _count?: { enrollments?: number } })._count?.enrollments || 0}
+                        {(course as CourseWithCount)._count?.enrollments || 0}
                       </p>
                     </div>
                     <div className="text-center">

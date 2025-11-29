@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { X, AlertCircle } from 'lucide-react';
 import { ReportType } from '@/types';
 import reportService from '@/services/report.service';
@@ -30,6 +30,15 @@ const ReportSubmissionModal = ({
   const [reportType, setReportType] = useState<ReportType>(ReportType.QUALITY_ISSUE);
   const [description, setDescription] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Reset form when modal opens
+  useEffect(() => {
+    if (isOpen) {
+      setReportType(ReportType.QUALITY_ISSUE);
+      setDescription('');
+      setIsSubmitting(false);
+    }
+  }, [isOpen]);
 
   const reportTypeOptions = [
     {
@@ -90,9 +99,14 @@ const ReportSubmissionModal = ({
       if (onSuccess) {
         onSuccess();
       }
-    } catch (error: any) {
+    } catch (error) {
       console.error('Failed to submit report:', error);
-      const errorMessage = error.response?.data?.message || 'Failed to submit report';
+      const errorMessage =
+        error && typeof error === 'object' && 'response' in error
+          ? (error as { response?: { data?: { message?: string } } }).response?.data?.message || 'Failed to submit report'
+          : error instanceof Error
+          ? error.message
+          : 'Failed to submit report';
       toast.error(errorMessage);
     } finally {
       setIsSubmitting(false);
@@ -150,7 +164,12 @@ const ReportSubmissionModal = ({
                     name="reportType"
                     value={option.value}
                     checked={reportType === option.value}
-                    onChange={(e) => setReportType(e.target.value as ReportType)}
+                    onChange={(e) => {
+                      const value = e.target.value as ReportType;
+                      if (Object.values(ReportType).includes(value)) {
+                        setReportType(value);
+                      }
+                    }}
                     className="mt-1 w-4 h-4 text-primary-600"
                   />
                   <div className="ml-3 flex-1">

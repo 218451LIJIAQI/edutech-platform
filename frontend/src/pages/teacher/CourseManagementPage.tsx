@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import {
   ArrowLeft,
@@ -32,6 +32,7 @@ const CourseManagementPage = () => {
   const navigate = useNavigate();
   const [course, setCourse] = useState<Course | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'overview' | 'live' | 'notifications' | 'materials' | 'recordings'>('overview');
   const [notificationTitle, setNotificationTitle] = useState('');
   const [notificationMessage, setNotificationMessage] = useState('');
@@ -39,26 +40,41 @@ const CourseManagementPage = () => {
   const [showRecordingModal, setShowRecordingModal] = useState(false);
   const [editingRecordingId, setEditingRecordingId] = useState<string | undefined>(undefined);
   const [recordingDefaultVideoType] = useState<'upload' | 'link'>('upload');
+  const [deletingLessonId, setDeletingLessonId] = useState<string | null>(null);
 
-  useEffect(() => {
-    fetchCourse();
-  }, [courseId]);
+  const fetchCourse = useCallback(async () => {
+    if (!courseId) {
+      toast.error('Course ID is missing');
+      navigate('/teacher/courses');
+      return;
+    }
 
-  const fetchCourse = async () => {
     setIsLoading(true);
+    setError(null);
     try {
-      const data = await courseService.getCourseById(courseId!);
+      const data = await courseService.getCourseById(courseId);
       setCourse(data);
-    } catch (error) {
-      console.error('Failed to fetch course:', error);
-      toast.error('Failed to load course');
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to load course';
+      console.error('Failed to fetch course:', err);
+      setError(errorMessage);
+      toast.error(errorMessage);
       navigate('/teacher/courses');
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [courseId, navigate]);
+
+  useEffect(() => {
+    fetchCourse();
+  }, [fetchCourse]);
 
   const handleSendNotification = async () => {
+    if (!courseId) {
+      toast.error('Course ID is missing');
+      return;
+    }
+
     if (!notificationTitle.trim() || !notificationMessage.trim()) {
       toast.error('Please fill in all notification fields');
       return;
@@ -66,7 +82,7 @@ const CourseManagementPage = () => {
 
     setIsSendingNotification(true);
     try {
-      await notificationService.sendCourseNotification(courseId!, {
+      await notificationService.sendCourseNotification(courseId, {
         title: notificationTitle.trim(),
         message: notificationMessage.trim(),
         type: 'COURSE_ANNOUNCEMENT',
@@ -97,11 +113,27 @@ const CourseManagementPage = () => {
     );
   }
 
+  if (!courseId) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 via-blue-50 to-indigo-50">
+        <div className="text-center">
+          <h1 className="text-2xl font-bold text-gray-900 mb-4">Course ID is missing</h1>
+          <Link to="/teacher/courses" className="btn-primary">
+            Back to My Courses
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
   if (!course) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 via-blue-50 to-indigo-50">
         <div className="text-center">
           <h1 className="text-2xl font-bold text-gray-900 mb-4">Course not found</h1>
+          {error && (
+            <p className="text-red-600 mb-4">{error}</p>
+          )}
           <Link to="/teacher/courses" className="btn-primary">
             Back to My Courses
           </Link>
@@ -168,7 +200,9 @@ const CourseManagementPage = () => {
               <div>
                 <p className="text-sm font-bold text-blue-100 uppercase tracking-wide">Students Enrolled</p>
                 <p className="text-4xl font-bold text-white mt-3">
-                  {(course as Course & { _count?: { enrollments?: number } })._count?.enrollments || 0}
+                  {(course && typeof course === 'object' && '_count' in course && course._count && typeof course._count === 'object' && 'enrollments' in course._count)
+                    ? (course._count.enrollments as number)
+                    : 0}
                 </p>
               </div>
               <Users className="w-16 h-16 text-blue-200 opacity-50" />
@@ -497,19 +531,30 @@ const CourseManagementPage = () => {
                                 type="button"
                                 aria-label="Delete recording"
                                 title="Delete recording"
+                                disabled={deletingLessonId === lesson.id}
                                 onClick={async () => {
-                                  if (!confirm('Delete this recording?')) return;
+                                  if (!window.confirm('Are you sure you want to delete this recording? This action cannot be undone.')) {
+                                    return;
+                                  }
+                                  setDeletingLessonId(lesson.id);
                                   try {
                                     await courseService.deleteLesson(lesson.id);
                                     toast.success('Recording deleted');
                                     await fetchCourse();
                                   } catch (e) {
-                                    toast.error('Failed to delete');
+                                    const errorMessage = e instanceof Error ? e.message : 'Failed to delete recording';
+                                    toast.error(errorMessage);
+                                  } finally {
+                                    setDeletingLessonId(null);
                                   }
                                 }}
-                                className="btn-sm text-red-600 hover:bg-red-50"
+                                className="btn-sm text-red-600 hover:bg-red-50 disabled:opacity-50 disabled:cursor-not-allowed"
                               >
-                                <Trash2 className="w-4 h-4" />
+                                {deletingLessonId === lesson.id ? (
+                                  <div className="spinner w-4 h-4"></div>
+                                ) : (
+                                  <Trash2 className="w-4 h-4" />
+                                )}
                               </button>
                             </div>
                           </div>
@@ -524,9 +569,9 @@ const CourseManagementPage = () => {
           </div>
         </div>
         {/* Modals */}
-        {showRecordingModal && (
+        {showRecordingModal && courseId && (
           <LessonModal
-            courseId={courseId!}
+            courseId={courseId}
             lessonId={editingRecordingId}
             initialLesson={editingRecordingId ? (course?.lessons || []).find(l => l.id === editingRecordingId) : undefined}
             defaultVideoType={recordingDefaultVideoType}

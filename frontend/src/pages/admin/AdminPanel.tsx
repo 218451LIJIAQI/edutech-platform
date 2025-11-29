@@ -11,12 +11,12 @@ import VerificationTeachersManagement from './VerificationTeachersManagement';
  * Admin Panel Component
  * Main admin interface with tabs for different management sections
  */
-const AdminPanel = () => {
-  const [activeTab, setActiveTab] = useState<
-    'dashboard' | 'users' | 'courses' | 'reports' | 'refunds' | 'support' | 'verification-teachers'
-  >('dashboard');
+type TabId = 'dashboard' | 'users' | 'courses' | 'reports' | 'refunds' | 'support' | 'verification-teachers';
 
-  const tabs = [
+const AdminPanel = () => {
+  const [activeTab, setActiveTab] = useState<TabId>('dashboard');
+
+  const tabs: Array<{ id: TabId; label: string; icon: string }> = [
     { id: 'dashboard', label: 'Dashboard', icon: '📊' },
     { id: 'users', label: 'Users', icon: '👥' },
     { id: 'verification-teachers', label: 'Verification Teachers', icon: '✅' },
@@ -34,7 +34,7 @@ const AdminPanel = () => {
           {tabs.map((tab) => (
             <button
               key={tab.id}
-              onClick={() => setActiveTab(tab.id as any)}
+              onClick={() => setActiveTab(tab.id)}
               className={`px-4 py-2 rounded-lg font-semibold transition-all flex items-center gap-2 ${
                 activeTab === tab.id
                   ? 'bg-primary-600 text-white shadow-lg'

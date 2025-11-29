@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { Star, Users, Award, Search } from 'lucide-react';
 import teacherService from '@/services/teacher.service';
@@ -14,13 +14,11 @@ const TeachersPage = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [verifiedOnly, setVerifiedOnly] = useState(false);
   const [minRating, setMinRating] = useState<number>(0);
+  const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    fetchTeachers();
-  }, [verifiedOnly, minRating]);
-
-  const fetchTeachers = async () => {
+  const fetchTeachers = useCallback(async () => {
     setIsLoading(true);
+    setError(null);
     try {
       // Use verified teachers endpoint if verified filter is selected
       const result = verifiedOnly
@@ -28,16 +26,23 @@ const TeachersPage = () => {
             search: searchTerm || undefined,
           })
         : await teacherService.getAllTeachers({
-        minRating: minRating || undefined,
-        search: searchTerm || undefined,
-      });
+            minRating: minRating > 0 ? minRating : undefined,
+            search: searchTerm || undefined,
+          });
       setTeachers(result.items || result.teachers || []);
-    } catch (error) {
-      console.error('Failed to fetch teachers:', error);
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to fetch teachers';
+      console.error('Failed to fetch teachers:', err);
+      setError(errorMessage);
+      setTeachers([]);
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [verifiedOnly, minRating, searchTerm]);
+
+  useEffect(() => {
+    fetchTeachers();
+  }, [fetchTeachers]);
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -114,6 +119,22 @@ const TeachersPage = () => {
             </div>
           </form>
         </div>
+
+        {/* Error Message */}
+        {error && (
+          <div className="card mb-6 bg-red-50 border border-red-200 shadow-lg">
+            <div className="flex items-center justify-between">
+              <p className="text-red-800 font-medium">{error}</p>
+              <button
+                onClick={() => setError(null)}
+                className="text-red-600 hover:text-red-800 font-bold text-xl"
+                aria-label="Dismiss error"
+              >
+                ×
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Teachers Grid */}
         {isLoading ? (

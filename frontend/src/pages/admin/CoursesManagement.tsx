@@ -8,13 +8,22 @@ import toast from 'react-hot-toast';
 const CoursesManagement = () => {
   const [courses, setCourses] = useState<Course[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [pagination, setPagination] = useState<{
+    total: number;
+    page: number;
+    limit: number;
+    totalPages: number;
+  } | null>(null);
   const [filters, setFilters] = useState<{
     isPublished?: boolean;
     category?: string;
     search?: string;
     page?: number;
     limit?: number;
-  }>({});
+  }>({
+    page: 1,
+    limit: 10,
+  });
 
   useEffect(() => {
     fetchCourses();
@@ -25,9 +34,13 @@ const CoursesManagement = () => {
     try {
       const data = await adminService.getAllCourses(filters);
       setCourses(data.items || data.courses || []);
-    } catch (error) {
-      console.error(error);
-      toast.error('Failed to load courses');
+      if (data.pagination) {
+        setPagination(data.pagination);
+      }
+    } catch (error: unknown) {
+      console.error('Failed to fetch courses:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Failed to load courses';
+      toast.error(errorMessage);
     } finally {
       setIsLoading(false);
     }
@@ -38,9 +51,35 @@ const CoursesManagement = () => {
       await adminService.updateCourseStatus(id, !currentStatus);
       toast.success(`Course ${!currentStatus ? 'published' : 'unpublished'}`);
       fetchCourses();
-    } catch (error) {
-      toast.error('Failed to update course');
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to update course';
+      toast.error(errorMessage);
     }
+  };
+
+  const handleFilterChange = (newFilters: Record<string, string>) => {
+    const updatedFilters: typeof filters = {
+      ...filters,
+      page: 1, // Reset to first page when filters change
+    };
+    
+    if (newFilters.isPublished !== undefined) {
+      updatedFilters.isPublished = newFilters.isPublished === 'true';
+    } else {
+      delete updatedFilters.isPublished;
+    }
+    
+    if (newFilters.category) {
+      updatedFilters.category = newFilters.category;
+    } else {
+      delete updatedFilters.category;
+    }
+    
+    setFilters(updatedFilters);
+  };
+
+  const handlePageChange = (newPage: number) => {
+    setFilters({ ...filters, page: newPage });
   };
 
   return (
@@ -51,16 +90,17 @@ const CoursesManagement = () => {
         <div className="card mb-8 shadow-xl border border-gray-100 rounded-2xl">
           <SearchFilter
             placeholder="Search courses..."
-            onSearch={(q) => setFilters({ ...filters, search: q })}
+            onSearch={(q) => setFilters({ ...filters, search: q || undefined, page: 1 })}
             filters={[{
               name: 'isPublished',
               label: 'Status',
               options: [
+                { label: 'All', value: '' },
                 { label: 'Published', value: 'true' },
                 { label: 'Unpublished', value: 'false' },
               ],
             }]}
-            onFilterChange={setFilters}
+            onFilterChange={handleFilterChange}
           />
         </div>
 
@@ -130,6 +170,31 @@ const CoursesManagement = () => {
                   ))}
                 </tbody>
               </table>
+            </div>
+          )}
+
+          {/* Pagination */}
+          {pagination && pagination.totalPages > 1 && (
+            <div className="mt-6 pt-4 border-t flex items-center justify-between">
+              <div className="text-sm text-gray-700">
+                Showing page {pagination.page} of {pagination.totalPages} ({pagination.total} total courses)
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  className="btn-outline btn-sm"
+                  disabled={pagination.page <= 1 || isLoading}
+                  onClick={() => handlePageChange(pagination.page - 1)}
+                >
+                  Previous
+                </button>
+                <button
+                  className="btn-primary btn-sm"
+                  disabled={pagination.page >= pagination.totalPages || isLoading}
+                  onClick={() => handlePageChange(pagination.page + 1)}
+                >
+                  Next
+                </button>
+              </div>
             </div>
           )}
         </div>

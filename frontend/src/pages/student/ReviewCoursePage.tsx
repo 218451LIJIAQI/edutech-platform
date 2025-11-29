@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Star, ArrowLeft, Send } from 'lucide-react';
 import { Course, Enrollment } from '@/types';
@@ -23,14 +23,16 @@ const ReviewCoursePage = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  useEffect(() => {
-    fetchData();
-  }, [courseId]);
+  const fetchData = useCallback(async () => {
+    if (!courseId) {
+      toast.error('Course ID is missing');
+      navigate('/courses');
+      return;
+    }
 
-  const fetchData = async () => {
     setIsLoading(true);
     try {
-      const courseData = await courseService.getCourseById(courseId!);
+      const courseData = await courseService.getCourseById(courseId);
       setCourse(courseData);
 
       const enrollments = await enrollmentService.getMyCourses();
@@ -47,11 +49,17 @@ const ReviewCoursePage = () => {
       setEnrollment(currentEnrollment);
     } catch (error) {
       console.error('Failed to fetch data:', error);
-      toast.error('Failed to load course');
+      const errorMessage = error instanceof Error ? error.message : 'Failed to load course';
+      toast.error(errorMessage);
+      navigate('/courses');
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [courseId, navigate]);
+
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
 
   const handleSubmitReview = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -74,8 +82,8 @@ const ReviewCoursePage = () => {
 
     setIsSubmitting(true);
     try {
-      const trimmed = comment.trim();
-      await reviewService.createReview(enrollment.id, rating, trimmed);
+      const trimmedComment = comment.trim();
+      await reviewService.createReview(enrollment.id, rating, trimmedComment);
       toast.success('Thank you for your review!');
       navigate('/student/courses');
     } catch (error) {
@@ -97,6 +105,17 @@ const ReviewCoursePage = () => {
         <div className="flex flex-col items-center space-y-4">
           <div className="spinner"></div>
           <p className="text-gray-600 font-medium">Loading course...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!courseId) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 via-blue-50 to-indigo-50">
+        <div className="text-center">
+          <p className="text-gray-600 mb-4">Course ID is missing</p>
+          <button className="btn-primary" onClick={() => navigate('/courses')}>Browse Courses</button>
         </div>
       </div>
     );
@@ -199,8 +218,8 @@ const ReviewCoursePage = () => {
                   placeholder="What did you like or dislike about this course? What did you learn? Would you recommend it to others?"
                   required
                 />
-                <p className={`text-xs mt-2 font-medium ${comment.length >= 50 ? 'text-green-600' : 'text-gray-500'}`}>
-                  Minimum 50 characters ({comment.length}/50)
+                <p className={`text-xs mt-2 font-medium ${comment.trim().length >= 50 ? 'text-green-600' : 'text-gray-500'}`}>
+                  Minimum 50 characters ({comment.trim().length}/50)
                 </p>
               </div>
 
@@ -239,9 +258,9 @@ const ReviewCoursePage = () => {
                 </button>
                 <button
                   type="submit"
-                  disabled={isSubmitting || rating === 0 || comment.length < 50}
+                  disabled={isSubmitting || rating === 0 || comment.trim().length < 50}
                   className="btn-primary btn-lg disabled:opacity-50 disabled:cursor-not-allowed"
-                  title={rating === 0 || comment.length < 50 ? 'Select a rating and write at least 50 characters to enable submit' : undefined as any}
+                  title={rating === 0 || comment.trim().length < 50 ? 'Select a rating and write at least 50 characters to enable submit' : ''}
                 >
                   {isSubmitting ? (
                     <span className="flex items-center">

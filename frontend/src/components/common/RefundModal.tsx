@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import toast from 'react-hot-toast';
 import ordersService from '@/services/orders.service';
 import { Order, RefundMethod } from '@/types';
@@ -29,9 +29,23 @@ const RefundModal = ({ isOpen, onClose, order, onRefundSubmitted }: RefundModalP
   const [refundAmount, setRefundAmount] = useState(order.totalAmount.toString());
   const [reasonCategory, setReasonCategory] = useState('QUALITY_ISSUE');
   const [reason, setReason] = useState('');
-  const [refundMethod, setRefundMethod] = useState<RefundMethod>('ORIGINAL_PAYMENT');
+  const [refundMethod, setRefundMethod] = useState<RefundMethod>(RefundMethod.ORIGINAL_PAYMENT);
   const [bankDetails, setBankDetails] = useState('');
   const [notes, setNotes] = useState('');
+
+  // Reset form when order changes
+  useEffect(() => {
+    if (isOpen && order) {
+      setStep('amount');
+      setRefundAmount(order.totalAmount.toString());
+      setReasonCategory('QUALITY_ISSUE');
+      setReason('');
+      setRefundMethod(RefundMethod.ORIGINAL_PAYMENT);
+      setBankDetails('');
+      setNotes('');
+      setWorking(false);
+    }
+  }, [isOpen, order]);
 
   /**
    * Validate refund amount
@@ -99,12 +113,15 @@ const RefundModal = ({ isOpen, onClose, order, onRefundSubmitted }: RefundModalP
       toast.success('Refund request submitted successfully');
       onRefundSubmitted?.();
       onClose();
-    } catch (e) {
+    } catch (error) {
       const message =
-        e instanceof Error && 'response' in e
-          ? (e as { response?: { data?: { message?: string } } }).response?.data?.message
+        error instanceof Error && 'response' in error
+          ? (error as { response?: { data?: { message?: string } } }).response?.data?.message
+          : error instanceof Error
+          ? error.message
           : undefined;
       toast.error(message || 'Failed to submit refund request');
+      console.error('Refund request error:', error);
     } finally {
       setWorking(false);
     }
@@ -175,6 +192,7 @@ const RefundModal = ({ isOpen, onClose, order, onRefundSubmitted }: RefundModalP
                   <span className="text-xl font-bold text-gray-600">$</span>
                   <input
                     type="number"
+                    id="refund-amount"
                     value={refundAmount}
                     onChange={(e) => setRefundAmount(e.target.value)}
                     step="0.01"
@@ -182,6 +200,7 @@ const RefundModal = ({ isOpen, onClose, order, onRefundSubmitted }: RefundModalP
                     max={order.totalAmount}
                     className="input flex-1"
                     disabled={working}
+                    aria-label="Refund amount"
                   />
                 </div>
               </div>
@@ -216,14 +235,16 @@ const RefundModal = ({ isOpen, onClose, order, onRefundSubmitted }: RefundModalP
               <h3 className="text-xl font-bold text-gray-900">Refund Reason</h3>
 
               <div>
-                <label className="block text-sm font-semibold text-gray-900 mb-2">
+                <label htmlFor="reason-category" className="block text-sm font-semibold text-gray-900 mb-2">
                   Reason Category *
                 </label>
                 <select
+                  id="reason-category"
                   value={reasonCategory}
                   onChange={(e) => setReasonCategory(e.target.value)}
                   className="input w-full"
                   disabled={working}
+                  aria-label="Reason category"
                 >
                   <option value="QUALITY_ISSUE">Quality Issue</option>
                   <option value="CHANGED_MIND">Changed My Mind</option>
@@ -262,11 +283,11 @@ const RefundModal = ({ isOpen, onClose, order, onRefundSubmitted }: RefundModalP
 
               <div className="space-y-3">
                 {/* Original Payment */}
-                <label className="flex items-start gap-3 p-4 border-2 border-gray-200 rounded-lg cursor-pointer hover:border-blue-500 transition-colors"
-                  style={{
-                    borderColor: refundMethod === 'ORIGINAL_PAYMENT' ? '#2563eb' : undefined,
-                    backgroundColor: refundMethod === 'ORIGINAL_PAYMENT' ? '#eff6ff' : undefined,
-                  }}
+                <label className={`flex items-start gap-3 p-4 border-2 rounded-lg cursor-pointer hover:border-blue-500 transition-colors ${
+                  refundMethod === 'ORIGINAL_PAYMENT' 
+                    ? 'border-blue-600 bg-blue-50' 
+                    : 'border-gray-200'
+                }`}
                 >
                   <input
                     type="radio"
@@ -286,11 +307,11 @@ const RefundModal = ({ isOpen, onClose, order, onRefundSubmitted }: RefundModalP
                 </label>
 
                 {/* Wallet */}
-                <label className="flex items-start gap-3 p-4 border-2 border-gray-200 rounded-lg cursor-pointer hover:border-blue-500 transition-colors"
-                  style={{
-                    borderColor: refundMethod === 'WALLET' ? '#2563eb' : undefined,
-                    backgroundColor: refundMethod === 'WALLET' ? '#eff6ff' : undefined,
-                  }}
+                <label className={`flex items-start gap-3 p-4 border-2 rounded-lg cursor-pointer hover:border-blue-500 transition-colors ${
+                  refundMethod === 'WALLET' 
+                    ? 'border-blue-600 bg-blue-50' 
+                    : 'border-gray-200'
+                }`}
                 >
                   <input
                     type="radio"
@@ -310,11 +331,11 @@ const RefundModal = ({ isOpen, onClose, order, onRefundSubmitted }: RefundModalP
                 </label>
 
                 {/* Bank Transfer */}
-                <label className="flex items-start gap-3 p-4 border-2 border-gray-200 rounded-lg cursor-pointer hover:border-blue-500 transition-colors"
-                  style={{
-                    borderColor: refundMethod === 'BANK_TRANSFER' ? '#2563eb' : undefined,
-                    backgroundColor: refundMethod === 'BANK_TRANSFER' ? '#eff6ff' : undefined,
-                  }}
+                <label className={`flex items-start gap-3 p-4 border-2 rounded-lg cursor-pointer hover:border-blue-500 transition-colors ${
+                  refundMethod === 'BANK_TRANSFER' 
+                    ? 'border-blue-600 bg-blue-50' 
+                    : 'border-gray-200'
+                }`}
                 >
                   <input
                     type="radio"
@@ -361,7 +382,7 @@ const RefundModal = ({ isOpen, onClose, order, onRefundSubmitted }: RefundModalP
                 <div className="flex items-center justify-between">
                   <span className="text-gray-700">Refund Amount:</span>
                   <span className="font-bold text-lg text-blue-600">
-                    ${parseFloat(refundAmount).toFixed(2)}
+                    ${(isNaN(parseFloat(refundAmount)) ? 0 : parseFloat(refundAmount)).toFixed(2)}
                   </span>
                 </div>
                 <div className="flex items-center justify-between">

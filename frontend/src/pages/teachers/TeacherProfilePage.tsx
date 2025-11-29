@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { Star, Users, Award, Calendar, BookOpen, AlertCircle, Globe, Briefcase, GraduationCap, CheckCircle } from 'lucide-react';
+import { Star, Users, Award, Calendar, BookOpen, AlertCircle, Globe, Briefcase, GraduationCap } from 'lucide-react';
 import teacherService from '@/services/teacher.service';
 import courseService from '@/services/course.service';
 import { TeacherProfile, Course } from '@/types';
@@ -24,12 +24,14 @@ const TeacherProfilePage = () => {
     if (id) {
       fetchTeacherData();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
   const fetchTeacherData = async () => {
+    if (!id) return;
     setIsLoading(true);
     try {
-      const teacherData = await teacherService.getTeacherById(id!);
+      const teacherData = await teacherService.getTeacherById(id);
       setTeacher(teacherData);
 
       // Fetch teacher's courses

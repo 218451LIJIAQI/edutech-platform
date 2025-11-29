@@ -1,6 +1,44 @@
 import prisma from '../config/database';
 import { NotFoundError, ValidationError } from '../utils/errors';
 import { SupportTicketStatus, SupportTicketPriority } from '@prisma/client';
+import type { SupportTicket, SupportTicketMessage } from '@prisma/client';
+
+// Type definitions for support tickets with relations
+type SupportTicketWithMessages = SupportTicket & {
+  messages: (SupportTicketMessage & {
+    sender: {
+      id: string;
+      email: string;
+      firstName: string;
+      lastName: string;
+    };
+  })[];
+  user: {
+    id: string;
+    email: string;
+    firstName: string;
+    lastName: string;
+  };
+};
+
+type SupportTicketWithUser = SupportTicket & {
+  messages: SupportTicketMessage[];
+  user: {
+    id: string;
+    email: string;
+    firstName: string;
+    lastName: string;
+  };
+};
+
+type SupportTicketMessageWithSender = SupportTicketMessage & {
+  sender: {
+    id: string;
+    email: string;
+    firstName: string;
+    lastName: string;
+  };
+};
 
 /**
  * Generate unique support ticket number
@@ -27,7 +65,10 @@ class SupportService {
     category: string,
     orderId?: string,
     priority: string = 'MEDIUM'
-  ) {
+  ): Promise<SupportTicketWithUser> {
+    if (!userId || !userId.trim()) {
+      throw new ValidationError('User ID is required');
+    }
     const trimmedSubject = (subject ?? '').trim();
     const trimmedDescription = (description ?? '').trim();
     const trimmedCategory = (category ?? '').trim();
@@ -43,8 +84,8 @@ class SupportService {
     const ticket = await prisma.supportTicket.create({
       data: {
         ticketNo: genTicketNo(),
-        userId,
-        orderId,
+        userId: userId.trim(),
+        orderId: orderId?.trim() || null,
         subject: trimmedSubject,
         description: trimmedDescription,
         category: trimmedCategory,
@@ -70,9 +111,12 @@ class SupportService {
   /**
    * Get all support tickets for a user
    */
-  async getUserTickets(userId: string) {
+  async getUserTickets(userId: string): Promise<SupportTicketWithMessages[]> {
+    if (!userId || !userId.trim()) {
+      throw new ValidationError('User ID is required');
+    }
     const tickets = await prisma.supportTicket.findMany({
-      where: { userId },
+      where: { userId: userId.trim() },
       include: {
         messages: {
           include: {
@@ -105,9 +149,15 @@ class SupportService {
   /**
    * Get support ticket by ID (scoped to current user)
    */
-  async getTicketById(userId: string, ticketId: string) {
+  async getTicketById(userId: string, ticketId: string): Promise<SupportTicketWithMessages> {
+    if (!userId || !userId.trim()) {
+      throw new ValidationError('User ID is required');
+    }
+    if (!ticketId || !ticketId.trim()) {
+      throw new ValidationError('Ticket ID is required');
+    }
     const ticket = await prisma.supportTicket.findFirst({
-      where: { id: ticketId, userId },
+      where: { id: ticketId.trim(), userId: userId.trim() },
       include: {
         messages: {
           include: {
@@ -141,9 +191,15 @@ class SupportService {
   /**
    * Add message to support ticket
    */
-  async addMessage(userId: string, ticketId: string, message: string, attachment?: string) {
+  async addMessage(userId: string, ticketId: string, message: string, attachment?: string): Promise<SupportTicketMessageWithSender> {
+    if (!userId || !userId.trim()) {
+      throw new ValidationError('User ID is required');
+    }
+    if (!ticketId || !ticketId.trim()) {
+      throw new ValidationError('Ticket ID is required');
+    }
     const ticket = await prisma.supportTicket.findFirst({
-      where: { id: ticketId, userId },
+      where: { id: ticketId.trim(), userId: userId.trim() },
     });
 
     if (!ticket) throw new NotFoundError('Support ticket not found');
@@ -154,8 +210,8 @@ class SupportService {
     // Create message (ticket updatedAt will be automatically updated by Prisma)
     const msg = await prisma.supportTicketMessage.create({
       data: {
-        ticketId,
-        senderId: userId,
+        ticketId: ticketId.trim(),
+        senderId: userId.trim(),
         message: trimmedMessage,
         attachment,
       },
@@ -177,9 +233,15 @@ class SupportService {
   /**
    * Close support ticket
    */
-  async closeTicket(userId: string, ticketId: string, resolution?: string) {
+  async closeTicket(userId: string, ticketId: string, resolution?: string): Promise<SupportTicketWithMessages> {
+    if (!userId || !userId.trim()) {
+      throw new ValidationError('User ID is required');
+    }
+    if (!ticketId || !ticketId.trim()) {
+      throw new ValidationError('Ticket ID is required');
+    }
     const ticket = await prisma.supportTicket.findFirst({
-      where: { id: ticketId, userId },
+      where: { id: ticketId.trim(), userId: userId.trim() },
     });
 
     if (!ticket) throw new NotFoundError('Support ticket not found');
@@ -187,7 +249,7 @@ class SupportService {
     const trimmedResolution = resolution?.trim();
 
     const updated = await prisma.supportTicket.update({
-      where: { id: ticketId },
+      where: { id: ticketId.trim() },
       data: {
         status: SupportTicketStatus.CLOSED,
         resolution: trimmedResolution,
@@ -206,6 +268,14 @@ class SupportService {
             },
           },
         },
+        user: {
+          select: {
+            id: true,
+            email: true,
+            firstName: true,
+            lastName: true,
+          },
+        },
       },
     });
 
@@ -215,11 +285,17 @@ class SupportService {
   /**
    * Get tickets for a specific order
    */
-  async getTicketsByOrderId(userId: string, orderId: string) {
+  async getTicketsByOrderId(userId: string, orderId: string): Promise<SupportTicketWithMessages[]> {
+    if (!userId || !userId.trim()) {
+      throw new ValidationError('User ID is required');
+    }
+    if (!orderId || !orderId.trim()) {
+      throw new ValidationError('Order ID is required');
+    }
     const tickets = await prisma.supportTicket.findMany({
       where: {
-        userId,
-        orderId,
+        userId: userId.trim(),
+        orderId: orderId.trim(),
       },
       include: {
         messages: {
@@ -235,6 +311,14 @@ class SupportService {
           },
           orderBy: { createdAt: 'asc' },
         },
+        user: {
+          select: {
+            id: true,
+            email: true,
+            firstName: true,
+            lastName: true,
+          },
+        },
       },
       orderBy: { createdAt: 'desc' },
     });
@@ -245,9 +329,18 @@ class SupportService {
   /**
    * Get support statistics for the current user
    */
-  async getStats(userId: string) {
+  async getStats(userId: string): Promise<{
+    totalConversations: number;
+    activeConversations: number;
+    resolvedConversations: number;
+    averageResponseTime: number;
+    satisfactionRating: number;
+  }> {
+    if (!userId || !userId.trim()) {
+      throw new ValidationError('User ID is required');
+    }
     const tickets = await prisma.supportTicket.findMany({
-      where: { userId },
+      where: { userId: userId.trim() },
       include: {
         messages: {
           orderBy: { createdAt: 'asc' },

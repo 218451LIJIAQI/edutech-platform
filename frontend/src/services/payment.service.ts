@@ -29,7 +29,10 @@ export const paymentService = {
         amount: number;
       };
     }>>('/payments/cart/create-intent');
-    return response.data.data!;
+    if (!response.data.data) {
+      throw new Error('Failed to create cart payment intent');
+    }
+    return response.data.data;
   },
 
   createPaymentIntent: async (packageId: string): Promise<{
@@ -52,7 +55,10 @@ export const paymentService = {
     }>>('/payments/create-intent', {
       packageId,
     });
-    return response.data.data!;
+    if (!response.data.data) {
+      throw new Error('Failed to create payment intent');
+    }
+    return response.data.data;
   },
 
   /**
@@ -66,7 +72,10 @@ export const paymentService = {
       paymentId,
       stripePaymentId,
     });
-    return response.data.data!;
+    if (!response.data.data) {
+      throw new Error('Failed to confirm payment');
+    }
+    return response.data.data;
   },
 
   /**
@@ -74,7 +83,10 @@ export const paymentService = {
    */
   getMyPayments: async (): Promise<Payment[]> => {
     const response = await api.get<ApiResponse<Payment[]>>('/payments/my-payments');
-    return response.data.data!;
+    if (!response.data.data) {
+      throw new Error('Failed to get payment history');
+    }
+    return response.data.data;
   },
 
   /**
@@ -82,7 +94,10 @@ export const paymentService = {
    */
   getPaymentById: async (id: string): Promise<Payment> => {
     const response = await api.get<ApiResponse<Payment>>(`/payments/${id}`);
-    return response.data.data!;
+    if (!response.data.data) {
+      throw new Error('Failed to get payment details');
+    }
+    return response.data.data;
   },
 
   /**
@@ -96,7 +111,10 @@ export const paymentService = {
       totalEarnings: number;
       payments: PaymentWithDetails[];
     }>>('/payments/teacher/earnings');
-    return response.data.data!;
+    if (!response.data.data) {
+      throw new Error('Failed to get teacher earnings');
+    }
+    return response.data.data;
   },
 
   /**
@@ -128,9 +146,11 @@ export const paymentService = {
       }>;
       recentPayments: PaymentWithDetails[];
     }>>('/payments/teacher/earnings-by-course');
-    return response.data.data!;
+    if (!response.data.data) {
+      throw new Error('Failed to get teacher earnings by course');
+    }
+    return response.data.data;
   },
 };
 
 export default paymentService;
-

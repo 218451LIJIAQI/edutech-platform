@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Users, Mail, Calendar, TrendingUp, Download, ArrowLeft, Search } from 'lucide-react';
 import { Enrollment, Course, User } from '@/types';
@@ -30,30 +30,22 @@ const StudentsPage = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
 
-  useEffect(() => {
-    fetchTeacherCourses();
-  }, []);
-
-  useEffect(() => {
-    if (selectedCourse) {
-      fetchCourseStudents();
-      fetchCourseStats();
-    }
-  }, [selectedCourse]);
-
-  const fetchTeacherCourses = async () => {
+  const fetchTeacherCourses = useCallback(async () => {
     setIsLoading(true);
     try {
       // Fetch teacher's courses
       const response = await courseService.getAllCourses();
-      setCourses(response.items || response.courses || []);
+      const coursesList = Array.isArray(response) 
+        ? response 
+        : (response.items || response.courses || []);
+      setCourses(coursesList);
 
       // Select first course or course from URL
       if (courseId) {
-        const course = response.courses?.find((c: Course) => c.id === courseId);
+        const course = coursesList.find((c: Course) => c.id === courseId);
         if (course) setSelectedCourse(course);
-      } else if (response.courses && response.courses.length > 0) {
-        setSelectedCourse(response.courses[0]);
+      } else if (coursesList.length > 0) {
+        setSelectedCourse(coursesList[0]);
       }
     } catch (error) {
       console.error('Failed to fetch courses:', error);
@@ -61,9 +53,9 @@ const StudentsPage = () => {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [courseId]);
 
-  const fetchCourseStudents = async () => {
+  const fetchCourseStudents = useCallback(async () => {
     if (!selectedCourse) return;
 
     try {
@@ -73,9 +65,9 @@ const StudentsPage = () => {
       console.error('Failed to fetch students:', error);
       toast.error('Failed to load students');
     }
-  };
+  }, [selectedCourse]);
 
-  const fetchCourseStats = async () => {
+  const fetchCourseStats = useCallback(async () => {
     if (!selectedCourse) return;
 
     try {
@@ -84,9 +76,21 @@ const StudentsPage = () => {
     } catch (error) {
       console.error('Failed to fetch stats:', error);
     }
-  };
+  }, [selectedCourse]);
 
-  const filteredStudents = students.filter((enrollment) => {
+  useEffect(() => {
+    fetchTeacherCourses();
+  }, [fetchTeacherCourses]);
+
+  useEffect(() => {
+    if (selectedCourse) {
+      fetchCourseStudents();
+      fetchCourseStats();
+    }
+  }, [selectedCourse, fetchCourseStudents, fetchCourseStats]);
+
+  const filteredStudents = useMemo(() => {
+    return students.filter((enrollment) => {
     const student = enrollment.user;
     if (!student) return false;
 
@@ -95,27 +99,45 @@ const StudentsPage = () => {
     const query = searchQuery.toLowerCase();
 
     return fullName.includes(query) || email.includes(query);
-  });
+    });
+  }, [students, searchQuery]);
 
-  const exportToCSV = () => {
+  const exportToCSV = useCallback(() => {
+    if (!selectedCourse) {
+      toast.error('Please select a course first');
+      return;
+    }
+
+    // Helper function to escape CSV values
+    const escapeCSV = (value: string | number): string => {
+      const str = String(value);
+      if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+        return `"${str.replace(/"/g, '""')}"`;
+      }
+      return str;
+    };
+
     const headers = ['Name', 'Email', 'Enrolled Date', 'Progress', 'Completed Lessons'];
     const rows = filteredStudents.map((enrollment) => [
-      `${enrollment.user?.firstName} ${enrollment.user?.lastName}`,
-      enrollment.user?.email || '',
-      new Date(enrollment.enrolledAt).toLocaleDateString(),
-      `${enrollment.progress}%`,
-      enrollment.completedLessons,
+      escapeCSV(`${enrollment.user?.firstName || ''} ${enrollment.user?.lastName || ''}`.trim()),
+      escapeCSV(enrollment.user?.email || ''),
+      escapeCSV(new Date(enrollment.enrolledAt).toLocaleDateString()),
+      escapeCSV(`${enrollment.progress}%`),
+      escapeCSV(enrollment.completedLessons),
     ]);
 
-    const csv = [headers, ...rows].map((row) => row.join(',')).join('\n');
-    const blob = new Blob([csv], { type: 'text/csv' });
+    const csv = [headers.map(escapeCSV), ...rows].map((row) => row.join(',')).join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `students-${selectedCourse?.title || 'export'}.csv`;
+    a.download = `students-${selectedCourse.title.replace(/[^a-z0-9]/gi, '_') || 'export'}.csv`;
+    document.body.appendChild(a);
     a.click();
+    document.body.removeChild(a);
+    window.URL.revokeObjectURL(url);
     toast.success('Student list exported!');
-  };
+  }, [filteredStudents, selectedCourse]);
 
   if (isLoading) {
     return (

@@ -139,16 +139,18 @@
   .transition-smooth {
     @apply transition-all duration-300 ease-in-out;
   }
-
-  /* Backdrop blur */
-  .backdrop-blur-sm {
-    backdrop-filter: blur(4px);
-  }
 }
 
 @layer utilities {
+  /* Text balance with fallback support */
   .text-balance {
     text-wrap: balance;
+  }
+  
+  @supports not (text-wrap: balance) {
+    .text-balance {
+      text-align: left;
+    }
   }
 
   /* Animations */
@@ -195,7 +197,7 @@
     animation: pulse-glow 2s infinite;
   }
 
-  /* Utility classes */
+  /* Shadow utility classes */
   .shadow-soft {
     box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
   }
@@ -208,8 +210,10 @@
     box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
   }
 
+  /* Glass morphism effect */
   .glass-effect {
     background: rgba(255, 255, 255, 0.7);
+    -webkit-backdrop-filter: blur(10px);
     backdrop-filter: blur(10px);
     border: 1px solid rgba(255, 255, 255, 0.2);
   }

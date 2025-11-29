@@ -43,9 +43,12 @@ const ProfilePage = () => {
   // Ensure we have full profile (including createdAt) after login or profile edits
   useEffect(() => {
     if (user && !user.createdAt) {
-      fetchProfile().catch(() => {});
+      fetchProfile().catch((error) => {
+        console.error('Failed to fetch profile:', error);
+      });
     }
-  }, [user, fetchProfile]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData({
@@ -418,8 +421,8 @@ const ProfilePage = () => {
                   setCurrentPassword('');
                   setNewPassword('');
                   setConfirmPassword('');
-                } catch (err: any) {
-                  const msg = err?.response?.data?.message || 'Failed to change password';
+                } catch (err: unknown) {
+                  const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message || 'Failed to change password';
                   toast.error(msg);
                 } finally {
                   setIsChangingPwd(false);

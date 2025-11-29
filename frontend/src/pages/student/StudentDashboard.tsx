@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { BookOpen, Clock, Award, TrendingUp, ArrowRight } from 'lucide-react';
 import { Enrollment } from '@/types';
@@ -12,44 +12,49 @@ import toast from 'react-hot-toast';
 const StudentDashboard = () => {
   const [enrollments, setEnrollments] = useState<Enrollment[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [stats, setStats] = useState({
-    totalCourses: 0,
-    averageProgress: 0,
-    completedCourses: 0,
-    hoursLearned: 0,
-  });
+  const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    fetchDashboardData();
-  }, []);
+  const stats = useMemo(() => {
+    const total = enrollments.length;
+    const avgProgress =
+      total > 0
+        ? enrollments.reduce((sum: number, e: Enrollment) => sum + e.progress, 0) / total
+        : 0;
+    const completed = enrollments.filter((e: Enrollment) => e.progress === 100).length;
+    
+    // Calculate estimated hours based on completed lessons
+    const estimatedHours = enrollments.reduce((sum: number, e: Enrollment) => {
+      // Estimate 1 hour per completed lesson
+      return sum + e.completedLessons;
+    }, 0);
 
-  const fetchDashboardData = async () => {
+    return {
+      totalCourses: total,
+      averageProgress: Math.round(avgProgress),
+      completedCourses: completed,
+      hoursLearned: estimatedHours,
+    };
+  }, [enrollments]);
+
+  const fetchDashboardData = useCallback(async () => {
     setIsLoading(true);
+    setError(null);
     try {
       const enrollmentsData = await enrollmentService.getMyCourses();
       setEnrollments(enrollmentsData);
-
-      // Calculate stats
-      const total = enrollmentsData.length;
-      const avgProgress =
-        total > 0
-          ? enrollmentsData.reduce((sum: number, e: Enrollment) => sum + e.progress, 0) / total
-          : 0;
-      const completed = enrollmentsData.filter((e: Enrollment) => e.progress === 100).length;
-
-      setStats({
-        totalCourses: total,
-        averageProgress: Math.round(avgProgress),
-        completedCourses: completed,
-        hoursLearned: total * 10, // Estimated
-      });
-    } catch (error) {
-      console.error('Failed to fetch dashboard data:', error);
-      toast.error('Failed to load dashboard data');
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to load dashboard data';
+      console.error('Failed to fetch dashboard data:', err);
+      setError(errorMessage);
+      toast.error(errorMessage);
     } finally {
       setIsLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    fetchDashboardData();
+  }, [fetchDashboardData]);
 
   if (isLoading) {
     return (
@@ -64,153 +69,172 @@ const StudentDashboard = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 via-blue-50 to-indigo-50">
-    <div className="container mx-auto px-4 py-8">
-      {/* Header */}
+      <div className="container mx-auto px-4 py-8">
+        {/* Header */}
         <div className="mb-12">
           <h1 className="section-title">My Learning Dashboard</h1>
           <p className="section-subtitle">Track your progress and continue learning</p>
-      </div>
+        </div>
 
-      {/* Stats Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-        {/* Total Courses */}
+        {/* Error State */}
+        {error && (
+          <div className="card p-6 mb-8 bg-red-50 border border-red-200 rounded-2xl">
+            <div className="flex items-center gap-3">
+              <span className="text-2xl">⚠️</span>
+              <div>
+                <h3 className="font-bold text-red-900 mb-1">Error loading dashboard</h3>
+                <p className="text-red-700 text-sm">{error}</p>
+                <button
+                  onClick={fetchDashboardData}
+                  className="mt-3 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors text-sm font-semibold"
+                >
+                  Retry
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Stats Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+          {/* Total Courses */}
           <div className="card bg-gradient-to-br from-blue-500 via-blue-600 to-blue-700 text-white shadow-xl hover:shadow-2xl transition-all duration-300 transform hover:scale-105 border border-blue-400/30">
             <div className="flex items-center justify-between mb-4">
               <div className="p-4 bg-white bg-opacity-20 rounded-xl">
                 <BookOpen className="w-7 h-7" />
               </div>
-          </div>
+            </div>
             <p className="text-blue-100 text-sm font-bold mb-3 uppercase tracking-wide">Enrolled Courses</p>
             <span className="text-5xl font-bold">{stats.totalCourses}</span>
-        </div>
+          </div>
 
-        {/* Average Progress */}
+          {/* Average Progress */}
           <div className="card bg-gradient-to-br from-green-500 via-green-600 to-green-700 text-white shadow-xl hover:shadow-2xl transition-all duration-300 transform hover:scale-105 border border-green-400/30">
             <div className="flex items-center justify-between mb-4">
               <div className="p-4 bg-white bg-opacity-20 rounded-xl">
                 <TrendingUp className="w-7 h-7" />
               </div>
-          </div>
+            </div>
             <p className="text-green-100 text-sm font-bold mb-3 uppercase tracking-wide">Average Progress</p>
             <span className="text-5xl font-bold">{stats.averageProgress}%</span>
-        </div>
+          </div>
 
-        {/* Completed */}
+          {/* Completed */}
           <div className="card bg-gradient-to-br from-purple-500 via-purple-600 to-purple-700 text-white shadow-xl hover:shadow-2xl transition-all duration-300 transform hover:scale-105 border border-purple-400/30">
             <div className="flex items-center justify-between mb-4">
               <div className="p-4 bg-white bg-opacity-20 rounded-xl">
                 <Award className="w-7 h-7" />
               </div>
-          </div>
+            </div>
             <p className="text-purple-100 text-sm font-bold mb-3 uppercase tracking-wide">Completed</p>
             <span className="text-5xl font-bold">{stats.completedCourses}</span>
-        </div>
+          </div>
 
-        {/* Hours Learned */}
+          {/* Hours Learned */}
           <div className="card bg-gradient-to-br from-orange-500 via-orange-600 to-orange-700 text-white shadow-xl hover:shadow-2xl transition-all duration-300 transform hover:scale-105 border border-orange-400/30">
             <div className="flex items-center justify-between mb-4">
               <div className="p-4 bg-white bg-opacity-20 rounded-xl">
                 <Clock className="w-7 h-7" />
               </div>
-          </div>
+            </div>
             <p className="text-orange-100 text-sm font-bold mb-3 uppercase tracking-wide">Hours Learned</p>
             <span className="text-5xl font-bold">{stats.hoursLearned}</span>
+          </div>
         </div>
-      </div>
 
-      {/* Continue Learning */}
+        {/* Continue Learning */}
         <div className="mb-12">
           <div className="flex items-center justify-between mb-6">
             <h2 className="text-2xl font-bold text-gray-900">Continue Learning</h2>
             <Link to="/student/courses" className="text-primary-600 hover:text-primary-700 font-semibold flex items-center space-x-1">
-            <span>View All</span>
-            <ArrowRight className="w-4 h-4" />
-          </Link>
-        </div>
+              <span>View All</span>
+              <ArrowRight className="w-4 h-4" />
+            </Link>
+          </div>
 
-        {enrollments.length > 0 ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {enrollments.slice(0, 3).map((enrollment) => {
-              const course = enrollment.package?.course;
-              if (!course) return null;
+          {enrollments.length > 0 ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {enrollments.slice(0, 3).map((enrollment) => {
+                const course = enrollment.package?.course;
+                if (!course) return null;
 
-              return (
-                <Link
-                  key={enrollment.id}
-                  to={`/courses/${course.id}`}
-                  className="card-hover flex flex-col"
-                >
-                  {/* Course Info */}
+                return (
+                  <Link
+                    key={enrollment.id}
+                    to={`/courses/${course.id}`}
+                    className="card-hover flex flex-col"
+                  >
+                    {/* Course Info */}
                     <div className="mb-5">
                       <h3 className="font-bold text-lg text-gray-900 mb-2">{course.title}</h3>
-                    <p className="text-sm text-gray-600 line-clamp-2">
-                      {course.description}
-                    </p>
-                  </div>
+                      <p className="text-sm text-gray-600 line-clamp-2">
+                        {course.description}
+                      </p>
+                    </div>
 
-                  {/* Progress Bar */}
+                    {/* Progress Bar */}
                     <div className="mb-4">
                       <div className="flex items-center justify-between text-sm mb-2">
                         <span className="text-gray-600 font-medium">Progress</span>
                         <span className="font-bold text-primary-600">
-                        {enrollment.progress}%
-                      </span>
-                    </div>
+                          {enrollment.progress}%
+                        </span>
+                      </div>
                       <div className="w-full bg-gray-300 rounded-full h-3">
-                      <div
+                        <div
                           className="bg-gradient-to-r from-primary-600 to-primary-700 h-3 rounded-full transition-all duration-500"
-                        style={{ width: `${enrollment.progress}%` }}
-                      ></div>
+                          style={{ width: `${enrollment.progress}%` }}
+                        ></div>
+                      </div>
                     </div>
-                  </div>
 
-                  {/* Lessons Completed */}
+                    {/* Lessons Completed */}
                     <div className="text-sm text-gray-600 font-medium mb-4">
                       📚 {enrollment.completedLessons} lessons completed
-                  </div>
+                    </div>
 
-                  {/* Continue Button - Pushed to bottom */}
+                    {/* Continue Button - Pushed to bottom */}
                     <button className="btn-primary w-full mt-auto">
-                    Continue Learning
-                  </button>
-                </Link>
-              );
-            })}
-          </div>
-        ) : (
+                      Continue Learning
+                    </button>
+                  </Link>
+                );
+              })}
+            </div>
+          ) : (
             <div className="card text-center py-16 shadow-lg">
-            <BookOpen className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+              <BookOpen className="w-16 h-16 text-gray-300 mx-auto mb-4" />
               <h3 className="text-2xl font-bold text-gray-900 mb-2">No courses yet</h3>
               <p className="text-gray-600 mb-6">
-              Start your learning journey by enrolling in a course
-            </p>
-            <Link to="/courses" className="btn-primary inline-block">
-              Browse Courses
-            </Link>
-          </div>
-        )}
-      </div>
+                Start your learning journey by enrolling in a course
+              </p>
+              <Link to="/courses" className="btn-primary inline-block">
+                Browse Courses
+              </Link>
+            </div>
+          )}
+        </div>
 
-      {/* Quick Actions */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {/* Quick Actions */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div className="card bg-gradient-to-br from-primary-50 to-primary-100 border-2 border-primary-200 shadow-lg">
             <h3 className="text-xl font-bold text-gray-900 mb-3">Explore New Courses</h3>
             <p className="text-gray-700 mb-6">
-            Discover courses from expert teachers in various subjects
-          </p>
-          <Link to="/courses" className="btn-primary">
-            Browse Courses
-          </Link>
-        </div>
+              Discover courses from expert teachers in various subjects
+            </p>
+            <Link to="/courses" className="btn-primary">
+              Browse Courses
+            </Link>
+          </div>
 
           <div className="card bg-gradient-to-br from-green-50 to-green-100 border-2 border-green-200 shadow-lg">
             <h3 className="text-xl font-bold text-gray-900 mb-3">Find Teachers</h3>
             <p className="text-gray-700 mb-6">
-            Connect with verified teachers and learn from the best
-          </p>
+              Connect with verified teachers and learn from the best
+            </p>
             <Link to="/teachers" className="btn-primary">
-            View Teachers
-          </Link>
+              View Teachers
+            </Link>
           </div>
         </div>
       </div>

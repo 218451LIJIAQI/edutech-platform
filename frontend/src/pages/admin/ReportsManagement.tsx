@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { Report } from '@/types';
 import adminService from '@/services/admin.service';
 import { AlertCircle } from 'lucide-react';
@@ -8,32 +8,45 @@ const ReportsManagement = () => {
   const [reports, setReports] = useState<Report[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  useEffect(() => {
-    fetchReports();
+  /**
+   * Extract error message from error object
+   */
+  const getErrorMessage = useCallback((e: unknown): string | undefined => {
+    if (e instanceof Error && 'response' in e) {
+      return (e as { response?: { data?: { message?: string } } }).response?.data?.message;
+    }
+    return undefined;
   }, []);
 
-  const fetchReports = async () => {
+  const fetchReports = useCallback(async () => {
     setIsLoading(true);
     try {
       const data = await adminService.getAllReports();
       setReports(data.items || data.reports || []);
     } catch (error) {
-      console.error(error);
-      toast.error('Failed to load reports');
+      console.error('Error fetching reports:', error);
+      const message = getErrorMessage(error);
+      toast.error(message || 'Failed to load reports');
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [getErrorMessage]);
 
-  const handleUpdateStatus = async (id: string, status: string) => {
+  useEffect(() => {
+    fetchReports();
+  }, [fetchReports]);
+
+  const handleUpdateStatus = useCallback(async (id: string, status: string) => {
     try {
       await adminService.updateReportStatus(id, status, 'Resolved by admin');
       toast.success('Report updated');
-      fetchReports();
+      await fetchReports();
     } catch (error) {
-      toast.error('Failed to update report');
+      console.error('Error updating report status:', error);
+      const message = getErrorMessage(error);
+      toast.error(message || 'Failed to update report');
     }
-  };
+  }, [fetchReports, getErrorMessage]);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 via-blue-50 to-indigo-50">

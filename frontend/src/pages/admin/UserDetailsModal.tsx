@@ -1,5 +1,6 @@
 import { User } from '@/types';
 import { X, Mail, Phone, MapPin, Briefcase, Calendar, Award, Users } from 'lucide-react';
+import { useMemo } from 'react';
 
 interface UserDetailsModalProps {
   isOpen: boolean;
@@ -14,25 +15,57 @@ interface UserDetailsModalProps {
 const UserDetailsModal = ({ isOpen, user, onClose }: UserDetailsModalProps) => {
   if (!isOpen || !user) return null;
 
-  const formatDate = (date: string | Date) => {
-    return new Date(date).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    });
+  const formatDate = (date: string | Date): string => {
+    try {
+      const dateObj = new Date(date);
+      if (isNaN(dateObj.getTime())) {
+        return 'Invalid Date';
+      }
+      return dateObj.toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+      });
+    } catch (error) {
+      return 'Invalid Date';
+    }
+  };
+
+  const avatarUrl = useMemo(() => {
+    if (user.avatar) return user.avatar;
+    const name = `${user.firstName}+${user.lastName}`;
+    return `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}`;
+  }, [user.avatar, user.firstName, user.lastName]);
+
+  const handleImageError = (e: React.SyntheticEvent<HTMLImageElement, Event>) => {
+    const target = e.currentTarget;
+    const name = `${user.firstName}+${user.lastName}`;
+    target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}`;
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+    <div 
+      className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) {
+          onClose();
+        }
+      }}
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="user-details-title"
+    >
       <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b sticky top-0 bg-white">
-          <h2 className="text-2xl font-bold text-gray-900">User Details</h2>
+          <h2 id="user-details-title" className="text-2xl font-bold text-gray-900">User Details</h2>
           <button
             onClick={onClose}
-            className="text-gray-500 hover:text-gray-700"
+            className="text-gray-500 hover:text-gray-700 transition-colors"
+            aria-label="Close user details modal"
+            type="button"
           >
             <X className="w-6 h-6" />
           </button>
@@ -43,29 +76,30 @@ const UserDetailsModal = ({ isOpen, user, onClose }: UserDetailsModalProps) => {
           {/* User Header */}
           <div className="flex items-center gap-4">
             <img
-              src={user.avatar || `https://ui-avatars.com/api/?name=${user.firstName}+${user.lastName}`}
+              src={avatarUrl}
               alt={`${user.firstName} ${user.lastName}`}
-              className="w-20 h-20 rounded-full shadow-md"
+              className="w-20 h-20 rounded-full shadow-md object-cover"
+              onError={handleImageError}
             />
             <div>
               <h3 className="text-2xl font-bold text-gray-900">
                 {user.firstName} {user.lastName}
               </h3>
-              <div className="flex items-center gap-2 mt-1">
-                <span className={`badge ${
+              <div className="flex items-center gap-2 mt-1 flex-wrap">
+                <span className={`px-2 py-1 rounded-full text-xs font-medium ${
                   user.role === 'ADMIN' ? 'bg-red-100 text-red-800' :
                   user.role === 'TEACHER' ? 'bg-blue-100 text-blue-800' :
                   'bg-green-100 text-green-800'
                 }`}>
                   {user.role}
                 </span>
-                <span className={`badge ${
+                <span className={`px-2 py-1 rounded-full text-xs font-medium ${
                   user.isActive ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
                 }`}>
                   {user.isActive ? 'Active' : 'Inactive'}
                 </span>
                 {user.isLocked && (
-                  <span className="badge bg-red-100 text-red-800">Locked</span>
+                  <span className="px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800">Locked</span>
                 )}
               </div>
             </div>
@@ -160,7 +194,9 @@ const UserDetailsModal = ({ isOpen, user, onClose }: UserDetailsModalProps) => {
                   <div>
                     <p className="text-sm text-gray-600">Average Rating</p>
                     <p className="font-medium text-gray-900">
-                      ⭐ {user.teacherProfile.averageRating.toFixed(1)}/5
+                      ⭐ {typeof user.teacherProfile.averageRating === 'number' && !isNaN(user.teacherProfile.averageRating) 
+                        ? user.teacherProfile.averageRating.toFixed(1) 
+                        : '0.0'}/5
                     </p>
                   </div>
                 </div>
@@ -177,7 +213,7 @@ const UserDetailsModal = ({ isOpen, user, onClose }: UserDetailsModalProps) => {
                 <div>
                   <p className="text-sm text-gray-600">Total Earnings</p>
                   <p className="font-medium text-gray-900">
-                    ${user.teacherProfile.totalEarnings?.toFixed(2) || '0.00'}
+                    ${(user.teacherProfile.totalEarnings ?? 0).toFixed(2)}
                   </p>
                 </div>
               </div>
@@ -191,7 +227,9 @@ const UserDetailsModal = ({ isOpen, user, onClose }: UserDetailsModalProps) => {
               <div className="mt-4">
                 <p className="text-sm text-gray-600">Enrolled Courses</p>
                 <p className="font-medium text-gray-900 mt-1">
-                  {(user as any)._count?.enrollments || 0} course(s)
+                  {('_count' in user && typeof (user as any)._count === 'object' && (user as any)._count?.enrollments) 
+                    ? (user as any)._count.enrollments 
+                    : 0} course(s)
                 </p>
               </div>
             </div>
@@ -202,6 +240,7 @@ const UserDetailsModal = ({ isOpen, user, onClose }: UserDetailsModalProps) => {
             <button
               onClick={onClose}
               className="w-full px-4 py-2 bg-gray-100 text-gray-900 rounded-lg font-medium hover:bg-gray-200 transition-colors"
+              type="button"
             >
               Close
             </button>

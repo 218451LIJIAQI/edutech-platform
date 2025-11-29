@@ -1,5 +1,4 @@
-import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useEffect, useState, useCallback } from 'react';
 import { AlertCircle, CheckCircle, Clock } from 'lucide-react';
 import teacherService from '@/services/teacher.service';
 import TeacherProfileCompletionForm from '@/components/teacher/TeacherProfileCompletionForm';
@@ -10,20 +9,15 @@ import { TeacherProfile } from '@/types';
  * Allows teachers to complete and submit their extended profile for verification
  */
 const ProfileCompletionPage = () => {
-  const navigate = useNavigate();
   const [profile, setProfile] = useState<TeacherProfile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [successMessage, setSuccessMessage] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
 
-  useEffect(() => {
-    fetchProfile();
-  }, []);
-
   /**
    * Fetch teacher's extended profile
    */
-  const fetchProfile = async () => {
+  const fetchProfile = useCallback(async () => {
     setIsLoading(true);
     try {
       const data = await teacherService.getExtendedProfile();
@@ -34,25 +28,29 @@ const ProfileCompletionPage = () => {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    fetchProfile();
+  }, [fetchProfile]);
 
   /**
    * Handle successful profile submission
    */
-  const handleSuccess = (updatedProfile: TeacherProfile) => {
+  const handleSuccess = useCallback((updatedProfile: TeacherProfile) => {
     setProfile(updatedProfile);
-    const isApproved = profile?.profileCompletionStatus === 'APPROVED';
+    const isApproved = updatedProfile.profileCompletionStatus === 'APPROVED';
     setSuccessMessage(
       isApproved 
         ? 'Profile updated successfully! Your changes will be reviewed by our admin team.'
         : 'Profile submitted successfully! It will be reviewed by our admin team.'
     );
     setErrorMessage('');
-    // Refresh profile data
+    // Refresh profile data after a short delay to ensure backend has processed
     setTimeout(() => {
       fetchProfile();
     }, 1000);
-  };
+  }, [fetchProfile]);
 
   /**
    * Handle submission error
@@ -180,7 +178,7 @@ const ProfileCompletionPage = () => {
         <TeacherProfileCompletionForm
           onSuccess={handleSuccess}
           onError={handleError}
-          initialData={profile}
+          initialData={profile ?? undefined}
           isEditingApproved={profile?.profileCompletionStatus === 'APPROVED'}
         />
 

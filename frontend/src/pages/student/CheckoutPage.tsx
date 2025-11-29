@@ -55,11 +55,10 @@ const CheckoutForm = ({
       const loadingToast = toast.loading('Preparing payment...');
       const paymentIntent = await paymentService.createPaymentIntent(selectedPackage.id);
 
-      if (enableMockPayment || !paymentIntent.clientSecret) {
-        // Simulate processing animation and success
+      // Handle mock payment mode
+      if (enableMockPayment) {
         toast.loading('Processing payment...', { id: loadingToast });
         await new Promise((r) => setTimeout(r, 1200));
-        // Confirm payment on backend without Stripe payment id
         await paymentService.confirmPayment(paymentIntent.payment.id);
         toast.dismiss(loadingToast);
         toast.success('Payment successful!');
@@ -67,7 +66,7 @@ const CheckoutForm = ({
         return;
       }
 
-      // Real Stripe flow
+      // Real Stripe flow - validate client secret
       if (!paymentIntent.clientSecret) {
         toast.dismiss(loadingToast);
         toast.error('Payment system is not properly configured. Please contact support.');
@@ -115,13 +114,19 @@ const CheckoutForm = ({
       toast.success('Payment successful!');
       onSuccess();
     } catch (error) {
-      const message = error instanceof Error && 'response' in error 
-        ? (error as { response?: { data?: { message?: string } } }).response?.data?.message 
-        : error instanceof Error 
-        ? error.message 
-        : undefined;
+      let errorMessage = 'Payment failed. Please try again.';
+      
+      if (error instanceof Error) {
+        if ('response' in error) {
+          const apiError = error as { response?: { data?: { message?: string } } };
+          errorMessage = apiError.response?.data?.message || error.message || errorMessage;
+        } else {
+          errorMessage = error.message || errorMessage;
+        }
+      }
+      
       console.error('Payment failed:', error);
-      toast.error(message || 'Payment failed. Please try again.');
+      toast.error(errorMessage);
     } finally {
       setIsProcessing(false);
     }
@@ -254,13 +259,22 @@ const CheckoutPage = () => {
   const [paymentSuccess, setPaymentSuccess] = useState(false);
 
   useEffect(() => {
-    fetchCourseData();
-  }, [courseId, packageId]);
+    if (courseId && packageId) {
+      fetchCourseData();
+    } else {
+      toast.error('Missing course or package information');
+      navigate('/courses');
+    }
+  }, [courseId, packageId, navigate]);
 
   const fetchCourseData = async () => {
+    if (!courseId || !packageId) {
+      return;
+    }
+
     setIsLoading(true);
     try {
-      const courseData = await courseService.getCourseById(courseId!);
+      const courseData = await courseService.getCourseById(courseId);
       setCourse(courseData);
 
       const pkg = courseData.packages?.find((p) => p.id === packageId);
@@ -273,6 +287,7 @@ const CheckoutPage = () => {
     } catch (error) {
       console.error('Failed to fetch course:', error);
       toast.error('Failed to load course information');
+      navigate('/courses');
     } finally {
       setIsLoading(false);
     }

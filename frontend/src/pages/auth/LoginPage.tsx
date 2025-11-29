@@ -1,8 +1,8 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '@/store/authStore';
 import { UserRole } from '@/types';
-import { BookOpen } from 'lucide-react';
+import { BookOpen, AlertCircle } from 'lucide-react';
 
 /**
  * Login Page Component
@@ -16,37 +16,83 @@ const LoginPage = () => {
   const { login } = useAuthStore();
   const navigate = useNavigate();
 
+  // Clear error after 5 seconds
+  useEffect(() => {
+    if (error) {
+      const timer = setTimeout(() => setError(''), 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [error]);
+
+  const validateForm = (): boolean => {
+    if (!email.trim()) {
+      setError('Email is required');
+      return false;
+    }
+    
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      setError('Please enter a valid email address');
+      return false;
+    }
+    
+    if (!password) {
+      setError('Password is required');
+      return false;
+    }
+    
+    if (password.length < 6) {
+      setError('Password must be at least 6 characters');
+      return false;
+    }
+    
+    return true;
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+
+    if (!validateForm()) {
+      return;
+    }
+
     setIsLoading(true);
 
     try {
       await login({ email, password });
       
-      // Redirect based on user role
-      const userRole = useAuthStore.getState().user?.role;
+      // Get user role after login completes
+      const currentUser = useAuthStore.getState().user;
+      const userRole = currentUser?.role;
       
+      // Redirect based on user role
       switch (userRole) {
         case UserRole.ADMIN:
-          navigate('/admin');
+          navigate('/admin', { replace: true });
           break;
         case UserRole.TEACHER:
-          navigate('/teacher');
+          navigate('/teacher', { replace: true });
           break;
         case UserRole.STUDENT:
-          navigate('/student');
+          navigate('/student', { replace: true });
           break;
         default:
-          navigate('/');
+          navigate('/', { replace: true });
       }
     } catch (err) {
-      const message = err instanceof Error && 'response' in err 
-        ? (err as { response?: { data?: { message?: string } } }).response?.data?.message 
-        : err instanceof Error 
-        ? err.message 
-        : undefined;
-      setError(message || 'Login failed. Please try again.');
+      let errorMessage = 'Login failed. Please try again.';
+      
+      if (err instanceof Error) {
+        if ('response' in err) {
+          const responseError = err as { response?: { data?: { message?: string } } };
+          errorMessage = responseError.response?.data?.message || errorMessage;
+        } else {
+          errorMessage = err.message || errorMessage;
+        }
+      }
+      
+      setError(errorMessage);
     } finally {
       setIsLoading(false);
     }
@@ -72,9 +118,13 @@ const LoginPage = () => {
         <div className="card shadow-2xl hover:shadow-3xl transition-all duration-300 border border-white/50">
           <form onSubmit={handleSubmit} className="space-y-6">
             {error && (
-              <div className="bg-gradient-to-r from-red-50 to-red-100 border-l-4 border-red-600 text-red-700 px-4 py-4 rounded-xl shadow-sm">
+              <div 
+                className="bg-gradient-to-r from-red-50 to-red-100 border-l-4 border-red-600 text-red-700 px-4 py-4 rounded-xl shadow-sm"
+                role="alert"
+                aria-live="polite"
+              >
                 <p className="font-semibold text-sm flex items-center gap-2">
-                  <span className="text-lg">⚠️</span>
+                  <AlertCircle className="w-5 h-5 flex-shrink-0" aria-hidden="true" />
                   {error}
                 </p>
               </div>
@@ -82,42 +132,56 @@ const LoginPage = () => {
 
             <div>
               <label htmlFor="email" className="block text-sm font-bold text-gray-800 mb-3 uppercase tracking-wide">
-                Email Address
+                Email Address <span className="text-red-500">*</span>
               </label>
               <input
                 id="email"
                 type="email"
                 required
+                autoComplete="email"
                 className="input w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-primary-600 focus:ring-2 focus:ring-primary-200 transition-all duration-200 text-base"
                 placeholder="you@example.com"
                 value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                onChange={(e) => {
+                  setEmail(e.target.value);
+                  if (error) setError('');
+                }}
+                aria-invalid={!!error && !email.trim()}
+                aria-describedby={error && !email.trim() ? 'email-error' : undefined}
               />
             </div>
 
             <div>
               <label htmlFor="password" className="block text-sm font-bold text-gray-800 mb-3 uppercase tracking-wide">
-                Password
+                Password <span className="text-red-500">*</span>
               </label>
               <input
                 id="password"
                 type="password"
                 required
+                autoComplete="current-password"
+                minLength={6}
                 className="input w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-primary-600 focus:ring-2 focus:ring-primary-200 transition-all duration-200 text-base"
                 placeholder="••••••••"
                 value={password}
-                onChange={(e) => setPassword(e.target.value)}
+                onChange={(e) => {
+                  setPassword(e.target.value);
+                  if (error) setError('');
+                }}
+                aria-invalid={!!error && !password}
+                aria-describedby={error && !password ? 'password-error' : undefined}
               />
             </div>
 
             <button
               type="submit"
               disabled={isLoading}
-              className="btn-primary w-full py-4 text-base font-bold uppercase tracking-wide rounded-xl hover:shadow-lg transition-all duration-300 transform hover:scale-105 disabled:opacity-70 disabled:cursor-not-allowed"
+              className="btn-primary w-full py-4 text-base font-bold uppercase tracking-wide rounded-xl hover:shadow-lg transition-all duration-300 transform hover:scale-105 disabled:opacity-70 disabled:cursor-not-allowed disabled:transform-none"
+              aria-label={isLoading ? 'Signing in...' : 'Sign in'}
             >
               {isLoading ? (
                 <span className="flex items-center justify-center gap-2">
-                  <div className="spinner"></div>
+                  <div className="spinner" aria-hidden="true"></div>
                   Signing in...
                 </span>
               ) : (

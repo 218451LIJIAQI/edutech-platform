@@ -20,7 +20,10 @@ export const reviewService = {
       rating,
       comment,
     });
-    return response.data.data!;
+    if (!response.data.data) {
+      throw new Error('Failed to create review');
+    }
+    return response.data.data;
   },
 
   /**
@@ -35,7 +38,10 @@ export const reviewService = {
       rating,
       comment,
     });
-    return response.data.data!;
+    if (!response.data.data) {
+      throw new Error('Failed to update review');
+    }
+    return response.data.data;
   },
 
   /**
@@ -59,6 +65,9 @@ export const reviewService = {
         params: { page, limit },
       }
     );
+    if (!response.data.data) {
+      throw new Error('Failed to get teacher reviews');
+    }
     return response.data.data;
   },
 
@@ -67,9 +76,11 @@ export const reviewService = {
    */
   getMyReviews: async (): Promise<Review[]> => {
     const response = await api.get<ApiResponse<Review[]>>('/reviews/my-reviews');
-    return response.data.data!;
+    if (!response.data.data) {
+      throw new Error('Failed to get reviews');
+    }
+    return response.data.data;
   },
 };
 
 export default reviewService;
-

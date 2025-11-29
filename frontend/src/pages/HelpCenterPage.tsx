@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { Search, ChevronDown, ChevronUp, Mail, MessageCircle, Phone } from 'lucide-react';
 
 /**
@@ -7,6 +7,7 @@ import { Search, ChevronDown, ChevronUp, Mail, MessageCircle, Phone } from 'luci
  */
 
 interface FAQItem {
+  id: string;
   question: string;
   answer: string;
   category: string;
@@ -14,7 +15,7 @@ interface FAQItem {
 
 const HelpCenterPage = () => {
   const [searchQuery, setSearchQuery] = useState('');
-  const [expandedId, setExpandedId] = useState<number | null>(null);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
 
   const categories = [
@@ -28,82 +29,97 @@ const HelpCenterPage = () => {
 
   const faqs: FAQItem[] = [
     {
+      id: 'faq-1',
       category: 'getting-started',
       question: 'How do I create an account?',
       answer: 'Click on "Sign Up" in the top right corner, choose your role (Student or Teacher), fill in your information, and verify your email address.',
     },
     {
+      id: 'faq-2',
       category: 'getting-started',
       question: 'What are the different user roles?',
       answer: 'Edutech has three roles: Students (learn from courses), Teachers (create and teach courses), and Admins (manage the platform).',
     },
     {
+      id: 'faq-3',
       category: 'courses',
       question: 'How do I enroll in a course?',
       answer: 'Browse courses, select one you like, choose a pricing package, and complete the payment process. You will have immediate access after payment.',
     },
     {
+      id: 'faq-4',
       category: 'courses',
       question: 'Can I get a refund for a course?',
       answer: 'Refund policies vary by course. Please contact support@edutech.com with your enrollment details for refund requests.',
     },
     {
+      id: 'faq-5',
       category: 'courses',
       question: 'How long do I have access to a course?',
       answer: 'Access duration depends on the package you purchased. Some courses offer lifetime access, while others have time-limited access (30, 60, or 90 days).',
     },
     {
+      id: 'faq-6',
       category: 'payments',
       question: 'What payment methods do you accept?',
       answer: 'We accept all major credit cards (Visa, MasterCard, American Express) through our secure payment processor Stripe.',
     },
     {
+      id: 'faq-7',
       category: 'payments',
       question: 'Is my payment information secure?',
       answer: 'Yes, all payment information is processed securely through Stripe. We do not store your credit card information on our servers.',
     },
     {
+      id: 'faq-8',
       category: 'teachers',
       question: 'How do I become a teacher on Edutech?',
       answer: 'Register as a teacher, complete your profile, submit verification documents, and once approved, you can create and publish courses.',
     },
     {
+      id: 'faq-9',
       category: 'teachers',
       question: 'How do I get paid as a teacher?',
       answer: 'Teachers receive 90% of course revenue (platform takes 10% commission). Payments are processed monthly to your registered bank account.',
     },
     {
+      id: 'faq-10',
       category: 'teachers',
       question: 'Can I offer live classes?',
       answer: 'Yes! You can create LIVE lessons which support real-time video sessions with students. You can also offer RECORDED or HYBRID lessons.',
     },
     {
+      id: 'faq-11',
       category: 'technical',
       question: 'What browsers are supported?',
       answer: 'Edutech works best on the latest versions of Chrome, Firefox, Safari, and Edge. We recommend keeping your browser updated.',
     },
     {
+      id: 'faq-12',
       category: 'technical',
       question: 'I forgot my password. How do I reset it?',
       answer: 'Click "Forgot Password" on the login page, enter your email, and follow the instructions sent to your email to reset your password.',
     },
     {
+      id: 'faq-13',
       category: 'technical',
       question: 'The video player is not working. What should I do?',
       answer: 'Try clearing your browser cache, using a different browser, or checking your internet connection. If the issue persists, contact support.',
     },
   ];
 
-  const filteredFAQs = faqs.filter((faq) => {
-    const matchesCategory = selectedCategory === 'all' || faq.category === selectedCategory;
-    const matchesSearch = searchQuery === '' || 
-      faq.question.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      faq.answer.toLowerCase().includes(searchQuery.toLowerCase());
-    return matchesCategory && matchesSearch;
-  });
+  const filteredFAQs = useMemo(() => {
+    return faqs.filter((faq) => {
+      const matchesCategory = selectedCategory === 'all' || faq.category === selectedCategory;
+      const matchesSearch = searchQuery === '' || 
+        faq.question.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        faq.answer.toLowerCase().includes(searchQuery.toLowerCase());
+      return matchesCategory && matchesSearch;
+    });
+  }, [selectedCategory, searchQuery]);
 
-  const toggleFAQ = (index: number) => {
-    setExpandedId(expandedId === index ? null : index);
+  const toggleFAQ = (id: string) => {
+    setExpandedId(expandedId === id ? null : id);
   };
 
   return (
@@ -167,24 +183,30 @@ const HelpCenterPage = () => {
                 </div>
               ) : (
                 <div className="space-y-4">
-                  {filteredFAQs.map((faq, index) => (
+                  {filteredFAQs.map((faq) => (
                     <div
-                      key={index}
-                      className="border-2 border-gray-200 rounded-xl overflow-hidden hover:border-primary-400 hover:shadow-lg transition-all duration-300 transform hover:scale-102"
+                      key={faq.id}
+                      className="border-2 border-gray-200 rounded-xl overflow-hidden hover:border-primary-400 hover:shadow-lg transition-all duration-300 transform hover:scale-[1.02]"
                     >
                       <button
-                        onClick={() => toggleFAQ(index)}
+                        onClick={() => toggleFAQ(faq.id)}
                         className="w-full px-6 py-6 flex items-center justify-between hover:bg-gradient-to-r hover:from-primary-50 hover:to-primary-100 transition-all"
+                        aria-expanded={expandedId === faq.id}
+                        aria-controls={`faq-answer-${faq.id}`}
                       >
                         <span className="font-bold text-left text-gray-900 text-lg">{faq.question}</span>
-                        {expandedId === index ? (
-                          <ChevronUp className="w-6 h-6 text-primary-600 flex-shrink-0" />
+                        {expandedId === faq.id ? (
+                          <ChevronUp className="w-6 h-6 text-primary-600 flex-shrink-0" aria-hidden="true" />
                         ) : (
-                          <ChevronDown className="w-6 h-6 text-gray-500 flex-shrink-0" />
+                          <ChevronDown className="w-6 h-6 text-gray-500 flex-shrink-0" aria-hidden="true" />
                         )}
                       </button>
-                      {expandedId === index && (
-                        <div className="px-6 py-6 bg-gradient-to-r from-primary-50 to-primary-100 border-t-2 border-primary-200">
+                      {expandedId === faq.id && (
+                        <div 
+                          id={`faq-answer-${faq.id}`}
+                          className="px-6 py-6 bg-gradient-to-r from-primary-50 to-primary-100 border-t-2 border-primary-200"
+                          role="region"
+                        >
                           <p className="text-gray-700 leading-relaxed text-base">{faq.answer}</p>
                         </div>
                       )}

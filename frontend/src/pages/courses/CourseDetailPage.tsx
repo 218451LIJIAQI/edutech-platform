@@ -22,8 +22,14 @@ const CourseDetailPage = () => {
   const [isPurchasing, setIsPurchasing] = useState(false);
   const [isReportModalOpen, setIsReportModalOpen] = useState(false);
 
+  useEffect(() => {
+    if (id) {
+      fetchCourseById(id);
+    }
+  }, [id, fetchCourseById]);
+
   const handleOpenLesson = (_lessonId?: string) => {
-    if (!isEnrolled) {
+    if (!currentCourse?.isEnrolled) {
       toast.error('Please select a package to start learning');
       document.getElementById('packages-section')?.scrollIntoView({ behavior: 'smooth' });
       return;
@@ -31,12 +37,6 @@ const CourseDetailPage = () => {
     if (!id) return;
     navigate(`/courses/${id}/learn`);
   };
-
-  useEffect(() => {
-    if (id) {
-      fetchCourseById(id);
-    }
-  }, [id]);
 
   const handlePurchase = async () => {
     if (!isAuthenticated) {
@@ -155,7 +155,7 @@ const CourseDetailPage = () => {
             {/* Teacher Info */}
             <div className="flex items-center space-x-5 pt-6 border-t border-primary-400 border-opacity-30">
               <div className="w-16 h-16 bg-gradient-to-br from-white to-primary-100 rounded-full flex items-center justify-center text-primary-700 font-bold text-xl shadow-lg">
-                {teacher?.user?.firstName[0]}{teacher?.user?.lastName[0]}
+                {(teacher?.user?.firstName?.[0] || '')}{(teacher?.user?.lastName?.[0] || '')}
               </div>
               <div>
                 <p className="font-bold text-lg">
@@ -205,7 +205,7 @@ const CourseDetailPage = () => {
                     <div
                       key={lesson.id}
                       onClick={() => handleOpenLesson(lesson.id)}
-                      className={`flex items-center justify-between p-5 rounded-xl transition-all duration-300 ${isEnrolled ? 'bg-gradient-to-r from-gray-50 to-gray-100 hover:from-gray-100 hover:to-gray-150 cursor-pointer hover:shadow-md border border-gray-200' : 'bg-gradient-to-r from-gray-50 to-gray-100 border border-gray-200'}`}
+                      className={`flex items-center justify-between p-5 rounded-xl transition-all duration-300 ${isEnrolled ? 'bg-gradient-to-r from-gray-50 to-gray-100 hover:from-gray-100 hover:to-gray-200 cursor-pointer hover:shadow-md border border-gray-200' : 'bg-gradient-to-r from-gray-50 to-gray-100 border border-gray-200'}`}
                       role="button"
                       tabIndex={0}
                     >
@@ -227,9 +227,9 @@ const CourseDetailPage = () => {
                             <span className="font-medium">{formatDuration(lesson.duration)}</span>
                           </div>
                         )}
-                        <span className="badge-primary">{lesson.type}</span>
+                        <span className="px-3 py-1 bg-primary-100 text-primary-700 rounded-full text-xs font-semibold">{lesson.type}</span>
                         {lesson.isFree && (
-                          <span className="badge-success">Free Preview</span>
+                          <span className="px-3 py-1 bg-green-100 text-green-700 rounded-full text-xs font-semibold">Free Preview</span>
                         )}
                       </div>
                     </div>
@@ -307,7 +307,7 @@ const CourseDetailPage = () => {
                                 <span className="text-lg text-gray-400 line-through">
                                   {formatCurrency(pkg.price)}
                                 </span>
-                                <span className="badge-danger ml-2">-{pkg.discount}%</span>
+                                <span className="px-2 py-1 bg-red-100 text-red-700 rounded-full text-xs font-semibold ml-2">-{pkg.discount}%</span>
                               </>
                             ) : (
                               <span className="text-4xl font-bold text-primary-600">

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import ordersService from '@/services/orders.service';
 import { Order, Refund } from '@/types';
@@ -29,7 +29,7 @@ const OrderDetailPage = () => {
   /**
    * Load order and refund details
    */
-  const load = async () => {
+  const load = useCallback(async () => {
     if (!id) return;
     setLoading(true);
     try {
@@ -40,19 +40,26 @@ const OrderDetailPage = () => {
       setOrder(orderData);
       setRefund(refundData);
     } catch (e) {
-      const message =
-        e instanceof Error && 'response' in e
-        ? (e as { response?: { data?: { message?: string } } }).response?.data?.message 
-        : undefined;
-      toast.error(message || 'Failed to load order');
+      let errorMessage = 'Failed to load order';
+      
+      if (e instanceof Error) {
+        if ('response' in e) {
+          const apiError = e as { response?: { data?: { message?: string } } };
+          errorMessage = apiError.response?.data?.message || e.message || errorMessage;
+        } else {
+          errorMessage = e.message || errorMessage;
+        }
+      }
+      
+      toast.error(errorMessage);
     } finally {
       setLoading(false);
     }
-  };
+  }, [id]);
 
   useEffect(() => {
     load();
-  }, [id]);
+  }, [load]);
 
   /**
    * Handle cancel order
@@ -67,11 +74,18 @@ const OrderDetailPage = () => {
       setOrder(updated);
       setCancelReason('');
     } catch (e) {
-      const message =
-        e instanceof Error && 'response' in e
-        ? (e as { response?: { data?: { message?: string } } }).response?.data?.message 
-        : undefined;
-      toast.error(message || 'Failed to cancel order');
+      let errorMessage = 'Failed to cancel order';
+      
+      if (e instanceof Error) {
+        if ('response' in e) {
+          const apiError = e as { response?: { data?: { message?: string } } };
+          errorMessage = apiError.response?.data?.message || e.message || errorMessage;
+        } else {
+          errorMessage = e.message || errorMessage;
+        }
+      }
+      
+      toast.error(errorMessage);
     } finally {
       setWorking(false);
     }
@@ -254,8 +268,8 @@ const OrderDetailPage = () => {
                     </div>
                         {item.discount && item.discount > 0 && (
                           <div className="text-sm text-green-600 font-semibold mb-1">
-                            Discount: -${(item.discount * item.price).toFixed(2)}
-                  </div>
+                            Discount: -${item.discount.toFixed(2)}
+                          </div>
                         )}
                         <div className="font-bold text-lg text-primary-600">
                           ${item.finalPrice.toFixed(2)}
@@ -414,9 +428,9 @@ const OrderDetailPage = () => {
                 <p className="text-sm text-gray-700">
                   Amount: <span className="font-bold">${refund.amount.toFixed(2)}</span>
                 </p>
-                {refund.status === 'COMPLETED' && (
+                {refund.status === 'COMPLETED' && refund.completedAt && (
                   <p className="text-xs text-green-600 mt-2">
-                    ✓ Refund completed on {new Date(refund.completedAt || '').toLocaleString()}
+                    ✓ Refund completed on {new Date(refund.completedAt).toLocaleString()}
                   </p>
                 )}
               </div>

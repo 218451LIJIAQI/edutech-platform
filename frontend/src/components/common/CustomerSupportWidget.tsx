@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import {
   MessageCircle,
   Clock,
@@ -23,14 +23,10 @@ const CustomerSupportWidget = ({ onOpenChat }: CustomerSupportWidgetProps) => {
   const [stats, setStats] = useState<SupportStats | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  useEffect(() => {
-    loadStats();
-  }, []);
-
   /**
    * Load support statistics
    */
-  const loadStats = async () => {
+  const loadStats = useCallback(async () => {
     try {
       setIsLoading(true);
       const data = await customerSupportService.getStats();
@@ -41,7 +37,11 @@ const CustomerSupportWidget = ({ onOpenChat }: CustomerSupportWidgetProps) => {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    loadStats();
+  }, [loadStats]);
 
   if (isLoading) {
     return (

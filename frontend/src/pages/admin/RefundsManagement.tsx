@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import toast from 'react-hot-toast';
 import adminRefundService from '@/services/admin-refund.service';
-import { Refund, RefundStatus } from '@/types';
+import { Refund } from '@/types';
 
 /**
  * Refunds Management Page Component
@@ -13,7 +13,15 @@ const RefundsManagement = () => {
   const [working, setWorking] = useState(false);
   const [filter, setFilter] = useState<string>('PENDING');
   const [selectedRefund, setSelectedRefund] = useState<Refund | null>(null);
-  const [stats, setStats] = useState<any>(null);
+  const [stats, setStats] = useState<{
+    pending: number;
+    approved: number;
+    processing: number;
+    completed: number;
+    rejected: number;
+    totalRefundAmount: number;
+    completedRefundAmount: number;
+  } | null>(null);
 
   // Modal state
   const [showApproveModal, setShowApproveModal] = useState(false);
@@ -22,9 +30,19 @@ const RefundsManagement = () => {
   const [rejectionReason, setRejectionReason] = useState('');
 
   /**
+   * Extract error message from error object
+   */
+  const getErrorMessage = useCallback((e: unknown): string | undefined => {
+    if (e instanceof Error && 'response' in e) {
+      return (e as { response?: { data?: { message?: string } } }).response?.data?.message;
+    }
+    return undefined;
+  }, []);
+
+  /**
    * Load refunds and stats
    */
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     setLoading(true);
     try {
       const [refundsData, statsData] = await Promise.all([
@@ -34,19 +52,16 @@ const RefundsManagement = () => {
       setRefunds(refundsData.refunds);
       setStats(statsData);
     } catch (e) {
-      const message =
-        e instanceof Error && 'response' in e
-          ? (e as { response?: { data?: { message?: string } } }).response?.data?.message
-          : undefined;
+      const message = getErrorMessage(e);
       toast.error(message || 'Failed to load refunds');
     } finally {
       setLoading(false);
     }
-  };
+  }, [filter, getErrorMessage]);
 
   useEffect(() => {
     loadData();
-  }, [filter]);
+  }, [loadData]);
 
   /**
    * Approve refund
@@ -62,10 +77,7 @@ const RefundsManagement = () => {
       setSelectedRefund(null);
       await loadData();
     } catch (e) {
-      const message =
-        e instanceof Error && 'response' in e
-          ? (e as { response?: { data?: { message?: string } } }).response?.data?.message
-          : undefined;
+      const message = getErrorMessage(e);
       toast.error(message || 'Failed to approve refund');
     } finally {
       setWorking(false);
@@ -89,10 +101,7 @@ const RefundsManagement = () => {
       setSelectedRefund(null);
       await loadData();
     } catch (e) {
-      const message =
-        e instanceof Error && 'response' in e
-          ? (e as { response?: { data?: { message?: string } } }).response?.data?.message
-          : undefined;
+      const message = getErrorMessage(e);
       toast.error(message || 'Failed to reject refund');
     } finally {
       setWorking(false);
@@ -111,10 +120,7 @@ const RefundsManagement = () => {
       setSelectedRefund(null);
       await loadData();
     } catch (e) {
-      const message =
-        e instanceof Error && 'response' in e
-          ? (e as { response?: { data?: { message?: string } } }).response?.data?.message
-          : undefined;
+      const message = getErrorMessage(e);
       toast.error(message || 'Failed to update refund');
     } finally {
       setWorking(false);
@@ -133,10 +139,7 @@ const RefundsManagement = () => {
       setSelectedRefund(null);
       await loadData();
     } catch (e) {
-      const message =
-        e instanceof Error && 'response' in e
-          ? (e as { response?: { data?: { message?: string } } }).response?.data?.message
-          : undefined;
+      const message = getErrorMessage(e);
       toast.error(message || 'Failed to complete refund');
     } finally {
       setWorking(false);

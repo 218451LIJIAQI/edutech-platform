@@ -134,6 +134,16 @@ const TeacherStudentManagementPage = () => {
     a.href = url;
     a.download = 'students-management.csv';
     a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const copyEmail = async (email: string) => {
+    try {
+      await navigator.clipboard.writeText(email);
+      toast.success('Email copied');
+    } catch {
+      toast.error('Copy failed');
+    }
   };
 
   return (
@@ -178,9 +188,9 @@ const TeacherStudentManagementPage = () => {
 
             <div className="flex items-center gap-3">
               <span className="text-sm text-gray-600">Progress</span>
-              <input type="number" min={0} max={100} value={progressMin} onChange={(e)=>setProgressMin(Number(e.target.value)||0)} className="input w-20" />
+              <input type="number" min={0} max={100} value={progressMin} onChange={(e) => setProgressMin(Number(e.target.value) || 0)} className="input w-20" />
               <span>-</span>
-              <input type="number" min={0} max={100} value={progressMax} onChange={(e)=>setProgressMax(Number(e.target.value)||100)} className="input w-20" />
+              <input type="number" min={0} max={100} value={progressMax} onChange={(e) => setProgressMax(Number(e.target.value) || 100)} className="input w-20" />
               <button onClick={exportCSV} className="btn-outline ml-auto">
                 <Download className="w-4 h-4 mr-2" /> Export CSV
               </button>
@@ -275,7 +285,7 @@ const TeacherStudentManagementPage = () => {
                           </button>
                           <button
                             type="button"
-                            onClick={async () => { try { await navigator.clipboard.writeText(s.user.email); toast.success('Email copied'); } catch { toast.error('Copy failed'); } }}
+                            onClick={() => copyEmail(s.user.email)}
                             className="btn-outline btn-sm flex items-center gap-1"
                             title="Copy email"
                           >

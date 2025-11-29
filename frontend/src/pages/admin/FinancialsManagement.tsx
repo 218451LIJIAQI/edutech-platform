@@ -33,18 +33,6 @@ type SettlementRow = {
   transactions: number;
 };
 
-type InvoiceRow = {
-  id: string;
-  paidAt: string | null;
-  amount: number;
-  platformCommission: number;
-  teacherEarning: number;
-  status: string;
-  user?: { firstName?: string | null; lastName?: string | null; email?: string | null } | null;
-  package?: { course?: { title?: string } } | null;
-  order?: { items: Array<{ id: string; package: { course?: { title?: string } } }> } | null;
-};
-
 const FinancialsManagement = () => {
   const [tab, setTab] = useState<'payments' | 'commissions' | 'settlements' | 'analytics'>('payments');
 
@@ -77,9 +65,10 @@ const FinancialsManagement = () => {
       if (endDate) params.endDate = endDate;
       const data = await adminService.getFinancials(params);
       setStats(data);
-    } catch (e) {
-      console.error(e);
-      toast.error('Failed to load financial stats');
+    } catch (error: unknown) {
+      console.error('Failed to load financial stats:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Failed to load financial stats';
+      toast.error(errorMessage);
     } finally {
       setIsLoading(false);
     }
@@ -109,11 +98,20 @@ const FinancialsManagement = () => {
         page: commissionPage,
         limit: commissionLimit,
       });
-      setCommissionRows((data.items || []) as unknown as TeacherCommissionRow[]);
-      setCommissionPagination(data.pagination as Pagination);
-    } catch (e) {
-      console.error(e);
-      toast.error('Failed to load commissions');
+      if (data.items && Array.isArray(data.items)) {
+        setCommissionRows(data.items as unknown as TeacherCommissionRow[]);
+      } else {
+        setCommissionRows([]);
+      }
+      if (data.pagination) {
+        setCommissionPagination(data.pagination as Pagination);
+      } else {
+        setCommissionPagination(null);
+      }
+    } catch (error: unknown) {
+      console.error('Failed to load commissions:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Failed to load commissions';
+      toast.error(errorMessage);
     } finally {
       setCommissionLoading(false);
     }
@@ -124,13 +122,13 @@ const FinancialsManagement = () => {
       loadCommissions();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tab, commissionPage, commissionLimit]);
+  }, [tab, commissionPage, commissionLimit, commissionSearch]);
 
   // Settlements state
   const [settStart, setSettStart] = useState('');
   const [settEnd, setSettEnd] = useState('');
   const [settPage, setSettPage] = useState(1);
-  const [settLimit, setSettLimit] = useState(10);
+  const [settLimit, _setSettLimit] = useState(10);
   const [settRows, setSettRows] = useState<SettlementRow[]>([]);
   const [settPagination, setSettPagination] = useState<Pagination | null>(null);
   const [settLoading, setSettLoading] = useState(false);
@@ -144,11 +142,20 @@ const FinancialsManagement = () => {
         page: settPage,
         limit: settLimit,
       });
-      setSettRows((data.items || []) as unknown as SettlementRow[]);
-      setSettPagination(data.pagination as Pagination);
-    } catch (e) {
-      console.error(e);
-      toast.error('Failed to load settlements');
+      if (data.items && Array.isArray(data.items)) {
+        setSettRows(data.items as unknown as SettlementRow[]);
+      } else {
+        setSettRows([]);
+      }
+      if (data.pagination) {
+        setSettPagination(data.pagination as Pagination);
+      } else {
+        setSettPagination(null);
+      }
+    } catch (error: unknown) {
+      console.error('Failed to load settlements:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Failed to load settlements';
+      toast.error(errorMessage);
     } finally {
       setSettLoading(false);
     }
@@ -159,41 +166,37 @@ const FinancialsManagement = () => {
       loadSettlements();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tab, settPage, settLimit]);
+  }, [tab, settPage, settLimit, settStart, settEnd]);
 
 
 
   const formatMoney = (v: number | undefined) =>
     (v ?? 0).toLocaleString(undefined, { style: 'currency', currency: 'USD' });
 
-  const exportCSV = (rows: any[], headers: string[], mapper: (row: any) => any[]) => {
+  const exportCSV = (rows: unknown[], headers: string[], mapper: (row: unknown) => unknown[]) => {
     if (!rows || rows.length === 0) {
       toast.error('No data to export');
       return;
     }
-    const csv = [
-      headers.join(','),
-      ...rows.map((r) => mapper(r).map((c) => `"${c ?? ''}"`).join(',')),
-    ].join('\n');
-    const blob = new Blob([csv], { type: 'text/csv' });
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `export-${new Date().toISOString().slice(0,10)}.csv`;
-    a.click();
-    window.URL.revokeObjectURL(url);
-  };
-
-  const getCourseFromInvoice = (row: InvoiceRow) => {
-    if (row.package?.course?.title) return row.package.course.title;
-    if (row.order?.items?.length) {
-      return row.order.items.map((i) => i.package.course?.title).filter(Boolean).join(' | ');
+    try {
+      const csv = [
+        headers.join(','),
+        ...rows.map((r) => mapper(r).map((c) => `"${String(c ?? '').replace(/"/g, '""')}"`).join(',')),
+      ].join('\n');
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `export-${new Date().toISOString().slice(0, 10)}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+    } catch (error: unknown) {
+      console.error('Failed to export CSV:', error);
+      toast.error('Failed to export CSV');
     }
-    return '-';
   };
-
-  const getDisplayRate = (rate?: number | null) =>
-    rate === null || rate === undefined ? 'Default' : `${rate}%`;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 via-blue-50 to-indigo-50">
@@ -215,14 +218,6 @@ const FinancialsManagement = () => {
           ) : tab === 'commissions' ? (
             <button
               onClick={loadCommissions}
-              className="btn btn-outline flex items-center gap-2"
-              title="Refresh"
-            >
-              <RefreshCcw className="w-4 h-4" /> Refresh
-            </button>
-          ) : tab === 'settlements' ? (
-            <button
-              onClick={loadSettlements}
               className="btn btn-outline flex items-center gap-2"
               title="Refresh"
             >
@@ -540,10 +535,15 @@ const FinancialsManagement = () => {
                                   const value = editing[key] ?? (t.teacherProfile?.commissionRate ?? null);
                                   await adminService.updateTeacherCommission(t.id, value as number | null);
                                   toast.success('Commission saved');
-                                  setEditing((prev) => ({ ...prev, [key]: value }));
+                                  setEditing((prev) => {
+                                    const next = { ...prev };
+                                    delete next[key];
+                                    return next;
+                                  });
                                   loadCommissions();
-                                } catch (e) {
-                                  toast.error('Failed to save');
+                                } catch (error: unknown) {
+                                  const errorMessage = error instanceof Error ? error.message : 'Failed to save commission';
+                                  toast.error(errorMessage);
                                 }
                               }}
                             >
@@ -604,7 +604,7 @@ const FinancialsManagement = () => {
                 <button
                   className="btn btn-outline flex items-center gap-2"
                   onClick={() => exportCSV(settRows, ['Teacher','Email','Gross','Platform','Teacher','Transactions'],
-                    (r: SettlementRow) => [r.teacherName, r.teacherEmail || '-', r.totalGross, r.platformCommission, r.teacherEarning, r.transactions])}
+                    ((r: unknown) => { const row = r as SettlementRow; return [row.teacherName, row.teacherEmail || '-', row.totalGross, row.platformCommission, row.teacherEarning, row.transactions]; }))}
                 >
                   <Download className="w-4 h-4"/> Export CSV
                 </button>

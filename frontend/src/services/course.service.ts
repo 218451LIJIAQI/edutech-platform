@@ -6,6 +6,26 @@ import { Course, Lesson, LessonPackage, Material, ApiResponse, PaginatedResponse
  * Handles all course-related API calls
  */
 
+/**
+ * Helper function to extract data from API response with error handling
+ */
+function extractData<T>(response: { data: ApiResponse<T> }): T {
+  if (!response.data.data) {
+    throw new Error(response.data.message || 'No data received from server');
+  }
+  return response.data.data;
+}
+
+/**
+ * Helper function to extract paginated data from API response
+ */
+function extractPaginatedData<T>(response: { data: PaginatedResponse<T> }): PaginatedResponse<T>['data'] {
+  if (!response.data.data) {
+    throw new Error('No data received from server');
+  }
+  return response.data.data;
+}
+
 export const courseService = {
   /**
    * Get all published courses
@@ -24,7 +44,7 @@ export const courseService = {
     limit?: number;
   }): Promise<PaginatedResponse<Course>['data']> => {
     const response = await api.get<PaginatedResponse<Course>>('/courses', { params });
-    return response.data.data;
+    return extractPaginatedData(response);
   },
 
   /**
@@ -32,7 +52,7 @@ export const courseService = {
    */
   getCourseById: async (id: string): Promise<Course> => {
     const response = await api.get<ApiResponse<Course>>(`/courses/${id}`);
-    return response.data.data!;
+    return extractData(response);
   },
 
   /**
@@ -40,7 +60,7 @@ export const courseService = {
    */
   getCategories: async (): Promise<string[]> => {
     const response = await api.get<ApiResponse<string[]>>('/courses/categories/all');
-    return response.data.data!;
+    return extractData(response);
   },
 
   /**
@@ -48,7 +68,7 @@ export const courseService = {
    */
   getMyCourses: async (): Promise<Course[]> => {
     const response = await api.get<ApiResponse<Course[]>>('/courses/my-courses');
-    return response.data.data!;
+    return extractData(response);
   },
 
   /**
@@ -56,7 +76,7 @@ export const courseService = {
    */
   createCourse: async (data: Partial<Course>): Promise<Course> => {
     const response = await api.post<ApiResponse<Course>>('/courses', data);
-    return response.data.data!;
+    return extractData(response);
   },
 
   /**
@@ -64,7 +84,7 @@ export const courseService = {
    */
   updateCourse: async (id: string, data: Partial<Course>): Promise<Course> => {
     const response = await api.put<ApiResponse<Course>>(`/courses/${id}`, data);
-    return response.data.data!;
+    return extractData(response);
   },
 
   /**
@@ -82,7 +102,7 @@ export const courseService = {
       `/courses/${courseId}/lessons`,
       data
     );
-    return response.data.data!;
+    return extractData(response);
   },
 
   /**
@@ -93,7 +113,7 @@ export const courseService = {
       `/courses/lessons/${lessonId}`,
       data
     );
-    return response.data.data!;
+    return extractData(response);
   },
 
   /**
@@ -111,7 +131,7 @@ export const courseService = {
       `/courses/${courseId}/packages`,
       data
     );
-    return response.data.data!;
+    return extractData(response);
   },
 
   /**
@@ -122,7 +142,7 @@ export const courseService = {
       `/courses/packages/${packageId}`,
       data
     );
-    return response.data.data!;
+    return extractData(response);
   },
 
   /**
@@ -140,7 +160,7 @@ export const courseService = {
       `/courses/${courseId}/materials`,
       data
     );
-    return response.data.data!;
+    return extractData(response);
   },
 
   /**
@@ -151,7 +171,7 @@ export const courseService = {
       `/courses/materials/${materialId}`,
       data
     );
-    return response.data.data!;
+    return extractData(response);
   },
 
   /**

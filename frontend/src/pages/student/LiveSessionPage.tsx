@@ -1,27 +1,37 @@
 import { useEffect, useState, useRef } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import { Send, Users, Hand } from 'lucide-react';
 import { io, Socket } from 'socket.io-client';
 import toast from 'react-hot-toast';
 
+interface ChatMessage {
+  id?: string;
+  user?: {
+    firstName?: string;
+    lastName?: string;
+  };
+  message: string;
+  timestamp?: number;
+}
+
 const LiveSessionPage = () => {
-  const { sessionId } = useParams();
+  const { sessionId } = useParams<{ sessionId: string }>();
+  const navigate = useNavigate();
   const [socket, setSocket] = useState<Socket | null>(null);
-  interface ChatMessage {
-    user?: {
-      firstName?: string;
-      lastName?: string;
-    };
-    message: string;
-  }
-  
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [message, setMessage] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    if (!sessionId) {
+      toast.error('Session ID is missing');
+      navigate('/courses');
+      return;
+    }
+
     const token = localStorage.getItem('accessToken');
-    const newSocket = io(import.meta.env.VITE_SOCKET_URL, {
+    const socketUrl = import.meta.env.VITE_SOCKET_URL || 'http://localhost:3000';
+    const newSocket = io(socketUrl, {
       auth: { token },
     });
 
@@ -33,34 +43,52 @@ const LiveSessionPage = () => {
       toast.success('Joined live session');
     });
 
-    newSocket.on('user-joined', (data) => {
-      toast(`${data.user.firstName} joined the session`);
+    newSocket.on('user-joined', (data: { user?: { firstName?: string; lastName?: string } }) => {
+      const userName = data.user?.firstName 
+        ? `${data.user.firstName}${data.user.lastName ? ` ${data.user.lastName}` : ''}`
+        : 'A user';
+      toast(`${userName} joined the session`);
     });
 
-    newSocket.on('chat-message', (data) => {
-      setMessages((prev) => [...prev, data]);
+    newSocket.on('chat-message', (data: ChatMessage) => {
+      const messageWithId: ChatMessage = {
+        ...data,
+        id: data.id || `msg-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        timestamp: data.timestamp || Date.now(),
+      };
+      setMessages((prev) => [...prev, messageWithId]);
+    });
+
+    newSocket.on('error', (error: { message?: string }) => {
+      console.error('Socket error:', error);
+      toast.error(error.message || 'Connection error occurred');
     });
 
     setSocket(newSocket);
 
     return () => {
-      newSocket.emit('leave-session', { sessionId });
+      if (sessionId) {
+        newSocket.emit('leave-session', { sessionId });
+      }
       newSocket.disconnect();
     };
-  }, [sessionId]);
+  }, [sessionId, navigate]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
   const sendMessage = () => {
-    if (!socket || !message.trim()) return;
+    if (!socket || !message.trim() || !sessionId) return;
     socket.emit('chat-message', { sessionId, message });
     setMessage('');
   };
 
   const raiseHand = () => {
-    if (!socket) return;
+    if (!socket || !sessionId) {
+      toast.error('Unable to raise hand. Please check your connection.');
+      return;
+    }
     socket.emit('raise-hand', { sessionId });
     toast.success('Hand raised!');
   };
@@ -100,10 +128,11 @@ const LiveSessionPage = () => {
                   <p>No messages yet. Start the conversation!</p>
                 </div>
               ) : (
-                messages.map((msg, idx) => (
-                  <div key={idx} className="bg-gradient-to-r from-gray-50 to-gray-100 p-4 rounded-xl border border-gray-200">
+                messages.map((msg) => (
+                  <div key={msg.id || `msg-${msg.timestamp || Date.now()}`} className="bg-gradient-to-r from-gray-50 to-gray-100 p-4 rounded-xl border border-gray-200">
                     <p className="text-xs font-bold text-primary-600 mb-1">
-                      {msg.user?.firstName} {msg.user?.lastName}
+                      {msg.user?.firstName || ''} {msg.user?.lastName || ''}
+                      {!msg.user?.firstName && !msg.user?.lastName && 'Anonymous'}
                     </p>
                     <p className="text-sm text-gray-900">{msg.message}</p>
                   </div>
@@ -125,7 +154,7 @@ const LiveSessionPage = () => {
                 type="text"
                 value={message}
                 onChange={(e) => setMessage(e.target.value)}
-                onKeyPress={(e) => e.key === 'Enter' && sendMessage()}
+                onKeyDown={(e) => e.key === 'Enter' && sendMessage()}
                 placeholder="Type a message..."
                 className="flex-1 input"
               />

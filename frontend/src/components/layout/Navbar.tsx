@@ -1,9 +1,9 @@
 import { Link, useNavigate } from 'react-router-dom';
-import { BookOpen, User, LogOut, LayoutDashboard, ShoppingCart, Receipt, MessageSquare } from 'lucide-react';
+import { BookOpen, User, LogOut, LayoutDashboard, ShoppingCart, Receipt } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
 import { UserRole } from '@/types';
 import NotificationCenter from '../common/NotificationCenter';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import messageService from '@/services/message.service';
 
 /**
@@ -13,6 +13,15 @@ const Navbar = () => {
   const { user, isAuthenticated, logout } = useAuthStore();
   const navigate = useNavigate();
   const [unreadMessageCount, setUnreadMessageCount] = useState(0);
+
+  const fetchUnreadMessageCount = useCallback(async () => {
+    try {
+      const count = await messageService.getUnreadCount();
+      setUnreadMessageCount(count);
+    } catch (error) {
+      console.error('Failed to fetch unread message count:', error);
+    }
+  }, []);
 
   useEffect(() => {
     if (isAuthenticated && user) {
@@ -35,16 +44,7 @@ const Navbar = () => {
         document.removeEventListener('visibilitychange', onVisibility);
       };
     }
-  }, [isAuthenticated, user]);
-
-  const fetchUnreadMessageCount = async () => {
-    try {
-      const count = await messageService.getUnreadCount();
-      setUnreadMessageCount(count);
-    } catch (error) {
-      console.error('Failed to fetch unread message count:', error);
-    }
-  };
+  }, [isAuthenticated, user, fetchUnreadMessageCount]);
 
   const handleLogout = async () => {
     await logout();

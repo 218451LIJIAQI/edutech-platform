@@ -49,8 +49,9 @@ const RegisterPage = () => {
         role: formData.role,
       });
       
-      // Redirect based on user role
-      const userRole = useAuthStore.getState().user?.role;
+      // Redirect based on user role - get from store after registration completes
+      const { user } = useAuthStore.getState();
+      const userRole = user?.role;
       
       switch (userRole) {
         case UserRole.ADMIN:
@@ -66,12 +67,19 @@ const RegisterPage = () => {
           navigate('/');
       }
     } catch (err) {
-      const message = err instanceof Error && 'response' in err 
-        ? (err as { response?: { data?: { message?: string } } }).response?.data?.message 
-        : err instanceof Error 
-        ? err.message 
-        : undefined;
-      setError(message || 'Registration failed. Please try again.');
+      let errorMessage = 'Registration failed. Please try again.';
+      
+      if (err instanceof Error) {
+        // Handle axios error response
+        if ('response' in err) {
+          const axiosError = err as { response?: { data?: { message?: string } } };
+          errorMessage = axiosError.response?.data?.message || err.message || errorMessage;
+        } else {
+          errorMessage = err.message || errorMessage;
+        }
+      }
+      
+      setError(errorMessage);
     } finally {
       setIsLoading(false);
     }

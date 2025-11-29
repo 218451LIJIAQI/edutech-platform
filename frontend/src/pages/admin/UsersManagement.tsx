@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import { UserRole, User } from '@/types';
 import adminService from '@/services/admin.service';
 import SearchFilter from '@/components/common/SearchFilter';
@@ -9,12 +9,21 @@ import UserActionsMenu from './UserActionsMenu';
 import { Users, Plus, Trash2, CheckCircle, XCircle, Download, Lock } from 'lucide-react';
 import toast from 'react-hot-toast';
 
+interface ExtendedUser extends User {
+  phone?: string;
+  department?: string;
+  isLocked?: boolean;
+  _count?: {
+    enrollments?: number;
+  };
+}
+
 /**
  * Users Management Page (Admin)
  * Comprehensive user management with CRUD, batch operations, and audit logs
  */
 const UsersManagement = () => {
-  const [users, setUsers] = useState<User[]>([]);
+  const [users, setUsers] = useState<ExtendedUser[]>([]);
   const [pagination, setPagination] = useState<{
     total?: number;
     page?: number;
@@ -40,20 +49,16 @@ const UsersManagement = () => {
 
   // Modal states
   const [isFormModalOpen, setIsFormModalOpen] = useState(false);
-  const [selectedUser, setSelectedUser] = useState<User | undefined>();
+  const [selectedUser, setSelectedUser] = useState<ExtendedUser | undefined>();
   const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
-  const [detailsUser, setDetailsUser] = useState<User | undefined>();
+  const [detailsUser, setDetailsUser] = useState<ExtendedUser | undefined>();
 
   // Batch operations
   const [selectedUserIds, setSelectedUserIds] = useState<Set<string>>(new Set());
   const [batchOperation, setBatchOperation] = useState<'activate' | 'deactivate' | 'delete' | null>(null);
   const [isBatchModalOpen, setIsBatchModalOpen] = useState(false);
 
-  useEffect(() => {
-    fetchUsers();
-  }, [filters, search]);
-
-  const fetchUsers = async () => {
+  const fetchUsers = useCallback(async () => {
     setIsLoading(true);
     try {
       const data = await adminService.getAllUsers({
@@ -70,10 +75,15 @@ const UsersManagement = () => {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [filters, search]);
+
+  useEffect(() => {
+    fetchUsers();
+  }, [fetchUsers]);
 
   const handleToggleStatus = async (userId: string, currentStatus: boolean) => {
-    if (!confirm(`Are you sure you want to ${currentStatus ? 'deactivate' : 'activate'} this user?`)) {
+    const action = currentStatus ? 'deactivate' : 'activate';
+    if (!window.confirm(`Are you sure you want to ${action} this user?`)) {
       return;
     }
 
@@ -82,19 +92,27 @@ const UsersManagement = () => {
       toast.success(`User ${!currentStatus ? 'activated' : 'deactivated'} successfully`);
       fetchUsers();
     } catch (error) {
-      const message = error instanceof Error && 'response' in error 
-        ? (error as { response?: { data?: { message?: string } } }).response?.data?.message 
-        : undefined;
-      toast.error(message || 'Failed to update user status');
+      let errorMessage = 'Failed to update user status';
+      
+      if (error instanceof Error) {
+        if ('response' in error) {
+          const responseError = error as { response?: { data?: { message?: string } } };
+          errorMessage = responseError.response?.data?.message || errorMessage;
+        } else {
+          errorMessage = error.message || errorMessage;
+        }
+      }
+      
+      toast.error(errorMessage);
     }
   };
 
-  const handleEditUser = (user: User) => {
+  const handleEditUser = (user: ExtendedUser) => {
     setSelectedUser(user);
     setIsFormModalOpen(true);
   };
 
-  const handleViewDetails = (user: User) => {
+  const handleViewDetails = (user: ExtendedUser) => {
     setDetailsUser(user);
     setIsDetailsModalOpen(true);
   };
@@ -131,40 +149,51 @@ const UsersManagement = () => {
     setIsBatchModalOpen(true);
   };
 
-  const handleExportCSV = () => {
+  const handleExportCSV = useCallback(() => {
     if (users.length === 0) {
       toast.error('No users to export');
       return;
     }
 
+    const escapeCSV = (value: string | number | undefined): string => {
+      if (value === undefined || value === null) return '';
+      const str = String(value);
+      if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+        return `"${str.replace(/"/g, '""')}"`;
+      }
+      return str;
+    };
+
     const headers = ['ID', 'First Name', 'Last Name', 'Email', 'Phone', 'Role', 'Status', 'Joined'];
     const rows = users.map(u => [
-      u.id,
-      u.firstName,
-      u.lastName,
-      u.email,
-      u.phone || '',
-      u.role,
-      u.isActive ? 'Active' : 'Inactive',
-      new Date(u.createdAt).toLocaleDateString(),
+      escapeCSV(u.id),
+      escapeCSV(u.firstName),
+      escapeCSV(u.lastName),
+      escapeCSV(u.email),
+      escapeCSV((u as ExtendedUser).phone),
+      escapeCSV(u.role),
+      escapeCSV(u.isActive ? 'Active' : 'Inactive'),
+      escapeCSV(new Date(u.createdAt).toLocaleDateString()),
     ]);
 
     const csv = [
       headers.join(','),
-      ...rows.map(row => row.map(cell => `"${cell}"`).join(',')),
+      ...rows.map(row => row.join(',')),
     ].join('\n');
 
-    const blob = new Blob([csv], { type: 'text/csv' });
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
     a.download = `users-${new Date().toISOString().split('T')[0]}.csv`;
+    document.body.appendChild(a);
     a.click();
+    document.body.removeChild(a);
     window.URL.revokeObjectURL(url);
     toast.success('Users exported successfully');
-  };
+  }, [users]);
 
-  const getRoleBadgeColor = (role: string) => {
+  const getRoleBadgeColor = useCallback((role: string): string => {
     switch (role) {
       case 'ADMIN':
         return 'bg-red-100 text-red-800';
@@ -175,7 +204,7 @@ const UsersManagement = () => {
       default:
         return 'bg-gray-100 text-gray-800';
     }
-  };
+  }, []);
 
   const filterOptions = [
     {
@@ -197,9 +226,18 @@ const UsersManagement = () => {
     },
   ];
 
-  const selectedUserNames = users
-    .filter(u => selectedUserIds.has(u.id))
-    .map(u => `${u.firstName} ${u.lastName}`);
+  const selectedUserNames = useMemo(() => 
+    users
+      .filter(u => selectedUserIds.has(u.id))
+      .map(u => `${u.firstName} ${u.lastName}`),
+    [users, selectedUserIds]
+  );
+
+  const handleImageError = useCallback((e: React.SyntheticEvent<HTMLImageElement, Event>, user: ExtendedUser) => {
+    const target = e.currentTarget;
+    const name = `${user.firstName}+${user.lastName}`;
+    target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}`;
+  }, []);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 via-blue-50 to-indigo-50">
@@ -317,6 +355,7 @@ const UsersManagement = () => {
                         checked={selectedUserIds.size === users.length && users.length > 0}
                         onChange={handleSelectAll}
                         className="rounded"
+                        aria-label="Select all users"
                       />
                     </th>
                     <th className="px-6 py-4 text-left font-bold text-gray-900">
@@ -351,14 +390,16 @@ const UsersManagement = () => {
                           checked={selectedUserIds.has(user.id)}
                           onChange={() => handleSelectUser(user.id)}
                           className="rounded"
+                          aria-label={`Select ${user.firstName} ${user.lastName}`}
                         />
                       </td>
                       <td className="px-6 py-5 whitespace-nowrap">
                         <div className="flex items-center space-x-4">
                           <img
-                            src={user.avatar || `https://ui-avatars.com/api/?name=${user.firstName}+${user.lastName}`}
+                            src={user.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.firstName)}+${encodeURIComponent(user.lastName)}`}
                             alt={`${user.firstName} ${user.lastName}`}
-                            className="w-12 h-12 rounded-full shadow-md"
+                            className="w-12 h-12 rounded-full shadow-md object-cover"
+                            onError={(e) => handleImageError(e, user)}
                           />
                           <div>
                             <div className="text-sm font-bold text-gray-900">
@@ -369,41 +410,45 @@ const UsersManagement = () => {
                         </div>
                       </td>
                       <td className="px-6 py-5 whitespace-nowrap">
-                        <span className={`badge ${getRoleBadgeColor(user.role)}`}>
+                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${getRoleBadgeColor(user.role)}`}>
                           {user.role}
                         </span>
                       </td>
                       <td className="px-6 py-5 whitespace-nowrap">
                         <div className="flex items-center gap-2">
-                        <span className={`badge ${
-                          user.isActive ? 'badge-success' : 'badge-danger'
-                        }`}>
-                          {user.isActive ? 'Active' : 'Inactive'}
-                        </span>
-                          {user.isLocked && (
-                            <span className="badge bg-red-100 text-red-800 flex items-center gap-1">
+                          <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                            user.isActive ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
+                          }`}>
+                            {user.isActive ? 'Active' : 'Inactive'}
+                          </span>
+                          {(user as ExtendedUser).isLocked && (
+                            <span className="px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800 flex items-center gap-1">
                               <Lock className="w-3 h-3" /> Locked
                             </span>
                           )}
                         </div>
                       </td>
                       <td className="px-6 py-5 whitespace-nowrap text-sm">
-                        {user.phone && (
-                          <div className="text-gray-700">{user.phone}</div>
+                        {(user as ExtendedUser).phone && (
+                          <div className="text-gray-700">{(user as ExtendedUser).phone}</div>
                         )}
-                        {user.department && (
-                          <div className="text-gray-600 text-xs">{user.department}</div>
+                        {(user as ExtendedUser).department && (
+                          <div className="text-gray-600 text-xs">{(user as ExtendedUser).department}</div>
                         )}
                       </td>
                       <td className="px-6 py-5 whitespace-nowrap text-sm">
                         {user.role === 'TEACHER' && user.teacherProfile ? (
                           <div className="space-y-1">
                             <div className="font-medium text-gray-700">{user.teacherProfile.totalStudents} students</div>
-                            <div className="text-primary-600 font-bold">⭐ {user.teacherProfile.averageRating.toFixed(1)}</div>
+                            <div className="text-primary-600 font-bold">
+                              ⭐ {typeof user.teacherProfile.averageRating === 'number' && !isNaN(user.teacherProfile.averageRating)
+                                ? user.teacherProfile.averageRating.toFixed(1)
+                                : '0.0'}
+                            </div>
                           </div>
                         ) : user.role === 'STUDENT' ? (
                           <div className="font-medium text-gray-700">
-                            {(user as User & { _count?: { enrollments?: number } })._count?.enrollments || 0} enrollments
+                            {(user as ExtendedUser)._count?.enrollments || 0} enrollments
                           </div>
                         ) : (
                           <span className="text-gray-400">-</span>
@@ -422,6 +467,8 @@ const UsersManagement = () => {
                                 : 'text-green-600 hover:bg-green-50'
                             }`}
                             title={user.isActive ? 'Deactivate' : 'Activate'}
+                            aria-label={user.isActive ? 'Deactivate user' : 'Activate user'}
+                            type="button"
                           >
                             {user.isActive ? <XCircle className="w-5 h-5" /> : <CheckCircle className="w-5 h-5" />}
                           </button>

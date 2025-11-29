@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { DollarSign, Users, BookOpen, Star, TrendingUp, Award } from 'lucide-react';
 import teacherService from '@/services/teacher.service';
@@ -30,11 +30,7 @@ const TeacherDashboard = () => {
   const [totalEarnings, setTotalEarnings] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
 
-  useEffect(() => {
-    fetchDashboardData();
-  }, []);
-
-  const fetchDashboardData = async () => {
+  const fetchDashboardData = useCallback(async () => {
     setIsLoading(true);
     try {
       // Fetch teacher stats
@@ -43,15 +39,19 @@ const TeacherDashboard = () => {
 
       // Fetch earnings grouped by course
       const earningsData = await paymentService.getTeacherEarningsByCourse();
-      setTotalEarnings(earningsData.totalEarnings);
-      setCourseEarnings(earningsData.courseEarnings);
-      setEarnings(earningsData.recentPayments.slice(0, 5)); // Latest 5
+      setTotalEarnings(earningsData.totalEarnings || 0);
+      setCourseEarnings(earningsData.courseEarnings || []);
+      setEarnings((earningsData.recentPayments || []).slice(0, 5)); // Latest 5
     } catch (error) {
       console.error('Failed to fetch dashboard data:', error);
     } finally {
       setIsLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    fetchDashboardData();
+  }, [fetchDashboardData]);
 
   if (isLoading) {
     return (
@@ -196,7 +196,7 @@ const TeacherDashboard = () => {
                   {courseEarnings.map((course) => (
                     <div
                       key={course.courseId}
-                      className="p-4 bg-gradient-to-r from-gray-50 to-gray-100 rounded-xl hover:from-gray-100 hover:to-gray-150 transition-all duration-300 border border-gray-200"
+                      className="p-4 bg-gradient-to-r from-gray-50 to-gray-100 rounded-xl hover:from-gray-100 hover:to-gray-200 transition-all duration-300 border border-gray-200"
                     >
                       <div className="flex items-start justify-between mb-3">
                         <div className="flex-1">
@@ -213,7 +213,7 @@ const TeacherDashboard = () => {
                         <div
                           className="bg-gradient-to-r from-green-500 to-green-600 h-2.5 rounded-full transition-all duration-500"
                           style={{
-                            width: `${(course.totalEarnings / totalEarnings) * 100}%`,
+                            width: `${totalEarnings > 0 ? (course.totalEarnings / totalEarnings) * 100 : 0}%`,
                           }}
                         ></div>
                       </div>
@@ -239,7 +239,7 @@ const TeacherDashboard = () => {
                 {earnings.map((payment) => (
                   <div
                     key={payment.id}
-                    className="flex items-center justify-between p-4 bg-gradient-to-r from-gray-50 to-gray-100 rounded-xl hover:from-gray-100 hover:to-gray-150 transition-all duration-300 border border-gray-200"
+                    className="flex items-center justify-between p-4 bg-gradient-to-r from-gray-50 to-gray-100 rounded-xl hover:from-gray-100 hover:to-gray-200 transition-all duration-300 border border-gray-200"
                   >
                     <div className="flex-1">
                       <p className="font-bold text-gray-900">

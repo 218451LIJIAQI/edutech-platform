@@ -1,6 +1,6 @@
 import Stripe from 'stripe';
 import { PaymentStatus, OrderStatus } from '@prisma/client';
-import type { Payment as PaymentModel } from '@prisma/client';
+import type { Payment as PaymentModel, Enrollment, Order, LessonPackage, Course, TeacherProfile } from '@prisma/client';
 import prisma from '../config/database';
 import config from '../config/env';
 import {
@@ -46,6 +46,45 @@ type TeacherEarningsEntry = {
   paidAt: Date | null;
   package: { id: string; name: string; finalPrice: number; course: { id: string; title: string } };
   user: { firstName: string | null; lastName: string | null; email: string } | null;
+};
+
+// Type for payment with related entities
+type PaymentWithRelations = PaymentModel & {
+  package: (LessonPackage & {
+    course: Course | null;
+  }) | null;
+  order: Order | null;
+};
+
+type UserPaymentWithRelations = PaymentModel & {
+  package: (LessonPackage & {
+    course: (Course & {
+      teacherProfile: (TeacherProfile & {
+        user: {
+          firstName: string | null;
+          lastName: string | null;
+        };
+      }) | null;
+    }) | null;
+  }) | null;
+};
+
+type TeacherEarningsPayment = {
+  id: string;
+  amount: number;
+  teacherEarning: number;
+  paidAt: Date | null;
+  status: PaymentStatus;
+  package: (LessonPackage & {
+    course: (Course & {
+      teacherProfile?: TeacherProfile | null;
+    }) | null;
+  }) | null;
+  user: {
+    firstName: string | null;
+    lastName: string | null;
+    email: string;
+  } | null;
 };
 
 /**
@@ -288,7 +327,7 @@ class PaymentService {
     paymentId: string,
     stripePaymentId?: string
   ): Promise<
-    | { payment: PaymentModel; enrollment: any }
+    | { payment: PaymentModel; enrollment: Enrollment }
     | { payment: PaymentModel; orderId: string }
     | { payment: PaymentModel }
   > {
@@ -313,6 +352,9 @@ class PaymentService {
         const enrollment = await prisma.enrollment.findFirst({
           where: { userId: payment.userId, packageId: payment.packageId },
         });
+        if (!enrollment) {
+          throw new InternalServerError('Enrollment not found for completed payment');
+        }
         return { payment, enrollment };
       }
       if (payment.orderId) {
@@ -559,7 +601,7 @@ class PaymentService {
   /**
    * Get user's payment history
    */
-  async getUserPayments(userId: string): Promise<any[]> {
+  async getUserPayments(userId: string): Promise<UserPaymentWithRelations[]> {
     if (!userId || !userId.trim()) {
       throw new ValidationError('User ID is required');
     }
@@ -594,7 +636,7 @@ class PaymentService {
   /**
    * Get payment by ID
    */
-  async getPaymentById(paymentId: string, userId: string): Promise<any> {
+  async getPaymentById(paymentId: string, userId: string): Promise<PaymentWithRelations> {
     if (!paymentId || !paymentId.trim()) {
       throw new ValidationError('Payment ID is required');
     }
@@ -609,6 +651,7 @@ class PaymentService {
             course: true,
           },
         },
+        order: true,
       },
     });
 
@@ -628,15 +671,7 @@ class PaymentService {
    */
   async getTeacherEarnings(userId: string): Promise<{
     totalEarnings: number;
-    payments: Array<{
-      id: string;
-      amount: number;
-      teacherEarning: number;
-      paidAt: Date | null;
-      status: PaymentStatus;
-      package: any;
-      user: { firstName: string | null; lastName: string | null; email: string } | null;
-    }>;
+    payments: TeacherEarningsPayment[];
   }> {
     if (!userId || !userId.trim()) {
       throw new ValidationError('User ID is required');
@@ -687,15 +722,7 @@ class PaymentService {
     });
 
     // Flatten into per-course entries
-    const entries: Array<{
-      id: string;
-      amount: number;
-      teacherEarning: number;
-      paidAt: Date | null;
-      status: PaymentStatus;
-      package: any;
-      user: { firstName: string | null; lastName: string | null; email: string } | null;
-    }> = [];
+    const entries: TeacherEarningsPayment[] = [];
 
     for (const p of payments) {
       if (p.packageId && p.package && p.package.course.teacherProfileId === teacherProfile.id) {

@@ -1,12 +1,14 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { X, Plus, Trash2 } from 'lucide-react';
 import { useForm } from 'react-hook-form';
+import { LessonPackage } from '@/types';
 import courseService from '@/services/course.service';
 import toast from 'react-hot-toast';
 
 interface PackageModalProps {
   courseId: string;
   packageId?: string;
+  initialPackage?: LessonPackage;
   onClose: () => void;
   onSuccess: () => void;
 }
@@ -23,6 +25,7 @@ interface PackageFormData {
 const PackageModal: React.FC<PackageModalProps> = ({
   courseId,
   packageId,
+  initialPackage,
   onClose,
   onSuccess,
 }) => {
@@ -35,6 +38,7 @@ const PackageModal: React.FC<PackageModalProps> = ({
     register,
     handleSubmit,
     watch,
+    setValue,
     formState: { errors },
   } = useForm<PackageFormData>({
     defaultValues: {
@@ -44,6 +48,19 @@ const PackageModal: React.FC<PackageModalProps> = ({
       maxStudents: 100,
     },
   });
+
+  // Prefill when editing
+  useEffect(() => {
+    if (isEditMode && initialPackage) {
+      setValue('name', initialPackage.name);
+      setValue('description', initialPackage.description || '');
+      setValue('price', initialPackage.price);
+      setValue('discount', initialPackage.discount || 0);
+      setValue('duration', initialPackage.duration || 30);
+      setValue('maxStudents', initialPackage.maxStudents || 100);
+      setFeatures(initialPackage.features || []);
+    }
+  }, [isEditMode, initialPackage, setValue]);
 
   const price = watch('price');
   const discount = watch('discount');
@@ -71,10 +88,38 @@ const PackageModal: React.FC<PackageModalProps> = ({
     setIsSubmitting(true);
     try {
       // Convert string values to numbers
-      const price = typeof data.price === 'string' ? parseFloat(data.price) : data.price;
-      const discount = typeof data.discount === 'string' ? parseFloat(data.discount) : data.discount;
-      const duration = typeof data.duration === 'string' ? parseInt(data.duration, 10) : data.duration;
-      const maxStudents = typeof data.maxStudents === 'string' ? parseInt(data.maxStudents, 10) : data.maxStudents;
+      const price = typeof data.price === 'string' 
+        ? parseFloat(data.price) || 0 
+        : data.price || 0;
+      const discount = typeof data.discount === 'string' 
+        ? parseFloat(data.discount) || 0 
+        : data.discount || 0;
+      const duration = typeof data.duration === 'string' 
+        ? parseInt(data.duration, 10) || 0 
+        : data.duration || 0;
+      const maxStudents = typeof data.maxStudents === 'string' 
+        ? parseInt(data.maxStudents, 10) || 0 
+        : data.maxStudents || 0;
+
+      // Validate discount doesn't exceed price
+      if (discount > price) {
+        toast.error('Discount cannot exceed price');
+        setIsSubmitting(false);
+        return;
+      }
+
+      // Validate duration and maxStudents
+      if (duration < 0) {
+        toast.error('Duration must be a positive number');
+        setIsSubmitting(false);
+        return;
+      }
+
+      if (maxStudents < 1) {
+        toast.error('Max students must be at least 1');
+        setIsSubmitting(false);
+        return;
+      }
 
       const packageData = {
         ...data,
@@ -175,10 +220,20 @@ const PackageModal: React.FC<PackageModalProps> = ({
               <input
                 type="number"
                 step="0.01"
-                {...register('discount', { min: 0 })}
+                {...register('discount', { 
+                  min: 0,
+                  validate: (value) => {
+                    const discountValue = typeof value === 'string' ? parseFloat(value) || 0 : value || 0;
+                    const priceValue = typeof price === 'string' ? parseFloat(price) || 0 : price || 0;
+                    return discountValue <= priceValue || 'Discount cannot exceed price';
+                  }
+                })}
                 className="input"
                 placeholder="10.00"
               />
+              {errors.discount && (
+                <p className="text-red-600 text-sm mt-1">{errors.discount.message}</p>
+              )}
             </div>
           </div>
 
@@ -200,13 +255,16 @@ const PackageModal: React.FC<PackageModalProps> = ({
               </label>
               <input
                 type="number"
-                {...register('duration', { min: 1 })}
+                {...register('duration', { min: 0 })}
                 className="input"
                 placeholder="30"
               />
               <p className="text-xs text-gray-500 mt-1">
-                Leave blank for lifetime access
+                Leave blank or 0 for lifetime access
               </p>
+              {errors.duration && (
+                <p className="text-red-600 text-sm mt-1">{errors.duration.message}</p>
+              )}
             </div>
 
             <div>
@@ -215,13 +273,16 @@ const PackageModal: React.FC<PackageModalProps> = ({
               </label>
               <input
                 type="number"
-                {...register('maxStudents', { min: 1 })}
+                {...register('maxStudents', { min: 1, required: 'Max students is required' })}
                 className="input"
                 placeholder="100"
               />
               <p className="text-xs text-gray-500 mt-1">
                 For live sessions
               </p>
+              {errors.maxStudents && (
+                <p className="text-red-600 text-sm mt-1">{errors.maxStudents.message}</p>
+              )}
             </div>
           </div>
 
@@ -237,7 +298,12 @@ const PackageModal: React.FC<PackageModalProps> = ({
                 type="text"
                 value={newFeature}
                 onChange={(e) => setNewFeature(e.target.value)}
-                onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), handleAddFeature())}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    handleAddFeature();
+                  }
+                }}
                 className="input flex-1"
                 placeholder="e.g., Lifetime access, Certificate of completion"
               />

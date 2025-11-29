@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import {
   MessageCircle,
   Send,
@@ -41,7 +41,7 @@ const CustomerSupportChat = ({ open, onClose }: CustomerSupportChatProps) => {
   const [newChatSubject, setNewChatSubject] = useState('');
   const [newChatCategory, setNewChatCategory] = useState('general');
   const [newChatMessage, setNewChatMessage] = useState('');
-  const [newChatPriority, setNewChatPriority] = useState<'low' | 'medium' | 'high' | 'urgent'>('medium');
+  const [newChatPriority, setNewChatPriority] = useState<SupportTicketPriority>(SupportTicketPriority.MEDIUM);
   const [isCreating, setIsCreating] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -64,14 +64,20 @@ const CustomerSupportChat = ({ open, onClose }: CustomerSupportChatProps) => {
   // Sync open prop
   useEffect(() => { setIsOpen(!!open); }, [open]);
 
-  // Initial load when chat opens
-  useEffect(() => {
-    if (!isOpen) return;
-    void loadTickets();
-  }, [isOpen]);
+  // Select ticket and load its messages
+  const selectTicket = useCallback(async (ticketId: string) => {
+    try {
+      const ticket = await supportService.getTicketById(ticketId);
+      setSelectedTicket(ticket);
+      setMessages(ticket.messages || []);
+    } catch (error) {
+      console.error('Failed to load conversation:', error);
+      toast.error('Failed to load conversation');
+    }
+  }, []);
 
   // Load all tickets for current user
-  const loadTickets = async () => {
+  const loadTickets = useCallback(async () => {
     try {
       const list = await supportService.getUserTickets();
       setTickets(list);
@@ -83,23 +89,17 @@ const CustomerSupportChat = ({ open, onClose }: CustomerSupportChatProps) => {
         setSelectedTicket(null);
         setMessages([]);
       }
-    } catch (e) {
-      console.error(e);
+    } catch (error) {
+      console.error('Failed to load conversations:', error);
       toast.error('Failed to load conversations');
     }
-  };
+  }, [selectTicket]);
 
-  // Select ticket and load its messages
-  const selectTicket = async (ticketId: string) => {
-    try {
-      const ticket = await supportService.getTicketById(ticketId);
-      setSelectedTicket(ticket);
-      setMessages(ticket.messages || []);
-    } catch (e) {
-      console.error(e);
-      toast.error('Failed to load conversation');
-    }
-  };
+  // Initial load when chat opens
+  useEffect(() => {
+    if (!isOpen) return;
+    void loadTickets();
+  }, [isOpen, loadTickets]);
 
   // Send a message
   const handleSendMessage = async () => {
@@ -124,20 +124,19 @@ const CustomerSupportChat = ({ open, onClose }: CustomerSupportChatProps) => {
     }
     setIsCreating(true);
     try {
-      const priority = newChatPriority.toUpperCase() as Uppercase<typeof newChatPriority> as SupportTicketPriority;
       const ticket = await supportService.createTicket(
         newChatSubject,
         newChatMessage,
         newChatCategory,
         undefined,
-        priority
+        newChatPriority
       );
       toast.success('Support chat created');
       setShowNewChat(false);
       setNewChatSubject('');
       setNewChatMessage('');
       setNewChatCategory('general');
-      setNewChatPriority('medium');
+      setNewChatPriority(SupportTicketPriority.MEDIUM);
       await loadTickets();
       await selectTicket(ticket.id);
     } catch (e) {
@@ -231,7 +230,7 @@ const CustomerSupportChat = ({ open, onClose }: CustomerSupportChatProps) => {
                       <p className="font-medium text-gray-900 truncate">{t.subject}</p>
                       <p className="text-xs text-gray-600 truncate">{t.category}</p>
                       <div className="flex items-center gap-2 mt-1">
-                        <span className={`text-xs px-2 py-0.5 rounded-full ${statusBadge(t.status)}`}>{t.status.replace('_', ' ')}</span>
+                        <span className={`text-xs px-2 py-0.5 rounded-full ${statusBadge(t.status)}`}>{t.status.replace(/_/g, ' ')}</span>
                         <span className={`text-xs px-2 py-0.5 rounded-full ${priorityBadge(t.priority)}`}>{t.priority}</span>
                       </div>
                     </button>
@@ -378,13 +377,13 @@ const CustomerSupportChat = ({ open, onClose }: CustomerSupportChatProps) => {
                 <label className="block text-sm font-medium text-gray-900 mb-2">Priority</label>
                 <select
                   value={newChatPriority}
-                  onChange={(e) => setNewChatPriority(e.target.value as any)}
+                  onChange={(e) => setNewChatPriority(e.target.value as SupportTicketPriority)}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
                 >
-                  <option value="low">Low</option>
-                  <option value="medium">Medium</option>
-                  <option value="high">High</option>
-                  <option value="urgent">Urgent</option>
+                  <option value={SupportTicketPriority.LOW}>Low</option>
+                  <option value={SupportTicketPriority.MEDIUM}>Medium</option>
+                  <option value={SupportTicketPriority.HIGH}>High</option>
+                  <option value={SupportTicketPriority.URGENT}>Urgent</option>
                 </select>
               </div>
 

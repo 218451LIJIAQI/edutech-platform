@@ -28,10 +28,12 @@ const PostDetailPage = () => {
         const p = await communityService.getPostById(id);
         setPost(p);
         setComments(await communityService.getComments(id));
-      } catch (e) {
-        console.error(e);
+      } catch (error) {
+        console.error('Failed to load post:', error);
         toast.error('Failed to load post');
-      } finally { setIsLoading(false); }
+      } finally {
+        setIsLoading(false);
+      }
     };
     load();
   }, [id]);
@@ -39,8 +41,14 @@ const PostDetailPage = () => {
   const onShare = async () => {
     if (!post) return;
     const url = `${window.location.origin}/community/post/${post.id}`;
-    try { await navigator.clipboard.writeText(url); toast.success('Link copied'); }
-    catch { toast(url); }
+    try {
+      await navigator.clipboard.writeText(url);
+      toast.success('Link copied to clipboard');
+    } catch (error) {
+      console.error('Failed to copy link:', error);
+      // Fallback: show URL in toast if clipboard API fails
+      toast.error(`Share URL: ${url}`);
+    }
   };
 
   const toggleLike = async () => {
@@ -48,7 +56,10 @@ const PostDetailPage = () => {
     try {
       const { likes, hasLiked } = await communityService.likePost(post.id);
       setPost({ ...post, likes, hasLiked });
-    } catch { toast.error('Failed to like'); }
+    } catch (error) {
+      console.error('Failed to like post:', error);
+      toast.error('Failed to like post');
+    }
   };
 
   const toggleBookmark = async () => {
@@ -56,18 +67,28 @@ const PostDetailPage = () => {
     try {
       const { bookmarks, hasBookmarked } = await communityService.bookmarkPost(post.id);
       setPost({ ...post, bookmarks, hasBookmarked });
-    } catch { toast.error('Failed to bookmark'); }
+    } catch (error) {
+      console.error('Failed to bookmark post:', error);
+      toast.error('Failed to bookmark post');
+    }
   };
 
   const addComment = async () => {
     if (!user || !post) return;
     const text = commentInput.trim();
-    if (!text) return;
+    if (!text) {
+      toast.error('Please enter a comment');
+      return;
+    }
     try {
       const c = await communityService.addComment(post.id, user.id, text);
       setComments(prev => [...prev, c]);
       setCommentInput('');
-    } catch { toast.error('Failed to comment'); }
+      toast.success('Comment added');
+    } catch (error) {
+      console.error('Failed to add comment:', error);
+      toast.error('Failed to add comment');
+    }
   };
 
 
@@ -100,7 +121,11 @@ const PostDetailPage = () => {
             <div className="flex-1">
               <div className="flex items-center justify-between">
                 <div>
-                  <Link to={`/community/user/${post.authorId}`} className="font-bold text-gray-900 hover:underline">{post.author?.firstName} {post.author?.lastName}</Link>
+                  <Link to={`/community/user/${post.authorId}`} className="font-bold text-gray-900 hover:underline">
+                    {post.author?.firstName && post.author?.lastName 
+                      ? `${post.author.firstName} ${post.author.lastName}`
+                      : post.author?.email || 'Unknown User'}
+                  </Link>
                   <p className="text-xs text-gray-500">{new Date(post.createdAt).toLocaleString()}</p>
                 </div>
                 <button type="button" onClick={() => setIsReportModalOpen(true)} className="btn-outline btn-sm inline-flex items-center gap-1"><Flag className="w-4 h-4" aria-label="flag" /> Report</button>
@@ -156,14 +181,27 @@ const PostDetailPage = () => {
                 <p className="text-sm text-gray-500">No comments yet.</p>
               ) : comments.map(c => (
                 <div key={c.id} className="p-3 bg-gray-50 rounded-xl border border-gray-200">
-                  <div className="text-xs text-gray-500 mb-1">{new Date(c.createdAt).toLocaleString()}</div>
+                  <div className="flex items-center justify-between mb-1">
+                    <div className="text-xs text-gray-500">{new Date(c.createdAt).toLocaleString()}</div>
+                  </div>
                   <div className="text-sm text-gray-800 whitespace-pre-wrap">{c.content}</div>
                 </div>
               ))}
             </div>
 
             <div className="mt-3 flex items-center gap-2">
-              <input value={commentInput} onChange={(e) => setCommentInput(e.target.value)} onKeyDown={(e) => { if ((e as any).key === 'Enter') addComment(); }} className="input flex-1" placeholder="Write your comment..." />
+              <input 
+                value={commentInput} 
+                onChange={(e) => setCommentInput(e.target.value)} 
+                onKeyDown={(e) => { 
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    addComment();
+                  }
+                }} 
+                className="input flex-1" 
+                placeholder="Write your comment..." 
+              />
               <button type="button" onClick={addComment} className="btn-primary btn-sm">Post</button>
             </div>
           </div>
@@ -175,7 +213,9 @@ const PostDetailPage = () => {
           isOpen={isReportModalOpen}
           onClose={() => setIsReportModalOpen(false)}
           reportedId={post.authorId}
-          reportedName={`${post.author?.firstName} ${post.author?.lastName}`}
+          reportedName={post.author?.firstName && post.author?.lastName 
+            ? `${post.author.firstName} ${post.author.lastName}`
+            : post.author?.email || 'Unknown User'}
           contentType="community_post"
           contentId={post.id}
         />

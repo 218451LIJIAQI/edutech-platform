@@ -18,7 +18,7 @@ import { formatCurrency } from '@/utils/helpers';
 const { VITE_STRIPE_PUBLISHABLE_KEY, VITE_STRIPE_PUBLIC_KEY, VITE_ENABLE_PAYMENT_MOCK } = import.meta.env;
 const stripePublicKey = VITE_STRIPE_PUBLISHABLE_KEY || VITE_STRIPE_PUBLIC_KEY || 'pk_test_placeholder';
 const stripePromise = loadStripe(stripePublicKey);
-const enableMockPayment = (String(VITE_ENABLE_PAYMENT_MOCK).toLowerCase() === 'true');
+const enableMockPayment = String(VITE_ENABLE_PAYMENT_MOCK || '').toLowerCase() === 'true';
 
 /**
  * Cart Checkout Form Component
@@ -55,7 +55,7 @@ const CartCheckoutForm = ({
       const loadingToast = toast.loading('Preparing payment...');
       const paymentIntent = await paymentService.createCartPaymentIntent();
 
-      if (enableMockPayment || !paymentIntent.clientSecret) {
+      if (enableMockPayment) {
         toast.loading('Processing payment...', { id: loadingToast });
         await new Promise((r) => setTimeout(r, 1200));
         await paymentService.confirmPayment(paymentIntent.payment.id);
@@ -89,12 +89,15 @@ const CartCheckoutForm = ({
       }
 
       toast.loading('Processing payment...', { id: loadingToast });
-      const { error, paymentIntent: confirmedPayment } = await stripe.confirmCardPayment(paymentIntent.clientSecret, {
-        payment_method: {
-          card: cardElement,
-          billing_details: { name: cardName },
-        },
-      });
+      const { error, paymentIntent: confirmedPayment } = await stripe.confirmCardPayment(
+        paymentIntent.clientSecret,
+        {
+          payment_method: {
+            card: cardElement,
+            billing_details: { name: cardName.trim() },
+          },
+        }
+      );
 
       if (error) {
         throw new Error(error.message || 'Card payment failed');
@@ -154,8 +157,19 @@ const CartCheckoutForm = ({
           <p className="text-xs text-blue-700 mt-1">Your payment information is encrypted and secure, powered by Stripe.</p>
         </div>
       </div>
-      <button type="submit" disabled={(!enableMockPayment && !stripe) || isProcessing} className="btn-primary w-full text-lg py-4 disabled:opacity-50 disabled:cursor-not-allowed">
-        {isProcessing ? <span className="flex items-center justify-center"><div className="spinner mr-2"></div>Processing...</span> : `Pay ${formatCurrency(cart.totalAmount)}`}
+      <button
+        type="submit"
+        disabled={(!enableMockPayment && !stripe) || isProcessing}
+        className="btn-primary w-full text-lg py-4 disabled:opacity-50 disabled:cursor-not-allowed"
+      >
+        {isProcessing ? (
+          <span className="flex items-center justify-center">
+            <div className="spinner mr-2"></div>
+            Processing...
+          </span>
+        ) : (
+          `Pay ${formatCurrency(cart.totalAmount)}`
+        )}
       </button>
     </form>
   );

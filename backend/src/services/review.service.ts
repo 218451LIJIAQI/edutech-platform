@@ -1,9 +1,43 @@
 import prisma from '../config/database';
+import type { Review, Enrollment, LessonPackage, Course, TeacherProfile } from '@prisma/client';
 import {
   NotFoundError,
   ValidationError,
   AuthorizationError,
 } from '../utils/errors';
+
+// Type definitions for reviews with relations
+type ReviewWithRelations = Review & {
+  reviewer: {
+    id: string;
+    firstName: string;
+    lastName: string;
+    avatar: string | null;
+  };
+  enrollment: Enrollment & {
+    package: LessonPackage & {
+      course: {
+        title: string;
+      };
+    };
+  };
+};
+
+type ReviewWithEnrollment = Review & {
+  enrollment: Enrollment & {
+    package: LessonPackage & {
+      course: Course & {
+        teacherProfile: TeacherProfile & {
+          user: {
+            firstName: string;
+            lastName: string;
+            avatar: string | null;
+          };
+        };
+      };
+    };
+  };
+};
 
 /**
  * Review Service
@@ -18,10 +52,16 @@ class ReviewService {
     enrollmentId: string,
     rating: number,
     comment?: string
-  ) {
+  ): Promise<Review> {
+    if (!userId || !userId.trim()) {
+      throw new ValidationError('User ID is required');
+    }
+    if (!enrollmentId || !enrollmentId.trim()) {
+      throw new ValidationError('Enrollment ID is required');
+    }
     // Verify enrollment exists and belongs to user
     const enrollment = await prisma.enrollment.findUnique({
-      where: { id: enrollmentId },
+      where: { id: enrollmentId.trim() },
       include: {
         package: {
           include: {
@@ -39,7 +79,7 @@ class ReviewService {
       throw new NotFoundError('Enrollment not found');
     }
 
-    if (enrollment.userId !== userId) {
+    if (enrollment.userId !== userId.trim()) {
       throw new AuthorizationError('You can only review your own enrollments');
     }
 
@@ -64,8 +104,8 @@ class ReviewService {
     // Create review (default publish)
     const review = await prisma.review.create({
       data: {
-        enrollmentId,
-        reviewerId: userId,
+        enrollmentId: enrollmentId.trim(),
+        reviewerId: userId.trim(),
         teacherId: enrollment.package.course.teacherProfile.userId,
         rating,
         comment,
@@ -87,9 +127,15 @@ class ReviewService {
     reviewId: string,
     rating?: number,
     comment?: string
-  ) {
+  ): Promise<Review> {
+    if (!userId || !userId.trim()) {
+      throw new ValidationError('User ID is required');
+    }
+    if (!reviewId || !reviewId.trim()) {
+      throw new ValidationError('Review ID is required');
+    }
     const review = await prisma.review.findUnique({
-      where: { id: reviewId },
+      where: { id: reviewId.trim() },
       include: {
         enrollment: {
           include: {
@@ -111,7 +157,7 @@ class ReviewService {
       throw new NotFoundError('Review not found');
     }
 
-    if (review.reviewerId !== userId) {
+    if (review.reviewerId !== userId.trim()) {
       throw new AuthorizationError('You can only update your own reviews');
     }
 
@@ -130,7 +176,7 @@ class ReviewService {
     }
 
     const updated = await prisma.review.update({
-      where: { id: reviewId },
+      where: { id: reviewId.trim() },
       data: updateData,
     });
 
@@ -145,9 +191,15 @@ class ReviewService {
   /**
    * Delete a review
    */
-  async deleteReview(userId: string, reviewId: string) {
+  async deleteReview(userId: string, reviewId: string): Promise<{ message: string }> {
+    if (!userId || !userId.trim()) {
+      throw new ValidationError('User ID is required');
+    }
+    if (!reviewId || !reviewId.trim()) {
+      throw new ValidationError('Review ID is required');
+    }
     const review = await prisma.review.findUnique({
-      where: { id: reviewId },
+      where: { id: reviewId.trim() },
       include: {
         enrollment: {
           include: {
@@ -169,12 +221,12 @@ class ReviewService {
       throw new NotFoundError('Review not found');
     }
 
-    if (review.reviewerId !== userId) {
+    if (review.reviewerId !== userId.trim()) {
       throw new AuthorizationError('You can only delete your own reviews');
     }
 
     await prisma.review.delete({
-      where: { id: reviewId },
+      where: { id: reviewId.trim() },
     });
 
     // Update teacher's average rating
@@ -192,7 +244,18 @@ class ReviewService {
     teacherId: string,
     page: number = 1,
     limit: number = 10
-  ) {
+  ): Promise<{
+    reviews: ReviewWithRelations[];
+    pagination: {
+      total: number;
+      page: number;
+      limit: number;
+      totalPages: number;
+    };
+  }> {
+    if (!teacherId || !teacherId.trim()) {
+      throw new ValidationError('Teacher ID is required');
+    }
     const safePage = Number.isFinite(page) && page > 0 ? Math.floor(page) : 1;
     const safeLimit = Number.isFinite(limit)
       ? Math.min(Math.max(Math.floor(limit), 1), 100)
@@ -203,7 +266,7 @@ class ReviewService {
     const [reviews, total] = await Promise.all([
       prisma.review.findMany({
         where: {
-          teacherId,
+          teacherId: teacherId.trim(),
           isPublished: true,
         },
         skip,
@@ -235,7 +298,7 @@ class ReviewService {
       }),
       prisma.review.count({
         where: {
-          teacherId,
+          teacherId: teacherId.trim(),
           isPublished: true,
         },
       }),
@@ -255,9 +318,12 @@ class ReviewService {
   /**
    * Get user's reviews
    */
-  async getUserReviews(userId: string) {
+  async getUserReviews(userId: string): Promise<ReviewWithEnrollment[]> {
+    if (!userId || !userId.trim()) {
+      throw new ValidationError('User ID is required');
+    }
     const reviews = await prisma.review.findMany({
-      where: { reviewerId: userId },
+      where: { reviewerId: userId.trim() },
       include: {
         enrollment: {
           include: {
@@ -292,7 +358,7 @@ class ReviewService {
   /**
    * Update teacher's average rating
    */
-  private async updateTeacherRating(teacherProfileId: string) {
+  private async updateTeacherRating(teacherProfileId: string): Promise<void> {
     const reviews = await prisma.review.findMany({
       where: {
         enrollment: {

@@ -15,7 +15,10 @@ const TABS: { key: NonNullable<FeedQuery['tab']>; label: string; icon: any }[] =
 const CommunityHomePage = () => {
   const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
-  const [tab, setTab] = useState<NonNullable<FeedQuery['tab']>>(params.get('tab') as any || 'hot');
+  const [tab, setTab] = useState<NonNullable<FeedQuery['tab']>>(() => {
+    const tabParam = params.get('tab');
+    return (tabParam === 'hot' || tabParam === 'new' || tabParam === 'weekly') ? tabParam : 'hot';
+  });
   const [tag, setTag] = useState<string | undefined>(params.get('tag') || undefined);
   const [tags, setTags] = useState<CommunityTag[]>([]);
   const [posts, setPosts] = useState<CommunityPost[]>([]);
@@ -42,18 +45,23 @@ const CommunityHomePage = () => {
         setPosts(res.items);
         setTotalPages(res.pagination.totalPages);
       } catch (e) {
-        console.error(e);
+        console.error('Failed to load community feed:', e);
         toast.error('Failed to load community feed');
       } finally {
         setIsLoading(false);
       }
     };
     load();
-  }, [query.tab, query.tag, query.page]);
+  }, [query]);
 
   useEffect(() => {
     (async () => {
-      try { setTags(await communityService.getTags()); } catch {}
+      try {
+        setTags(await communityService.getTags());
+      } catch (error) {
+        console.error('Failed to load tags:', error);
+        toast.error('Failed to load tags');
+      }
     })();
   }, []);
 
@@ -61,20 +69,32 @@ const CommunityHomePage = () => {
     try {
       const { likes, hasLiked } = await communityService.likePost(id);
       setPosts((ps) => ps.map(p => p.id === id ? { ...p, likes, hasLiked } : p));
-    } catch { toast.error('Failed to like'); }
+    } catch (error) {
+      console.error('Failed to like post:', error);
+      toast.error('Failed to like post');
+    }
   };
 
   const toggleBookmark = async (id: string) => {
     try {
       const { bookmarks, hasBookmarked } = await communityService.bookmarkPost(id);
       setPosts((ps) => ps.map(p => p.id === id ? { ...p, bookmarks, hasBookmarked } : p));
-    } catch { toast.error('Failed to bookmark'); }
+    } catch (error) {
+      console.error('Failed to bookmark post:', error);
+      toast.error('Failed to bookmark post');
+    }
   };
 
   const onShare = async (post: CommunityPost) => {
     const url = `${window.location.origin}/community/post/${post.id}`;
-    try { await navigator.clipboard.writeText(url); toast.success('Link copied'); }
-    catch { toast(url); }
+    try {
+      await navigator.clipboard.writeText(url);
+      toast.success('Link copied to clipboard');
+    } catch (error) {
+      console.error('Failed to copy link:', error);
+      // Fallback: show URL in toast if clipboard API fails
+      toast.error(`Share URL: ${url}`);
+    }
   };
 
   return (
@@ -133,8 +153,8 @@ const CommunityHomePage = () => {
                 )}
                 <div className="flex-1 p-5">
                   <Link to={`/community/post/${post.id}`} className="block">
-                    <h3 className="text-lg font-bold text-gray-900 mb-2 line-clamp-2 hover:text-primary-600 transition-colors">{post.title || post.content.slice(0, 60)}</h3>
-                    <p className="text-sm text-gray-600 line-clamp-2">{post.content}</p>
+                    <h3 className="text-lg font-bold text-gray-900 mb-2 line-clamp-2 hover:text-primary-600 transition-colors">{post.title || (post.content ? post.content.slice(0, 60) : 'Untitled')}</h3>
+                    <p className="text-sm text-gray-600 line-clamp-2">{post.content || ''}</p>
                   </Link>
                   <div className="mt-3 flex items-center gap-2 flex-wrap">
                     {post.tags?.map(t => (
@@ -166,9 +186,9 @@ const CommunityHomePage = () => {
         {/* Pagination */}
         {totalPages > 1 && (
           <div className="mt-8 flex items-center justify-center gap-2">
-            <button disabled={page<=1} onClick={() => setPage(p => p-1)} className="btn-outline btn-sm disabled:opacity-50">Previous</button>
+            <button disabled={page <= 1} onClick={() => setPage(p => p - 1)} className="btn-outline btn-sm disabled:opacity-50">Previous</button>
             <span className="text-sm text-gray-600">Page {page} of {totalPages}</span>
-            <button disabled={page>=totalPages} onClick={() => setPage(p => p+1)} className="btn-outline btn-sm disabled:opacity-50">Next</button>
+            <button disabled={page >= totalPages} onClick={() => setPage(p => p + 1)} className="btn-outline btn-sm disabled:opacity-50">Next</button>
           </div>
         )}
       </div>

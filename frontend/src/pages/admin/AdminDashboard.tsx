@@ -182,6 +182,12 @@ const AdminDashboard = () => {
     return activity.description;
   };
 
+  // Helper function to calculate percentage safely
+  const calculatePercentage = (numerator: number, denominator: number): number => {
+    if (denominator === 0) return 0;
+    return Math.round((numerator / denominator) * 100);
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 via-blue-50 to-indigo-50">
       <div className="container mx-auto px-4 py-8">
@@ -387,12 +393,12 @@ const AdminDashboard = () => {
             {stats.overview.totalTeachers}
           </p>
           <ProgressBar
-            percentage={Math.round((stats.overview.totalTeachers / stats.overview.totalUsers) * 100)}
+            percentage={calculatePercentage(stats.overview.totalTeachers, stats.overview.totalUsers)}
             containerClassName="w-full bg-primary-200 rounded-full h-2 overflow-hidden"
             barClassName="bg-gradient-to-r from-primary-600 to-primary-700 h-2 rounded-full transition-all duration-500"
           />
           <p className="text-sm text-primary-700 mt-3 font-medium">
-            {Math.round((stats.overview.totalTeachers / stats.overview.totalUsers) * 100)}% of users
+            {calculatePercentage(stats.overview.totalTeachers, stats.overview.totalUsers)}% of users
           </p>
         </div>
         <div className="card bg-gradient-to-br from-green-50 to-green-100 border-green-200">
@@ -404,12 +410,12 @@ const AdminDashboard = () => {
             {stats.overview.totalStudents}
           </p>
           <ProgressBar
-            percentage={Math.round((stats.overview.totalStudents / stats.overview.totalUsers) * 100)}
+            percentage={calculatePercentage(stats.overview.totalStudents, stats.overview.totalUsers)}
             containerClassName="w-full bg-green-200 rounded-full h-2 overflow-hidden"
             barClassName="bg-gradient-to-r from-green-600 to-green-700 h-2 rounded-full transition-all duration-500"
           />
           <p className="text-sm text-green-700 mt-3 font-medium">
-            {Math.round((stats.overview.totalStudents / stats.overview.totalUsers) * 100)}% of users
+            {calculatePercentage(stats.overview.totalStudents, stats.overview.totalUsers)}% of users
           </p>
         </div>
         <div className="card bg-gradient-to-br from-purple-50 to-purple-100 border-purple-200">
@@ -421,12 +427,12 @@ const AdminDashboard = () => {
             {stats.overview.publishedCourses}
           </p>
           <ProgressBar
-            percentage={Math.round((stats.overview.publishedCourses / stats.overview.totalCourses) * 100)}
+            percentage={calculatePercentage(stats.overview.publishedCourses, stats.overview.totalCourses)}
             containerClassName="w-full bg-purple-200 rounded-full h-2 overflow-hidden"
             barClassName="bg-gradient-to-r from-purple-600 to-purple-700 h-2 rounded-full transition-all duration-500"
           />
           <p className="text-sm text-purple-700 mt-3 font-medium">
-            {Math.round((stats.overview.publishedCourses / stats.overview.totalCourses) * 100)}% of total
+            {calculatePercentage(stats.overview.publishedCourses, stats.overview.totalCourses)}% of total
           </p>
         </div>
         </div>

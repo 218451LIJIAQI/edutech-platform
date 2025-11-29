@@ -26,7 +26,7 @@ const UniversalVideoPlayer = ({
   const resolveAssetUrl = (path?: string) => {
     if (!path) return '';
     if (/^https?:\/\//i.test(path)) return path;
-    const apiUrl = (import.meta as any).env?.VITE_API_URL || 'http://localhost:3000/api/v1';
+    const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000/api/v1';
     const origin = apiUrl.replace(/\/api(\/.*)?$/i, '');
     return `${origin}${path.startsWith('/') ? path : `/${path}`}`;
   };
@@ -149,8 +149,8 @@ const UniversalVideoPlayer = ({
     // Local video file or direct video URL
     return (
       <VideoPlayer
-        src={src}
-        poster={poster}
+        src={resolvedSrc}
+        poster={resolvedPoster}
         title={title}
         onProgress={onProgress}
         onComplete={onComplete}

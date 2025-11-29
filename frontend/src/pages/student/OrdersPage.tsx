@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import ordersService from '@/services/orders.service';
 import { Order, OrderStatus } from '@/types';
 import { Link } from 'react-router-dom';
@@ -14,43 +14,51 @@ import { Link } from 'react-router-dom';
 const OrdersPage = () => {
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState<'ALL' | keyof typeof OrderStatus>('ALL');
+  const [error, setError] = useState<string | null>(null);
+  const [filter, setFilter] = useState<'ALL' | OrderStatus>('ALL');
 
   /**
    * Load all orders
    */
-  const load = async () => {
+  const load = useCallback(async () => {
     setLoading(true);
+    setError(null);
     try {
       const data = await ordersService.getMyOrders();
       setOrders(data);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load orders');
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     load();
-  }, []);
+  }, [load]);
 
   /**
    * Filter orders by status
    */
-  const filtered = orders.filter((o) => (filter === 'ALL' ? true : o.status === filter));
+  const filtered = useMemo(() => {
+    return orders.filter((o) => (filter === 'ALL' ? true : o.status === filter));
+  }, [orders, filter]);
 
   /**
    * Get status badge color
    */
-  const getStatusBadgeClass = (status: string) => {
+  const getStatusBadgeClass = (status: OrderStatus): string => {
     switch (status) {
-      case 'PAID':
+      case OrderStatus.PAID:
         return 'badge-success';
-      case 'PENDING':
+      case OrderStatus.PENDING:
         return 'badge-warning';
-      case 'CANCELLED':
+      case OrderStatus.CANCELLED:
         return 'badge-danger';
-      case 'REFUNDED':
+      case OrderStatus.REFUNDED:
         return 'badge-info';
+      case OrderStatus.FAILED:
+        return 'badge-danger';
       default:
         return 'badge-primary';
     }
@@ -59,16 +67,18 @@ const OrdersPage = () => {
   /**
    * Get status icon
    */
-  const getStatusIcon = (status: string) => {
+  const getStatusIcon = (status: OrderStatus): string => {
     switch (status) {
-      case 'PAID':
+      case OrderStatus.PAID:
         return '✓';
-      case 'PENDING':
+      case OrderStatus.PENDING:
         return '⏳';
-      case 'CANCELLED':
+      case OrderStatus.CANCELLED:
         return '✕';
-      case 'REFUNDED':
+      case OrderStatus.REFUNDED:
         return '↩';
+      case OrderStatus.FAILED:
+        return '⚠';
       default:
         return '•';
     }
@@ -95,20 +105,39 @@ const OrdersPage = () => {
           >
             All Orders
           </button>
-          {Object.keys(OrderStatus).map((k) => (
+          {Object.values(OrderStatus).map((status) => (
             <button
-              key={k}
+              key={status}
               className={`px-4 py-2 rounded-full text-sm font-semibold transition-all border ${
-                filter === k
+                filter === status
                 ? 'bg-primary-600 text-white border-primary-600 shadow-md'
                 : 'bg-white text-gray-700 border-gray-200 hover:border-primary-300 hover:text-primary-700'
               }`}
-              onClick={() => setFilter(k as keyof typeof OrderStatus)}
+              onClick={() => setFilter(status)}
             >
-              {k}
+              {status}
             </button>
           ))}
         </div>
+
+        {/* Error State */}
+        {error && (
+          <div className="card p-6 mb-8 bg-red-50 border border-red-200 rounded-2xl">
+            <div className="flex items-center gap-3">
+              <span className="text-2xl">⚠️</span>
+              <div>
+                <h3 className="font-bold text-red-900 mb-1">Error loading orders</h3>
+                <p className="text-red-700 text-sm">{error}</p>
+                <button
+                  onClick={load}
+                  className="mt-3 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors text-sm font-semibold"
+                >
+                  Retry
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Loading State */}
         {loading ? (
@@ -205,7 +234,7 @@ const OrdersPage = () => {
                     </div>
                   )}
 
-                  {!order.paidAt && !order.canceledAt && order.status === 'PENDING' && (
+                  {!order.paidAt && !order.canceledAt && order.status === OrderStatus.PENDING && (
                     <div className="flex items-center gap-1 text-yellow-600">
                       <span>⏳ Awaiting payment</span>
                     </div>

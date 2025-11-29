@@ -25,9 +25,11 @@ const CommunityUserProfilePage = () => {
         const res = await communityService.getUserPosts(userId, 1, 20);
         setPosts(res.items);
       } catch (e) {
-        console.error(e);
+        console.error('Failed to load profile:', e);
         toast.error('Failed to load profile');
-      } finally { setIsLoading(false); }
+      } finally {
+        setIsLoading(false);
+      }
     };
     load();
   }, [userId]);
@@ -37,27 +39,42 @@ const CommunityUserProfilePage = () => {
     try {
       const res = await communityService.followUser(userId);
       setProfile(prev => prev ? { ...prev, isFollowing: res.isFollowing, followers: res.followers } : prev);
-    } catch { toast.error('Failed to follow'); }
+    } catch (error) {
+      console.error('Failed to follow user:', error);
+      toast.error('Failed to follow user');
+    }
   };
 
   const toggleLike = async (id: string) => {
     try {
       const { likes, hasLiked } = await communityService.likePost(id);
       setPosts((ps) => ps.map(p => p.id === id ? { ...p, likes, hasLiked } : p));
-    } catch { toast.error('Failed to like'); }
+    } catch (error) {
+      console.error('Failed to like post:', error);
+      toast.error('Failed to like post');
+    }
   };
 
   const toggleBookmark = async (id: string) => {
     try {
       const { bookmarks, hasBookmarked } = await communityService.bookmarkPost(id);
       setPosts((ps) => ps.map(p => p.id === id ? { ...p, bookmarks, hasBookmarked } : p));
-    } catch { toast.error('Failed to bookmark'); }
+    } catch (error) {
+      console.error('Failed to bookmark post:', error);
+      toast.error('Failed to bookmark post');
+    }
   };
 
   const onShare = async (post: CommunityPost) => {
     const url = `${window.location.origin}/community/post/${post.id}`;
-    try { await navigator.clipboard.writeText(url); toast.success('Link copied'); }
-    catch { toast(url); }
+    try {
+      await navigator.clipboard.writeText(url);
+      toast.success('Link copied to clipboard');
+    } catch (error) {
+      console.error('Failed to copy link:', error);
+      // Fallback: show URL in toast if clipboard API fails
+      toast.error(`Share URL: ${url}`);
+    }
   };
 
   if (isLoading) {
@@ -91,10 +108,10 @@ const CommunityUserProfilePage = () => {
             <div className="flex-1">
               <h1 className="text-2xl font-bold text-gray-900">{isMe ? 'My Profile' : 'User Profile'}</h1>
               <p className="text-sm text-gray-600">Followers {profile.followers} · Following {profile.following}</p>
-              {profile.badges && (
+              {profile.badges && profile.badges.length > 0 && (
                 <div className="mt-2 flex items-center gap-2 flex-wrap">
                   {profile.badges.map((b, i) => (
-                    <span key={i} className="badge-primary text-xs">{b}</span>
+                    <span key={`badge-${i}-${b}`} className="badge-primary text-xs">{b}</span>
                   ))}
                 </div>
               )}
@@ -128,8 +145,8 @@ const CommunityUserProfilePage = () => {
                   )
                 )}
                 <Link to={`/community/post/${post.id}`} className="block">
-                  <h3 className="text-lg font-bold text-gray-900 mb-1 line-clamp-2">{post.title || post.content.slice(0, 60)}</h3>
-                  <p className="text-sm text-gray-600 line-clamp-2">{post.content}</p>
+                  <h3 className="text-lg font-bold text-gray-900 mb-1 line-clamp-2">{post.title || (post.content ? post.content.slice(0, 60) : 'Untitled')}</h3>
+                  <p className="text-sm text-gray-600 line-clamp-2">{post.content || ''}</p>
                 </Link>
                 <div className="mt-4 flex items-center justify-between">
                   <div className="flex items-center gap-3">
