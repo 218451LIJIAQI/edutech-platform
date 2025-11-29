@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { UserRole } from '@prisma/client';
+import { param } from 'express-validator';
 import courseController from '../controllers/course.controller';
 import { authenticate, authorize, optionalAuth } from '../middleware/auth';
 import { validate } from '../middleware/validate';
@@ -37,7 +38,12 @@ router.get(
 );
 
 // Generic course by ID route - MUST come last
-router.get('/:id', optionalAuth, courseController.getCourseById);
+router.get(
+  '/:id',
+  optionalAuth,
+  validate([param('id').notEmpty().withMessage('Course ID is required').isUUID().withMessage('Invalid course ID')]),
+  courseController.getCourseById
+);
 
 // Teacher-only routes - Course Management
 router.post(
@@ -54,7 +60,10 @@ router.put(
   authenticate,
   authorize(UserRole.TEACHER),
   ensureTeacherApproved,
-  validate(updateCourseValidation),
+  validate([
+    param('id').notEmpty().withMessage('Course ID is required').isUUID().withMessage('Invalid course ID'),
+    ...updateCourseValidation,
+  ]),
   courseController.updateCourse
 );
 
@@ -63,6 +72,7 @@ router.delete(
   authenticate,
   authorize(UserRole.TEACHER),
   ensureTeacherApproved,
+  validate([param('id').notEmpty().withMessage('Course ID is required').isUUID().withMessage('Invalid course ID')]),
   courseController.deleteCourse
 );
 
@@ -72,7 +82,10 @@ router.post(
   authenticate,
   authorize(UserRole.TEACHER),
   ensureTeacherApproved,
-  validate(createLessonValidation),
+  validate([
+    param('id').notEmpty().withMessage('Course ID is required').isUUID().withMessage('Invalid course ID'),
+    ...createLessonValidation,
+  ]),
   courseController.createLesson
 );
 
@@ -81,7 +94,10 @@ router.put(
   authenticate,
   authorize(UserRole.TEACHER),
   ensureTeacherApproved,
-  validate(updateLessonValidation),
+  validate([
+    param('id').notEmpty().withMessage('Lesson ID is required').isUUID().withMessage('Invalid lesson ID'),
+    ...updateLessonValidation,
+  ]),
   courseController.updateLesson
 );
 
@@ -90,6 +106,7 @@ router.delete(
   authenticate,
   authorize(UserRole.TEACHER),
   ensureTeacherApproved,
+  validate([param('id').notEmpty().withMessage('Lesson ID is required').isUUID().withMessage('Invalid lesson ID')]),
   courseController.deleteLesson
 );
 
@@ -99,7 +116,10 @@ router.post(
   authenticate,
   authorize(UserRole.TEACHER),
   ensureTeacherApproved,
-  validate(createPackageValidation),
+  validate([
+    param('id').notEmpty().withMessage('Course ID is required').isUUID().withMessage('Invalid course ID'),
+    ...createPackageValidation,
+  ]),
   courseController.createPackage
 );
 
@@ -108,7 +128,10 @@ router.put(
   authenticate,
   authorize(UserRole.TEACHER),
   ensureTeacherApproved,
-  validate(updatePackageValidation),
+  validate([
+    param('id').notEmpty().withMessage('Package ID is required').isUUID().withMessage('Invalid package ID'),
+    ...updatePackageValidation,
+  ]),
   courseController.updatePackage
 );
 
@@ -117,6 +140,7 @@ router.delete(
   authenticate,
   authorize(UserRole.TEACHER),
   ensureTeacherApproved,
+  validate([param('id').notEmpty().withMessage('Package ID is required').isUUID().withMessage('Invalid package ID')]),
   courseController.deletePackage
 );
 
@@ -126,7 +150,10 @@ router.post(
   authenticate,
   authorize(UserRole.TEACHER),
   ensureTeacherApproved,
-  validate(uploadMaterialValidation),
+  validate([
+    param('id').notEmpty().withMessage('Course ID is required').isUUID().withMessage('Invalid course ID'),
+    ...uploadMaterialValidation,
+  ]),
   courseController.uploadMaterial
 );
 
@@ -135,7 +162,10 @@ router.put(
   authenticate,
   authorize(UserRole.TEACHER),
   ensureTeacherApproved,
-  validate(updateMaterialValidation),
+  validate([
+    param('id').notEmpty().withMessage('Material ID is required').isUUID().withMessage('Invalid material ID'),
+    ...updateMaterialValidation,
+  ]),
   courseController.updateMaterial
 );
 
@@ -144,6 +174,7 @@ router.delete(
   authenticate,
   authorize(UserRole.TEACHER),
   ensureTeacherApproved,
+  validate([param('id').notEmpty().withMessage('Material ID is required').isUUID().withMessage('Invalid material ID')]),
   courseController.deleteMaterial
 );
 
@@ -153,6 +184,7 @@ router.post(
   authenticate,
   authorize(UserRole.TEACHER),
   ensureTeacherApproved,
+  validate([param('id').notEmpty().withMessage('Course ID is required').isUUID().withMessage('Invalid course ID')]),
   courseController.sendCourseNotification
 );
 

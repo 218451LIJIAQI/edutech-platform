@@ -1,4 +1,5 @@
 import { UserRole, VerificationStatus, ReportStatus, PaymentStatus } from '@prisma/client';
+import bcrypt from 'bcrypt';
 import prisma from '../config/database';
 import config from '../config/env';
 import { NotFoundError, ValidationError } from '../utils/errors';
@@ -79,7 +80,7 @@ class AdminService {
     for (const p of paymentsLast12) {
       if (!p.paidAt) continue;
       const label = `${p.paidAt.getFullYear()}-${String(p.paidAt.getMonth() + 1).padStart(2, '0')}`;
-      monthlyMap.set(label, (monthlyMap.get(label) || 0) + p.amount);
+      monthlyMap.set(label, (monthlyMap.get(label) || 0) + Number(p.amount));
     }
 
     const monthly = months.map((m) => ({ month: m, revenue: monthlyMap.get(m) || 0 }));
@@ -731,10 +732,16 @@ class AdminService {
       throw new ValidationError('Email already in use');
     }
 
+    if (!data.password || data.password.length < 8) {
+      throw new ValidationError('Password must be at least 8 characters long');
+    }
+
+    const hashedPassword = await bcrypt.hash(data.password, 10);
+
     const user = await prisma.user.create({
       data: {
         email: data.email,
-        password: data.password,
+        password: hashedPassword,
         firstName: data.firstName,
         lastName: data.lastName,
         role: data.role,
@@ -821,10 +828,16 @@ class AdminService {
       throw new NotFoundError('User not found');
     }
 
+    if (!newPassword || newPassword.length < 8) {
+      throw new ValidationError('Password must be at least 8 characters long');
+    }
+
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+
     const updated = await prisma.user.update({
       where: { id: userId },
       data: {
-        password: newPassword,
+        password: hashedPassword,
         updatedBy: adminId,
       },
     });
@@ -1201,7 +1214,7 @@ class AdminService {
       })),
     ];
 
-    const ordered = raw.sort((a, b) => new Date(b.createdAt as any).getTime() - new Date(a.createdAt as any).getTime());
+    const ordered = raw.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
     const start = (page - 1) * limit;
     const items = ordered.slice(start, start + limit);
 
@@ -1364,9 +1377,9 @@ class AdminService {
           });
         }
         const row = map.get(key)!;
-        row.totalGross += p.amount;
-        row.platformCommission += p.platformCommission;
-        row.teacherEarning += p.teacherEarning;
+        row.totalGross += Number(p.amount);
+        row.platformCommission += Number(p.platformCommission);
+        row.teacherEarning += Number(p.teacherEarning);
         row.transactions += 1;
       }
 
@@ -1391,7 +1404,7 @@ class AdminService {
           // Recompute per-item split using teacher commission rate if available; fallback to platform
           const rate = tp.commissionRate ?? config.PLATFORM_COMMISSION_RATE;
           const platformCommission = (item.finalPrice * rate) / 100;
-          const teacherEarning = item.finalPrice - platformCommission;
+          const teacherEarning = item.finalPrice * (1 - rate / 100);
           row.totalGross += item.finalPrice;
           row.platformCommission += platformCommission;
           row.teacherEarning += teacherEarning;
@@ -1506,7 +1519,8 @@ class AdminService {
       const d = new Date(date);
       if (groupBy === 'month') return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
       if (groupBy === 'week') {
-        const firstDay = new Date(d.setDate(d.getDate() - d.getDay()));
+        const firstDay = new Date(d);
+        firstDay.setDate(d.getDate() - d.getDay());
         return `${firstDay.getFullYear()}-${String(firstDay.getMonth() + 1).padStart(2, '0')}-${String(firstDay.getDate()).padStart(2, '0')}`;
       }
       return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -1519,9 +1533,9 @@ class AdminService {
         trendMap.set(key, { date: key, totalRevenue: 0, platformEarnings: 0, teacherEarnings: 0 });
       }
       const entry = trendMap.get(key)!;
-      entry.totalRevenue += p.amount;
-      entry.platformEarnings += p.platformCommission;
-      entry.teacherEarnings += p.teacherEarning;
+      entry.totalRevenue += Number(p.amount);
+      entry.platformEarnings += Number(p.platformCommission);
+      entry.teacherEarnings += Number(p.teacherEarning);
     }
     const revenueTrend = Array.from(trendMap.values()).sort((a, b) => a.date.localeCompare(b.date));
 
@@ -1542,21 +1556,31 @@ class AdminService {
       const teacherEarning = item.finalPrice * (1 - rate / 100);
 
       // Top Teachers
-      if (!teacherMap.has(teacherKey)) teacherMap.set(teacherKey, { id: teacherKey, name: `${teacher.firstName} ${teacher.lastName}`, earnings: 0 });
+      if (!teacherMap.has(teacherKey)) {
+        teacherMap.set(teacherKey, {
+          id: teacherKey,
+          name: `${teacher.firstName} ${teacher.lastName}`,
+          earnings: 0,
+        });
+      }
       teacherMap.get(teacherKey)!.earnings += teacherEarning;
 
       // Top Courses
-      if (!courseMap.has(courseKey)) courseMap.set(courseKey, { id: courseKey, title: course.title, revenue: 0 });
+      if (!courseMap.has(courseKey)) {
+        courseMap.set(courseKey, { id: courseKey, title: course.title, revenue: 0 });
+      }
       courseMap.get(courseKey)!.revenue += item.finalPrice;
 
       // Breakdown
-      if (!breakdownMap.has(courseType)) breakdownMap.set(courseType, { type: courseType, revenue: 0 });
+      if (!breakdownMap.has(courseType)) {
+        breakdownMap.set(courseType, { type: courseType, revenue: 0 });
+      }
       breakdownMap.get(courseType)!.revenue += item.finalPrice;
     };
 
     for (const p of payments) {
       if (p.package && p.package.course) {
-        processItem({ finalPrice: p.amount }, p.package.course);
+        processItem({ finalPrice: Number(p.amount) }, p.package.course);
       } else if (p.order && p.order.items) {
         for (const item of p.order.items) {
           if (item.package && item.package.course) {

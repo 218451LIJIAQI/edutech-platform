@@ -1,6 +1,25 @@
 import { Request, Response } from 'express';
 import enrollmentService from '../services/enrollment.service';
 import asyncHandler from '../utils/asyncHandler';
+import { BadRequestError } from '../utils/errors';
+
+/**
+ * Helper function to normalize ID parameter
+ */
+function normalizeId(id: unknown): string {
+  if (typeof id === 'string') {
+    const trimmed = id.trim();
+    if (!trimmed) {
+      throw new BadRequestError('ID cannot be empty');
+    }
+    return trimmed;
+  }
+  const stringId = String(id).trim();
+  if (!stringId) {
+    throw new BadRequestError('ID cannot be empty');
+  }
+  return stringId;
+}
 
 /**
  * Enrollment Controller
@@ -12,7 +31,10 @@ class EnrollmentController {
    * GET /api/enrollments/my-courses
    */
   getMyEnrollments = asyncHandler(async (req: Request, res: Response) => {
-    const userId = req.user!.id;
+    if (!req.user) {
+      throw new BadRequestError('Authentication required');
+    }
+    const userId = req.user.id;
 
     const enrollments = await enrollmentService.getUserEnrollments(userId);
 
@@ -27,10 +49,13 @@ class EnrollmentController {
    * GET /api/enrollments/:id
    */
   getEnrollmentById = asyncHandler(async (req: Request, res: Response) => {
-    const userId = req.user!.id;
+    if (!req.user) {
+      throw new BadRequestError('Authentication required');
+    }
+    const userId = req.user.id;
     const { id } = req.params;
 
-    const enrollmentId = typeof id === 'string' ? id.trim() : String(id);
+    const enrollmentId = normalizeId(id);
 
     const enrollment = await enrollmentService.getEnrollmentById(enrollmentId, userId);
 
@@ -45,14 +70,17 @@ class EnrollmentController {
    * PUT /api/enrollments/:id/progress
    */
   updateProgress = asyncHandler(async (req: Request, res: Response) => {
-    const userId = req.user!.id;
+    if (!req.user) {
+      throw new BadRequestError('Authentication required');
+    }
+    const userId = req.user.id;
     const { id } = req.params;
     const { completedLessons, progress } = req.body as {
       completedLessons?: string[] | number;
       progress?: number | string;
     };
 
-    const enrollmentId = typeof id === 'string' ? id.trim() : String(id);
+    const enrollmentId = normalizeId(id);
 
     // Accept either an array of lesson IDs or a numeric count
     const completedCount = Array.isArray(completedLessons)
@@ -63,16 +91,16 @@ class EnrollmentController {
 
     const normalizedProgress =
       typeof progress === 'number'
-        ? progress
+        ? Math.max(0, Math.min(100, progress))
         : progress != null
-        ? Number(progress)
-        : undefined as unknown as number;
+        ? Math.max(0, Math.min(100, Number(progress) || 0))
+        : undefined;
 
     const enrollment = await enrollmentService.updateProgress(
       enrollmentId,
       userId,
       completedCount,
-      normalizedProgress as number
+      normalizedProgress
     );
 
     res.status(200).json({
@@ -87,11 +115,13 @@ class EnrollmentController {
    * GET /api/enrollments/check-access/:courseId
    */
   checkAccess = asyncHandler(async (req: Request, res: Response) => {
-    const userId = req.user!.id;
+    if (!req.user) {
+      throw new BadRequestError('Authentication required');
+    }
+    const userId = req.user.id;
     const { courseId } = req.params;
 
-    const normalizedCourseId =
-      typeof courseId === 'string' ? courseId.trim() : String(courseId);
+    const normalizedCourseId = normalizeId(courseId);
 
     const hasAccess = await enrollmentService.checkAccess(userId, normalizedCourseId);
 
@@ -106,11 +136,13 @@ class EnrollmentController {
    * GET /api/enrollments/course/:courseId/students
    */
   getCourseStudents = asyncHandler(async (req: Request, res: Response) => {
-    const userId = req.user!.id;
+    if (!req.user) {
+      throw new BadRequestError('Authentication required');
+    }
+    const userId = req.user.id;
     const { courseId } = req.params;
 
-    const normalizedCourseId =
-      typeof courseId === 'string' ? courseId.trim() : String(courseId);
+    const normalizedCourseId = normalizeId(courseId);
 
     const students = await enrollmentService.getCourseStudents(userId, normalizedCourseId);
 
@@ -125,11 +157,13 @@ class EnrollmentController {
    * GET /api/enrollments/course/:courseId/stats
    */
   getCourseStats = asyncHandler(async (req: Request, res: Response) => {
-    const userId = req.user!.id;
+    if (!req.user) {
+      throw new BadRequestError('Authentication required');
+    }
+    const userId = req.user.id;
     const { courseId } = req.params;
 
-    const normalizedCourseId =
-      typeof courseId === 'string' ? courseId.trim() : String(courseId);
+    const normalizedCourseId = normalizeId(courseId);
 
     const stats = await enrollmentService.getCourseStats(userId, normalizedCourseId);
 

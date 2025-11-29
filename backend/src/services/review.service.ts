@@ -121,12 +121,17 @@ class ReviewService {
       }
     }
 
+    const updateData: { rating?: number; comment?: string | null } = {};
+    if (rating !== undefined) {
+      updateData.rating = rating;
+    }
+    if (comment !== undefined) {
+      updateData.comment = comment || null;
+    }
+
     const updated = await prisma.review.update({
       where: { id: reviewId },
-      data: {
-        rating: rating !== undefined ? rating : review.rating,
-        comment: comment !== undefined ? comment : review.comment,
-      },
+      data: updateData,
     });
 
     // Update teacher's average rating
@@ -299,12 +304,15 @@ class ReviewService {
         },
         isPublished: true,
       },
+      select: {
+        rating: true,
+      },
     });
 
     const averageRating =
       reviews.length > 0
-        ? reviews.reduce((sum, review) => sum + review.rating, 0) /
-          reviews.length
+        ? Math.round((reviews.reduce((sum, review) => sum + review.rating, 0) /
+          reviews.length) * 100) / 100
         : 0;
 
     await prisma.teacherProfile.update({

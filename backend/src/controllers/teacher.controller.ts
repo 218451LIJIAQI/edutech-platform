@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { VerificationStatus, RegistrationStatus } from '@prisma/client';
 import teacherService from '../services/teacher.service';
 import asyncHandler from '../utils/asyncHandler';
+import { BadRequestError } from '../utils/errors';
 
 /**
  * Teacher Controller
@@ -58,7 +59,10 @@ class TeacherController {
    * GET /api/teachers/me/profile
    */
   getMyProfile = asyncHandler(async (req: Request, res: Response) => {
-    const userId = req.user!.id;
+    if (!req.user) {
+      throw new BadRequestError('Authentication required');
+    }
+    const userId = req.user.id;
 
     const teacher = await teacherService.getTeacherByUserId(userId);
 
@@ -73,7 +77,10 @@ class TeacherController {
    * PUT /api/teachers/me/profile
    */
   updateProfile = asyncHandler(async (req: Request, res: Response) => {
-    const userId = req.user!.id;
+    if (!req.user) {
+      throw new BadRequestError('Authentication required');
+    }
+    const userId = req.user.id;
     const { bio, headline, hourlyRate } = req.body as {
       bio?: string;
       headline?: string;
@@ -98,23 +105,52 @@ class TeacherController {
    * POST /api/teachers/me/certifications
    */
   addCertification = asyncHandler(async (req: Request, res: Response) => {
-    const userId = req.user!.id;
+    if (!req.user) {
+      throw new BadRequestError('Authentication required');
+    }
+    const userId = req.user.id;
     const { title, issuer, issueDate, expiryDate, credentialId, credentialUrl } = req.body as {
-      title: string;
-      issuer: string;
-      issueDate: string;
+      title?: string;
+      issuer?: string;
+      issueDate?: string;
       expiryDate?: string;
       credentialId?: string;
       credentialUrl?: string;
     };
 
+    if (!title || typeof title !== 'string' || !title.trim()) {
+      throw new BadRequestError('Title is required');
+    }
+    if (!issuer || typeof issuer !== 'string' || !issuer.trim()) {
+      throw new BadRequestError('Issuer is required');
+    }
+    if (!issueDate || typeof issueDate !== 'string') {
+      throw new BadRequestError('Issue date is required');
+    }
+
+    const parsedIssueDate = new Date(issueDate);
+    if (isNaN(parsedIssueDate.getTime())) {
+      throw new BadRequestError('Invalid issue date format');
+    }
+
+    let parsedExpiryDate: Date | undefined;
+    if (expiryDate) {
+      if (typeof expiryDate !== 'string') {
+        throw new BadRequestError('Invalid expiry date format');
+      }
+      parsedExpiryDate = new Date(expiryDate);
+      if (isNaN(parsedExpiryDate.getTime())) {
+        throw new BadRequestError('Invalid expiry date format');
+      }
+    }
+
     const certification = await teacherService.addCertification(userId, {
-      title,
-      issuer,
-      issueDate: new Date(issueDate),
-      expiryDate: expiryDate ? new Date(expiryDate) : undefined,
-      credentialId,
-      credentialUrl,
+      title: title.trim(),
+      issuer: issuer.trim(),
+      issueDate: parsedIssueDate,
+      expiryDate: parsedExpiryDate,
+      credentialId: credentialId?.trim(),
+      credentialUrl: credentialUrl?.trim(),
     });
 
     res.status(201).json({
@@ -129,7 +165,10 @@ class TeacherController {
    * DELETE /api/teachers/me/certifications/:id
    */
   deleteCertification = asyncHandler(async (req: Request, res: Response) => {
-    const userId = req.user!.id;
+    if (!req.user) {
+      throw new BadRequestError('Authentication required');
+    }
+    const userId = req.user.id;
     const { id } = req.params as { id: string };
 
     const result = await teacherService.deleteCertification(userId, id);
@@ -145,13 +184,23 @@ class TeacherController {
    * POST /api/teachers/me/verifications
    */
   submitVerification = asyncHandler(async (req: Request, res: Response) => {
-    const userId = req.user!.id;
-    const { documentType, documentUrl } = req.body as { documentType: string; documentUrl: string };
+    if (!req.user) {
+      throw new BadRequestError('Authentication required');
+    }
+    const userId = req.user.id;
+    const { documentType, documentUrl } = req.body as { documentType?: string; documentUrl?: string };
+
+    if (!documentType || typeof documentType !== 'string' || !documentType.trim()) {
+      throw new BadRequestError('Document type is required');
+    }
+    if (!documentUrl || typeof documentUrl !== 'string' || !documentUrl.trim()) {
+      throw new BadRequestError('Document URL is required');
+    }
 
     const verification = await teacherService.submitVerification(
       userId,
-      documentType,
-      documentUrl
+      documentType.trim(),
+      documentUrl.trim()
     );
 
     res.status(201).json({
@@ -166,7 +215,10 @@ class TeacherController {
    * GET /api/teachers/me/verifications
    */
   getMyVerifications = asyncHandler(async (req: Request, res: Response) => {
-    const userId = req.user!.id;
+    if (!req.user) {
+      throw new BadRequestError('Authentication required');
+    }
+    const userId = req.user.id;
 
     const verifications = await teacherService.getVerifications(userId);
 
@@ -181,7 +233,10 @@ class TeacherController {
    * GET /api/teachers/me/stats
    */
   getMyStats = asyncHandler(async (req: Request, res: Response) => {
-    const userId = req.user!.id;
+    if (!req.user) {
+      throw new BadRequestError('Authentication required');
+    }
+    const userId = req.user.id;
 
     const stats = await teacherService.getTeacherStats(userId);
 
@@ -210,17 +265,24 @@ class TeacherController {
    */
   reviewVerification = asyncHandler(async (req: Request, res: Response) => {
     const { id } = req.params as { id: string };
-    const adminId = req.user!.id;
+    if (!req.user) {
+      throw new BadRequestError('Authentication required');
+    }
+    const adminId = req.user.id;
     const { status, reviewNotes } = req.body as {
-      status: VerificationStatus;
+      status?: VerificationStatus;
       reviewNotes?: string;
     };
+
+    if (!status || !Object.values(VerificationStatus).includes(status)) {
+      throw new BadRequestError('Valid verification status is required');
+    }
 
     const verification = await teacherService.reviewVerification(
       id,
       adminId,
-      status as VerificationStatus,
-      reviewNotes
+      status,
+      reviewNotes?.trim()
     );
 
     res.status(200).json({
@@ -235,7 +297,10 @@ class TeacherController {
    * POST /api/teachers/me/profile/submit
    */
   submitExtendedProfile = asyncHandler(async (req: Request, res: Response) => {
-    const userId = req.user!.id;
+    if (!req.user) {
+      throw new BadRequestError('Authentication required');
+    }
+    const userId = req.user.id;
     const {
       selfIntroduction,
       educationBackground,
@@ -285,7 +350,10 @@ class TeacherController {
    * GET /api/teachers/me/profile/extended
    */
   getExtendedProfile = asyncHandler(async (req: Request, res: Response) => {
-    const userId = req.user!.id;
+    if (!req.user) {
+      throw new BadRequestError('Authentication required');
+    }
+    const userId = req.user.id;
 
     const profile = await teacherService.getExtendedProfile(userId);
 
@@ -300,7 +368,10 @@ class TeacherController {
    * PUT /api/teachers/me/profile/update
    */
   updateExtendedProfile = asyncHandler(async (req: Request, res: Response) => {
-    const userId = req.user!.id;
+    if (!req.user) {
+      throw new BadRequestError('Authentication required');
+    }
+    const userId = req.user.id;
     const {
       selfIntroduction,
       educationBackground,
@@ -369,14 +440,21 @@ class TeacherController {
    */
   reviewTeacherProfile = asyncHandler(async (req: Request, res: Response) => {
     const { id } = req.params as { id: string };
-    const adminId = req.user!.id;
-    const { status, reviewNotes } = req.body as { status: VerificationStatus; reviewNotes?: string };
+    if (!req.user) {
+      throw new BadRequestError('Authentication required');
+    }
+    const adminId = req.user.id;
+    const { status, reviewNotes } = req.body as { status?: VerificationStatus; reviewNotes?: string };
+
+    if (!status || !Object.values(VerificationStatus).includes(status)) {
+      throw new BadRequestError('Valid verification status is required');
+    }
 
     const profile = await teacherService.reviewTeacherProfile(
       id,
       adminId,
-      status as VerificationStatus,
-      reviewNotes
+      status,
+      reviewNotes?.trim()
     );
 
     res.status(200).json({
@@ -428,13 +506,20 @@ class TeacherController {
    */
   reviewRegistration = asyncHandler(async (req: Request, res: Response) => {
     const { id } = req.params as { id: string };
-    const adminId = req.user!.id;
-    const { status } = req.body as { status: RegistrationStatus };
+    if (!req.user) {
+      throw new BadRequestError('Authentication required');
+    }
+    const adminId = req.user.id;
+    const { status } = req.body as { status?: RegistrationStatus };
+
+    if (!status || !Object.values(RegistrationStatus).includes(status)) {
+      throw new BadRequestError('Valid registration status is required');
+    }
 
     const updated = await teacherService.reviewRegistration(
       id,
       adminId,
-      status as RegistrationStatus
+      status
     );
 
     res.status(200).json({

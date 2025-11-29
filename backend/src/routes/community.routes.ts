@@ -66,6 +66,7 @@ router.post(
 // ==================== COMMENTS ====================
 router.get(
   '/posts/:postId/comments',
+  optionalAuth,
   validate([
     param('postId').notEmpty().withMessage('postId is required').isUUID().withMessage('Invalid postId'),
     query('page').optional().isInt({ min: 1 }).withMessage('page must be >= 1'),
@@ -87,12 +88,14 @@ router.post(
 // ==================== USERS ====================
 router.get(
   '/users/:userId/profile',
+  optionalAuth,
   validate([param('userId').notEmpty().withMessage('userId is required').isUUID().withMessage('Invalid userId')]),
   communityController.getUserProfile
 );
 
 router.get(
   '/users/:userId/posts',
+  optionalAuth,
   validate([
     param('userId').notEmpty().withMessage('userId is required').isUUID().withMessage('Invalid userId'),
     query('page').optional().isInt({ min: 1 }).withMessage('page must be >= 1'),

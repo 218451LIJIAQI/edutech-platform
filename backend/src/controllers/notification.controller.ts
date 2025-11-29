@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import notificationService from '../services/notification.service';
 import asyncHandler from '../utils/asyncHandler';
+import { BadRequestError } from '../utils/errors';
 
 /**
  * Notification Controller
@@ -12,17 +13,23 @@ class NotificationController {
    * GET /api/notifications
    */
   getMyNotifications = asyncHandler(async (req: Request, res: Response) => {
-    const userId = req.user!.id;
+    if (!req.user) {
+      throw new BadRequestError('Authentication required');
+    }
+    const userId = req.user.id;
     const { page, limit, unreadOnly } = req.query as {
       page?: string;
       limit?: string;
       unreadOnly?: string | boolean;
     };
 
+    const parsedPage = page ? Math.max(1, parseInt(page, 10) || 1) : undefined;
+    const parsedLimit = limit ? Math.min(Math.max(1, parseInt(limit, 10) || 10), 100) : undefined;
+
     const result = await notificationService.getUserNotifications(
       userId,
-      page ? parseInt(page, 10) : undefined,
-      limit ? parseInt(limit, 10) : undefined,
+      parsedPage,
+      parsedLimit,
       unreadOnly === 'true' || unreadOnly === true
     );
 
@@ -40,7 +47,10 @@ class NotificationController {
    * GET /api/notifications/unread-count
    */
   getUnreadCount = asyncHandler(async (req: Request, res: Response) => {
-    const userId = req.user!.id;
+    if (!req.user) {
+      throw new BadRequestError('Authentication required');
+    }
+    const userId = req.user.id;
 
     const count = await notificationService.getUnreadCount(userId);
 
@@ -55,10 +65,17 @@ class NotificationController {
    * PUT /api/notifications/:id/read
    */
   markAsRead = asyncHandler(async (req: Request, res: Response) => {
-    const userId = req.user!.id;
-    const { id } = req.params as { id: string };
+    if (!req.user) {
+      throw new BadRequestError('Authentication required');
+    }
+    const userId = req.user.id;
+    const { id } = req.params;
 
-    const notification = await notificationService.markAsRead(id, userId);
+    if (!id || typeof id !== 'string' || !id.trim()) {
+      throw new BadRequestError('Notification ID is required');
+    }
+
+    const notification = await notificationService.markAsRead(id.trim(), userId);
 
     res.status(200).json({
       status: 'success',
@@ -71,8 +88,11 @@ class NotificationController {
    * Mark all notifications as read
    * PUT /api/notifications/read-all
    */
-  markAllAsRead = asyncHandler(async (_req: Request, res: Response) => {
-    const userId = res.req.user!.id;
+  markAllAsRead = asyncHandler(async (req: Request, res: Response) => {
+    if (!req.user) {
+      throw new BadRequestError('Authentication required');
+    }
+    const userId = req.user.id;
 
     await notificationService.markAllAsRead(userId);
 
@@ -87,10 +107,17 @@ class NotificationController {
    * DELETE /api/notifications/:id
    */
   deleteNotification = asyncHandler(async (req: Request, res: Response) => {
-    const userId = req.user!.id;
-    const { id } = req.params as { id: string };
+    if (!req.user) {
+      throw new BadRequestError('Authentication required');
+    }
+    const userId = req.user.id;
+    const { id } = req.params;
 
-    await notificationService.deleteNotification(id, userId);
+    if (!id || typeof id !== 'string' || !id.trim()) {
+      throw new BadRequestError('Notification ID is required');
+    }
+
+    await notificationService.deleteNotification(id.trim(), userId);
 
     res.status(200).json({
       status: 'success',
@@ -104,17 +131,37 @@ class NotificationController {
    */
   createNotification = asyncHandler(async (req: Request, res: Response) => {
     const { userId, title, message, type } = req.body as {
-      userId: string;
-      title: string;
-      message: string;
+      userId?: string;
+      title?: string;
+      message?: string;
       type?: string;
     };
 
+    if (!userId || typeof userId !== 'string' || !userId.trim()) {
+      throw new BadRequestError('User ID is required');
+    }
+
+    if (!title || typeof title !== 'string' || !title.trim()) {
+      throw new BadRequestError('Title is required');
+    }
+
+    if (title.trim().length > 200) {
+      throw new BadRequestError('Title must not exceed 200 characters');
+    }
+
+    if (!message || typeof message !== 'string' || !message.trim()) {
+      throw new BadRequestError('Message is required');
+    }
+
+    if (message.trim().length > 1000) {
+      throw new BadRequestError('Message must not exceed 1000 characters');
+    }
+
     const notification = await notificationService.createNotification(
-      userId,
-      title,
-      message,
-      type
+      userId.trim(),
+      title.trim(),
+      message.trim(),
+      type?.trim()
     );
 
     res.status(201).json({

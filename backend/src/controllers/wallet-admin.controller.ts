@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import asyncHandler from '../utils/asyncHandler';
 import walletService from '../services/wallet.service';
+import { BadRequestError } from '../utils/errors';
 
 // Allowed admin actions for payout review
 type PayoutAction = 'approve' | 'reject' | 'processing' | 'paid';
@@ -55,14 +56,12 @@ class WalletAdminController {
 
     const cleanedId = cleanString(id);
     if (!cleanedId) {
-      res.status(400).json({ status: 'fail', message: 'Invalid payout id' });
-      return;
+      throw new BadRequestError('Invalid payout id');
     }
 
     const actionStr = cleanString(action);
     if (!actionStr || !ALLOWED_ACTIONS.has(actionStr as PayoutAction)) {
-      res.status(400).json({ status: 'fail', message: 'Invalid action' });
-      return;
+      throw new BadRequestError('Invalid action. Allowed actions: approve, reject, processing, paid');
     }
 
     const data = await walletService.reviewPayout(cleanedId, actionStr as PayoutAction, {

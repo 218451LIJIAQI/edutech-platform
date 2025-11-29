@@ -13,11 +13,11 @@ export const ensureTeacherApproved: RequestHandler = async (
   next: NextFunction
 ) => {
   try {
-    const userId = (req as any).user?.id as string | number | undefined;
+    const userId = req.user?.id;
     if (!userId) return next(new AuthorizationError('Unauthorized'));
 
     const profile = await prisma.teacherProfile.findUnique({
-      where: { userId: String(userId) },
+      where: { userId },
       select: {
         registrationStatus: true,
       },
@@ -42,7 +42,7 @@ export const ensureTeacherApproved: RequestHandler = async (
 
     return next();
   } catch (err) {
-    return next(err as unknown);
+    return next(err as Error);
   }
 };
 

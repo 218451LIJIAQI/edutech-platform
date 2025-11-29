@@ -2,6 +2,8 @@ import { Request, Response } from 'express';
 import asyncHandler from '../utils/asyncHandler';
 import { AppError } from '../utils/errors';
 import prisma from '../config/database';
+import { UserRole } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 
 /**
  * Message Controller
@@ -37,17 +39,17 @@ export const getContacts = asyncHandler(async (req: Request, res: Response) => {
   }
 
   // Build query based on user role
-  let where: any = {
+  const where: Prisma.UserWhereInput = {
     id: { not: userId }, // Exclude self
   };
 
   // Students can message teachers and admins
   if (currentUser.role === 'STUDENT') {
-    where.role = { in: ['TEACHER', 'ADMIN'] };
+    where.role = { in: [UserRole.TEACHER, UserRole.ADMIN] };
   }
   // Teachers can message students and admins
   else if (currentUser.role === 'TEACHER') {
-    where.role = { in: ['STUDENT', 'ADMIN'] };
+    where.role = { in: [UserRole.STUDENT, UserRole.ADMIN] };
   }
   // Admins can message everyone
   // else if (currentUser.role === 'ADMIN') {
@@ -84,6 +86,7 @@ export const getContacts = asyncHandler(async (req: Request, res: Response) => {
       contacts = contacts.filter((c) => c.role !== 'ADMIN' || c.id === primaryAdmin.id);
       const exists = contacts.some((c) => c.id === primaryAdmin.id);
       if (!exists) {
+        // Type-safe insertion: primaryAdmin matches the contact structure from select
         contacts = [primaryAdmin, ...contacts];
       } else {
         // Move to front
@@ -121,8 +124,8 @@ export const getOrCreateThread = asyncHandler(async (req: Request, res: Response
     throw new AppError('User not authenticated', 401);
   }
 
-  if (!contactId) {
-    throw new AppError('contactId is required', 400);
+  if (!contactId || typeof contactId !== 'string' || !contactId.trim()) {
+    throw new AppError('contactId is required and must be a non-empty string', 400);
   }
 
   // Check if other user exists
@@ -223,15 +226,19 @@ export const getOrCreateThread = asyncHandler(async (req: Request, res: Response
 export const getMessages = asyncHandler(async (req: Request, res: Response) => {
   const userId = req.user?.id;
   const { threadId } = req.params;
-  const { cursor, limit = 20 } = req.query;
+  const { cursor, limit } = req.query as { cursor?: string; limit?: string };
 
   if (!userId) {
     throw new AppError('User not authenticated', 401);
   }
 
+  if (!threadId || typeof threadId !== 'string' || !threadId.trim()) {
+    throw new AppError('Thread ID is required', 400);
+  }
+
   // Verify user is part of this thread
   const thread = await prisma.messageThread.findUnique({
-    where: { id: threadId as string },
+    where: { id: threadId.trim() },
   });
 
   if (!thread) {
@@ -243,8 +250,14 @@ export const getMessages = asyncHandler(async (req: Request, res: Response) => {
     throw new AppError('Not authorized to view this thread', 403);
   }
 
+  const parsedLimit = limit 
+    ? Math.min(Math.max(parseInt(String(limit), 10) || 20, 1), 100) 
+    : 20;
+
+  const trimmedCursor = cursor && typeof cursor === 'string' ? cursor.trim() : undefined;
+
   const messages = await prisma.message.findMany({
-    where: { threadId: threadId as string },
+    where: { threadId: threadId.trim() },
     include: {
       sender: {
         select: {
@@ -256,15 +269,16 @@ export const getMessages = asyncHandler(async (req: Request, res: Response) => {
       },
     },
     orderBy: { createdAt: 'desc' },
-    take: parseInt(limit as string) || 20,
-    ...(cursor && { skip: 1, cursor: { id: cursor as string } }),
+    take: parsedLimit,
+    ...(trimmedCursor ? { skip: 1, cursor: { id: trimmedCursor } } : {}),
   });
 
+  const reversedMessages = messages.reverse();
   res.status(200).json({
     status: 'success',
     data: {
-      items: messages.reverse(),
-      nextCursor: messages.length > 0 ? messages[0].id : null, // after reverse, messages[0] is oldest item
+      items: reversedMessages,
+      nextCursor: reversedMessages.length > 0 ? reversedMessages[0].id : null, // after reverse, messages[0] is oldest item
     },
   });
 });
@@ -281,13 +295,21 @@ export const sendMessage = asyncHandler(async (req: Request, res: Response) => {
     throw new AppError('User not authenticated', 401);
   }
 
-  if (!content || !content.trim()) {
+  if (!threadId || typeof threadId !== 'string' || !threadId.trim()) {
+    throw new AppError('Thread ID is required', 400);
+  }
+
+  if (!content || typeof content !== 'string' || !content.trim()) {
     throw new AppError('Message content is required', 400);
+  }
+
+  if (content.trim().length > 5000) {
+    throw new AppError('Message content must not exceed 5000 characters', 400);
   }
 
   // Verify user is part of this thread
   const thread = await prisma.messageThread.findUnique({
-    where: { id: threadId as string },
+    where: { id: threadId.trim() },
   });
 
   if (!thread) {
@@ -301,7 +323,7 @@ export const sendMessage = asyncHandler(async (req: Request, res: Response) => {
 
   const message = await prisma.message.create({
     data: {
-      threadId: threadId as string,
+      threadId: threadId.trim(),
       senderId: userId,
       content: content.trim(),
     },
@@ -319,7 +341,7 @@ export const sendMessage = asyncHandler(async (req: Request, res: Response) => {
 
   // Update thread updatedAt
   await prisma.messageThread.update({
-    where: { id: threadId as string },
+    where: { id: threadId.trim() },
     data: { updatedAt: new Date() },
   });
 
@@ -368,9 +390,13 @@ export const markMessagesAsRead = asyncHandler(async (req: Request, res: Respons
     throw new AppError('User not authenticated', 401);
   }
 
+  if (!threadId || typeof threadId !== 'string' || !threadId.trim()) {
+    throw new AppError('Thread ID is required', 400);
+  }
+
   // Verify user is part of this thread
   const thread = await prisma.messageThread.findUnique({
-    where: { id: threadId as string },
+    where: { id: threadId.trim() },
   });
 
   if (!thread) {
@@ -385,7 +411,7 @@ export const markMessagesAsRead = asyncHandler(async (req: Request, res: Respons
   // Mark all unread messages from other users as read
   const result = await prisma.message.updateMany({
     where: {
-      threadId: threadId as string,
+      threadId: threadId.trim(),
       senderId: { not: userId },
       isRead: false,
     },
@@ -406,10 +432,14 @@ export const markMessagesAsRead = asyncHandler(async (req: Request, res: Respons
  */
 export const getContactUnreadCount = asyncHandler(async (req: Request, res: Response) => {
   const userId = req.user?.id;
-  const { contactId } = req.params as { contactId: string };
+  const { contactId } = req.params;
 
   if (!userId) {
     throw new AppError('User not authenticated', 401);
+  }
+
+  if (!contactId || typeof contactId !== 'string' || !contactId.trim()) {
+    throw new AppError('Contact ID is required', 400);
   }
 
   // Find thread with this contact using participants relation (handles legacy participantIds ordering)
@@ -427,7 +457,7 @@ export const getContactUnreadCount = asyncHandler(async (req: Request, res: Resp
     unreadCount = await prisma.message.count({
       where: {
         threadId: thread.id,
-        senderId: contactId,
+        senderId: contactId.trim(),
         isRead: false,
       },
     });

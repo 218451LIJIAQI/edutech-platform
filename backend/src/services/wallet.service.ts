@@ -55,7 +55,7 @@ class WalletService {
     const safeLimit = toInt(limit, 20, { min: 1, max: 100 });
     const safeOffset = toInt(offset, 0, { min: 0 });
 
-    const where: any = { walletId: wallet.id };
+    const where: { walletId: string; type?: TransactionType; source?: TransactionSource } = { walletId: wallet.id };
 
     const typeUpper = cleanString(type)?.toUpperCase() as TransactionType | undefined;
     if (typeUpper && ALLOWED_TX_TYPES.has(typeUpper)) where.type = typeUpper;
@@ -84,6 +84,14 @@ class WalletService {
     const label = cleanString(input.label);
     if (!label) throw new ValidationError('Label is required');
 
+    const typeUpper = cleanString(input.type)?.toUpperCase();
+    if (!typeUpper) throw new ValidationError('Type is required');
+
+    const validTypes = ['BANK_TRANSFER', 'GRABPAY', 'TOUCH_N_GO', 'PAYPAL', 'OTHER'];
+    if (!validTypes.includes(typeUpper)) {
+      throw new ValidationError(`Invalid payout method type. Must be one of: ${validTypes.join(', ')}`);
+    }
+
     const created = await prisma.$transaction(async (tx) => {
       if (input.isDefault) {
         await tx.payoutMethod.updateMany({ where: { walletId: wallet.id }, data: { isDefault: false } });
@@ -91,7 +99,7 @@ class WalletService {
       const method = await tx.payoutMethod.create({
         data: {
           walletId: wallet.id,
-          type: (cleanString(input.type)?.toUpperCase() || input.type) as any,
+          type: typeUpper as any,
           label,
           details: input.details,
           isDefault: !!input.isDefault,
@@ -217,7 +225,7 @@ class WalletService {
     const safeLimit = toInt(limit, 50, { min: 1, max: 100 });
     const safeOffset = toInt(offset, 0, { min: 0 });
 
-    const where: any = {};
+    const where: { status?: PayoutStatus } = {};
     const statusUpper = cleanString(status)?.toUpperCase() as PayoutStatus | undefined;
     if (statusUpper && ALLOWED_PAYOUT_STATUSES.has(statusUpper)) where.status = statusUpper;
 

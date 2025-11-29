@@ -15,6 +15,14 @@ router.get(
   ordersController.getMyOrders
 );
 
+// Get all refunds for the current user (must be before /:id to avoid route conflict)
+router.get(
+  '/refunds/list',
+  authenticate,
+  authorize(UserRole.STUDENT),
+  ordersController.getUserRefunds
+);
+
 // Get order detail
 router.get(
   '/:id',
@@ -60,14 +68,6 @@ router.get(
   authorize(UserRole.STUDENT),
   validate([param('id').notEmpty().withMessage('id is required').isUUID().withMessage('Invalid order id')]),
   ordersController.getRefundByOrderId
-);
-
-// Get all refunds for the current user
-router.get(
-  '/refunds/list',
-  authenticate,
-  authorize(UserRole.STUDENT),
-  ordersController.getUserRefunds
 );
 
 export default router;

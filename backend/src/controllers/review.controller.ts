@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import reviewService from '../services/review.service';
 import asyncHandler from '../utils/asyncHandler';
+import { BadRequestError } from '../utils/errors';
 
 /**
  * Review Controller
@@ -12,18 +13,32 @@ class ReviewController {
    * POST /api/reviews
    */
   createReview = asyncHandler(async (req: Request, res: Response) => {
-    const userId = req.user!.id;
+    if (!req.user) {
+      throw new BadRequestError('Authentication required');
+    }
+    const userId = req.user.id;
     const { enrollmentId, rating, comment } = (req.body || {}) as {
-      enrollmentId: string;
-      rating: number | string;
+      enrollmentId?: string;
+      rating?: number | string;
       comment?: string;
     };
 
-    const normalizedEnrollmentId =
-      typeof enrollmentId === 'string' ? enrollmentId.trim() : String(enrollmentId);
+    if (!enrollmentId || typeof enrollmentId !== 'string' || !enrollmentId.trim()) {
+      throw new BadRequestError('Enrollment ID is required');
+    }
+
+    const normalizedEnrollmentId = enrollmentId.trim();
+
+    if (rating === undefined || rating === null) {
+      throw new BadRequestError('Rating is required');
+    }
 
     const normalizedRating =
-      typeof rating === 'number' ? rating : rating != null ? Number(rating) : NaN;
+      typeof rating === 'number' ? rating : Number(rating);
+
+    if (!Number.isFinite(normalizedRating) || normalizedRating < 1 || normalizedRating > 5) {
+      throw new BadRequestError('Rating must be a number between 1 and 5');
+    }
 
     const normalizedComment =
       typeof comment === 'string' ? comment.trim() : comment;
@@ -47,7 +62,10 @@ class ReviewController {
    * PUT /api/reviews/:id
    */
   updateReview = asyncHandler(async (req: Request, res: Response) => {
-    const userId = req.user!.id;
+    if (!req.user) {
+      throw new BadRequestError('Authentication required');
+    }
+    const userId = req.user.id;
     const { id } = req.params;
     const { rating, comment } = (req.body || {}) as {
       rating?: number | string;
@@ -56,8 +74,13 @@ class ReviewController {
 
     const reviewId = typeof id === 'string' ? id.trim() : String(id);
 
-    const normalizedRating =
-      typeof rating === 'number' ? rating : rating != null ? Number(rating) : undefined;
+    let normalizedRating: number | undefined = undefined;
+    if (rating !== undefined && rating !== null) {
+      normalizedRating = typeof rating === 'number' ? rating : Number(rating);
+      if (!Number.isFinite(normalizedRating) || normalizedRating < 1 || normalizedRating > 5) {
+        throw new BadRequestError('Rating must be a number between 1 and 5');
+      }
+    }
 
     const normalizedComment =
       typeof comment === 'string' ? comment.trim() : comment;
@@ -65,7 +88,7 @@ class ReviewController {
     const review = await reviewService.updateReview(
       userId,
       reviewId,
-      normalizedRating as number | undefined,
+      normalizedRating,
       normalizedComment
     );
 
@@ -81,7 +104,10 @@ class ReviewController {
    * DELETE /api/reviews/:id
    */
   deleteReview = asyncHandler(async (req: Request, res: Response) => {
-    const userId = req.user!.id;
+    if (!req.user) {
+      throw new BadRequestError('Authentication required');
+    }
+    const userId = req.user.id;
     const { id } = req.params;
 
     const reviewId = typeof id === 'string' ? id.trim() : String(id);
@@ -138,7 +164,10 @@ class ReviewController {
    * GET /api/reviews/my-reviews
    */
   getMyReviews = asyncHandler(async (req: Request, res: Response) => {
-    const userId = req.user!.id;
+    if (!req.user) {
+      throw new BadRequestError('Authentication required');
+    }
+    const userId = req.user.id;
 
     const reviews = await reviewService.getUserReviews(userId);
 

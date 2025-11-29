@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import asyncHandler from '../utils/asyncHandler';
 import supportAdminService from '../services/support-admin.service';
+import { BadRequestError } from '../utils/errors';
 
 class SupportAdminController {
   /**
@@ -67,7 +68,10 @@ class SupportAdminController {
     const { id } = req.params;
     const ticketId = typeof id === 'string' ? id.trim() : String(id);
 
-    const adminId = req.user!.id;
+    if (!req.user) {
+      throw new BadRequestError('Authentication required');
+    }
+    const adminId = req.user.id;
 
     const ticket = await supportAdminService.assignTicket(ticketId, adminId);
 
@@ -86,13 +90,20 @@ class SupportAdminController {
     const { id } = req.params;
     const ticketId = typeof id === 'string' ? id.trim() : String(id);
 
-    const { message } = (req.body || {}) as { message: string };
-    const adminId = req.user!.id;
+    const { message } = (req.body || {}) as { message?: string };
+    if (!req.user) {
+      throw new BadRequestError('Authentication required');
+    }
+    const adminId = req.user.id;
+
+    if (!message || typeof message !== 'string' || !message.trim()) {
+      throw new BadRequestError('Message is required');
+    }
 
     const msg = await supportAdminService.addAdminResponse(
       ticketId,
       adminId,
-      typeof message === 'string' ? message.trim() : message
+      message.trim()
     );
 
     res.status(201).json({
@@ -110,11 +121,15 @@ class SupportAdminController {
     const { id } = req.params;
     const ticketId = typeof id === 'string' ? id.trim() : String(id);
 
-    const { resolution } = (req.body || {}) as { resolution: string };
+    const { resolution } = (req.body || {}) as { resolution?: string };
+
+    if (!resolution || typeof resolution !== 'string' || !resolution.trim()) {
+      throw new BadRequestError('Resolution is required');
+    }
 
     const ticket = await supportAdminService.resolveTicket(
       ticketId,
-      typeof resolution === 'string' ? resolution.trim() : resolution
+      resolution.trim()
     );
 
     res.status(200).json({

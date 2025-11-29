@@ -1,6 +1,6 @@
 import prisma from '../config/database';
-import { NotFoundError } from '../utils/errors';
-import { Prisma } from '@prisma/client';
+import { NotFoundError, ValidationError } from '../utils/errors';
+import { Prisma, Notification } from '@prisma/client';
 
 /**
  * Notification Service
@@ -15,7 +15,18 @@ class NotificationService {
     page: number = 1,
     limit: number = 20,
     unreadOnly: boolean = false
-  ) {
+  ): Promise<{
+    notifications: Notification[];
+    pagination: {
+      total: number;
+      page: number;
+      limit: number;
+      totalPages: number;
+    };
+  }> {
+    if (!userId || !userId.trim()) {
+      throw new ValidationError('User ID is required');
+    }
     const safePage = Number.isFinite(page) && page > 0 ? Math.floor(page) : 1;
     const safeLimit = Number.isFinite(limit)
       ? Math.min(Math.max(Math.floor(limit), 1), 100)
@@ -24,8 +35,8 @@ class NotificationService {
     const skip = (safePage - 1) * safeLimit;
 
     const where: Prisma.NotificationWhereInput = unreadOnly
-      ? { userId, isRead: false }
-      : { userId };
+      ? { userId: userId.trim(), isRead: false }
+      : { userId: userId.trim() };
 
     const [notifications, total] = await Promise.all([
       prisma.notification.findMany({
@@ -52,9 +63,12 @@ class NotificationService {
    * Get unread notification count
    */
   async getUnreadCount(userId: string): Promise<number> {
+    if (!userId || !userId.trim()) {
+      throw new ValidationError('User ID is required');
+    }
     return await prisma.notification.count({
       where: {
-        userId,
+        userId: userId.trim(),
         isRead: false,
       },
     });
@@ -63,9 +77,18 @@ class NotificationService {
   /**
    * Mark notification as read (idempotent, scoped to owner)
    */
-  async markAsRead(notificationId: string, userId: string) {
+  async markAsRead(
+    notificationId: string,
+    userId: string
+  ): Promise<Notification> {
+    if (!notificationId || !notificationId.trim()) {
+      throw new ValidationError('Notification ID is required');
+    }
+    if (!userId || !userId.trim()) {
+      throw new ValidationError('User ID is required');
+    }
     const notification = await prisma.notification.findFirst({
-      where: { id: notificationId, userId },
+      where: { id: notificationId.trim(), userId: userId.trim() },
     });
 
     if (!notification) {
@@ -76,7 +99,7 @@ class NotificationService {
     if (notification.isRead) return notification;
 
     return await prisma.notification.update({
-      where: { id: notificationId },
+      where: { id: notificationId.trim() },
       data: { isRead: true },
     });
   }
@@ -84,10 +107,13 @@ class NotificationService {
   /**
    * Mark all notifications as read
    */
-  async markAllAsRead(userId: string) {
-    await prisma.notification.updateMany({
+  async markAllAsRead(userId: string): Promise<{ count: number }> {
+    if (!userId || !userId.trim()) {
+      throw new ValidationError('User ID is required');
+    }
+    return await prisma.notification.updateMany({
       where: {
-        userId,
+        userId: userId.trim(),
         isRead: false,
       },
       data: {
@@ -99,9 +125,15 @@ class NotificationService {
   /**
    * Delete notification (scoped to owner)
    */
-  async deleteNotification(notificationId: string, userId: string) {
+  async deleteNotification(notificationId: string, userId: string): Promise<void> {
+    if (!notificationId || !notificationId.trim()) {
+      throw new ValidationError('Notification ID is required');
+    }
+    if (!userId || !userId.trim()) {
+      throw new ValidationError('User ID is required');
+    }
     const { count } = await prisma.notification.deleteMany({
-      where: { id: notificationId, userId },
+      where: { id: notificationId.trim(), userId: userId.trim() },
     });
 
     if (count === 0) {
@@ -118,13 +150,22 @@ class NotificationService {
     title: string,
     message: string,
     type: string = 'general'
-  ) {
+  ): Promise<Notification> {
+    if (!title || !title.trim()) {
+      throw new ValidationError('Notification title is required');
+    }
+    if (!message || !message.trim()) {
+      throw new ValidationError('Notification message is required');
+    }
+    if (!userId || !userId.trim()) {
+      throw new ValidationError('User ID is required');
+    }
     return await prisma.notification.create({
       data: {
-        userId,
-        title,
-        message,
-        type,
+        userId: userId.trim(),
+        title: title.trim(),
+        message: message.trim(),
+        type: type.trim() || 'general',
       },
     });
   }
@@ -137,15 +178,40 @@ class NotificationService {
     title: string,
     message: string,
     type: string = 'general'
-  ) {
-    const notifications = userIds.map((userId) => ({
+  ): Promise<{ count: number }> {
+    if (!userIds || !Array.isArray(userIds) || userIds.length === 0) {
+      return { count: 0 };
+    }
+
+    if (!title || !title.trim()) {
+      throw new ValidationError('Notification title is required');
+    }
+    if (!message || !message.trim()) {
+      throw new ValidationError('Notification message is required');
+    }
+
+    // Remove duplicates and filter out invalid user IDs
+    const uniqueUserIds = Array.from(
+      new Set(
+        userIds
+          .filter((id): id is string => typeof id === 'string' && id !== null && id !== undefined)
+          .map((id) => id.trim())
+          .filter((id) => id.length > 0)
+      )
+    );
+
+    if (uniqueUserIds.length === 0) {
+      return { count: 0 };
+    }
+
+    const notifications = uniqueUserIds.map((userId) => ({
       userId,
-      title,
-      message,
-      type,
+      title: title.trim(),
+      message: message.trim(),
+      type: type.trim() || 'general',
     }));
 
-    await prisma.notification.createMany({
+    return await prisma.notification.createMany({
       data: notifications,
     });
   }

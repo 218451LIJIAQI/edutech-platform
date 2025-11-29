@@ -11,6 +11,7 @@ import {
   reviewVerificationValidation,
   getTeachersValidation,
 } from '../validators/teacher.validator';
+import { param } from 'express-validator';
 
 const router = Router();
 
@@ -28,7 +29,11 @@ router.get(
   teacherController.getAllTeachers
 );
 
-router.get('/:id', teacherController.getTeacherById);
+router.get(
+  '/:id',
+  validate([param('id').notEmpty().withMessage('id is required').isUUID().withMessage('Invalid id')]),
+  teacherController.getTeacherById
+);
 
 // Teacher-only routes
 router.get(
@@ -67,6 +72,7 @@ router.delete(
   '/me/certifications/:id',
   authenticate,
   authorize(UserRole.TEACHER),
+  validate([param('id').notEmpty().withMessage('id is required').isUUID().withMessage('Invalid id')]),
   teacherController.deleteCertification
 );
 
@@ -120,7 +126,10 @@ router.put(
   '/verifications/:id/review',
   authenticate,
   authorize(UserRole.ADMIN),
-  validate(reviewVerificationValidation),
+  validate([
+    param('id').notEmpty().withMessage('id is required').isUUID().withMessage('Invalid id'),
+    ...reviewVerificationValidation,
+  ]),
   teacherController.reviewVerification
 );
 
@@ -136,6 +145,7 @@ router.put(
   '/admin/registrations/:id/review',
   authenticate,
   authorize(UserRole.ADMIN),
+  validate([param('id').notEmpty().withMessage('id is required').isUUID().withMessage('Invalid id')]),
   teacherController.reviewRegistration
 );
 
@@ -151,6 +161,7 @@ router.put(
   '/admin/profiles/:id/review',
   authenticate,
   authorize(UserRole.ADMIN),
+  validate([param('id').notEmpty().withMessage('id is required').isUUID().withMessage('Invalid id')]),
   teacherController.reviewTeacherProfile
 );
 

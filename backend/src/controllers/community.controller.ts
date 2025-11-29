@@ -41,15 +41,20 @@ export const communityController = {
       resolvedTab = tab;
     } else if (sort === 'top') {
       resolvedTab = 'hot';
-    } else {
+    } else if (sort === 'latest') {
       resolvedTab = 'new';
+    } else {
+      resolvedTab = 'hot'; // Default to 'hot' instead of 'new' for better UX
     }
+
+    const parsedPage = page ? Math.max(1, parseInt(page, 10) || 1) : 1;
+    const parsedLimit = limit ? Math.min(Math.max(1, parseInt(limit, 10) || 10), 100) : 10;
 
     const result = await communityService.getFeed({
       tab: resolvedTab,
-      tag,
-      page: page ? parseInt(page, 10) : 1,
-      limit: limit ? parseInt(limit, 10) : 10,
+      tag: tag && typeof tag === 'string' ? tag.trim() : undefined,
+      page: parsedPage,
+      limit: parsedLimit,
     });
     res.json({
       status: 'success',
@@ -58,15 +63,26 @@ export const communityController = {
   }),
 
   createPost: asyncHandler(async (req: Request, res: Response) => {
-    const userId = req.user?.id;
-    if (!userId) {
+    if (!req.user) {
       throw new BadRequestError('User not authenticated');
     }
+    const userId = req.user.id;
 
-    const { title, content, tags, media, courseId, courseTitle } = req.body;
+    const { title, content, tags, media, courseId, courseTitle } = req.body as {
+      title?: string;
+      content?: string;
+      tags?: string[];
+      media?: string[];
+      courseId?: string;
+      courseTitle?: string;
+    };
 
     if (!content || typeof content !== 'string' || content.trim().length < 10) {
       throw new BadRequestError('Content must be at least 10 characters');
+    }
+
+    if (title && typeof title === 'string' && title.trim().length > 200) {
+      throw new BadRequestError('Title must not exceed 200 characters');
     }
 
     const post = await communityService.createPost(
@@ -90,8 +106,11 @@ export const communityController = {
 
   getPostById: asyncHandler(async (req: Request, res: Response) => {
     const { id } = req.params;
+    if (!id || typeof id !== 'string' || !id.trim()) {
+      throw new BadRequestError('Post ID is required');
+    }
     const userId = req.user?.id;
-    const post = await communityService.getPostById(id, userId);
+    const post = await communityService.getPostById(id.trim(), userId);
     res.json({
       status: 'success',
       data: post,
@@ -99,13 +118,16 @@ export const communityController = {
   }),
 
   likePost: asyncHandler(async (req: Request, res: Response) => {
-    const userId = req.user?.id;
-    if (!userId) {
+    if (!req.user) {
       throw new BadRequestError('User not authenticated');
     }
+    const userId = req.user.id;
 
     const { id } = req.params;
-    const result = await communityService.likePost(id, userId);
+    if (!id || typeof id !== 'string' || !id.trim()) {
+      throw new BadRequestError('Post ID is required');
+    }
+    const result = await communityService.likePost(id.trim(), userId);
     res.json({
       status: 'success',
       data: result,
@@ -113,13 +135,16 @@ export const communityController = {
   }),
 
   bookmarkPost: asyncHandler(async (req: Request, res: Response) => {
-    const userId = req.user?.id;
-    if (!userId) {
+    if (!req.user) {
       throw new BadRequestError('User not authenticated');
     }
+    const userId = req.user.id;
 
     const { id } = req.params;
-    const result = await communityService.bookmarkPost(id, userId);
+    if (!id || typeof id !== 'string' || !id.trim()) {
+      throw new BadRequestError('Post ID is required');
+    }
+    const result = await communityService.bookmarkPost(id.trim(), userId);
     res.json({
       status: 'success',
       data: result,
@@ -129,7 +154,10 @@ export const communityController = {
   // ==================== COMMENTS ====================
   getComments: asyncHandler(async (req: Request, res: Response) => {
     const { postId } = req.params;
-    const comments = await communityService.getComments(postId);
+    if (!postId || typeof postId !== 'string' || !postId.trim()) {
+      throw new BadRequestError('Post ID is required');
+    }
+    const comments = await communityService.getComments(postId.trim());
     res.json({
       status: 'success',
       data: comments,
@@ -137,19 +165,23 @@ export const communityController = {
   }),
 
   addComment: asyncHandler(async (req: Request, res: Response) => {
-    const userId = req.user?.id;
-    if (!userId) {
+    if (!req.user) {
       throw new BadRequestError('User not authenticated');
     }
+    const userId = req.user.id;
 
     const { postId } = req.params;
-    const { content } = req.body;
+    if (!postId || typeof postId !== 'string' || !postId.trim()) {
+      throw new BadRequestError('Post ID is required');
+    }
+
+    const { content } = req.body as { content?: string };
 
     if (!content || typeof content !== 'string' || !content.trim()) {
       throw new BadRequestError('Comment content is required');
     }
 
-    const comment = await communityService.addComment(postId, userId, content.trim());
+    const comment = await communityService.addComment(postId.trim(), userId, content.trim());
     res.status(201).json({
       status: 'success',
       data: comment,
@@ -159,8 +191,11 @@ export const communityController = {
   // ==================== USERS ====================
   getUserProfile: asyncHandler(async (req: Request, res: Response) => {
     const { userId } = req.params;
+    if (!userId || typeof userId !== 'string' || !userId.trim()) {
+      throw new BadRequestError('User ID is required');
+    }
     const currentUserId = req.user?.id;
-    const profile = await communityService.getUserProfile(userId, currentUserId);
+    const profile = await communityService.getUserProfile(userId.trim(), currentUserId);
     res.json({
       status: 'success',
       data: profile,
@@ -169,11 +204,16 @@ export const communityController = {
 
   getUserPosts: asyncHandler(async (req: Request, res: Response) => {
     const { userId } = req.params;
-    const { page, limit } = req.query;
+    if (!userId || typeof userId !== 'string' || !userId.trim()) {
+      throw new BadRequestError('User ID is required');
+    }
+    const { page, limit } = req.query as { page?: string; limit?: string };
+    const parsedPage = page ? Math.max(1, parseInt(page, 10) || 1) : 1;
+    const parsedLimit = limit ? Math.min(Math.max(1, parseInt(limit, 10) || 10), 100) : 10;
     const result = await communityService.getUserPosts(
-      userId,
-      page ? parseInt(page as string, 10) : 1,
-      limit ? parseInt(limit as string, 10) : 10
+      userId.trim(),
+      parsedPage,
+      parsedLimit
     );
     res.json({
       status: 'success',
@@ -182,13 +222,16 @@ export const communityController = {
   }),
 
   followUser: asyncHandler(async (req: Request, res: Response) => {
-    const userId = req.user?.id;
-    if (!userId) {
+    if (!req.user) {
       throw new BadRequestError('User not authenticated');
     }
+    const userId = req.user.id;
 
     const { targetUserId } = req.params;
-    const result = await communityService.followUser(targetUserId, userId);
+    if (!targetUserId || typeof targetUserId !== 'string' || !targetUserId.trim()) {
+      throw new BadRequestError('Target user ID is required');
+    }
+    const result = await communityService.followUser(targetUserId.trim(), userId);
     res.json({
       status: 'success',
       data: result,

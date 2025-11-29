@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { ReportStatus, ReportType, UserRole } from '@prisma/client';
 import reportService from '../services/report.service';
 import asyncHandler from '../utils/asyncHandler';
+import { BadRequestError } from '../utils/errors';
 
 /**
  * Report Controller
@@ -14,22 +15,37 @@ class ReportController {
    * Supports reporting teachers, courses, and community content
    */
   submitReport = asyncHandler(async (req: Request, res: Response) => {
-    const reporterId = req.user!.id;
+    if (!req.user) {
+      throw new BadRequestError('Authentication required');
+    }
+    const reporterId = req.user.id;
     const { reportedId, type, description, contentType, contentId } = req.body as {
-      reportedId: string;
-      type: ReportType;
-      description: string;
+      reportedId?: string;
+      type?: ReportType;
+      description?: string;
       contentType?: string;
       contentId?: string;
     };
 
+    if (!reportedId || typeof reportedId !== 'string' || !reportedId.trim()) {
+      throw new BadRequestError('Reported ID is required');
+    }
+
+    if (!type || !Object.values(ReportType).includes(type)) {
+      throw new BadRequestError('Valid report type is required');
+    }
+
+    if (!description || typeof description !== 'string' || !description.trim()) {
+      throw new BadRequestError('Description is required');
+    }
+
     const report = await reportService.submitReport(
       reporterId,
-      reportedId,
-      type as ReportType,
-      description,
-      contentType,
-      contentId
+      reportedId.trim(),
+      type,
+      description.trim(),
+      contentType && typeof contentType === 'string' ? contentType.trim() : undefined,
+      contentId && typeof contentId === 'string' ? contentId.trim() : undefined
     );
 
     res.status(201).json({
@@ -44,7 +60,10 @@ class ReportController {
    * GET /api/reports/my-reports
    */
   getMyReports = asyncHandler(async (req: Request, res: Response) => {
-    const userId = req.user!.id;
+    if (!req.user) {
+      throw new BadRequestError('Authentication required');
+    }
+    const userId = req.user.id;
 
     const reports = await reportService.getUserReports(userId);
 
@@ -59,11 +78,18 @@ class ReportController {
    * GET /api/reports/:id
    */
   getReportById = asyncHandler(async (req: Request, res: Response) => {
-    const userId = req.user!.id;
-    const { id } = req.params as { id: string };
-    const isAdmin = req.user!.role === UserRole.ADMIN;
+    if (!req.user) {
+      throw new BadRequestError('Authentication required');
+    }
+    const userId = req.user.id;
+    const { id } = req.params as { id?: string };
+    const isAdmin = req.user.role === UserRole.ADMIN;
 
-    const report = await reportService.getReportById(id, userId, isAdmin);
+    if (!id || typeof id !== 'string' || !id.trim()) {
+      throw new BadRequestError('Report ID is required');
+    }
+
+    const report = await reportService.getReportById(id.trim(), userId, isAdmin);
 
     res.status(200).json({
       status: 'success',
@@ -77,17 +103,34 @@ class ReportController {
    */
   getAllReports = asyncHandler(async (req: Request, res: Response) => {
     const { status, type, page, limit } = req.query as {
-      status?: string;
-      type?: string;
-      page?: string;
-      limit?: string;
+      status?: string | string[];
+      type?: string | string[];
+      page?: string | string[];
+      limit?: string | string[];
     };
 
+    const pickFirst = (v?: string | string[]) => (Array.isArray(v) ? v[0] : v);
+
+    const statusValue = pickFirst(status);
+    const typeValue = pickFirst(type);
+    const pageValue = pickFirst(page);
+    const limitValue = pickFirst(limit);
+
+    const parsedPage = pageValue ? Number.parseInt(pageValue, 10) : undefined;
+    const parsedLimit = limitValue ? Number.parseInt(limitValue, 10) : undefined;
+
+    const safePage = parsedPage && Number.isFinite(parsedPage) && parsedPage > 0 ? parsedPage : undefined;
+    const safeLimit = parsedLimit && Number.isFinite(parsedLimit) && parsedLimit > 0 ? parsedLimit : undefined;
+
     const result = await reportService.getAllReports(
-      status as ReportStatus,
-      type as ReportType,
-      page ? parseInt(page, 10) : undefined,
-      limit ? parseInt(limit, 10) : undefined
+      statusValue && Object.values(ReportStatus).includes(statusValue as ReportStatus)
+        ? (statusValue as ReportStatus)
+        : undefined,
+      typeValue && Object.values(ReportType).includes(typeValue as ReportType)
+        ? (typeValue as ReportType)
+        : undefined,
+      safePage,
+      safeLimit
     );
 
     res.status(200).json({
@@ -101,13 +144,21 @@ class ReportController {
    * PUT /api/reports/:id/status
    */
   updateReportStatus = asyncHandler(async (req: Request, res: Response) => {
-    const { id } = req.params as { id: string };
-    const { status, resolution } = req.body as { status: ReportStatus; resolution?: string };
+    const { id } = req.params as { id?: string };
+    const { status, resolution } = req.body as { status?: ReportStatus; resolution?: string };
+
+    if (!id || typeof id !== 'string' || !id.trim()) {
+      throw new BadRequestError('Report ID is required');
+    }
+
+    if (!status || !Object.values(ReportStatus).includes(status)) {
+      throw new BadRequestError('Valid report status is required');
+    }
 
     const report = await reportService.updateReportStatus(
-      id,
-      status as ReportStatus,
-      resolution
+      id.trim(),
+      status,
+      resolution && typeof resolution === 'string' ? resolution.trim() : undefined
     );
 
     res.status(200).json({
@@ -122,9 +173,13 @@ class ReportController {
    * GET /api/reports/teacher/:teacherId
    */
   getTeacherReports = asyncHandler(async (req: Request, res: Response) => {
-    const { teacherId } = req.params as { teacherId: string };
+    const { teacherId } = req.params as { teacherId?: string };
 
-    const result = await reportService.getTeacherReports(teacherId);
+    if (!teacherId || typeof teacherId !== 'string' || !teacherId.trim()) {
+      throw new BadRequestError('Teacher ID is required');
+    }
+
+    const result = await reportService.getTeacherReports(teacherId.trim());
 
     res.status(200).json({
       status: 'success',

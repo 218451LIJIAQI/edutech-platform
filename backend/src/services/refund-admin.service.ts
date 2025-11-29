@@ -1,7 +1,19 @@
 import prisma from '../config/database';
 import { NotFoundError, ValidationError } from '../utils/errors';
-import { RefundStatus, OrderStatus } from '@prisma/client';
+import { RefundStatus, OrderStatus, Prisma } from '@prisma/client';
 import config from '../config/env';
+
+// Helper: safely convert Prisma.Decimal | string | number to number
+const toNum = (v: unknown): number => {
+  if (v && typeof v === 'object' && 'toNumber' in v && typeof (v as { toNumber: () => number }).toNumber === 'function') {
+    return (v as { toNumber: () => number }).toNumber();
+  }
+  const num = Number(v);
+  if (!Number.isFinite(num)) {
+    return 0;
+  }
+  return num;
+};
 
 /**
  * Admin Refund Management Service
@@ -15,10 +27,18 @@ class RefundAdminService {
     status?: string,
     limit: number = 50,
     offset: number = 0
-  ) {
-    const where: any = {};
-    if (status) {
-      where.status = status;
+  ): Promise<{
+    refunds: any[];
+    total: number;
+    limit: number;
+    offset: number;
+  }> {
+    const safeLimit = Number.isFinite(limit) && limit > 0 ? Math.min(Math.floor(limit), 100) : 50;
+    const safeOffset = Number.isFinite(offset) && offset >= 0 ? Math.floor(offset) : 0;
+    
+    const where: Prisma.RefundWhereInput = {};
+    if (status && status.trim()) {
+      where.status = status.trim() as RefundStatus;
     }
 
     const [refunds, total] = await Promise.all([
@@ -46,8 +66,8 @@ class RefundAdminService {
           },
         },
         orderBy: { createdAt: 'desc' },
-        take: limit,
-        skip: offset,
+        take: safeLimit,
+        skip: safeOffset,
       }),
       prisma.refund.count({ where }),
     ]);
@@ -55,17 +75,20 @@ class RefundAdminService {
     return {
       refunds,
       total,
-      limit,
-      offset,
+      limit: safeLimit,
+      offset: safeOffset,
     };
   }
 
   /**
    * Get refund by ID
    */
-  async getRefundById(refundId: string) {
+  async getRefundById(refundId: string): Promise<any> {
+    if (!refundId || !refundId.trim()) {
+      throw new ValidationError('Refund ID is required');
+    }
     const refund = await prisma.refund.findUnique({
-      where: { id: refundId },
+      where: { id: refundId.trim() },
       include: {
         order: {
           include: {
@@ -96,9 +119,12 @@ class RefundAdminService {
   /**
    * Approve a refund request
    */
-  async approveRefund(refundId: string, adminNotes?: string) {
+  async approveRefund(refundId: string, adminNotes?: string): Promise<any> {
+    if (!refundId || !refundId.trim()) {
+      throw new ValidationError('Refund ID is required');
+    }
     const refund = await prisma.refund.findUnique({
-      where: { id: refundId },
+      where: { id: refundId.trim() },
     });
 
     if (!refund) throw new NotFoundError('Refund not found');
@@ -107,10 +133,10 @@ class RefundAdminService {
     }
 
     const updated = await prisma.refund.update({
-      where: { id: refundId },
+      where: { id: refundId.trim() },
       data: {
         status: RefundStatus.APPROVED,
-        notes: adminNotes || refund.notes,
+        notes: adminNotes?.trim() || refund.notes || null,
         processedAt: new Date(),
       },
       include: {
@@ -135,13 +161,16 @@ class RefundAdminService {
   /**
    * Reject a refund request
    */
-  async rejectRefund(refundId: string, rejectionReason: string) {
-    if (!rejectionReason.trim()) {
+  async rejectRefund(refundId: string, rejectionReason: string): Promise<any> {
+    if (!refundId || !refundId.trim()) {
+      throw new ValidationError('Refund ID is required');
+    }
+    if (!rejectionReason || !rejectionReason.trim()) {
       throw new ValidationError('Rejection reason is required');
     }
 
     const refund = await prisma.refund.findUnique({
-      where: { id: refundId },
+      where: { id: refundId.trim() },
     });
 
     if (!refund) throw new NotFoundError('Refund not found');
@@ -150,10 +179,10 @@ class RefundAdminService {
     }
 
     const updated = await prisma.refund.update({
-      where: { id: refundId },
+      where: { id: refundId.trim() },
       data: {
         status: RefundStatus.REJECTED,
-        notes: rejectionReason,
+        notes: rejectionReason.trim(),
         processedAt: new Date(),
       },
       include: {
@@ -178,9 +207,12 @@ class RefundAdminService {
   /**
    * Mark refund as processing
    */
-  async markAsProcessing(refundId: string, adminNotes?: string) {
+  async markAsProcessing(refundId: string, adminNotes?: string): Promise<any> {
+    if (!refundId || !refundId.trim()) {
+      throw new ValidationError('Refund ID is required');
+    }
     const refund = await prisma.refund.findUnique({
-      where: { id: refundId },
+      where: { id: refundId.trim() },
     });
 
     if (!refund) throw new NotFoundError('Refund not found');
@@ -189,10 +221,10 @@ class RefundAdminService {
     }
 
     const updated = await prisma.refund.update({
-      where: { id: refundId },
+      where: { id: refundId.trim() },
       data: {
         status: RefundStatus.PROCESSING,
-        notes: adminNotes || refund.notes,
+        notes: adminNotes?.trim() || refund.notes || null,
       },
       include: {
         order: {
@@ -216,22 +248,25 @@ class RefundAdminService {
   /**
    * Mark refund as completed
    */
-  async completeRefund(refundId: string, adminNotes?: string) {
+  async completeRefund(refundId: string, adminNotes?: string): Promise<any> {
+    if (!refundId || !refundId.trim()) {
+      throw new ValidationError('Refund ID is required');
+    }
     const refund = await prisma.refund.findUnique({
-      where: { id: refundId },
+      where: { id: refundId.trim() },
     });
 
     if (!refund) throw new NotFoundError('Refund not found');
-    if (![RefundStatus.APPROVED, RefundStatus.PROCESSING].includes(refund.status as any)) {
+    if (refund.status !== RefundStatus.APPROVED && refund.status !== RefundStatus.PROCESSING) {
       throw new ValidationError('Only approved or processing refunds can be completed');
     }
 
     const updated = await prisma.refund.update({
-      where: { id: refundId },
+      where: { id: refundId.trim() },
       data: {
         status: RefundStatus.COMPLETED,
         completedAt: new Date(),
-        notes: adminNotes || refund.notes,
+        notes: adminNotes?.trim() || refund.notes || null,
       },
       include: {
         order: {
@@ -275,13 +310,15 @@ class RefundAdminService {
       });
       if (order && order.items.length > 0) {
         const walletService = (await import('./wallet.service')).default;
-        const totalItemsAmount = order.items.reduce((sum, it) => sum + it.finalPrice, 0) || order.totalAmount || 0;
+        const totalItemsAmount = order.items.reduce((sum, it) => sum + toNum(it.finalPrice), 0) || toNum(order.totalAmount);
         const base = totalItemsAmount > 0 ? totalItemsAmount : 1;
         for (const item of order.items) {
           const teacherProfile = item.package?.course?.teacherProfile;
           if (teacherProfile) {
-            const rate = teacherProfile.commissionRate ?? config.PLATFORM_COMMISSION_RATE; // fallback to platform rate
-            const itemPortion = (item.finalPrice / base) * refund.amount;
+            const rate = toNum(teacherProfile.commissionRate ?? config.PLATFORM_COMMISSION_RATE ?? 0);
+            const itemPrice = toNum(item.finalPrice);
+            const refundAmount = toNum(refund.amount);
+            const itemPortion = (itemPrice / base) * refundAmount;
             const teacherNet = itemPortion * (1 - rate / 100);
             await walletService.debitForRefund(teacherProfile.userId, teacherNet, {
               orderItemId: item.id,
@@ -300,7 +337,15 @@ class RefundAdminService {
   /**
    * Get refund statistics
    */
-  async getRefundStats() {
+  async getRefundStats(): Promise<{
+    pending: number;
+    approved: number;
+    processing: number;
+    completed: number;
+    rejected: number;
+    totalRefundAmount: number | null;
+    completedRefundAmount: number | null;
+  }> {
     const [pending, approved, processing, completed, rejected] = await Promise.all([
       prisma.refund.count({ where: { status: RefundStatus.PENDING } }),
       prisma.refund.count({ where: { status: RefundStatus.APPROVED } }),
@@ -324,8 +369,8 @@ class RefundAdminService {
       processing,
       completed,
       rejected,
-      totalRefundAmount: totalAmount._sum.amount || 0,
-      completedRefundAmount: completedAmount._sum.amount || 0,
+      totalRefundAmount: toNum(totalAmount._sum.amount),
+      completedRefundAmount: toNum(completedAmount._sum.amount),
     };
   }
 }

@@ -83,7 +83,13 @@ router.post(
   authenticate,
   validate([
     param('id').notEmpty().withMessage('id is required').isUUID().withMessage('Invalid id'),
-    body('resolution').optional().trim().isString().isLength({ max: 2000 }).withMessage('resolution too long'),
+    body('resolution')
+      .optional()
+      .trim()
+      .isString()
+      .withMessage('resolution must be a string')
+      .isLength({ max: 2000 })
+      .withMessage('resolution too long'),
   ]),
   supportController.closeTicket
 );

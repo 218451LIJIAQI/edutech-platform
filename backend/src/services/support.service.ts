@@ -151,31 +151,25 @@ class SupportService {
     const trimmedMessage = (message ?? '').trim();
     if (!trimmedMessage) throw new ValidationError('Message is required');
 
-    // Create message and update ticket timestamp atomically
-    const [msg] = await prisma.$transaction([
-      prisma.supportTicketMessage.create({
-        data: {
-          ticketId,
-          senderId: userId,
-          message: trimmedMessage,
-          attachment,
-        },
-        include: {
-          sender: {
-            select: {
-              id: true,
-              email: true,
-              firstName: true,
-              lastName: true,
-            },
+    // Create message (ticket updatedAt will be automatically updated by Prisma)
+    const msg = await prisma.supportTicketMessage.create({
+      data: {
+        ticketId,
+        senderId: userId,
+        message: trimmedMessage,
+        attachment,
+      },
+      include: {
+        sender: {
+          select: {
+            id: true,
+            email: true,
+            firstName: true,
+            lastName: true,
           },
         },
-      }),
-      prisma.supportTicket.update({
-        where: { id: ticketId },
-        data: { updatedAt: new Date() },
-      }),
-    ]);
+      },
+    });
 
     return msg;
   }

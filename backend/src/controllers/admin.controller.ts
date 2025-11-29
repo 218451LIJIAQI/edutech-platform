@@ -1,7 +1,8 @@
 import { Request, Response } from 'express';
-import { VerificationStatus, ReportStatus } from '@prisma/client';
+import { VerificationStatus, ReportStatus, UserRole } from '@prisma/client';
 import adminService from '../services/admin.service';
 import asyncHandler from '../utils/asyncHandler';
+import { AuthenticationError } from '../utils/errors';
 
 /**
  * Admin Controller
@@ -29,9 +30,9 @@ class AdminController {
     const { role, isActive, search, page, limit } = req.query;
 
     const result = await adminService.getAllUsers({
-      role: role as any,
+      role: role ? (role as UserRole) : undefined,
       isActive: isActive === 'true' ? true : isActive === 'false' ? false : undefined,
-      search: search as string,
+      search: search ? (search as string) : undefined,
       page: page ? parseInt(page as string, 10) : undefined,
       limit: limit ? parseInt(limit as string, 10) : undefined,
     });
@@ -80,7 +81,7 @@ class AdminController {
    */
   deleteUser = asyncHandler(async (req: Request, res: Response) => {
     const { id } = req.params;
-    const force = req.query.force === 'true' || !!(req.body as any)?.force;
+    const force = req.query.force === 'true' || (req.body as { force?: boolean })?.force === true;
 
     await adminService.deleteUser(id, { force });
 
@@ -150,7 +151,7 @@ class AdminController {
     const { status, page, limit } = req.query;
 
     const result = await adminService.getAllVerifications({
-      status: status as VerificationStatus,
+      status: status ? (status as VerificationStatus) : undefined,
       page: page ? parseInt(page as string, 10) : undefined,
       limit: limit ? parseInt(limit as string, 10) : undefined,
     });
@@ -167,13 +168,16 @@ class AdminController {
    */
   reviewVerification = asyncHandler(async (req: Request, res: Response) => {
     const { id } = req.params;
-    const adminId = req.user!.id;
+    if (!req.user) {
+      throw new AuthenticationError('Authentication required');
+    }
+    const adminId = req.user.id;
     const { status, reviewNotes } = req.body as { status: VerificationStatus; reviewNotes?: string };
 
     const verification = await adminService.reviewVerification(
       id,
       adminId,
-      status as VerificationStatus,
+      status,
       reviewNotes
     );
 
@@ -192,8 +196,8 @@ class AdminController {
     const { status, type, page, limit } = req.query;
 
     const result = await adminService.getAllReports({
-      status: status as ReportStatus,
-      type: type as string,
+      status: status ? (status as ReportStatus) : undefined,
+      type: type ? (type as string) : undefined,
       page: page ? parseInt(page as string, 10) : undefined,
       limit: limit ? parseInt(limit as string, 10) : undefined,
     });
@@ -212,7 +216,7 @@ class AdminController {
     const { id } = req.params;
     const { status, resolution } = req.body as { status: ReportStatus; resolution?: string };
 
-    const report = await adminService.updateReportStatus(id, status as ReportStatus, resolution);
+    const report = await adminService.updateReportStatus(id, status, resolution);
 
     res.status(200).json({
       status: 'success',
@@ -260,7 +264,10 @@ class AdminController {
   updateTeacherCommission = asyncHandler(async (req: Request, res: Response) => {
     const { userId } = req.params as { userId: string };
     const { commissionRate } = req.body as { commissionRate: number | null };
-    const adminId = req.user!.id;
+    if (!req.user) {
+      throw new AuthenticationError('Authentication required');
+    }
+    const adminId = req.user.id;
 
     const updated = await adminService.updateTeacherCommission(userId, adminId, commissionRate);
     res.status(200).json({ status: 'success', data: updated, message: 'Commission updated' });
@@ -290,7 +297,10 @@ class AdminController {
    */
   createUser = asyncHandler(async (req: Request, res: Response) => {
     const { email, password, firstName, lastName, role, phone, address, department } = req.body;
-    const adminId = req.user!.id;
+    if (!req.user) {
+      throw new AuthenticationError('Authentication required');
+    }
+    const adminId = req.user.id;
 
     const user = await adminService.createUser({
       email,
@@ -317,7 +327,10 @@ class AdminController {
    */
   updateUser = asyncHandler(async (req: Request, res: Response) => {
     const { id } = req.params;
-    const adminId = req.user!.id;
+    if (!req.user) {
+      throw new AuthenticationError('Authentication required');
+    }
+    const adminId = req.user.id;
 
     const user = await adminService.updateUser(id, req.body, adminId);
 
@@ -335,7 +348,10 @@ class AdminController {
   resetUserPassword = asyncHandler(async (req: Request, res: Response) => {
     const { id } = req.params;
     const { newPassword } = req.body as { newPassword: string };
-    const adminId = req.user!.id;
+    if (!req.user) {
+      throw new AuthenticationError('Authentication required');
+    }
+    const adminId = req.user.id;
 
     const user = await adminService.resetUserPassword(id, newPassword, adminId);
 
@@ -353,7 +369,10 @@ class AdminController {
   lockUserAccount = asyncHandler(async (req: Request, res: Response) => {
     const { id } = req.params;
     const { lock, reason } = req.body as { lock: boolean; reason?: string };
-    const adminId = req.user!.id;
+    if (!req.user) {
+      throw new AuthenticationError('Authentication required');
+    }
+    const adminId = req.user.id;
 
     const user = await adminService.lockUserAccount(id, lock, adminId, reason);
 
@@ -385,7 +404,10 @@ class AdminController {
    */
   batchUpdateUserStatus = asyncHandler(async (req: Request, res: Response) => {
     const { userIds, isActive } = req.body as { userIds: string[]; isActive: boolean };
-    const adminId = req.user!.id;
+    if (!req.user) {
+      throw new AuthenticationError('Authentication required');
+    }
+    const adminId = req.user.id;
 
     await adminService.batchUpdateUserStatus(userIds, isActive, adminId);
 
@@ -458,6 +480,10 @@ class AdminController {
     res.status(200).json({ status: 'success', data });
   });
 
+  /**
+   * Get revenue analytics
+   * GET /api/admin/financials/revenue-analytics
+   */
   getRevenueAnalytics = asyncHandler(async (req: Request, res: Response) => {
     const { startDate, endDate, groupBy } = req.query as {
       startDate?: string;

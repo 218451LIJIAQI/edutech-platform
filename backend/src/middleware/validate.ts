@@ -22,14 +22,16 @@ export const validate = (validations: ValidationChain | ValidationChain[]): Requ
       // Format errors (include both field and non-field errors)
       const extractedErrors: Record<string, string[]> = {};
 
-      (result.array({ onlyFirstError: false }) as ValidationError[]).forEach((err) => {
-        const isFieldError = (err as any).type === 'field';
-        const key = isFieldError ? ((err as any).path ?? (err as any).param ?? '_global') : '_global';
-        const msg = String((err as any).msg);
+      result.array({ onlyFirstError: false }).forEach((err) => {
+        const error = err as ValidationError & { type?: string; path?: string; param?: string; msg?: unknown };
+        const isFieldError = error.type === 'field';
+        const key = isFieldError ? (error.path ?? error.param ?? '_global') : '_global';
+        const msg = String(error.msg ?? 'Validation failed');
 
         if (!extractedErrors[key]) {
           extractedErrors[key] = [];
         }
+        // Avoid duplicate error messages
         if (!extractedErrors[key].includes(msg)) {
           extractedErrors[key].push(msg);
         }
@@ -43,7 +45,7 @@ export const validate = (validations: ValidationChain | ValidationChain[]): Requ
       });
     } catch (err) {
       // Forward unexpected errors to error handler
-      return next(err as unknown);
+      return next(err as Error);
     }
   };
 };

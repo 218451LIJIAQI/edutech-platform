@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import asyncHandler from '../utils/asyncHandler';
 import refundAdminService from '../services/refund-admin.service';
+import { BadRequestError } from '../utils/errors';
 
 class RefundAdminController {
   /**
@@ -89,12 +90,13 @@ class RefundAdminController {
     const { id } = req.params;
     const refundId = typeof id === 'string' ? id.trim() : String(id);
 
-    const { rejectionReason } = (req.body || {}) as { rejectionReason: string };
+    const { rejectionReason } = (req.body || {}) as { rejectionReason?: string };
 
-    const refund = await refundAdminService.rejectRefund(
-      refundId,
-      typeof rejectionReason === 'string' ? rejectionReason.trim() : rejectionReason
-    );
+    if (!rejectionReason || typeof rejectionReason !== 'string' || !rejectionReason.trim()) {
+      throw new BadRequestError('Rejection reason is required');
+    }
+
+    const refund = await refundAdminService.rejectRefund(refundId, rejectionReason.trim());
 
     res.status(200).json({
       status: 'success',

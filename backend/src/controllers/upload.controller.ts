@@ -17,6 +17,11 @@ class UploadController {
     }
 
     const file = req.file;
+    
+    if (!file.filename) {
+      throw new ValidationError('File upload failed: missing filename');
+    }
+
     // Derive subfolder from fieldname to match storage config (e.g., multer field)
     const folder = file.fieldname || 'file';
 
@@ -54,16 +59,18 @@ class UploadController {
       throw new ValidationError('No files uploaded');
     }
 
-    const uploadedFiles = filesArray.map((file) => {
-      const folder = file.fieldname || 'file';
-      return {
-        url: `/uploads/${folder}/${file.filename}`,
-        filename: file.filename,
-        size: file.size,
-        mimeType: file.mimetype,
-        originalName: file.originalname,
-      };
-    });
+    const uploadedFiles = filesArray
+      .filter((file) => file.filename) // Filter out files without filename
+      .map((file) => {
+        const folder = file.fieldname || 'file';
+        return {
+          url: `/uploads/${folder}/${file.filename}`,
+          filename: file.filename!,
+          size: file.size,
+          mimeType: file.mimetype,
+          originalName: file.originalname,
+        };
+      });
 
     res.status(201).json({
       status: 'success',

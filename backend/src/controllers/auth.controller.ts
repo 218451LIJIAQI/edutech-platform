@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { UserRole } from '@prisma/client';
 import authService from '../services/auth.service';
 import asyncHandler from '../utils/asyncHandler';
+import { AuthenticationError } from '../utils/errors';
 
 /**
  * Authentication Controller
@@ -13,15 +14,20 @@ class AuthController {
    * POST /api/auth/register
    */
   register = asyncHandler(async (req: Request, res: Response) => {
-    const { email, password, firstName, lastName } = req.body;
+    const { email, password, firstName, lastName } = req.body as {
+      email: string;
+      password: string;
+      firstName: string;
+      lastName: string;
+    };
 
     // For security: do NOT accept role from client during self-registration
     // Always register as STUDENT by default. Role elevation must be handled by admins.
     const result = await authService.register({
-      email: typeof email === 'string' ? email.trim().toLowerCase() : email,
+      email: email.trim().toLowerCase(),
       password,
-      firstName: typeof firstName === 'string' ? firstName.trim() : firstName,
-      lastName: typeof lastName === 'string' ? lastName.trim() : lastName,
+      firstName: firstName.trim(),
+      lastName: lastName.trim(),
       role: UserRole.STUDENT,
     });
 
@@ -37,10 +43,13 @@ class AuthController {
    * POST /api/auth/login
    */
   login = asyncHandler(async (req: Request, res: Response) => {
-    const { email, password } = req.body;
+    const { email, password } = req.body as {
+      email: string;
+      password: string;
+    };
 
     const result = await authService.login({
-      email: typeof email === 'string' ? email.trim().toLowerCase() : email,
+      email: email.trim().toLowerCase(),
       password,
     });
 
@@ -72,7 +81,10 @@ class AuthController {
    * GET /api/auth/profile
    */
   getProfile = asyncHandler(async (req: Request, res: Response) => {
-    const userId = req.user!.id;
+    if (!req.user) {
+      throw new AuthenticationError('Authentication required');
+    }
+    const userId = req.user.id;
 
     const user = await authService.getProfile(userId);
 
@@ -87,12 +99,19 @@ class AuthController {
    * PUT /api/auth/profile
    */
   updateProfile = asyncHandler(async (req: Request, res: Response) => {
-    const userId = req.user!.id;
-    const { firstName, lastName, avatar } = req.body;
+    if (!req.user) {
+      throw new AuthenticationError('Authentication required');
+    }
+    const userId = req.user.id;
+    const { firstName, lastName, avatar } = req.body as {
+      firstName?: string;
+      lastName?: string;
+      avatar?: string;
+    };
 
     const user = await authService.updateProfile(userId, {
-      firstName: typeof firstName === 'string' ? firstName.trim() : firstName,
-      lastName: typeof lastName === 'string' ? lastName.trim() : lastName,
+      firstName: firstName?.trim(),
+      lastName: lastName?.trim(),
       avatar,
     });
 
@@ -108,8 +127,14 @@ class AuthController {
    * POST /api/auth/change-password
    */
   changePassword = asyncHandler(async (req: Request, res: Response) => {
-    const userId = req.user!.id;
-    const { currentPassword, newPassword } = req.body;
+    if (!req.user) {
+      throw new AuthenticationError('Authentication required');
+    }
+    const userId = req.user.id;
+    const { currentPassword, newPassword } = req.body as {
+      currentPassword: string;
+      newPassword: string;
+    };
 
     const result = await authService.changePassword(
       userId,
@@ -143,7 +168,10 @@ class AuthController {
    * DELETE /api/auth/account
    */
   deleteAccount = asyncHandler(async (req: Request, res: Response) => {
-    const userId = req.user!.id;
+    if (!req.user) {
+      throw new AuthenticationError('Authentication required');
+    }
+    const userId = req.user.id;
     await authService.deleteAccount(userId);
     res.status(200).json({
       status: 'success',

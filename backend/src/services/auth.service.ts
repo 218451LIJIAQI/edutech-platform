@@ -84,8 +84,8 @@ class AuthService {
         data: {
           email,
           password: hashedPassword,
-          firstName: data.firstName?.trim(),
-          lastName: data.lastName?.trim(),
+          firstName: data.firstName.trim(),
+          lastName: data.lastName.trim(),
           role: data.role,
         },
         select: {
@@ -148,8 +148,16 @@ class AuthService {
 
     // Side effects: update last login time and count (best effort)
     prisma.user
-      .update({ where: { id: user.id }, data: { lastLoginAt: new Date(), loginCount: (user.loginCount || 0) + 1 } })
-      .catch(() => void 0);
+      .update({ 
+        where: { id: user.id }, 
+        data: { 
+          lastLoginAt: new Date(), 
+          loginCount: (user.loginCount || 0) + 1 
+        } 
+      })
+      .catch(() => {
+        // Silently fail - this is a best-effort update
+      });
 
     // Generate tokens
     const tokens = this.generateTokens(user.id, user.email, user.role);

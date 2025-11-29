@@ -3,7 +3,7 @@ import { LessonType, CourseType } from '@prisma/client';
 import courseService from '../services/course.service';
 import notificationService from '../services/notification.service';
 import prisma from '../config/database';
-import { NotFoundError, AuthorizationError } from '../utils/errors';
+import { NotFoundError, AuthorizationError, BadRequestError } from '../utils/errors';
 import asyncHandler from '../utils/asyncHandler';
 
 /**
@@ -34,6 +34,14 @@ class CourseController {
       ? (courseType as CourseType)
       : undefined;
 
+    type SortBy = 'NEWEST' | 'RATING' | 'POPULARITY' | 'PRICE_ASC' | 'PRICE_DESC';
+    const allowedSortBy: readonly SortBy[] = ['NEWEST', 'RATING', 'POPULARITY', 'PRICE_ASC', 'PRICE_DESC'] as const;
+    const parsedSortBy: SortBy | undefined = 
+      sortBy && typeof sortBy === 'string' && allowedSortBy.includes(sortBy as SortBy) 
+        ? (sortBy as SortBy) 
+        : undefined;
+    const parsedSortOrder: 'asc' | 'desc' | undefined = sortOrder === 'asc' || sortOrder === 'desc' ? (sortOrder as 'asc' | 'desc') : undefined;
+
     const result = await courseService.getAllCourses({
       category,
       teacherId,
@@ -42,10 +50,10 @@ class CourseController {
       minRating: minRating ? parseFloat(minRating) : undefined,
       minPrice: minPrice ? parseFloat(minPrice) : undefined,
       maxPrice: maxPrice ? parseFloat(maxPrice) : undefined,
-      sortBy: sortBy as any,
-      sortOrder: sortOrder as any,
-      page: page ? parseInt(page, 10) : undefined,
-      limit: limit ? parseInt(limit, 10) : undefined,
+      sortBy: parsedSortBy,
+      sortOrder: parsedSortOrder,
+      page: page ? Math.max(1, parseInt(page, 10) || 1) : undefined,
+      limit: limit ? Math.min(Math.max(1, parseInt(limit, 10) || 10), 100) : undefined,
     });
 
     res.status(200).json({
@@ -60,9 +68,12 @@ class CourseController {
    */
   getCourseById = asyncHandler(async (req: Request, res: Response) => {
     const { id } = req.params;
+    if (!id || typeof id !== 'string' || !id.trim()) {
+      throw new BadRequestError('Course ID is required');
+    }
     const userId = req.user?.id;
 
-    const course = await courseService.getCourseById(id, userId);
+    const course = await courseService.getCourseById(id.trim(), userId || undefined);
 
     res.status(200).json({
       status: 'success',
@@ -75,7 +86,10 @@ class CourseController {
    * POST /api/courses
    */
   createCourse = asyncHandler(async (req: Request, res: Response) => {
-    const userId = req.user!.id;
+    if (!req.user) {
+      throw new BadRequestError('Authentication required');
+    }
+    const userId = req.user.id;
     const { title, description, category, courseType, thumbnail, previewVideoUrl } = req.body as {
       title: string;
       description: string;
@@ -86,8 +100,7 @@ class CourseController {
     };
 
     if (!title || !description || !category) {
-      res.status(400).json({ status: 'error', message: 'title, description and category are required' });
-      return;
+      throw new BadRequestError('title, description and category are required');
     }
 
     const parsedCourseType = courseType && Object.values(CourseType).includes(courseType as CourseType)
@@ -115,8 +128,14 @@ class CourseController {
    * PUT /api/courses/:id
    */
   updateCourse = asyncHandler(async (req: Request, res: Response) => {
-    const userId = req.user!.id;
+    if (!req.user) {
+      throw new BadRequestError('Authentication required');
+    }
+    const userId = req.user.id;
     const { id } = req.params;
+    if (!id || typeof id !== 'string' || !id.trim()) {
+      throw new BadRequestError('Course ID is required');
+    }
     const { title, description, category, courseType, thumbnail, previewVideoUrl, isPublished } =
       req.body as {
         title?: string;
@@ -132,7 +151,7 @@ class CourseController {
       ? (courseType as CourseType)
       : undefined;
 
-    const course = await courseService.updateCourse(userId, id, {
+    const course = await courseService.updateCourse(userId, id.trim(), {
       title,
       description,
       category,
@@ -154,10 +173,16 @@ class CourseController {
    * DELETE /api/courses/:id
    */
   deleteCourse = asyncHandler(async (req: Request, res: Response) => {
-    const userId = req.user!.id;
+    if (!req.user) {
+      throw new BadRequestError('Authentication required');
+    }
+    const userId = req.user.id;
     const { id } = req.params;
+    if (!id || typeof id !== 'string' || !id.trim()) {
+      throw new BadRequestError('Course ID is required');
+    }
 
-    const result = await courseService.deleteCourse(userId, id);
+    const result = await courseService.deleteCourse(userId, id.trim());
 
     res.status(200).json({
       status: 'success',
@@ -170,8 +195,14 @@ class CourseController {
    * POST /api/courses/:id/lessons
    */
   createLesson = asyncHandler(async (req: Request, res: Response) => {
-    const userId = req.user!.id;
+    if (!req.user) {
+      throw new BadRequestError('Authentication required');
+    }
+    const userId = req.user.id;
     const { id: courseId } = req.params;
+    if (!courseId || typeof courseId !== 'string' || !courseId.trim()) {
+      throw new BadRequestError('Course ID is required');
+    }
     const { title, description, type, duration, videoUrl, isFree } = req.body as {
       title: string;
       description?: string;
@@ -181,10 +212,23 @@ class CourseController {
       isFree?: boolean;
     };
 
-    const lesson = await courseService.createLesson(userId, courseId, {
-      title,
+    if (!title || typeof title !== 'string' || !title.trim()) {
+      throw new BadRequestError('Lesson title is required');
+    }
+
+    const validLessonTypes = Object.values(LessonType);
+    const parsedType = type && validLessonTypes.includes(type as LessonType) 
+      ? (type as LessonType) 
+      : undefined;
+    
+    if (!parsedType) {
+      throw new BadRequestError(`Invalid lesson type. Must be one of: ${validLessonTypes.join(', ')}`);
+    }
+
+    const lesson = await courseService.createLesson(userId, courseId.trim(), {
+      title: title.trim(),
       description,
-      type: type as LessonType,
+      type: parsedType,
       duration,
       videoUrl,
       isFree,
@@ -202,8 +246,14 @@ class CourseController {
    * PUT /api/courses/lessons/:id
    */
   updateLesson = asyncHandler(async (req: Request, res: Response) => {
-    const userId = req.user!.id;
+    if (!req.user) {
+      throw new BadRequestError('Authentication required');
+    }
+    const userId = req.user.id;
     const { id } = req.params;
+    if (!id || typeof id !== 'string' || !id.trim()) {
+      throw new BadRequestError('Lesson ID is required');
+    }
     const { title, description, type, duration, videoUrl, isFree, orderIndex } =
       req.body as {
         title?: string;
@@ -215,10 +265,19 @@ class CourseController {
         orderIndex?: number;
       };
 
-    const lesson = await courseService.updateLesson(userId, id, {
-      title,
+    const validLessonTypes = Object.values(LessonType);
+    const parsedType = type && validLessonTypes.includes(type as LessonType) 
+      ? (type as LessonType) 
+      : undefined;
+
+    if (type !== undefined && !parsedType) {
+      throw new BadRequestError(`Invalid lesson type. Must be one of: ${validLessonTypes.join(', ')}`);
+    }
+
+    const lesson = await courseService.updateLesson(userId, id.trim(), {
+      title: title?.trim(),
       description,
-      type: (type as LessonType | undefined),
+      type: parsedType,
       duration,
       videoUrl,
       isFree,
@@ -237,10 +296,16 @@ class CourseController {
    * DELETE /api/courses/lessons/:id
    */
   deleteLesson = asyncHandler(async (req: Request, res: Response) => {
-    const userId = req.user!.id;
+    if (!req.user) {
+      throw new BadRequestError('Authentication required');
+    }
+    const userId = req.user.id;
     const { id } = req.params;
+    if (!id || typeof id !== 'string' || !id.trim()) {
+      throw new BadRequestError('Lesson ID is required');
+    }
 
-    const result = await courseService.deleteLesson(userId, id);
+    const result = await courseService.deleteLesson(userId, id.trim());
 
     res.status(200).json({
       status: 'success',
@@ -253,8 +318,14 @@ class CourseController {
    * POST /api/courses/:id/packages
    */
   createPackage = asyncHandler(async (req: Request, res: Response) => {
-    const userId = req.user!.id;
+    if (!req.user) {
+      throw new BadRequestError('Authentication required');
+    }
+    const userId = req.user.id;
     const { id: courseId } = req.params;
+    if (!courseId || typeof courseId !== 'string' || !courseId.trim()) {
+      throw new BadRequestError('Course ID is required');
+    }
     const {
       name,
       description,
@@ -273,8 +344,20 @@ class CourseController {
       features?: string[];
     };
 
-    const lessonPackage = await courseService.createPackage(userId, courseId, {
-      name,
+    if (!name || typeof name !== 'string' || !name.trim()) {
+      throw new BadRequestError('Package name is required');
+    }
+
+    if (typeof price !== 'number' || price < 0) {
+      throw new BadRequestError('Price must be a non-negative number');
+    }
+
+    if (discount !== undefined && (typeof discount !== 'number' || discount < 0 || discount > 100)) {
+      throw new BadRequestError('Discount must be a number between 0 and 100');
+    }
+
+    const lessonPackage = await courseService.createPackage(userId, courseId.trim(), {
+      name: name.trim(),
       description,
       price,
       discount,
@@ -295,8 +378,14 @@ class CourseController {
    * PUT /api/courses/packages/:id
    */
   updatePackage = asyncHandler(async (req: Request, res: Response) => {
-    const userId = req.user!.id;
+    if (!req.user) {
+      throw new BadRequestError('Authentication required');
+    }
+    const userId = req.user.id;
     const { id } = req.params;
+    if (!id || typeof id !== 'string' || !id.trim()) {
+      throw new BadRequestError('Package ID is required');
+    }
     const {
       name,
       description,
@@ -317,8 +406,20 @@ class CourseController {
       isActive?: boolean;
     };
 
-    const lessonPackage = await courseService.updatePackage(userId, id, {
-      name,
+    if (name !== undefined && (!name || typeof name !== 'string' || !name.trim())) {
+      throw new BadRequestError('Package name cannot be empty');
+    }
+
+    if (price !== undefined && (typeof price !== 'number' || price < 0)) {
+      throw new BadRequestError('Price must be a non-negative number');
+    }
+
+    if (discount !== undefined && (typeof discount !== 'number' || discount < 0 || discount > 100)) {
+      throw new BadRequestError('Discount must be a number between 0 and 100');
+    }
+
+    const lessonPackage = await courseService.updatePackage(userId, id.trim(), {
+      name: name?.trim(),
       description,
       price,
       discount,
@@ -340,10 +441,16 @@ class CourseController {
    * DELETE /api/courses/packages/:id
    */
   deletePackage = asyncHandler(async (req: Request, res: Response) => {
-    const userId = req.user!.id;
+    if (!req.user) {
+      throw new BadRequestError('Authentication required');
+    }
+    const userId = req.user.id;
     const { id } = req.params;
+    if (!id || typeof id !== 'string' || !id.trim()) {
+      throw new BadRequestError('Package ID is required');
+    }
 
-    const result = await courseService.deletePackage(userId, id);
+    const result = await courseService.deletePackage(userId, id.trim());
 
     res.status(200).json({
       status: 'success',
@@ -356,8 +463,14 @@ class CourseController {
    * POST /api/courses/:id/materials
    */
   uploadMaterial = asyncHandler(async (req: Request, res: Response) => {
-    const userId = req.user!.id;
+    if (!req.user) {
+      throw new BadRequestError('Authentication required');
+    }
+    const userId = req.user.id;
     const { id: courseId } = req.params;
+    if (!courseId || typeof courseId !== 'string' || !courseId.trim()) {
+      throw new BadRequestError('Course ID is required');
+    }
     const { title, description, fileUrl, fileType, fileSize, isDownloadable } =
       req.body as {
         title: string;
@@ -368,11 +481,27 @@ class CourseController {
         isDownloadable?: boolean;
       };
 
-    const material = await courseService.uploadMaterial(userId, courseId, {
-      title,
+    if (!title || typeof title !== 'string' || !title.trim()) {
+      throw new BadRequestError('Material title is required');
+    }
+
+    if (!fileUrl || typeof fileUrl !== 'string' || !fileUrl.trim()) {
+      throw new BadRequestError('File URL is required');
+    }
+
+    if (!fileType || typeof fileType !== 'string' || !fileType.trim()) {
+      throw new BadRequestError('File type is required');
+    }
+
+    if (typeof fileSize !== 'number' || fileSize < 0) {
+      throw new BadRequestError('File size must be a non-negative number');
+    }
+
+    const material = await courseService.uploadMaterial(userId, courseId.trim(), {
+      title: title.trim(),
       description,
-      fileUrl,
-      fileType,
+      fileUrl: fileUrl.trim(),
+      fileType: fileType.trim(),
       fileSize,
       isDownloadable,
     });
@@ -389,8 +518,14 @@ class CourseController {
    * PUT /api/courses/materials/:id
    */
   updateMaterial = asyncHandler(async (req: Request, res: Response) => {
-    const userId = req.user!.id;
+    if (!req.user) {
+      throw new BadRequestError('Authentication required');
+    }
+    const userId = req.user.id;
     const { id } = req.params;
+    if (!id || typeof id !== 'string' || !id.trim()) {
+      throw new BadRequestError('Material ID is required');
+    }
     const { title, description, fileUrl, fileType, fileSize, isDownloadable } =
       req.body as {
         title?: string;
@@ -401,11 +536,27 @@ class CourseController {
         isDownloadable?: boolean;
       };
 
-    const material = await courseService.updateMaterial(userId, id, {
-      title,
+    if (title !== undefined && (!title || typeof title !== 'string' || !title.trim())) {
+      throw new BadRequestError('Material title cannot be empty');
+    }
+
+    if (fileUrl !== undefined && (!fileUrl || typeof fileUrl !== 'string' || !fileUrl.trim())) {
+      throw new BadRequestError('File URL cannot be empty');
+    }
+
+    if (fileType !== undefined && (!fileType || typeof fileType !== 'string' || !fileType.trim())) {
+      throw new BadRequestError('File type cannot be empty');
+    }
+
+    if (fileSize !== undefined && (typeof fileSize !== 'number' || fileSize < 0)) {
+      throw new BadRequestError('File size must be a non-negative number');
+    }
+
+    const material = await courseService.updateMaterial(userId, id.trim(), {
+      title: title?.trim(),
       description,
-      fileUrl,
-      fileType,
+      fileUrl: fileUrl?.trim(),
+      fileType: fileType?.trim(),
       fileSize,
       isDownloadable,
     });
@@ -422,10 +573,16 @@ class CourseController {
    * DELETE /api/courses/materials/:id
    */
   deleteMaterial = asyncHandler(async (req: Request, res: Response) => {
-    const userId = req.user!.id;
+    if (!req.user) {
+      throw new BadRequestError('Authentication required');
+    }
+    const userId = req.user.id;
     const { id } = req.params;
+    if (!id || typeof id !== 'string' || !id.trim()) {
+      throw new BadRequestError('Material ID is required');
+    }
 
-    const result = await courseService.deleteMaterial(userId, id);
+    const result = await courseService.deleteMaterial(userId, id.trim());
 
     res.status(200).json({
       status: 'success',
@@ -438,7 +595,10 @@ class CourseController {
    * GET /api/courses/my-courses
    */
   getMyCourses = asyncHandler(async (req: Request, res: Response) => {
-    const userId = req.user!.id;
+    if (!req.user) {
+      throw new BadRequestError('Authentication required');
+    }
+    const userId = req.user.id;
 
     const courses = await courseService.getTeacherCourses(userId);
 
@@ -465,18 +625,27 @@ class CourseController {
    * POST /api/courses/:id/notifications
    */
   sendCourseNotification = asyncHandler(async (req: Request, res: Response) => {
-    const teacherUserId = req.user!.id;
+    if (!req.user) {
+      throw new BadRequestError('Authentication required');
+    }
+    const teacherUserId = req.user.id;
     const { id: courseId } = req.params;
-    const { title, message, type } = req.body as { title: string; message: string; type?: string };
+    if (!courseId || typeof courseId !== 'string' || !courseId.trim()) {
+      throw new BadRequestError('Course ID is required');
+    }
+    const { title, message, type } = req.body as { title?: string; message?: string; type?: string };
 
-    if (!title || !message) {
-      res.status(400).json({ status: 'error', message: 'Title and message are required' });
-      return;
+    if (!title || typeof title !== 'string' || !title.trim()) {
+      throw new BadRequestError('Title is required');
+    }
+
+    if (!message || typeof message !== 'string' || !message.trim()) {
+      throw new BadRequestError('Message is required');
     }
 
     // Verify course ownership
     const course = await prisma.course.findUnique({
-      where: { id: courseId },
+      where: { id: courseId.trim() },
       include: {
         teacherProfile: { select: { userId: true } },
       },
@@ -501,9 +670,9 @@ class CourseController {
     if (userIds.length > 0) {
       await notificationService.createBulkNotifications(
         userIds,
-        title,
-        message,
-        type || 'COURSE_ANNOUNCEMENT'
+        title.trim(),
+        message.trim(),
+        type?.trim() || 'COURSE_ANNOUNCEMENT'
       );
     }
 

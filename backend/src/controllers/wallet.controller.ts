@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import asyncHandler from '../utils/asyncHandler';
 import walletService from '../services/wallet.service';
+import { BadRequestError } from '../utils/errors';
 
 class WalletController {
   /**
@@ -8,7 +9,10 @@ class WalletController {
    * GET /api/wallet/summary
    */
   getMySummary = asyncHandler(async (req: Request, res: Response) => {
-    const userId = req.user!.id;
+    if (!req.user) {
+      throw new BadRequestError('Authentication required');
+    }
+    const userId = req.user.id;
     const data = await walletService.getSummary(userId);
     res.status(200).json({ status: 'success', data });
   });
@@ -18,7 +22,10 @@ class WalletController {
    * GET /api/wallet/transactions
    */
   getMyTransactions = asyncHandler(async (req: Request, res: Response) => {
-    const userId = req.user!.id;
+    if (!req.user) {
+      throw new BadRequestError('Authentication required');
+    }
+    const userId = req.user.id;
     const { limit, offset, type, source } = req.query as {
       limit?: string;
       offset?: string;
@@ -39,7 +46,10 @@ class WalletController {
    * GET /api/wallet/payout-methods
    */
   listMyPayoutMethods = asyncHandler(async (req: Request, res: Response) => {
-    const userId = req.user!.id;
+    if (!req.user) {
+      throw new BadRequestError('Authentication required');
+    }
+    const userId = req.user.id;
     const data = await walletService.listPayoutMethods(userId);
     res.status(200).json({ status: 'success', data });
   });
@@ -49,7 +59,10 @@ class WalletController {
    * POST /api/wallet/payout-methods
    */
   addPayoutMethod = asyncHandler(async (req: Request, res: Response) => {
-    const userId = req.user!.id;
+    if (!req.user) {
+      throw new BadRequestError('Authentication required');
+    }
+    const userId = req.user.id;
     const { type, label, details, isDefault } = req.body as {
       type: string;
       label: string;
@@ -65,7 +78,10 @@ class WalletController {
    * PUT /api/wallet/payout-methods/:id
    */
   updatePayoutMethod = asyncHandler(async (req: Request, res: Response) => {
-    const userId = req.user!.id;
+    if (!req.user) {
+      throw new BadRequestError('Authentication required');
+    }
+    const userId = req.user.id;
     const { id } = req.params as { id: string };
     const { label, details, isDefault } = req.body as {
       label?: string;
@@ -81,7 +97,10 @@ class WalletController {
    * DELETE /api/wallet/payout-methods/:id
    */
   deletePayoutMethod = asyncHandler(async (req: Request, res: Response) => {
-    const userId = req.user!.id;
+    if (!req.user) {
+      throw new BadRequestError('Authentication required');
+    }
+    const userId = req.user.id;
     const { id } = req.params as { id: string };
     const data = await walletService.deletePayoutMethod(userId, id);
     res.status(200).json({ status: 'success', data });
@@ -92,13 +111,20 @@ class WalletController {
    * POST /api/wallet/payouts
    */
   requestPayout = asyncHandler(async (req: Request, res: Response) => {
-    const userId = req.user!.id;
+    if (!req.user) {
+      throw new BadRequestError('Authentication required');
+    }
+    const userId = req.user.id;
     const { amount, methodId, note } = req.body as {
-      amount: number;
+      amount: number | string;
       methodId?: string;
       note?: string;
     };
-    const data = await walletService.requestPayout(userId, { amount: Number(amount), methodId, note });
+    const parsedAmount = typeof amount === 'string' ? parseFloat(amount) : amount;
+    if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
+      throw new BadRequestError('Invalid amount');
+    }
+    const data = await walletService.requestPayout(userId, { amount: parsedAmount, methodId, note });
     res.status(201).json({ status: 'success', message: 'Payout requested', data });
   });
 
@@ -107,7 +133,10 @@ class WalletController {
    * GET /api/wallet/payouts
    */
   listMyPayouts = asyncHandler(async (req: Request, res: Response) => {
-    const userId = req.user!.id;
+    if (!req.user) {
+      throw new BadRequestError('Authentication required');
+    }
+    const userId = req.user.id;
     const { limit, offset } = req.query as { limit?: string; offset?: string };
     const data = await walletService.listMyPayouts(userId, {
       limit: limit ? parseInt(limit, 10) : undefined,

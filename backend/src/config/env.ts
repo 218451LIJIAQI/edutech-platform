@@ -5,11 +5,19 @@ import path from 'path';
 // This avoids incorrect relative paths after TypeScript compilation.
 dotenv.config();
 
-// Helper to safely parse numbers with fallback and lower bounds
-const parseNumber = (value: string | undefined, fallback: number, min?: number): number => {
+// Helper to safely parse numbers with fallback and bounds
+const parseNumber = (
+  value: string | undefined,
+  fallback: number,
+  min?: number,
+  max?: number
+): number => {
   const n = Number(value);
   if (!Number.isFinite(n)) return fallback;
-  return min !== undefined ? Math.max(min, n) : n;
+  let result = n;
+  if (min !== undefined) result = Math.max(min, result);
+  if (max !== undefined) result = Math.min(max, result);
+  return result;
 };
 
 // Validate required environment variables
@@ -22,7 +30,7 @@ for (const envVar of requiredEnvVars) {
 
 export interface AppConfig {
   // Server
-  NODE_ENV: 'development' | 'test' | 'production' | string;
+  NODE_ENV: 'development' | 'test' | 'production';
   PORT: number;
   API_VERSION: string;
 
@@ -71,7 +79,11 @@ const uploadsDir = path.isAbsolute(process.env.UPLOAD_DIR || '')
 
 export const config: AppConfig = {
   // Server
-  NODE_ENV: process.env.NODE_ENV || 'development',
+  NODE_ENV: (
+    process.env.NODE_ENV === 'production' || process.env.NODE_ENV === 'test'
+      ? process.env.NODE_ENV
+      : 'development'
+  ) as 'development' | 'test' | 'production',
   PORT: parseNumber(process.env.PORT, 3000, 0),
   API_VERSION: process.env.API_VERSION || 'v1',
 
@@ -90,7 +102,7 @@ export const config: AppConfig = {
   STRIPE_WEBHOOK_SECRET: process.env.STRIPE_WEBHOOK_SECRET || '',
 
   // Platform
-  PLATFORM_COMMISSION_RATE: parseNumber(process.env.PLATFORM_COMMISSION_RATE, 10, 0),
+  PLATFORM_COMMISSION_RATE: parseNumber(process.env.PLATFORM_COMMISSION_RATE, 10, 0, 100),
 
   // File Upload
   MAX_FILE_SIZE: parseNumber(process.env.MAX_FILE_SIZE, 50 * 1024 * 1024, 0), // 50MB
@@ -110,10 +122,12 @@ export const config: AppConfig = {
   FRONTEND_URL: process.env.FRONTEND_URL || 'http://localhost:5173',
 
   // Socket.io (default to CORS_ORIGIN when not provided)
-  SOCKET_CORS_ORIGIN:
-    process.env.SOCKET_CORS_ORIGIN && process.env.SOCKET_CORS_ORIGIN.includes(',')
-      ? process.env.SOCKET_CORS_ORIGIN.split(',').map((s) => s.trim())
-      : process.env.SOCKET_CORS_ORIGIN || (process.env.CORS_ORIGIN || 'http://localhost:5173'),
+  SOCKET_CORS_ORIGIN: (() => {
+    const socketOrigin = process.env.SOCKET_CORS_ORIGIN || process.env.CORS_ORIGIN || 'http://localhost:5173';
+    return socketOrigin.includes(',')
+      ? socketOrigin.split(',').map((s) => s.trim())
+      : socketOrigin;
+  })(),
 
   // Derived flags
   IS_PROD: (process.env.NODE_ENV || 'development') === 'production',

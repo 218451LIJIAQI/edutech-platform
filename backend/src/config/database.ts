@@ -25,16 +25,22 @@ if (!isProduction) {
 
 // Graceful shutdown - ensure we only register this once
 if (!globalThis.__PRISMA_BEFORE_EXIT_HOOK__) {
-  process.on('beforeExit', async () => {
+  const disconnectHandler = async () => {
     try {
       await prismaClient.$disconnect();
-    } catch (e) {
-      logger.error('Error disconnecting Prisma', e as Error);
-    } finally {
-      logger.info('Database connection closed', { service: 'edutech-backend' });
+      logger.info('Database connection closed gracefully');
+    } catch (error) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      logger.error('Error disconnecting Prisma', { error: err.message, stack: err.stack });
     }
-  });
+  };
+
+  process.on('beforeExit', disconnectHandler);
+  process.on('SIGINT', disconnectHandler);
+  process.on('SIGTERM', disconnectHandler);
+
   globalThis.__PRISMA_BEFORE_EXIT_HOOK__ = true;
 }
 
 export default prismaClient;
+export type { PrismaClient };

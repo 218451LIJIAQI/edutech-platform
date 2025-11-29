@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import asyncHandler from '../utils/asyncHandler';
 import cartService from '../services/cart.service';
+import { AuthenticationError, BadRequestError } from '../utils/errors';
 
 class CartController {
   /**
@@ -8,7 +9,10 @@ class CartController {
    * GET /api/cart
    */
   getCart = asyncHandler(async (req: Request, res: Response) => {
-    const userId = req.user!.id;
+    if (!req.user) {
+      throw new AuthenticationError('Authentication required');
+    }
+    const userId = req.user.id;
     const cart = await cartService.getCart(userId);
     res.status(200).json({ status: 'success', data: cart });
   });
@@ -18,8 +22,14 @@ class CartController {
    * POST /api/cart/items
    */
   addItem = asyncHandler(async (req: Request, res: Response) => {
-    const userId = req.user!.id;
+    if (!req.user) {
+      throw new AuthenticationError('Authentication required');
+    }
+    const userId = req.user.id;
     const { packageId } = req.body as { packageId: string };
+    if (!packageId || typeof packageId !== 'string' || packageId.trim().length === 0) {
+      throw new BadRequestError('packageId is required and must be a non-empty string');
+    }
     const item = await cartService.addItem(userId, packageId);
     res
       .status(201)
@@ -31,8 +41,14 @@ class CartController {
    * DELETE /api/cart/items/:packageId
    */
   removeItem = asyncHandler(async (req: Request, res: Response) => {
-    const userId = req.user!.id;
-    const { packageId } = req.params as { packageId: string };
+    if (!req.user) {
+      throw new AuthenticationError('Authentication required');
+    }
+    const userId = req.user.id;
+    const { packageId } = req.params;
+    if (!packageId || typeof packageId !== 'string' || packageId.trim().length === 0) {
+      throw new BadRequestError('packageId is required and must be a non-empty string');
+    }
     const result = await cartService.removeItem(userId, packageId);
     res.status(200).json({ status: 'success', message: result.message });
   });
@@ -42,7 +58,10 @@ class CartController {
    * DELETE /api/cart/clear
    */
   clearCart = asyncHandler(async (req: Request, res: Response) => {
-    const userId = req.user!.id;
+    if (!req.user) {
+      throw new AuthenticationError('Authentication required');
+    }
+    const userId = req.user.id;
     const result = await cartService.clearCart(userId);
     res.status(200).json({ status: 'success', message: result.message });
   });

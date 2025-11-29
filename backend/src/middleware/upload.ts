@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
-import multer from 'multer';
+import multer, { FileFilterCallback } from 'multer';
 import { Request } from 'express';
 import config from '../config/env';
 import { ValidationError } from '../utils/errors';
@@ -14,7 +14,7 @@ if (!fs.existsSync(uploadDir)) {
 }
 
 const resolveSubDir = (fieldname: string): string => {
-  const normalized = String(fieldname || '').toLowerCase();
+  const normalized = (fieldname || '').toLowerCase();
   switch (normalized) {
     case 'avatar':
     case 'image':
@@ -57,11 +57,13 @@ const storage = multer.diskStorage({
 
 // File filter helper to check both extension and mimetype
 const createFileFilter = (allowedExts: string[], allowedMimes: string[]) => {
-  return (_req: Request, file: Express.Multer.File, cb: multer.FileFilterCallback) => {
+  return (_req: Request, file: Express.Multer.File, cb: FileFilterCallback) => {
     const ext = path.extname(file.originalname).toLowerCase();
     const mime = (file.mimetype || '').toLowerCase();
     const ok = allowedExts.includes(ext) && allowedMimes.includes(mime);
-    if (ok) return cb(null, true);
+    if (ok) {
+      return cb(null, true);
+    }
     return cb(
       new ValidationError(
         `Invalid file type. Allowed extensions: ${allowedExts.join(', ')}; Allowed mimetypes: ${allowedMimes.join(', ')}`
@@ -142,11 +144,11 @@ export const deleteFile = (filePath: string): void => {
   try {
     if (filePath && fs.existsSync(filePath)) {
       fs.unlinkSync(filePath);
+      logger.debug('File deleted successfully', { filePath });
     }
   } catch (error) {
-    if (error instanceof Error) {
-      logger.error('Failed to delete file', { filePath, error: error.message });
-    }
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    logger.error('Failed to delete file', { filePath, error: errorMessage });
   }
 };
 

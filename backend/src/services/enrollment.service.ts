@@ -90,7 +90,7 @@ class EnrollmentService {
     enrollmentId: string,
     userId: string,
     completedLessons: number,
-    progress: number
+    progress?: number
   ) {
     // Scope lookup by id and userId to prevent accessing others' records
     const enrollment = await prisma.enrollment.findFirst({
@@ -110,14 +110,16 @@ class EnrollmentService {
     const safeCompleted = Number.isFinite(completedLessons) ? Math.floor(completedLessons) : 0;
     const boundedCompleted = Math.max(0, Math.min(safeCompleted, totalLessons));
 
-    const safeProgress = Number.isFinite(progress) ? progress : 0;
-    const boundedProgress = Math.min(Math.max(safeProgress, 0), 100); // Ensure progress is between 0-100
+    const hasProgress = typeof progress === 'number' && Number.isFinite(progress);
+    const boundedProgress = hasProgress 
+      ? Math.min(Math.max(progress, 0), 100) 
+      : undefined; // Ensure progress is between 0-100 when provided
 
     const updated = await prisma.enrollment.update({
       where: { id: enrollmentId },
       data: {
         completedLessons: boundedCompleted,
-        progress: boundedProgress,
+        ...(boundedProgress !== undefined ? { progress: boundedProgress } : {}),
       },
     });
 

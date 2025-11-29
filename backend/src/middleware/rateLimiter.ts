@@ -5,8 +5,8 @@ import config from '../config/env';
  * General API rate limiter
  * In development mode, we use much more relaxed limits
  */
-const isDev = config.NODE_ENV === 'development';
-const isLocalIp = (ip?: string) => ip === '::1' || ip === '127.0.0.1';
+const isDev = config.IS_DEV;
+const isLocalIp = (ip?: string) => ip === '::1' || ip === '127.0.0.1' || ip === '::ffff:127.0.0.1' || ip === 'localhost';
 
 export const apiLimiter = rateLimit({
   windowMs: config.RATE_LIMIT_WINDOW_MS, // 15 minutes by default

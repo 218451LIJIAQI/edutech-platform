@@ -122,7 +122,6 @@ class SupportAdminService {
       data: {
         assignedTo: adminId,
         status: SupportTicketStatus.IN_PROGRESS,
-        updatedAt: new Date(),
       },
       include: {
         user: {
@@ -161,9 +160,9 @@ class SupportAdminService {
       throw new ValidationError('Message is required');
     }
 
-    // Create message and update ticket within a transaction
-    const [msg] = await prisma.$transaction([
-      prisma.supportTicketMessage.create({
+    // Create message and conditionally update ticket status within a transaction
+    const msg = await prisma.$transaction(async (tx) => {
+      const createdMsg = await tx.supportTicketMessage.create({
         data: {
           ticketId,
           senderId: adminId,
@@ -179,19 +178,20 @@ class SupportAdminService {
             },
           },
         },
-      }),
-      prisma.supportTicket.update({
-        where: { id: ticketId },
-        data: {
-          updatedAt: new Date(),
-        },
-      }),
-    ]);
+      });
 
-    // Conditionally bump status to IN_PROGRESS if currently OPEN
-    await prisma.supportTicket.updateMany({
-      where: { id: ticketId, status: SupportTicketStatus.OPEN },
-      data: { status: SupportTicketStatus.IN_PROGRESS },
+      // Conditionally bump status to IN_PROGRESS if currently OPEN
+      await tx.supportTicket.updateMany({
+        where: { 
+          id: ticketId,
+          status: SupportTicketStatus.OPEN,
+        },
+        data: { 
+          status: SupportTicketStatus.IN_PROGRESS,
+        },
+      });
+
+      return createdMsg;
     });
 
     return msg;
@@ -201,7 +201,8 @@ class SupportAdminService {
    * Resolve support ticket
    */
   async resolveTicket(ticketId: string, resolution: string) {
-    if (!resolution.trim()) {
+    const trimmedResolution = (resolution ?? '').trim();
+    if (!trimmedResolution) {
       throw new ValidationError('Resolution is required');
     }
 
@@ -215,9 +216,8 @@ class SupportAdminService {
       where: { id: ticketId },
       data: {
         status: SupportTicketStatus.RESOLVED,
-        resolution: resolution.trim(),
+        resolution: trimmedResolution,
         resolvedAt: new Date(),
-        updatedAt: new Date(),
       },
       include: {
         user: {
@@ -261,7 +261,6 @@ class SupportAdminService {
       where: { id: ticketId },
       data: {
         status: SupportTicketStatus.CLOSED,
-        updatedAt: new Date(),
       },
       include: {
         user: {

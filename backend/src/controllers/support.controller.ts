@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import asyncHandler from '../utils/asyncHandler';
 import supportService from '../services/support.service';
+import { BadRequestError } from '../utils/errors';
 
 class SupportController {
   /**
@@ -8,22 +9,35 @@ class SupportController {
    * POST /api/support/tickets
    */
   createTicket = asyncHandler(async (req: Request, res: Response) => {
-    const userId = req.user!.id;
+    if (!req.user) {
+      throw new BadRequestError('Authentication required');
+    }
+    const userId = req.user.id;
     const { subject, description, category, orderId, priority } = (req.body || {}) as {
-      subject: string;
-      description: string;
-      category: string;
+      subject?: string;
+      description?: string;
+      category?: string;
       orderId?: string;
       priority?: string;
     };
 
+    if (!subject || typeof subject !== 'string' || !subject.trim()) {
+      throw new BadRequestError('Subject is required');
+    }
+    if (!description || typeof description !== 'string' || !description.trim()) {
+      throw new BadRequestError('Description is required');
+    }
+    if (!category || typeof category !== 'string' || !category.trim()) {
+      throw new BadRequestError('Category is required');
+    }
+
     const ticket = await supportService.createTicket(
       userId,
-      typeof subject === 'string' ? subject.trim() : subject,
-      typeof description === 'string' ? description.trim() : description,
-      typeof category === 'string' ? category.trim() : category,
-      typeof orderId === 'string' ? orderId.trim() : orderId,
-      typeof priority === 'string' ? priority.trim() : priority
+      subject.trim(),
+      description.trim(),
+      category.trim(),
+      typeof orderId === 'string' ? orderId.trim() : undefined,
+      typeof priority === 'string' ? priority.trim() : undefined
     );
 
     res.status(201).json({
@@ -38,7 +52,10 @@ class SupportController {
    * GET /api/support/tickets
    */
   getUserTickets = asyncHandler(async (req: Request, res: Response) => {
-    const userId = req.user!.id;
+    if (!req.user) {
+      throw new BadRequestError('Authentication required');
+    }
+    const userId = req.user.id;
     const tickets = await supportService.getUserTickets(userId);
 
     res.status(200).json({
@@ -52,7 +69,10 @@ class SupportController {
    * GET /api/support/tickets/:id
    */
   getTicketById = asyncHandler(async (req: Request, res: Response) => {
-    const userId = req.user!.id;
+    if (!req.user) {
+      throw new BadRequestError('Authentication required');
+    }
+    const userId = req.user.id;
     const { id } = req.params;
 
     const ticketId = typeof id === 'string' ? id.trim() : String(id);
@@ -70,20 +90,27 @@ class SupportController {
    * POST /api/support/tickets/:id/messages
    */
   addMessage = asyncHandler(async (req: Request, res: Response) => {
-    const userId = req.user!.id;
+    if (!req.user) {
+      throw new BadRequestError('Authentication required');
+    }
+    const userId = req.user.id;
     const { id } = req.params;
     const { message, attachment } = (req.body || {}) as {
-      message: string;
+      message?: string;
       attachment?: string;
     };
 
     const ticketId = typeof id === 'string' ? id.trim() : String(id);
 
+    if (!message || typeof message !== 'string' || !message.trim()) {
+      throw new BadRequestError('Message is required');
+    }
+
     const msg = await supportService.addMessage(
       userId,
       ticketId,
-      typeof message === 'string' ? message.trim() : message,
-      typeof attachment === 'string' ? attachment.trim() : attachment
+      message.trim(),
+      typeof attachment === 'string' ? attachment.trim() : undefined
     );
 
     res.status(201).json({
@@ -98,7 +125,10 @@ class SupportController {
    * POST /api/support/tickets/:id/close
    */
   closeTicket = asyncHandler(async (req: Request, res: Response) => {
-    const userId = req.user!.id;
+    if (!req.user) {
+      throw new BadRequestError('Authentication required');
+    }
+    const userId = req.user.id;
     const { id } = req.params;
     const { resolution } = (req.body || {}) as { resolution?: string };
 
@@ -122,7 +152,10 @@ class SupportController {
    * GET /api/support/orders/:orderId/tickets
    */
   getTicketsByOrderId = asyncHandler(async (req: Request, res: Response) => {
-    const userId = req.user!.id;
+    if (!req.user) {
+      throw new BadRequestError('Authentication required');
+    }
+    const userId = req.user.id;
     const { orderId } = req.params;
 
     const normalizedOrderId =
@@ -144,7 +177,10 @@ class SupportController {
    * GET /api/support/stats
    */
   getStats = asyncHandler(async (req: Request, res: Response) => {
-    const userId = req.user!.id;
+    if (!req.user) {
+      throw new BadRequestError('Authentication required');
+    }
+    const userId = req.user.id;
     const stats = await supportService.getStats(userId);
 
     res.status(200).json({

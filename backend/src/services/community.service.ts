@@ -34,7 +34,18 @@ export const communityService = {
     const limit = params.limit || 10;
     const skip = (page - 1) * limit;
 
-    const where: any = {};
+    const where: {
+      tags?: {
+        some: {
+          tag: {
+            name: string;
+          };
+        };
+      };
+      createdAt?: {
+        gte: Date;
+      };
+    } = {};
     if (params.tag) {
       where.tags = {
         some: {

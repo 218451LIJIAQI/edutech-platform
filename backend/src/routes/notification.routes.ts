@@ -26,6 +26,9 @@ router.get(
 // Get unread count
 router.get('/unread-count', authenticate, notificationController.getUnreadCount);
 
+// Mark all as read (must be before /:id/read to avoid route conflict)
+router.put('/read-all', authenticate, notificationController.markAllAsRead);
+
 // Mark notification as read
 router.put(
   '/:id/read',
@@ -33,9 +36,6 @@ router.put(
   validate([param('id').notEmpty().withMessage('id is required').isUUID().withMessage('Invalid id')]),
   notificationController.markAsRead
 );
-
-// Mark all as read
-router.put('/read-all', authenticate, notificationController.markAllAsRead);
 
 // Delete notification
 router.delete(

@@ -2,6 +2,7 @@ import type { ErrorRequestHandler, Request, Response, NextFunction } from 'expre
 import { Prisma } from '@prisma/client';
 import { AppError } from '../utils/errors';
 import logger from '../utils/logger';
+import config from '../config/env';
 
 /**
  * Global error handling middleware
@@ -52,10 +53,9 @@ export const errorHandler: ErrorRequestHandler = (
   }
 
   // Fallback 500 (avoid leaking details in production)
-  const isProd = (process.env.NODE_ENV || 'development') === 'production';
   return res.status(500).json({
     status: 'error',
-    message: isProd ? 'Internal server error' : err.message,
+    message: config.IS_PROD ? 'Internal server error' : err.message,
   });
 };
 

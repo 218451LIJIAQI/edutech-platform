@@ -30,7 +30,11 @@ class TeacherService {
       limit = 10,
     } = filters;
 
-    const skip = (page - 1) * limit;
+    const safePage = Number.isFinite(page) && page > 0 ? Math.floor(page) : 1;
+    const safeLimit = Number.isFinite(limit)
+      ? Math.min(Math.max(Math.floor(limit), 1), 100)
+      : 10;
+    const skip = (safePage - 1) * safeLimit;
 
     // Build where clause with proper typing
     const where: Prisma.TeacherProfileWhereInput = {};
@@ -65,7 +69,7 @@ class TeacherService {
       prisma.teacherProfile.findMany({
         where,
         skip,
-        take: limit,
+        take: safeLimit,
         include: {
           user: {
             select: {
@@ -103,9 +107,9 @@ class TeacherService {
       teachers: teachersWithActualCounts,
       pagination: {
         total,
-        page,
-        limit,
-        totalPages: Math.ceil(total / limit),
+        page: safePage,
+        limit: safeLimit,
+        totalPages: Math.ceil(total / safeLimit),
       },
     };
   }
@@ -152,14 +156,24 @@ class TeacherService {
     // Only expose extended profile fields to students when approved
     const approved = teacher.profileCompletionStatus === 'APPROVED';
 
+    // Helper function to safely parse JSON
+    const safeParseJSON = (jsonString: string | null | undefined): any[] => {
+      if (!jsonString) return [];
+      try {
+        return JSON.parse(jsonString);
+      } catch {
+        return [];
+      }
+    };
+
     return {
       ...teacher,
       totalStudents: actualStudentCount, // Override with actual count
       // Parse JSON fields conditionally
-      awards: approved && teacher.awards ? JSON.parse(teacher.awards) : [],
-      specialties: approved && teacher.specialties ? JSON.parse(teacher.specialties) : [],
-      languages: approved && teacher.languages ? JSON.parse(teacher.languages) : [],
-      certificatePhotos: approved && teacher.certificatePhotos ? JSON.parse(teacher.certificatePhotos) : [],
+      awards: approved ? safeParseJSON(teacher.awards) : [],
+      specialties: approved ? safeParseJSON(teacher.specialties) : [],
+      languages: approved ? safeParseJSON(teacher.languages) : [],
+      certificatePhotos: approved ? safeParseJSON(teacher.certificatePhotos) : [],
       selfIntroduction: approved ? teacher.selfIntroduction : undefined,
       educationBackground: approved ? teacher.educationBackground : undefined,
       teachingExperience: approved ? teacher.teachingExperience : undefined,
@@ -433,7 +447,8 @@ class TeacherService {
    * Counts distinct users who have enrollments in this teacher's courses
    */
   async calculateActualStudentCount(teacherProfileId: string): Promise<number> {
-    const result = await prisma.enrollment.findMany({
+    const result = await prisma.enrollment.groupBy({
+      by: ['userId'],
       where: {
         package: {
           course: {
@@ -441,10 +456,6 @@ class TeacherService {
           },
         },
       },
-      select: {
-        userId: true,
-      },
-      distinct: ['userId'],
     });
 
     return result.length;
@@ -573,13 +584,23 @@ class TeacherService {
       throw new NotFoundError('Teacher profile not found');
     }
 
+    // Helper function to safely parse JSON
+    const safeParseJSON = (jsonString: string | null | undefined): any[] => {
+      if (!jsonString) return [];
+      try {
+        return JSON.parse(jsonString);
+      } catch {
+        return [];
+      }
+    };
+
     // Parse JSON fields
     return {
       ...teacherProfile,
-      awards: teacherProfile.awards ? JSON.parse(teacherProfile.awards) : [],
-      specialties: teacherProfile.specialties ? JSON.parse(teacherProfile.specialties) : [],
-      languages: teacherProfile.languages ? JSON.parse(teacherProfile.languages) : [],
-      certificatePhotos: teacherProfile.certificatePhotos ? JSON.parse(teacherProfile.certificatePhotos) : [],
+      awards: safeParseJSON(teacherProfile.awards),
+      specialties: safeParseJSON(teacherProfile.specialties),
+      languages: safeParseJSON(teacherProfile.languages),
+      certificatePhotos: safeParseJSON(teacherProfile.certificatePhotos),
     };
   }
 
@@ -658,13 +679,17 @@ class TeacherService {
    * Get pending teacher registrations (Admin only)
    */
   async getPendingRegistrations(page = 1, limit = 10) {
-    const skip = (page - 1) * limit;
+    const safePage = Number.isFinite(page) && page > 0 ? Math.floor(page) : 1;
+    const safeLimit = Number.isFinite(limit)
+      ? Math.min(Math.max(Math.floor(limit), 1), 100)
+      : 10;
+    const skip = (safePage - 1) * safeLimit;
 
     const [teachers, total] = await Promise.all([
       prisma.teacherProfile.findMany({
         where: { registrationStatus: RegistrationStatus.PENDING },
         skip,
-        take: limit,
+        take: safeLimit,
         include: {
           user: {
             select: {
@@ -685,9 +710,9 @@ class TeacherService {
       teachers,
       pagination: {
         total,
-        page,
-        limit,
-        totalPages: Math.ceil(total / limit),
+        page: safePage,
+        limit: safeLimit,
+        totalPages: Math.ceil(total / safeLimit),
       },
     };
   }
@@ -725,7 +750,11 @@ class TeacherService {
    * Get all teachers pending profile verification (Admin only)
    */
   async getPendingProfileVerifications(page = 1, limit = 10) {
-    const skip = (page - 1) * limit;
+    const safePage = Number.isFinite(page) && page > 0 ? Math.floor(page) : 1;
+    const safeLimit = Number.isFinite(limit)
+      ? Math.min(Math.max(Math.floor(limit), 1), 100)
+      : 10;
+    const skip = (safePage - 1) * safeLimit;
 
     const [teachers, total] = await Promise.all([
       prisma.teacherProfile.findMany({
@@ -733,7 +762,7 @@ class TeacherService {
           profileCompletionStatus: 'PENDING_REVIEW',
         },
         skip,
-        take: limit,
+        take: safeLimit,
         include: {
           user: {
             select: {
@@ -756,16 +785,26 @@ class TeacherService {
       }),
     ]);
 
+    // Helper function to safely parse JSON
+    const safeParseJSON = (jsonString: string | null | undefined): any[] => {
+      if (!jsonString) return [];
+      try {
+        return JSON.parse(jsonString);
+      } catch {
+        return [];
+      }
+    };
+
     // Overlay pending draft payload onto the teacher object for display only
     const mapped = teachers.map((t) => {
-      const draft = t.profileSubmissions?.[0]?.payload as any | undefined;
+      const draft = t.profileSubmissions?.[0]?.payload as Record<string, any> | undefined;
       const base = {
         ...t,
-        awards: t.awards ? JSON.parse(t.awards) : [],
-        specialties: t.specialties ? JSON.parse(t.specialties) : [],
-        languages: t.languages ? JSON.parse(t.languages) : [],
-        certificatePhotos: t.certificatePhotos ? JSON.parse(t.certificatePhotos) : [],
-      } as any;
+        awards: safeParseJSON(t.awards),
+        specialties: safeParseJSON(t.specialties),
+        languages: safeParseJSON(t.languages),
+        certificatePhotos: safeParseJSON(t.certificatePhotos),
+      } as Record<string, any>;
 
       if (draft) {
         base.selfIntroduction = draft.selfIntroduction ?? base.selfIntroduction;
@@ -786,9 +825,9 @@ class TeacherService {
       teachers: mapped,
       pagination: {
         total,
-        page,
-        limit,
-        totalPages: Math.ceil(total / limit),
+        page: safePage,
+        limit: safeLimit,
+        totalPages: Math.ceil(total / safeLimit),
       },
     };
   }
@@ -901,7 +940,11 @@ class TeacherService {
       limit = 10,
     } = filters;
 
-    const skip = (page - 1) * limit;
+    const safePage = Number.isFinite(page) && page > 0 ? Math.floor(page) : 1;
+    const safeLimit = Number.isFinite(limit)
+      ? Math.min(Math.max(Math.floor(limit), 1), 100)
+      : 10;
+    const skip = (safePage - 1) * safeLimit;
 
     const where: Prisma.TeacherProfileWhereInput = {
       isVerified: true,
@@ -923,7 +966,7 @@ class TeacherService {
       prisma.teacherProfile.findMany({
         where,
         skip,
-        take: limit,
+        take: safeLimit,
         include: {
           user: {
             select: {
@@ -944,16 +987,26 @@ class TeacherService {
       prisma.teacherProfile.count({ where }),
     ]);
 
+    // Helper function to safely parse JSON
+    const safeParseJSON = (jsonString: string | null | undefined): any[] => {
+      if (!jsonString) return [];
+      try {
+        return JSON.parse(jsonString);
+      } catch {
+        return [];
+      }
+    };
+
     const teachersWithActualCounts = await Promise.all(
       teachers.map(async (t) => {
         const actualStudentCount = await this.calculateActualStudentCount(t.id);
         return {
           ...t,
           totalStudents: actualStudentCount, // Override with actual count
-          awards: t.awards ? JSON.parse(t.awards) : [],
-          specialties: t.specialties ? JSON.parse(t.specialties) : [],
-          languages: t.languages ? JSON.parse(t.languages) : [],
-          certificatePhotos: t.certificatePhotos ? JSON.parse(t.certificatePhotos) : [],
+          awards: safeParseJSON(t.awards),
+          specialties: safeParseJSON(t.specialties),
+          languages: safeParseJSON(t.languages),
+          certificatePhotos: safeParseJSON(t.certificatePhotos),
         };
       })
     );
@@ -962,9 +1015,9 @@ class TeacherService {
       teachers: teachersWithActualCounts,
       pagination: {
         total,
-        page,
-        limit,
-        totalPages: Math.ceil(total / limit),
+        page: safePage,
+        limit: safeLimit,
+        totalPages: Math.ceil(total / safeLimit),
       },
     };
   }

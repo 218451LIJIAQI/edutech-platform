@@ -15,10 +15,11 @@ interface JWTPayload {
 }
 
 const getBearerToken = (req: Request): string | null => {
-  const authHeader = req.headers.authorization || (req.headers as any).Authorization;
-  if (!authHeader || typeof authHeader !== 'string') return null;
-  if (!authHeader.startsWith('Bearer ')) return null;
-  const token = authHeader.slice(7).trim();
+  const headerVal = req.headers.authorization;
+  if (typeof headerVal !== 'string') return null;
+  const match = headerVal.match(/^\s*Bearer\s+(.+)$/i);
+  if (!match) return null;
+  const token = match[1].trim();
   return token || null;
 };
 
@@ -85,11 +86,9 @@ export const authorize = (...roles: UserRole[]) => {
       return next(new AuthenticationError('Authentication required'));
     }
 
-    if (!roles.length || !roles.includes(req.user.role)) {
+    if (roles.length && !roles.includes(req.user.role)) {
       return next(
-        new AuthorizationError(
-          roles.length ? `Access denied. Required role: ${roles.join(' or ')}` : 'Access denied'
-        )
+        new AuthorizationError(`Access denied. Required role: ${roles.join(' or ')}`)
       );
     }
 

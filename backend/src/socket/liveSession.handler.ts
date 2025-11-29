@@ -32,8 +32,9 @@ export class LiveSessionHandler {
     // Authentication middleware
     this.io.use(async (socket: AuthenticatedSocket, next) => {
       try {
-        let token = (socket.handshake.auth as any)?.token as string | undefined;
-        const authHeader = (socket.handshake.headers?.authorization as string | undefined) ?? undefined;
+        const auth = socket.handshake.auth as { token?: string } | undefined;
+        let token = auth?.token;
+        const authHeader = socket.handshake.headers?.authorization as string | undefined;
 
         if (!token && authHeader?.startsWith('Bearer ')) {
           token = authHeader.slice('Bearer '.length);
@@ -58,6 +59,9 @@ export class LiveSessionHandler {
 
         return next();
       } catch (error) {
+        if (error instanceof (jwt as any).TokenExpiredError) {
+          return next(new Error('Token expired'));
+        }
         return next(new Error('Invalid token'));
       }
     });

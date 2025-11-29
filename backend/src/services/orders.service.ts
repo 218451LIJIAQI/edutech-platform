@@ -1,6 +1,6 @@
 import prisma from '../config/database';
 import { NotFoundError, ValidationError, AuthorizationError } from '../utils/errors';
-import { OrderStatus, RefundStatus } from '@prisma/client';
+import { OrderStatus, RefundStatus, RefundMethod } from '@prisma/client';
 
 const genOrderNo = () => {
   const now = new Date();
@@ -15,8 +15,11 @@ const genOrderNo = () => {
 
 class OrdersService {
   async getMyOrders(userId: string) {
+    if (!userId || !userId.trim()) {
+      throw new ValidationError('User ID is required');
+    }
     const orders = await prisma.order.findMany({
-      where: { userId },
+      where: { userId: userId.trim() },
       include: {
         items: {
           include: {
@@ -34,8 +37,14 @@ class OrdersService {
   }
 
   async getOrderById(userId: string, id: string) {
+    if (!userId || !userId.trim()) {
+      throw new ValidationError('User ID is required');
+    }
+    if (!id || !id.trim()) {
+      throw new ValidationError('Order ID is required');
+    }
     const order = await prisma.order.findUnique({
-      where: { id },
+      where: { id: id.trim() },
       include: {
         items: {
           include: {
@@ -47,13 +56,16 @@ class OrdersService {
       },
     });
     if (!order) throw new NotFoundError('Order not found');
-    if (order.userId !== userId) throw new AuthorizationError('You can only access your own orders');
+    if (order.userId !== userId.trim()) throw new AuthorizationError('You can only access your own orders');
     return order;
   }
 
   async createOrderFromCart(userId: string) {
+    if (!userId || !userId.trim()) {
+      throw new ValidationError('User ID is required');
+    }
     const cartItems = await prisma.cartItem.findMany({
-      where: { userId },
+      where: { userId: userId.trim() },
       include: {
         package: {
           include: {
@@ -74,8 +86,20 @@ class OrdersService {
       throw new ValidationError('Some items are no longer available. Please update your cart.');
     }
 
-    const totalAmount = cartItems.reduce(
-      (sum, it) => sum + it.package.finalPrice * it.quantity,
+    // Filter out items without packages (type guard)
+    const validCartItems = cartItems.filter((it): it is typeof it & { package: NonNullable<typeof it.package> } => 
+      it.package !== null && it.package !== undefined
+    );
+
+    const totalAmount = validCartItems.reduce(
+      (sum, it) => {
+        const price = Number(it.package.finalPrice ?? 0);
+        const quantity = Number(it.quantity ?? 0);
+        if (!Number.isFinite(price) || !Number.isFinite(quantity) || price < 0 || quantity < 0) {
+          throw new ValidationError('Invalid cart item price or quantity');
+        }
+        return sum + price * quantity;
+      },
       0
     );
 
@@ -86,7 +110,7 @@ class OrdersService {
         totalAmount,
         status: OrderStatus.PENDING,
         items: {
-          create: cartItems.map((it) => ({
+          create: validCartItems.map((it) => ({
             packageId: it.packageId,
             price: it.package.price,
             discount: it.package.discount || 0,
@@ -103,19 +127,25 @@ class OrdersService {
   }
 
   async cancelOrder(userId: string, id: string, reason?: string) {
-    const order = await prisma.order.findUnique({ where: { id } });
+    if (!userId || !userId.trim()) {
+      throw new ValidationError('User ID is required');
+    }
+    if (!id || !id.trim()) {
+      throw new ValidationError('Order ID is required');
+    }
+    const order = await prisma.order.findUnique({ where: { id: id.trim() } });
     if (!order) throw new NotFoundError('Order not found');
-    if (order.userId !== userId) throw new AuthorizationError('You can only modify your own orders');
+    if (order.userId !== userId.trim()) throw new AuthorizationError('You can only modify your own orders');
     if (order.status !== OrderStatus.PENDING) {
       throw new ValidationError('Only pending orders can be cancelled');
     }
 
     const updated = await prisma.order.update({
-      where: { id },
+      where: { id: id.trim() },
       data: {
         status: OrderStatus.CANCELLED,
         canceledAt: new Date(),
-        cancelReason: reason,
+        cancelReason: reason?.trim() || null,
       },
     });
     return updated;
@@ -127,22 +157,30 @@ class OrdersService {
     amount: number,
     reason?: string,
     reasonCategory?: string,
-    refundMethod: string = 'ORIGINAL_PAYMENT',
+    refundMethod: RefundMethod = RefundMethod.ORIGINAL_PAYMENT,
     bankDetails?: string,
     notes?: string
   ) {
+    if (!userId || !userId.trim()) {
+      throw new ValidationError('User ID is required');
+    }
+    if (!id || !id.trim()) {
+      throw new ValidationError('Order ID is required');
+    }
     const order = await prisma.order.findUnique({
-      where: { id },
+      where: { id: id.trim() },
       include: { payment: true },
     });
     if (!order) throw new NotFoundError('Order not found');
-    if (order.userId !== userId) throw new AuthorizationError('You can only request refund for your own orders');
+    if (order.userId !== userId.trim()) throw new AuthorizationError('You can only request refund for your own orders');
     if (order.status !== OrderStatus.PAID) {
       throw new ValidationError('Only paid orders can be refunded');
     }
 
     // Validate refund amount
-    if (amount <= 0 || amount > order.totalAmount) {
+    const orderTotal = Number(order.totalAmount ?? 0);
+    const refundAmount = Number(amount);
+    if (!Number.isFinite(refundAmount) || refundAmount <= 0 || refundAmount > orderTotal) {
       throw new ValidationError('Invalid refund amount');
     }
 
@@ -156,14 +194,14 @@ class OrdersService {
 
     const refund = await prisma.refund.create({
       data: {
-        orderId: id,
-        amount,
-        reason,
-        reasonCategory,
+        orderId: id.trim(),
+        amount: refundAmount,
+        reason: reason?.trim() || null,
+        reasonCategory: reasonCategory?.trim() || null,
         status: RefundStatus.PENDING,
-        refundMethod: refundMethod as any,
-        bankDetails,
-        notes,
+        refundMethod,
+        bankDetails: bankDetails?.trim() || null,
+        notes: notes?.trim() || null,
       },
       include: {
         order: {
@@ -187,15 +225,21 @@ class OrdersService {
    * Get refund details for an order
    */
   async getRefundByOrderId(userId: string, orderId: string) {
+    if (!userId || !userId.trim()) {
+      throw new ValidationError('User ID is required');
+    }
+    if (!orderId || !orderId.trim()) {
+      throw new ValidationError('Order ID is required');
+    }
     const order = await prisma.order.findUnique({
-      where: { id: orderId },
+      where: { id: orderId.trim() },
     });
 
     if (!order) throw new NotFoundError('Order not found');
-    if (order.userId !== userId) throw new AuthorizationError('You can only access your own refunds');
+    if (order.userId !== userId.trim()) throw new AuthorizationError('You can only access your own refunds');
 
     const refund = await prisma.refund.findFirst({
-      where: { orderId },
+      where: { orderId: orderId.trim() },
       include: {
         order: {
           include: {
@@ -218,10 +262,13 @@ class OrdersService {
    * Get all refunds for the current user
    */
   async getUserRefunds(userId: string) {
+    if (!userId || !userId.trim()) {
+      throw new ValidationError('User ID is required');
+    }
     const refunds = await prisma.refund.findMany({
       where: {
         order: {
-          userId,
+          userId: userId.trim(),
         },
       },
       include: {

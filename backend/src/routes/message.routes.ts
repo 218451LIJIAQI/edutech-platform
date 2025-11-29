@@ -65,7 +65,7 @@ router.get(
   authenticate,
   validate([
     param('threadId').notEmpty().withMessage('threadId is required').isUUID().withMessage('Invalid threadId'),
-    query('page').optional().isInt({ min: 1 }).withMessage('page must be >= 1'),
+    query('cursor').optional().isString().withMessage('cursor must be a string'),
     query('limit').optional().isInt({ min: 1, max: 100 }).withMessage('limit must be 1-100'),
   ]),
   getMessages
@@ -77,7 +77,7 @@ router.post(
   authenticate,
   validate([
     param('threadId').notEmpty().withMessage('threadId is required').isUUID().withMessage('Invalid threadId'),
-    body('content').optional().isString().isLength({ min: 1, max: 5000 }).withMessage('Invalid content length'),
+    body('content').trim().notEmpty().withMessage('content is required').isLength({ min: 1, max: 5000 }).withMessage('Invalid content length'),
   ]),
   sendMessage
 );
