@@ -104,6 +104,7 @@ const RevenueAnalytics = () => {
             value={groupBy} 
             onChange={(e) => setGroupBy(e.target.value as 'day' | 'week' | 'month')} 
             className="input py-2"
+            aria-label="Group by"
           >
             <option value="day">Day</option>
             <option value="week">Week</option>

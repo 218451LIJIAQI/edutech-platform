@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback, useMemo } from 'react';
 import ordersService from '@/services/orders.service';
 import { Order, OrderStatus } from '@/types';
 import { Link } from 'react-router-dom';
+import { usePageTitle } from '@/hooks';
 
 /**
  * Orders Page Component
@@ -12,6 +13,7 @@ import { Link } from 'react-router-dom';
  * - Order timeline
  */
 const OrdersPage = () => {
+  usePageTitle('My Orders');
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -85,12 +87,28 @@ const OrdersPage = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-blue-50 to-indigo-50">
-      <div className="container mx-auto px-4 py-8">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-primary-50/10 to-indigo-50/20 relative">
+      {/* Background Pattern */}
+      <div className="absolute inset-0 bg-[linear-gradient(rgba(0,0,0,0.015)_1px,transparent_1px),linear-gradient(90deg,rgba(0,0,0,0.015)_1px,transparent_1px)] bg-[size:32px_32px] pointer-events-none"></div>
+      
+      {/* Decorative Elements */}
+      <div className="absolute top-20 right-[10%] w-72 h-72 bg-primary-400/10 rounded-full blur-3xl pointer-events-none"></div>
+      <div className="absolute bottom-40 left-[5%] w-80 h-80 bg-indigo-400/10 rounded-full blur-3xl pointer-events-none"></div>
+      
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 relative">
         {/* Header */}
         <div className="mb-10">
-          <h1 className="section-title mb-2">My Orders</h1>
-          <p className="text-gray-600">Manage and track all your purchases</p>
+          <div className="flex items-center gap-3 mb-3">
+            <div className="w-12 h-12 bg-gradient-to-br from-primary-500 to-indigo-600 rounded-2xl flex items-center justify-center shadow-lg shadow-primary-500/25">
+              <span className="text-2xl">📦</span>
+            </div>
+            <div>
+              <h1 className="text-3xl md:text-4xl font-extrabold text-gray-900 tracking-tight">
+                My <span className="bg-gradient-to-r from-primary-600 to-indigo-600 bg-clip-text text-transparent">Orders</span>
+              </h1>
+              <p className="text-gray-500 font-medium mt-1">Manage and track all your purchases</p>
+            </div>
+          </div>
         </div>
 
         {/* Filter Buttons */}

@@ -5,6 +5,7 @@ import { useAuthStore } from '@/store/authStore';
 import messageService, { Contact, Message, Thread } from '@/services/message.service';
 import { UserRole } from '@/types';
 import toast from 'react-hot-toast';
+import { usePageTitle } from '@/hooks';
 
 function useQuery() {
   const { search } = useLocation();
@@ -12,6 +13,7 @@ function useQuery() {
 }
 
 const MessagesPage = () => {
+  usePageTitle('Messages');
   const { user } = useAuthStore();
   const query = useQuery();
 
@@ -87,6 +89,7 @@ const MessagesPage = () => {
       }
     };
     init();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.role, query]);
 
   // Filter contacts
@@ -162,17 +165,31 @@ const MessagesPage = () => {
       setMessages((prev) => [...prev, msg]);
       setInput('');
       setTimeout(() => listRef.current?.scrollTo({ top: listRef.current.scrollHeight, behavior: 'smooth' }), 0);
-    } catch (e) {
+    } catch (_e) {
       toast.error('Failed to send message');
     }
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-blue-50 to-indigo-50 py-8">
-      <div className="container mx-auto px-4">
-        <div className="mb-6 flex items-center gap-3">
-          <MessageSquare className="w-7 h-7 text-primary-600" />
-          <h1 className="section-title m-0">Messages</h1>
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-primary-50/10 to-indigo-50/20 py-8 relative">
+      {/* Background Pattern */}
+      <div className="absolute inset-0 bg-[linear-gradient(rgba(0,0,0,0.015)_1px,transparent_1px),linear-gradient(90deg,rgba(0,0,0,0.015)_1px,transparent_1px)] bg-[size:32px_32px] pointer-events-none"></div>
+      
+      {/* Decorative Elements */}
+      <div className="absolute top-20 right-[10%] w-72 h-72 bg-primary-400/10 rounded-full blur-3xl pointer-events-none"></div>
+      <div className="absolute bottom-40 left-[5%] w-80 h-80 bg-indigo-400/10 rounded-full blur-3xl pointer-events-none"></div>
+      
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative">
+        <div className="mb-8 flex items-center gap-3">
+          <div className="w-12 h-12 bg-gradient-to-br from-primary-500 to-indigo-600 rounded-2xl flex items-center justify-center shadow-lg shadow-primary-500/25">
+            <MessageSquare className="w-6 h-6 text-white" />
+          </div>
+          <div>
+            <h1 className="text-3xl font-extrabold text-gray-900 tracking-tight">
+              <span className="bg-gradient-to-r from-primary-600 to-indigo-600 bg-clip-text text-transparent">Messages</span>
+            </h1>
+            <p className="text-gray-500 font-medium">Chat with teachers and students</p>
+          </div>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">

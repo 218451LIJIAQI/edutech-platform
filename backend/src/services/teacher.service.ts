@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { Prisma, VerificationStatus, RegistrationStatus } from '@prisma/client';
 import prisma from '../config/database';
 import type { TeacherProfile, Certification, TeacherVerification, Course } from '@prisma/client';

@@ -1,21 +1,37 @@
-import { FileText } from 'lucide-react';
+import { FileText, ArrowLeft } from 'lucide-react';
+import { Link } from 'react-router-dom';
 
 /**
  * Terms of Service Page
  */
 const TermsOfServicePage = () => {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-blue-50 to-indigo-50 py-12">
-      <div className="container mx-auto px-4 max-w-4xl">
-        <div className="card shadow-xl border border-gray-100 rounded-2xl">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-primary-50/10 to-indigo-50/20 py-12 relative">
+      {/* Background Pattern */}
+      <div className="absolute inset-0 bg-[linear-gradient(rgba(0,0,0,0.015)_1px,transparent_1px),linear-gradient(90deg,rgba(0,0,0,0.015)_1px,transparent_1px)] bg-[size:32px_32px] pointer-events-none"></div>
+      
+      {/* Decorative Elements */}
+      <div className="absolute top-20 right-[10%] w-72 h-72 bg-primary-400/10 rounded-full blur-3xl pointer-events-none"></div>
+      <div className="absolute bottom-40 left-[5%] w-80 h-80 bg-indigo-400/10 rounded-full blur-3xl pointer-events-none"></div>
+      
+      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 relative">
+        {/* Back Button */}
+        <Link to="/" className="inline-flex items-center gap-2 text-gray-600 hover:text-primary-600 font-medium mb-6 transition-colors">
+          <ArrowLeft className="w-4 h-4" />
+          Back to Home
+        </Link>
+        
+        <div className="bg-white/95 backdrop-blur-sm shadow-xl border border-gray-100/60 rounded-2xl p-8 md:p-10">
           {/* Header */}
-          <div className="flex items-center space-x-4 mb-8 pb-8 border-b border-gray-200">
-            <div className="p-3 bg-gradient-to-br from-primary-600 to-primary-700 rounded-xl shadow-md">
-              <FileText className="w-8 h-8 text-white" />
+          <div className="flex items-center gap-4 mb-8 pb-8 border-b border-gray-200/80">
+            <div className="w-14 h-14 bg-gradient-to-br from-primary-500 via-primary-600 to-indigo-600 rounded-2xl flex items-center justify-center shadow-xl shadow-primary-500/25">
+              <FileText className="w-7 h-7 text-white" />
             </div>
             <div>
-              <h1 className="text-4xl font-bold text-gray-900">Terms of Service</h1>
-              <p className="text-gray-600 mt-2">
+              <h1 className="text-3xl md:text-4xl font-extrabold text-gray-900 tracking-tight">
+                Terms of <span className="bg-gradient-to-r from-primary-600 to-indigo-600 bg-clip-text text-transparent">Service</span>
+              </h1>
+              <p className="text-gray-500 font-medium mt-1">
                 Last updated: {new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
               </p>
             </div>

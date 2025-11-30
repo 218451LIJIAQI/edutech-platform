@@ -9,12 +9,15 @@ const TeacherPendingPage = () => {
   const { user } = useAuthStore();
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 via-blue-50 to-indigo-50 px-4">
-      <div className="card max-w-xl text-center shadow-2xl border border-gray-100 rounded-2xl">
-        <div className="mx-auto w-16 h-16 rounded-2xl bg-yellow-100 border-2 border-yellow-300 flex items-center justify-center mb-4">
-          <ShieldAlert className="w-8 h-8 text-yellow-700" />
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-primary-50/10 to-indigo-50/20 px-4 relative">
+      <div className="absolute inset-0 bg-[linear-gradient(rgba(0,0,0,0.015)_1px,transparent_1px),linear-gradient(90deg,rgba(0,0,0,0.015)_1px,transparent_1px)] bg-[size:32px_32px] pointer-events-none"></div>
+      <div className="card max-w-xl text-center shadow-2xl border border-gray-100 rounded-2xl relative bg-white/80 backdrop-blur-sm">
+        <div className="mx-auto w-16 h-16 rounded-2xl bg-gradient-to-br from-yellow-400 to-orange-500 flex items-center justify-center mb-4 shadow-lg shadow-yellow-500/25">
+          <ShieldAlert className="w-8 h-8 text-white" />
         </div>
-        <h1 className="text-2xl font-bold text-gray-900 mb-2">Registration Pending</h1>
+        <h1 className="text-2xl font-extrabold text-gray-900 mb-2">
+          Registration <span className="bg-gradient-to-r from-yellow-600 to-orange-600 bg-clip-text text-transparent">Pending</span>
+        </h1>
         <p className="text-gray-700 mb-6">
           Your teacher registration is currently under review. Once approved by our admin team, you will gain access to the teacher dashboard.
         </p>

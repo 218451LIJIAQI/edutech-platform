@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+﻿import { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import {
@@ -203,7 +203,7 @@ const CreateCoursePage = () => {
       toast.success(
         course.isPublished ? 'Course unpublished' : 'Course published successfully!'
       );
-    } catch (error) {
+    } catch (_error) {
       toast.error('Failed to update course status');
     }
   };
@@ -225,7 +225,7 @@ const CreateCoursePage = () => {
       await courseService.deleteLesson(lessonId);
       toast.success('Lesson deleted successfully!');
       fetchCourse();
-    } catch (error) {
+    } catch (_error) {
       toast.error('Failed to delete lesson');
     }
   };
@@ -247,7 +247,7 @@ const CreateCoursePage = () => {
       await courseService.deletePackage(packageId);
       toast.success('Package deleted successfully!');
       fetchCourse();
-    } catch (error) {
+    } catch (_error) {
       toast.error('Failed to delete package');
     }
   };
@@ -269,16 +269,21 @@ const CreateCoursePage = () => {
       await courseService.deleteMaterial(materialId);
       toast.success('Material deleted successfully!');
       fetchCourse();
-    } catch (error) {
+    } catch (_error) {
       toast.error('Failed to delete material');
     }
   };
 
   if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 via-blue-50 to-indigo-50">
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-primary-50/10 to-indigo-50/20">
         <div className="flex flex-col items-center space-y-4">
-          <div className="spinner"></div>
+          <div className="relative">
+            <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-primary-500 to-indigo-600 animate-pulse flex items-center justify-center">
+              <span className="text-2xl">✏️</span>
+            </div>
+            <div className="absolute inset-0 rounded-2xl bg-primary-500/20 animate-ping"></div>
+          </div>
           <p className="text-gray-600 font-medium">Loading course editor...</p>
         </div>
       </div>
@@ -286,8 +291,9 @@ const CreateCoursePage = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-blue-50 to-indigo-50 py-8">
-      <div className="container mx-auto px-4">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-primary-50/10 to-indigo-50/20 py-8 relative">
+      <div className="absolute inset-0 bg-[linear-gradient(rgba(0,0,0,0.015)_1px,transparent_1px),linear-gradient(90deg,rgba(0,0,0,0.015)_1px,transparent_1px)] bg-[size:32px_32px] pointer-events-none"></div>
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative">
         {/* Header */}
         <div className="mb-8">
           <button
@@ -297,16 +303,19 @@ const CreateCoursePage = () => {
             <ArrowLeft className="w-4 h-4 mr-2" />
             Back to Courses
           </button>
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="section-title mb-2">
-                {isEditMode ? 'Edit Course' : 'Create New Course'}
-              </h1>
-              <p className="section-subtitle">
-                {isEditMode
-                  ? 'Update your course information'
-                  : 'Create a new course for your students'}
-              </p>
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 bg-gradient-to-br from-primary-500 to-indigo-600 rounded-2xl flex items-center justify-center shadow-lg shadow-primary-500/25">
+                <Edit className="w-6 h-6 text-white" />
+              </div>
+              <div>
+                <h1 className="text-3xl font-extrabold text-gray-900 tracking-tight">
+                  {isEditMode ? 'Edit' : 'Create'} <span className="bg-gradient-to-r from-primary-600 to-indigo-600 bg-clip-text text-transparent">Course</span>
+                </h1>
+                <p className="text-gray-500 font-medium">
+                  {isEditMode ? 'Update your course information' : 'Create a new course for your students'}
+                </p>
+              </div>
             </div>
             {isEditMode && course && (
               <div className="flex items-center space-x-4">
@@ -744,8 +753,10 @@ const CreateCoursePage = () => {
                               type="button"
                               onClick={() => handleDeleteLesson(lesson.id)}
                               className="btn-sm text-red-600 hover:bg-red-50"
+                              title="Delete lesson"
+                              aria-label="Delete lesson"
                             >
-                              <Trash2 className="w-4 h-4" />
+                              <Trash2 className="w-4 h-4" aria-hidden="true" />
                             </button>
                           </div>
                         </div>

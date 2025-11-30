@@ -1,9 +1,11 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useCourseStore } from '@/store/courseStore';
 import { formatCurrency } from '@/utils/helpers';
 import { CourseType } from '@/types';
-import { Video, Radio, PlayCircle, BookOpen, Search, SlidersHorizontal } from 'lucide-react';
+import { usePageTitle, useDebounce, useSmoothLoading } from '@/hooks';
+import { Video, Radio, PlayCircle, Search, SlidersHorizontal } from 'lucide-react';
+import { CardSkeleton, EmptyState } from '@/components/common';
 
 /**
  * Courses Page (Student)
@@ -11,8 +13,12 @@ import { Video, Radio, PlayCircle, BookOpen, Search, SlidersHorizontal } from 'l
  * All UI text and comments are in English.
  */
 const CoursesPage = () => {
+  usePageTitle('Explore Courses');
   const { courses, categories, isLoading, fetchCourses, fetchCategories } = useCourseStore();
   const [searchParams, setSearchParams] = useSearchParams();
+  
+  // 丝滑加载过渡
+  const { showSkeleton, contentClass } = useSmoothLoading(isLoading);
 
   // Local state bound to URL params
   const [searchQuery, setSearchQuery] = useState(searchParams.get('q') || '');
@@ -40,19 +46,6 @@ const CoursesPage = () => {
     fetchCategories();
   }, [fetchCategories]);
 
-  // Build query object for API
-  const queryParams = useMemo(() => {
-    const qp: Record<string, any> = {};
-    if (searchQuery) qp.search = searchQuery;
-    if (category) qp.category = category;
-    if (courseType) qp.courseType = courseType;
-    if (minRating !== '' && !Number.isNaN(minRating)) qp.minRating = Number(minRating);
-    if (minPrice !== '' && !Number.isNaN(minPrice)) qp.minPrice = Number(minPrice);
-    if (maxPrice !== '' && !Number.isNaN(maxPrice)) qp.maxPrice = Number(maxPrice);
-    if (sortBy) qp.sortBy = sortBy;
-    return qp;
-  }, [searchQuery, category, courseType, minRating, minPrice, maxPrice, sortBy]);
-
   // Keep URL in sync with local state
   useEffect(() => {
     const sp = new URLSearchParams();
@@ -66,42 +59,64 @@ const CoursesPage = () => {
     setSearchParams(sp, { replace: true });
   }, [searchQuery, category, courseType, minRating, minPrice, maxPrice, sortBy, setSearchParams]);
 
-  // Debounce search to avoid excessive requests
+  // Debounce search query for better performance
+  const debouncedSearchQuery = useDebounce(searchQuery, 300);
+  
+  // Fetch courses when filters change
   useEffect(() => {
-    const t = setTimeout(() => {
-      fetchCourses(queryParams);
-    }, 300);
-    return () => clearTimeout(t);
-  }, [queryParams, fetchCourses]);
+    const params: Record<string, string | number> = {};
+    if (debouncedSearchQuery) params.search = debouncedSearchQuery;
+    if (category) params.category = category;
+    if (courseType) params.courseType = courseType;
+    if (minRating !== '' && !Number.isNaN(minRating)) params.minRating = Number(minRating);
+    if (minPrice !== '' && !Number.isNaN(minPrice)) params.minPrice = Number(minPrice);
+    if (maxPrice !== '' && !Number.isNaN(maxPrice)) params.maxPrice = Number(maxPrice);
+    if (sortBy) params.sortBy = sortBy;
+    fetchCourses(params);
+  }, [debouncedSearchQuery, category, courseType, minRating, minPrice, maxPrice, sortBy, fetchCourses]);
 
-  if (isLoading && courses.length === 0) return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 via-blue-50 to-indigo-50">
-      <div className="flex flex-col items-center space-y-4">
-        <div className="spinner"></div>
-        <p className="text-gray-600 font-medium">Loading courses...</p>
-      </div>
+  // 骨架屏 - 超柔和呼吸效果
+  const renderSkeletons = () => (
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+      {Array.from({ length: 6 }).map((_, i) => (
+        <div key={i} className="skeleton-breathe">
+          <CardSkeleton />
+        </div>
+      ))}
     </div>
   );
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-blue-50 to-indigo-50">
-      {/* Header */}
-      <div className="bg-gradient-to-br from-primary-600 via-primary-700 to-primary-900 text-white py-12 shadow-lg">
-        <div className="container mx-auto px-4">
-          <h1 className="text-3xl md:text-4xl font-bold mb-2">Explore Our Courses</h1>
-          <p className="text-primary-100">Discover thousands of courses from expert instructors</p>
-        </div>
-      </div>
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-primary-50/10 to-indigo-50/20 relative">
+      {/* Background Pattern */}
+      <div className="absolute inset-0 bg-[linear-gradient(rgba(0,0,0,0.015)_1px,transparent_1px),linear-gradient(90deg,rgba(0,0,0,0.015)_1px,transparent_1px)] bg-[size:32px_32px] pointer-events-none"></div>
+      
+      {/* Decorative Elements */}
+      <div className="absolute top-20 right-[10%] w-72 h-72 bg-primary-400/10 rounded-full blur-3xl pointer-events-none"></div>
+      <div className="absolute bottom-40 left-[5%] w-80 h-80 bg-indigo-400/10 rounded-full blur-3xl pointer-events-none"></div>
+      
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 relative">
+        {/* Header */}
+        <div className="mb-10">
+          <div className="flex items-center gap-3 mb-6">
+            <div className="w-12 h-12 bg-gradient-to-br from-primary-500 to-indigo-600 rounded-2xl flex items-center justify-center shadow-lg shadow-primary-500/25">
+              <span className="text-2xl">📚</span>
+            </div>
+            <div>
+              <h1 className="text-3xl md:text-4xl font-extrabold text-gray-900 tracking-tight">
+                Explore <span className="bg-gradient-to-r from-primary-600 to-indigo-600 bg-clip-text text-transparent">Courses</span>
+              </h1>
+              <p className="text-gray-500 font-medium mt-1">Discover courses from expert teachers</p>
+            </div>
+          </div>
 
-      <div className="container mx-auto px-4 py-8 space-y-6">
-        {/* Search & Sort Bar */}
-        <div className="card shadow-xl border border-gray-100 rounded-2xl">
-          <div className="flex flex-col md:flex-row gap-3 md:items-center">
+          {/* Search and Filters Bar */}
+          <div className="flex flex-col md:flex-row gap-4 items-stretch md:items-center">
             {/* Search */}
             <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5" />
+              <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5" />
               <input
-                className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-600"
+                className="input w-full pl-12"
                 placeholder="Search courses by title or description..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
@@ -110,9 +125,11 @@ const CoursesPage = () => {
 
             {/* Sort */}
             <div className="flex items-center gap-2">
-              <label className="text-sm text-gray-600 font-medium">Sort by:</label>
+              <label htmlFor="sort-select" className="text-sm text-gray-600 font-semibold whitespace-nowrap">Sort:</label>
               <select
-                className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-600"
+                id="sort-select"
+                title="Sort courses"
+                className="input py-3"
                 value={sortBy}
                 onChange={(e) => setSortBy(e.target.value as 'NEWEST' | 'RATING' | 'POPULARITY' | 'PRICE_ASC' | 'PRICE_DESC')}
               >
@@ -127,8 +144,8 @@ const CoursesPage = () => {
             {/* Filter Toggle */}
             <button
               onClick={() => setShowFilters((v) => !v)}
-              className={`px-4 py-2 rounded-lg border flex items-center gap-2 ${
-                showFilters ? 'bg-primary-50 border-primary-300 text-primary-700' : 'border-gray-300 text-gray-700'
+              className={`btn ${
+                showFilters ? 'bg-primary-100 border-primary-300 text-primary-700' : 'btn-secondary'
               }`}
             >
               <SlidersHorizontal className="w-4 h-4" />
@@ -143,8 +160,10 @@ const CoursesPage = () => {
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
               {/* Category */}
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">Category</label>
+                <label htmlFor="category-select" className="block text-sm font-semibold text-gray-700 mb-2">Category</label>
                 <select
+                  id="category-select"
+                  title="Filter by category"
                   value={category}
                   onChange={(e) => setCategory(e.target.value)}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-600"
@@ -158,8 +177,10 @@ const CoursesPage = () => {
 
               {/* Type */}
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">Course Type</label>
+                <label htmlFor="type-select" className="block text-sm font-semibold text-gray-700 mb-2">Course Type</label>
                 <select
+                  id="type-select"
+                  title="Filter by course type"
                   value={courseType}
                   onChange={(e) => setCourseType(e.target.value as '' | 'LIVE' | 'RECORDED' | 'HYBRID')}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-600"
@@ -173,8 +194,10 @@ const CoursesPage = () => {
 
               {/* Rating */}
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">Minimum Rating</label>
+                <label htmlFor="rating-select" className="block text-sm font-semibold text-gray-700 mb-2">Minimum Rating</label>
                 <select
+                  id="rating-select"
+                  title="Filter by minimum rating"
                   value={minRating}
                   onChange={(e) => setMinRating(e.target.value ? Number(e.target.value) : '')}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-600"
@@ -245,33 +268,43 @@ const CoursesPage = () => {
           </div>
         )}
 
-        {/* Results */}
-        {courses.length === 0 ? (
-          <div className="text-center py-20">
-            <div className="card shadow-xl border border-gray-100 rounded-2xl max-w-md mx-auto">
-              <BookOpen className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-              <h3 className="text-2xl font-bold text-gray-900 mb-2">No courses found</h3>
-              <p className="text-gray-600">Try adjusting filters or search terms</p>
-            </div>
+        {/* Results - 丝滑过渡 */}
+        {showSkeleton ? renderSkeletons() : courses.length === 0 ? (
+          <div className={contentClass}>
+            <EmptyState
+              title="No courses found"
+              description="Try adjusting filters or search terms"
+              variant="courses"
+              action={{
+                label: 'Clear Filters',
+                onClick: () => {
+                  setSearchQuery('');
+                  setCategory('');
+                  setCourseType('');
+                  setMinRating('');
+                  setMinPrice('');
+                  setMaxPrice('');
+                  setSortBy('NEWEST');
+                }
+              }}
+            />
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-            {courses.map((course, idx) => (
+          <div className={`grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 ${contentClass}`}>
+            {courses.map((course) => (
               <Link 
                 key={course.id} 
                 to={`/courses/${course.id}`} 
-                className="card-hover group overflow-hidden shadow-lg hover:shadow-2xl transition-all duration-300 transform hover:scale-105 border border-gray-100 hover:border-primary-200 rounded-2xl"
-                style={{ animationDelay: `${idx * 50}ms` }}
+                className="group overflow-hidden shadow-lg border border-gray-100 rounded-2xl bg-white card-smooth"
               >
             {/* Thumbnail */}
             {course.thumbnail && (
-                  <div className="aspect-video bg-gradient-to-br from-gray-200 to-gray-300 rounded-t-2xl overflow-hidden mb-4 relative">
+                  <div className="aspect-video bg-gray-100 rounded-t-2xl overflow-hidden">
                 <img 
                   src={course.thumbnail} 
                   alt={course.title} 
-                      className="w-full h-full object-cover group-hover:scale-125 transition-transform duration-500"
+                  className="w-full h-full object-cover"
                 />
-                    <div className="absolute inset-0 bg-black opacity-0 group-hover:opacity-30 transition-opacity duration-300"></div>
               </div>
             )}
             

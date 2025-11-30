@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import adminService, { PlatformStats } from '@/services/admin.service';
 import { formatCurrency } from '@/utils/helpers';
+import { usePageTitle } from '@/hooks';
 import styles from './AdminDashboard.module.css';
 
 /**
@@ -47,6 +48,7 @@ const ProgressBar = ({ percentage, containerClassName, barClassName }: ProgressB
  * Overview of platform statistics and recent activities
  */
 const AdminDashboard = () => {
+  usePageTitle('Admin Dashboard');
   const [stats, setStats] = useState<PlatformStats | null>(null);
   const [activities, setActivities] = useState<Array<{
     id: string;
@@ -62,6 +64,7 @@ const AdminDashboard = () => {
 
   useEffect(() => {
     fetchDashboardData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activitiesPage, activitiesLimit]);
 
   useEffect(() => {
@@ -71,7 +74,7 @@ const AdminDashboard = () => {
         const latest = await adminService.getRecentActivities({ limit: activitiesLimit, page: activitiesPage });
         setActivities(latest.items);
         setActivitiesPagination(latest.pagination);
-      } catch (e) {
+      } catch (_e) {
         // silent fail for background refresh
       }
     }, 20000);
@@ -98,9 +101,14 @@ const AdminDashboard = () => {
 
   if (isLoading || !stats) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 via-blue-50 to-indigo-50">
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-primary-50/10 to-indigo-50/20">
         <div className="flex flex-col items-center space-y-4">
-          <div className="spinner"></div>
+          <div className="relative">
+            <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-primary-500 to-indigo-600 animate-pulse flex items-center justify-center">
+              <Activity className="w-8 h-8 text-white" />
+            </div>
+            <div className="absolute inset-0 rounded-2xl bg-primary-500/20 animate-ping"></div>
+          </div>
           <p className="text-gray-600 font-medium">Loading dashboard...</p>
         </div>
       </div>
@@ -189,49 +197,67 @@ const AdminDashboard = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-blue-50 to-indigo-50">
-      <div className="container mx-auto px-4 py-8">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-primary-50/10 to-indigo-50/20 relative">
+      {/* Background Pattern */}
+      <div className="absolute inset-0 bg-[linear-gradient(rgba(0,0,0,0.015)_1px,transparent_1px),linear-gradient(90deg,rgba(0,0,0,0.015)_1px,transparent_1px)] bg-[size:32px_32px] pointer-events-none"></div>
+      
+      {/* Decorative Elements */}
+      <div className="absolute top-20 right-[10%] w-72 h-72 bg-primary-400/10 rounded-full blur-3xl pointer-events-none"></div>
+      <div className="absolute bottom-40 left-[5%] w-80 h-80 bg-indigo-400/10 rounded-full blur-3xl pointer-events-none"></div>
+      
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 relative">
         {/* Header */}
-        <div className="mb-12">
-          <h1 className="section-title">Admin Dashboard</h1>
-          <p className="section-subtitle">Platform overview and management</p>
+        <div className="mb-10">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-4 mb-3">
+            <div className="w-14 h-14 bg-gradient-to-br from-primary-500 via-primary-600 to-indigo-600 rounded-2xl flex items-center justify-center shadow-xl shadow-primary-500/25 ring-4 ring-white">
+              <Activity className="w-7 h-7 text-white" />
+            </div>
+            <div>
+              <h1 className="text-3xl md:text-4xl font-extrabold text-gray-900 tracking-tight">
+                Admin <span className="bg-gradient-to-r from-primary-600 to-indigo-600 bg-clip-text text-transparent">Dashboard</span>
+              </h1>
+              <p className="text-gray-500 font-medium mt-1">Platform overview and management</p>
+            </div>
+          </div>
         </div>
 
         {/* Stats Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 mb-10">
           {statCards.map((stat, index) => (
-            <div key={index} className="card group hover:shadow-2xl transition-all duration-300 transform hover:scale-105 border border-gray-100 hover:border-primary-200">
-              <div className="flex items-center justify-between mb-4">
-                <div className={`${stat.color} p-4 rounded-xl text-white group-hover:scale-125 transition-transform duration-300 shadow-lg`}>
-                  <stat.icon className="w-7 h-7" />
+            <div key={index} className="group bg-white/95 backdrop-blur-sm rounded-2xl p-6 shadow-card hover:shadow-card-hover transition-all duration-300 hover:-translate-y-1 border border-gray-100/60 relative overflow-hidden">
+              <div className="absolute top-0 right-0 w-20 h-20 bg-gradient-to-br from-gray-100/50 to-transparent rounded-full -translate-y-1/2 translate-x-1/2"></div>
+              <div className="flex items-center justify-between mb-4 relative">
+                <div className={`${stat.color} p-3 rounded-xl text-white group-hover:scale-110 group-hover:rotate-3 transition-all duration-300 shadow-lg`}>
+                  <stat.icon className="w-6 h-6" />
                 </div>
               </div>
-              <h3 className="text-4xl font-bold mb-3 text-gray-900">{stat.value}</h3>
-              <p className="text-gray-600 text-sm mb-3 font-bold uppercase tracking-wide">{stat.title}</p>
-              <p className="text-xs text-gray-600 bg-gray-50 px-3 py-2 rounded-lg inline-block font-medium">{stat.change}</p>
+              <h3 className="text-3xl font-bold mb-2 text-gray-900">{stat.value}</h3>
+              <p className="text-gray-500 text-xs mb-3 font-semibold uppercase tracking-wider">{stat.title}</p>
+              <p className="text-xs text-gray-600 bg-gray-50/80 px-3 py-1.5 rounded-lg inline-block font-medium">{stat.change}</p>
             </div>
           ))}
         </div>
 
         {/* Alert Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mb-10">
           {alertCards.map((alert, index) => (
             <Link
               key={index}
               to={alert.link}
-              className={`card ${alert.bgColor} border-2 hover:shadow-xl hover:-translate-y-1 transition-all duration-300 group`}
+              className={`${alert.bgColor} rounded-2xl p-6 border-2 hover:shadow-xl hover:-translate-y-1 transition-all duration-300 group relative overflow-hidden`}
             >
-              <div className="flex items-center justify-between">
+              <div className="absolute top-0 right-0 w-32 h-32 bg-white/20 rounded-full -translate-y-1/2 translate-x-1/2"></div>
+              <div className="flex items-center justify-between relative">
                 <div>
-                  <div className="flex items-center space-x-3 mb-3">
-                    <div className={`p-3 rounded-lg ${alert.bgColor}`}>
+                  <div className="flex items-center gap-3 mb-3">
+                    <div className={`p-3 rounded-xl ${alert.bgColor} border border-current/10`}>
                       <alert.icon className={`w-6 h-6 ${alert.color}`} />
                     </div>
-                    <h3 className="text-lg font-bold">{alert.title}</h3>
+                    <h3 className="text-lg font-bold text-gray-900">{alert.title}</h3>
                   </div>
                   <p className="text-4xl font-bold text-gray-900">{alert.count}</p>
                 </div>
-                <CheckCircle className={`w-16 h-16 ${alert.color} opacity-10 group-hover:opacity-20 transition-opacity`} />
+                <CheckCircle className={`w-16 h-16 ${alert.color} opacity-10 group-hover:opacity-25 transition-opacity`} />
               </div>
             </Link>
           ))}
@@ -312,8 +338,10 @@ const AdminDashboard = () => {
             </div>
             {/* Page size selector */}
             <div className="flex items-center gap-2 text-sm">
-              <span className="text-gray-600">Per page:</span>
+              <label htmlFor="activities-per-page" className="text-gray-600">Per page:</label>
               <select
+                id="activities-per-page"
+                title="Items per page"
                 value={activitiesLimit}
                 onChange={(e) => {
                   setActivitiesPage(1);

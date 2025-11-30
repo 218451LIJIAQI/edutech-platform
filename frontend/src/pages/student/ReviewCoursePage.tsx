@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+﻿import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Star, ArrowLeft, Send } from 'lucide-react';
 import { Course, Enrollment } from '@/types';
@@ -101,10 +101,9 @@ const ReviewCoursePage = () => {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 via-blue-50 to-indigo-50">
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-primary-50/10 to-indigo-50/20">
         <div className="flex flex-col items-center space-y-4">
-          <div className="spinner"></div>
-          <p className="text-gray-600 font-medium">Loading course...</p>
+          <div className="relative"><div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-primary-500 to-indigo-600 animate-pulse flex items-center justify-center"><span className="text-2xl">⭐</span></div><div className="absolute inset-0 rounded-2xl bg-primary-500/20 animate-ping"></div></div><p className="text-gray-600 font-medium">Loading course...</p>
         </div>
       </div>
     );
@@ -112,7 +111,7 @@ const ReviewCoursePage = () => {
 
   if (!courseId) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 via-blue-50 to-indigo-50">
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-primary-50/10 to-indigo-50/20">
         <div className="text-center">
           <p className="text-gray-600 mb-4">Course ID is missing</p>
           <button className="btn-primary" onClick={() => navigate('/courses')}>Browse Courses</button>
@@ -123,7 +122,7 @@ const ReviewCoursePage = () => {
 
   if (!course || !enrollment) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 via-blue-50 to-indigo-50">
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-primary-50/10 to-indigo-50/20">
         <div className="text-center">
           <p className="text-gray-600 mb-4">Course not found</p>
           <button className="btn-primary" onClick={() => navigate('/courses')}>Browse Courses</button>
@@ -133,17 +132,29 @@ const ReviewCoursePage = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-blue-50 to-indigo-50 py-8">
-      <div className="container mx-auto px-4">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-primary-50/10 to-indigo-50/20 py-8 relative">
+      <div className="absolute inset-0 bg-[linear-gradient(rgba(0,0,0,0.015)_1px,transparent_1px),linear-gradient(90deg,rgba(0,0,0,0.015)_1px,transparent_1px)] bg-[size:32px_32px] pointer-events-none"></div>
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative">
         <div className="max-w-3xl mx-auto">
           {/* Header */}
           <button
             onClick={() => navigate('/student/courses')}
-            className="btn-outline mb-8"
+            className="btn-outline mb-6"
           >
             <ArrowLeft className="w-4 h-4 mr-2" />
             Back to My Courses
           </button>
+          <div className="flex items-center gap-3 mb-8">
+            <div className="w-12 h-12 bg-gradient-to-br from-yellow-400 to-orange-500 rounded-2xl flex items-center justify-center shadow-lg shadow-yellow-500/25">
+              <Star className="w-6 h-6 text-white" />
+            </div>
+            <div>
+              <h1 className="text-3xl font-extrabold text-gray-900 tracking-tight">
+                Write a <span className="bg-gradient-to-r from-yellow-600 to-orange-600 bg-clip-text text-transparent">Review</span>
+              </h1>
+              <p className="text-gray-500 font-medium">Share your experience with this course</p>
+            </div>
+          </div>
 
           <div className="card shadow-xl border border-gray-100 rounded-2xl">
             {/* Course Info */}

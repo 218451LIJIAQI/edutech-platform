@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import prisma from '../config/database';
 import { NotFoundError, ValidationError } from '../utils/errors';
 import { RefundStatus, OrderStatus, Prisma } from '@prisma/client';
@@ -327,7 +328,7 @@ class RefundAdminService {
           }
         }
       }
-    } catch (e) {
+    } catch (_e) {
       // non-blocking wallet adjustment
     }
 

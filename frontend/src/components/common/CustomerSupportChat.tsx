@@ -197,7 +197,7 @@ const CustomerSupportChat = ({ open, onClose }: CustomerSupportChatProps) => {
                 <p className="text-xs text-white text-opacity-80">Always here to help</p>
               </div>
             </div>
-            <button type="button" onClick={() => { setIsOpen(false); onClose?.(); }} className="text-white hover:bg-white hover:bg-opacity-20 p-1 rounded transition-colors">
+            <button type="button" onClick={() => { setIsOpen(false); onClose?.(); }} className="text-white hover:bg-white hover:bg-opacity-20 p-1 rounded transition-colors" aria-label="Close chat">
               <X className="w-5 h-5" />
             </button>
           </div>
@@ -301,16 +301,16 @@ const CustomerSupportChat = ({ open, onClose }: CustomerSupportChatProps) => {
                           placeholder="Type your message..."
                           className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
                         />
-                        <button type="button" onClick={() => void handleSendMessage()} disabled={!newMessage.trim()} className="bg-primary-600 text-white p-2 rounded-lg hover:bg-primary-700 disabled:opacity-50 transition-colors">
+                        <button type="button" onClick={() => void handleSendMessage()} disabled={!newMessage.trim()} className="bg-primary-600 text-white p-2 rounded-lg hover:bg-primary-700 disabled:opacity-50 transition-colors" aria-label="Send message">
                           <Send className="w-4 h-4" />
                         </button>
                       </div>
                       <div className="flex items-center justify-between text-xs text-gray-500">
                         <div className="flex items-center gap-2">
-                          <button type="button" className="hover:text-primary-600 transition-colors">
+                          <button type="button" className="hover:text-primary-600 transition-colors" aria-label="Attach file">
                             <Paperclip className="w-4 h-4" />
                           </button>
-                          <button type="button" className="hover:text-primary-600 transition-colors">
+                          <button type="button" className="hover:text-primary-600 transition-colors" aria-label="Insert emoji">
                             <Smile className="w-4 h-4" />
                           </button>
                         </div>
@@ -349,7 +349,7 @@ const CustomerSupportChat = ({ open, onClose }: CustomerSupportChatProps) => {
             {/* Header */}
             <div className="bg-gradient-to-r from-primary-600 to-primary-700 text-white p-6 rounded-t-lg flex items-center justify-between">
               <h3 className="text-lg font-bold">Start New Chat</h3>
-              <button type="button" onClick={() => setShowNewChat(false)} className="text-white hover:bg-white hover:bg-opacity-20 p-1 rounded transition-colors">
+              <button type="button" onClick={() => setShowNewChat(false)} className="text-white hover:bg-white hover:bg-opacity-20 p-1 rounded transition-colors" aria-label="Close dialog">
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -363,6 +363,7 @@ const CustomerSupportChat = ({ open, onClose }: CustomerSupportChatProps) => {
                   value={newChatCategory}
                   onChange={(e) => setNewChatCategory(e.target.value)}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  aria-label="Category"
                 >
                   {supportCategories.map((cat) => (
                     <option key={cat.value} value={cat.value}>
@@ -379,6 +380,7 @@ const CustomerSupportChat = ({ open, onClose }: CustomerSupportChatProps) => {
                   value={newChatPriority}
                   onChange={(e) => setNewChatPriority(e.target.value as SupportTicketPriority)}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  aria-label="Priority"
                 >
                   <option value={SupportTicketPriority.LOW}>Low</option>
                   <option value={SupportTicketPriority.MEDIUM}>Medium</option>

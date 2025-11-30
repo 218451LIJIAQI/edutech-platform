@@ -372,6 +372,7 @@ const CustomerServiceModal = ({ isOpen, onClose, orderId }: CustomerServiceModal
                   onChange={(e) => setCategory(e.target.value)}
                   className="input w-full"
                   disabled={working}
+                  aria-label="Category"
                 >
                   <option value="REFUND">Refund Request</option>
                   <option value="QUALITY">Quality Issue</option>
@@ -386,17 +387,18 @@ const CustomerServiceModal = ({ isOpen, onClose, orderId }: CustomerServiceModal
                 <label className="block text-sm font-semibold text-gray-900 mb-2">
                   Priority
                 </label>
-                  <select
-                    value={priority}
-                    onChange={(e) => setPriority(e.target.value as SupportTicketPriority)}
-                    className="input w-full"
-                    disabled={working}
-                  >
-                    <option value={SupportTicketPriority.LOW}>Low</option>
-                    <option value={SupportTicketPriority.MEDIUM}>Medium</option>
-                    <option value={SupportTicketPriority.HIGH}>High</option>
-                    <option value={SupportTicketPriority.URGENT}>Urgent</option>
-                  </select>
+                <select
+                  value={priority}
+                  onChange={(e) => setPriority(e.target.value as SupportTicketPriority)}
+                  className="input w-full"
+                  disabled={working}
+                  aria-label="Priority"
+                >
+                  <option value={SupportTicketPriority.LOW}>Low</option>
+                  <option value={SupportTicketPriority.MEDIUM}>Medium</option>
+                  <option value={SupportTicketPriority.HIGH}>High</option>
+                  <option value={SupportTicketPriority.URGENT}>Urgent</option>
+                </select>
               </div>
 
               <div>

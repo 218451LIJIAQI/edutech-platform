@@ -116,7 +116,9 @@ export const communityService = {
       authorId: string;
       title?: string;
       content: string;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       tags?: any[];
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       media?: any[];
       courseId?: string;
       courseTitle?: string;

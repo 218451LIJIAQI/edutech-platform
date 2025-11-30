@@ -15,6 +15,7 @@ import communityRoutes from './community.routes';
 import supportRoutes from './support.routes';
 import cartRoutes from './cart.routes';
 import ordersRoutes from './orders.routes';
+import healthRoutes from './health.routes';
 
 const router = Router();
 
@@ -23,17 +24,8 @@ const router = Router();
  * All routes are prefixed with /api/v1
  */
 
-// Health check
-router.get('/health', (_req, res) => {
-  res.set('Cache-Control', 'no-store');
-  res.status(200).json({
-    status: 'success',
-    message: 'Edutech API is running',
-    timestamp: new Date().toISOString(),
-    uptime: process.uptime(),
-    version: process.env.npm_package_version || '1.0.0',
-  });
-});
+// Health check routes (enhanced)
+router.use('/health', healthRoutes);
 
 // Mount routes
 router.use('/auth', authRoutes);

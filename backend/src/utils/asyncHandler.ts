@@ -1,4 +1,7 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { Request, Response, NextFunction, RequestHandler } from 'express';
+import { ParamsDictionary } from 'express-serve-static-core';
+import { ParsedQs } from 'qs';
 
 /**
  * Wrapper for route handlers to consistently forward both async rejections and
@@ -9,13 +12,13 @@ import { Request, Response, NextFunction, RequestHandler } from 'express';
  * - Catches async errors via Promise rejection
  */
 export const asyncHandler = <
-  P = any,
-  ResBody = any,
-  ReqBody = any,
-  ReqQuery = any,
-  Locals extends Record<string, any> = Record<string, any>
+  P = ParamsDictionary,
+  ResBody = unknown,
+  ReqBody = unknown,
+  ReqQuery = ParsedQs,
+  Locals extends Record<string, unknown> = Record<string, unknown>
 >(
-  fn: (req: Request<P, ResBody, ReqBody, ReqQuery, Locals>, res: Response<ResBody, Locals>, next: NextFunction) => any
+  fn: (req: Request<P, ResBody, ReqBody, ReqQuery, Locals>, res: Response<ResBody, Locals>, next: NextFunction) => void | Promise<void>
 ): RequestHandler<P, ResBody, ReqBody, ReqQuery, Locals> => {
   return (
     req: Request<P, ResBody, ReqBody, ReqQuery, Locals>,

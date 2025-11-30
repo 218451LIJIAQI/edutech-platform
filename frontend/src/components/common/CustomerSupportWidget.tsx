@@ -79,6 +79,7 @@ const CustomerSupportWidget = ({ onOpenChat }: CustomerSupportWidgetProps) => {
         <button
           onClick={onOpenChat}
           className="text-primary-600 hover:text-primary-700 transition-colors"
+          aria-label="Open customer support chat"
         >
           <ChevronRight className="w-6 h-6" />
         </button>

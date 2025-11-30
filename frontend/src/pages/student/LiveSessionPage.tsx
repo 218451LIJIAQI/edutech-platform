@@ -94,8 +94,9 @@ const LiveSessionPage = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-blue-50 to-indigo-50">
-      <div className="container mx-auto px-4 py-8">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-primary-50/10 to-indigo-50/20 relative">
+      <div className="absolute inset-0 bg-[linear-gradient(rgba(0,0,0,0.015)_1px,transparent_1px),linear-gradient(90deg,rgba(0,0,0,0.015)_1px,transparent_1px)] bg-[size:32px_32px] pointer-events-none"></div>
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 relative">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           {/* Video Area */}
           <div className="lg:col-span-2">
@@ -158,7 +159,7 @@ const LiveSessionPage = () => {
                 placeholder="Type a message..."
                 className="flex-1 input"
               />
-              <button onClick={sendMessage} className="btn-primary p-3 rounded-xl">
+              <button onClick={sendMessage} className="btn-primary p-3 rounded-xl" aria-label="Send message">
                 <Send className="w-5 h-5" />
               </button>
             </div>

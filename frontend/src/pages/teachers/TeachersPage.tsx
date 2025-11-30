@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+﻿import { useEffect, useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { Star, Users, Award, Search } from 'lucide-react';
 import teacherService from '@/services/teacher.service';
@@ -50,14 +50,28 @@ const TeachersPage = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-blue-50 to-indigo-50">
-      <div className="container mx-auto px-4 py-8">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-primary-50/10 to-indigo-50/20 relative">
+      {/* Background Pattern */}
+      <div className="absolute inset-0 bg-[linear-gradient(rgba(0,0,0,0.015)_1px,transparent_1px),linear-gradient(90deg,rgba(0,0,0,0.015)_1px,transparent_1px)] bg-[size:32px_32px] pointer-events-none"></div>
+      
+      {/* Decorative Elements */}
+      <div className="absolute top-20 right-[10%] w-72 h-72 bg-primary-400/10 rounded-full blur-3xl pointer-events-none"></div>
+      <div className="absolute bottom-40 left-[5%] w-80 h-80 bg-indigo-400/10 rounded-full blur-3xl pointer-events-none"></div>
+      
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 relative">
         {/* Header */}
         <div className="mb-10">
-          <h1 className="section-title mb-4">Find Your Perfect Teacher</h1>
-          <p className="section-subtitle">
-            Browse our community of verified, experienced educators
-          </p>
+          <div className="flex items-center gap-3 mb-3">
+            <div className="w-12 h-12 bg-gradient-to-br from-primary-500 to-indigo-600 rounded-2xl flex items-center justify-center shadow-lg shadow-primary-500/25">
+              <span className="text-2xl">👨‍🏫</span>
+            </div>
+            <div>
+              <h1 className="text-3xl md:text-4xl font-extrabold text-gray-900 tracking-tight">
+                Find Your <span className="bg-gradient-to-r from-primary-600 to-indigo-600 bg-clip-text text-transparent">Perfect Teacher</span>
+              </h1>
+              <p className="text-gray-500 font-medium mt-1">Browse our community of verified, experienced educators</p>
+            </div>
+          </div>
         </div>
 
         {/* Filters */}
@@ -140,7 +154,12 @@ const TeachersPage = () => {
         {isLoading ? (
           <div className="flex items-center justify-center py-20">
             <div className="flex flex-col items-center space-y-4">
-              <div className="spinner"></div>
+              <div className="relative">
+                <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-primary-500 to-indigo-600 animate-pulse flex items-center justify-center">
+                  <span className="text-2xl">👨‍🏫</span>
+                </div>
+                <div className="absolute inset-0 rounded-2xl bg-primary-500/20 animate-ping"></div>
+              </div>
               <p className="text-gray-600 font-medium">Loading teachers...</p>
             </div>
           </div>

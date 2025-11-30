@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useMemo } from 'react';
+﻿import { useEffect, useState, useCallback, useMemo } from 'react';
 import { AlertCircle, CheckCircle, Clock, XCircle, ChevronRight } from 'lucide-react';
 import { Report, ReportStatus, ReportType } from '@/types';
 import reportService from '@/services/report.service';
@@ -88,29 +88,29 @@ const StudentReportPage = () => {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 via-blue-50 to-indigo-50">
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-primary-50/10 to-indigo-50/20">
         <div className="flex flex-col items-center space-y-4">
-          <div className="spinner"></div>
-          <p className="text-gray-600 font-medium">Loading your reports...</p>
+          <div className="relative"><div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-primary-500 to-indigo-600 animate-pulse flex items-center justify-center"><span className="text-2xl">📊</span></div><div className="absolute inset-0 rounded-2xl bg-primary-500/20 animate-ping"></div></div><p className="text-gray-600 font-medium">Loading your reports...</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-blue-50 to-indigo-50">
-      <div className="container mx-auto px-4 py-8">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-primary-50/10 to-indigo-50/20 relative">
+      <div className="absolute inset-0 bg-[linear-gradient(rgba(0,0,0,0.015)_1px,transparent_1px),linear-gradient(90deg,rgba(0,0,0,0.015)_1px,transparent_1px)] bg-[size:32px_32px] pointer-events-none"></div>
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 relative">
         {/* Header */}
         <div className="mb-8">
-          <div className="flex items-center space-x-3 mb-4">
-            <div className="p-3 bg-red-100 rounded-lg">
-              <AlertCircle className="w-6 h-6 text-red-600" />
+          <div className="flex items-center gap-3 mb-4">
+            <div className="w-12 h-12 bg-gradient-to-br from-red-500 to-orange-600 rounded-2xl flex items-center justify-center shadow-lg shadow-red-500/25">
+              <AlertCircle className="w-6 h-6 text-white" />
             </div>
             <div>
-              <h1 className="section-title">My Reports</h1>
-              <p className="section-subtitle">
-                Track the status of your submitted reports and complaints
-              </p>
+              <h1 className="text-3xl font-extrabold text-gray-900 tracking-tight">
+                My <span className="bg-gradient-to-r from-red-600 to-orange-600 bg-clip-text text-transparent">Reports</span>
+              </h1>
+              <p className="text-gray-500 font-medium">Track the status of your submitted reports and complaints</p>
             </div>
           </div>
         </div>

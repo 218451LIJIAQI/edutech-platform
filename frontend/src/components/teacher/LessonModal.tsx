@@ -145,7 +145,7 @@ const LessonModal: React.FC<LessonModalProps> = ({
           <h2 className="text-xl font-bold">
             {isEditMode ? 'Edit Lesson' : 'Create New Lesson'}
           </h2>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600" aria-label="Close modal">
             <X className="w-6 h-6" />
           </button>
         </div>
@@ -185,7 +185,7 @@ const LessonModal: React.FC<LessonModalProps> = ({
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Lesson Type *
             </label>
-            <select {...register('type')} className="input">
+            <select {...register('type')} className="input" aria-label="Lesson type">
               <option value={LessonType.RECORDED}>Recorded Video</option>
               <option value={LessonType.LIVE}>Live Session</option>
               <option value={LessonType.HYBRID}>Hybrid</option>
@@ -256,6 +256,7 @@ const LessonModal: React.FC<LessonModalProps> = ({
                   accept="video/*"
                   onChange={(e) => setVideoFile(e.target.files?.[0] || null)}
                   className="input"
+                  aria-label="Upload video file"
                 />
                 <p className="text-xs text-gray-600">
                   Upload a video file (max 100MB). Supported formats: MP4, WebM, MOV

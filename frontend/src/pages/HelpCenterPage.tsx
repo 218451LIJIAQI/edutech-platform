@@ -1,5 +1,6 @@
 import { useState, useMemo } from 'react';
-import { Search, ChevronDown, ChevronUp, Mail, MessageCircle, Phone } from 'lucide-react';
+import { Search, ChevronDown, ChevronUp, Mail, MessageCircle, Phone, HelpCircle, Sparkles } from 'lucide-react';
+import { usePageTitle } from '@/hooks';
 
 /**
  * Help Center Page
@@ -14,6 +15,7 @@ interface FAQItem {
 }
 
 const HelpCenterPage = () => {
+  usePageTitle('Help Center');
   const [searchQuery, setSearchQuery] = useState('');
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
@@ -27,7 +29,7 @@ const HelpCenterPage = () => {
     { id: 'technical', name: 'Technical Support' },
   ];
 
-  const faqs: FAQItem[] = [
+  const faqs: FAQItem[] = useMemo(() => [
     {
       id: 'faq-1',
       category: 'getting-started',
@@ -106,7 +108,7 @@ const HelpCenterPage = () => {
       question: 'The video player is not working. What should I do?',
       answer: 'Try clearing your browser cache, using a different browser, or checking your internet connection. If the issue persists, contact support.',
     },
-  ];
+  ], []);
 
   const filteredFAQs = useMemo(() => {
     return faqs.filter((faq) => {
@@ -116,32 +118,44 @@ const HelpCenterPage = () => {
         faq.answer.toLowerCase().includes(searchQuery.toLowerCase());
       return matchesCategory && matchesSearch;
     });
-  }, [selectedCategory, searchQuery]);
+  }, [faqs, selectedCategory, searchQuery]);
 
   const toggleFAQ = (id: string) => {
     setExpandedId(expandedId === id ? null : id);
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-blue-50 to-indigo-50 py-12">
-      <div className="container mx-auto px-4">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-primary-50/10 to-indigo-50/20 py-12 relative">
+      {/* Background Pattern */}
+      <div className="absolute inset-0 bg-[linear-gradient(rgba(0,0,0,0.015)_1px,transparent_1px),linear-gradient(90deg,rgba(0,0,0,0.015)_1px,transparent_1px)] bg-[size:32px_32px] pointer-events-none"></div>
+      
+      {/* Decorative Elements */}
+      <div className="absolute top-20 right-[10%] w-72 h-72 bg-primary-400/10 rounded-full blur-3xl pointer-events-none"></div>
+      <div className="absolute bottom-40 left-[5%] w-80 h-80 bg-indigo-400/10 rounded-full blur-3xl pointer-events-none"></div>
+      
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative">
         {/* Header */}
         <div className="text-center mb-16">
-          <h1 className="section-title mb-6 text-5xl">Help Center</h1>
-          <p className="section-subtitle mb-12 text-xl">
+          <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-primary-500 via-primary-600 to-indigo-600 rounded-2xl mb-6 shadow-xl shadow-primary-500/30">
+            <HelpCircle className="w-8 h-8 text-white" />
+          </div>
+          <h1 className="text-4xl md:text-5xl font-extrabold text-gray-900 tracking-tight mb-4">
+            Help <span className="bg-gradient-to-r from-primary-600 to-indigo-600 bg-clip-text text-transparent">Center</span>
+          </h1>
+          <p className="text-xl text-gray-500 font-medium mb-10">
             Find answers to common questions and get support
           </p>
 
           {/* Search Bar */}
           <div className="max-w-2xl mx-auto">
-            <div className="relative">
-              <div className="absolute left-4 top-1/2 transform -translate-y-1/2">
-                <Search className="text-primary-600 w-6 h-6" />
+            <div className="relative group">
+              <div className="absolute left-5 top-1/2 transform -translate-y-1/2 text-gray-400 group-focus-within:text-primary-500 transition-colors">
+                <Search className="w-5 h-5" />
               </div>
               <input
                 type="text"
                 placeholder="Search for help..."
-                className="input pl-14 w-full shadow-lg border-2 border-primary-200 focus:border-primary-600 rounded-xl py-4 text-base"
+                className="w-full pl-14 pr-5 py-4 bg-white/95 backdrop-blur-sm border border-gray-200/80 rounded-2xl text-gray-900 placeholder-gray-400 shadow-lg focus:outline-none focus:ring-4 focus:ring-primary-500/10 focus:border-primary-500 hover:border-gray-300 transition-all duration-200"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
               />
@@ -151,15 +165,15 @@ const HelpCenterPage = () => {
 
         {/* Category Filter */}
         <div className="mb-12">
-          <div className="flex flex-wrap justify-center gap-3">
+          <div className="flex flex-wrap justify-center gap-2">
             {categories.map((category) => (
               <button
                 key={category.id}
                 onClick={() => setSelectedCategory(category.id)}
-                className={`px-6 py-3 rounded-full font-bold text-sm transition-all border-2 transform hover:scale-105 ${
+                className={`px-5 py-2.5 rounded-xl font-semibold text-sm transition-all duration-300 ${
                   selectedCategory === category.id
-                    ? 'bg-gradient-to-r from-primary-600 to-primary-700 text-white border-primary-600 shadow-lg'
-                    : 'bg-white text-gray-700 border-gray-200 hover:border-primary-300 hover:text-primary-700 hover:shadow-md'
+                    ? 'bg-gradient-to-r from-primary-500 to-primary-600 text-white shadow-lg shadow-primary-500/25'
+                    : 'bg-white/90 text-gray-600 border border-gray-200/80 hover:border-primary-300 hover:text-primary-600 hover:bg-primary-50/50'
                 }`}
               >
                 {category.name}
@@ -219,11 +233,17 @@ const HelpCenterPage = () => {
 
           {/* Contact Support */}
           <div className="lg:col-span-1">
-            <div className="card bg-gradient-to-br from-primary-600 to-primary-700 text-white border-2 border-primary-400 sticky top-20 shadow-2xl rounded-2xl">
-              <h3 className="text-3xl font-bold mb-6 text-white">Still Need Help?</h3>
-              <p className="text-primary-100 mb-10 leading-relaxed text-lg">
-                Can't find what you're looking for? Our support team is here to help!
-              </p>
+            <div className="bg-gradient-to-br from-primary-500 via-primary-600 to-indigo-600 text-white rounded-2xl p-8 sticky top-20 shadow-xl shadow-primary-500/20 relative overflow-hidden">
+              <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2"></div>
+              <div className="absolute bottom-0 left-0 w-24 h-24 bg-white/5 rounded-full translate-y-1/2 -translate-x-1/2"></div>
+              <div className="relative">
+                <div className="flex items-center gap-3 mb-4">
+                  <Sparkles className="w-6 h-6" />
+                  <h3 className="text-2xl font-bold">Still Need Help?</h3>
+                </div>
+                <p className="text-white/80 mb-8 leading-relaxed">
+                  Can't find what you're looking for? Our support team is here to help!
+                </p>
 
               <div className="space-y-4">
                 <a
@@ -264,9 +284,10 @@ const HelpCenterPage = () => {
               </div>
 
               <div className="mt-8 p-5 bg-white/20 rounded-xl border border-white/30 backdrop-blur-sm">
-                <p className="text-sm text-primary-100">
+                <p className="text-sm text-white/80">
                   <strong className="text-white">Response Time:</strong> We typically respond within 24 hours on business days.
                 </p>
+              </div>
               </div>
             </div>
           </div>

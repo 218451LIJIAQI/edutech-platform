@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+﻿import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   Play,
@@ -104,6 +104,7 @@ const CourseLearningPage = () => {
     if (courseId) {
       fetchCourseData();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [courseId, navigate]);
 
   const fetchCourseData = async () => {
@@ -198,10 +199,9 @@ const CourseLearningPage = () => {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 via-blue-50 to-indigo-50">
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-primary-50/10 to-indigo-50/20">
         <div className="flex flex-col items-center space-y-4">
-          <div className="spinner"></div>
-          <p className="text-gray-600 font-medium">Loading course...</p>
+          <div className="relative"><div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-primary-500 to-indigo-600 animate-pulse flex items-center justify-center"><span className="text-2xl">📖</span></div><div className="absolute inset-0 rounded-2xl bg-primary-500/20 animate-ping"></div></div><p className="text-gray-600 font-medium">Loading course...</p>
         </div>
       </div>
     );
@@ -209,7 +209,7 @@ const CourseLearningPage = () => {
 
   if (!course || !currentLesson) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 via-blue-50 to-indigo-50">
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-primary-50/10 to-indigo-50/20">
         <div className="text-center">
           <p className="text-gray-600 mb-4">Course not found</p>
           <button className="btn-primary" onClick={() => navigate('/courses')}>Browse Courses</button>
@@ -219,9 +219,10 @@ const CourseLearningPage = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-blue-50 to-indigo-50">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-primary-50/10 to-indigo-50/20 relative">
+      <div className="absolute inset-0 bg-[linear-gradient(rgba(0,0,0,0.015)_1px,transparent_1px),linear-gradient(90deg,rgba(0,0,0,0.015)_1px,transparent_1px)] bg-[size:32px_32px] pointer-events-none"></div>
       {/* Video Player */}
-      <div className="container mx-auto px-4 pt-6">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-6 relative">
         <div className="max-w-5xl mx-auto">
             {currentLesson.videoUrl ? (
             <div className="rounded-xl overflow-hidden shadow-xl">
@@ -245,7 +246,7 @@ const CourseLearningPage = () => {
       </div>
 
       {/* Course Content */}
-      <div className="container mx-auto px-4 py-8">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           {/* Main Content */}
           <div className="lg:col-span-2 space-y-6">

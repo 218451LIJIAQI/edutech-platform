@@ -134,7 +134,7 @@ const MaterialModal: React.FC<MaterialModalProps> = ({
           <h2 className="text-xl font-bold">
             {isEditMode ? 'Edit Material' : 'Upload Material'}
           </h2>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600" aria-label="Close modal">
             <X className="w-6 h-6" />
           </button>
         </div>
@@ -215,6 +215,7 @@ const MaterialModal: React.FC<MaterialModalProps> = ({
                   accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.zip,.txt"
                   onChange={(e) => setMaterialFile(e.target.files?.[0] || null)}
                   className="input"
+                  aria-label="Upload material file"
                 />
                 <p className="text-xs text-gray-500 mt-1">
                   Supported formats: PDF, DOC, DOCX, XLS, XLSX, PPT, PPTX, ZIP, TXT (max 50MB)

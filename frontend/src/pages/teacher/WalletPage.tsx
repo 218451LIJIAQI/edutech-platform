@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Wallet as WalletIcon, DollarSign, ArrowDownToLine, ArrowUpRight, Settings, Plus, CheckCircle, XCircle, CreditCard, Building2 } from 'lucide-react';
 import walletService from '@/services/wallet.service';
 import { PayoutMethod, PayoutMethodType, PayoutRequest, WalletSummary, WalletTransaction, WalletTransactionSource, WalletTransactionType } from '@/types';
+import { usePageTitle } from '@/hooks';
 import toast from 'react-hot-toast';
 
 const currency = (v: number, ccy = 'USD') => new Intl.NumberFormat(undefined, { style: 'currency', currency: ccy }).format(v || 0);
@@ -10,9 +11,12 @@ const typeOptions = Object.values(WalletTransactionType);
 const sourceOptions = Object.values(WalletTransactionSource);
 
 const WalletPage = () => {
+  usePageTitle('Wallet');
   const [summary, setSummary] = useState<WalletSummary | null>(null);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [txns, setTxns] = useState<{ items?: WalletTransaction[]; pagination?: any }>({});
   const [methods, setMethods] = useState<PayoutMethod[]>([]);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [payouts, setPayouts] = useState<{ items?: PayoutRequest[]; pagination?: any }>({});
   const [loading, setLoading] = useState(true);
 
@@ -27,6 +31,7 @@ const WalletPage = () => {
   // New method form
   const [methodType, setMethodType] = useState<PayoutMethodType>(PayoutMethodType.BANK_TRANSFER);
   const [methodLabel, setMethodLabel] = useState('');
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [methodDetails, setMethodDetails] = useState<any>({});
   const [methodIsDefault, setMethodIsDefault] = useState(false);
 
@@ -49,7 +54,7 @@ const WalletPage = () => {
       setTxns({ items: t.items, pagination: t });
       setMethods(m);
       setPayouts({ items: pr.items, pagination: pr });
-    } catch (e) {
+    } catch (_e) {
       toast.error('Failed to load wallet');
     } finally {
       setLoading(false);
@@ -81,6 +86,7 @@ const WalletPage = () => {
       setPayoutMethodId('');
       setPayoutNote('');
       await loadAll();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (e: any) {
       toast.error(e?.response?.data?.message || 'Failed to request payout');
     } finally {
@@ -96,6 +102,7 @@ const WalletPage = () => {
       setMethodModalOpen(false);
       setMethodLabel(''); setMethodDetails({}); setMethodIsDefault(false);
       await loadAll();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (e: any) {
       toast.error(e?.response?.data?.message || 'Failed to add method');
     }
@@ -103,21 +110,35 @@ const WalletPage = () => {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 via-blue-50 to-indigo-50">
-        <div className="spinner" />
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-primary-50/10 to-indigo-50/20">
+        <div className="flex flex-col items-center space-y-4">
+          <div className="relative">
+            <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-green-500 to-emerald-600 animate-pulse flex items-center justify-center">
+              <WalletIcon className="w-8 h-8 text-white" />
+            </div>
+            <div className="absolute inset-0 rounded-2xl bg-green-500/20 animate-ping"></div>
+          </div>
+          <p className="text-gray-600 font-medium">Loading wallet...</p>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-blue-50 to-indigo-50">
-      <div className="container mx-auto px-4 py-8">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-primary-50/10 to-indigo-50/20 relative">
+      <div className="absolute inset-0 bg-[linear-gradient(rgba(0,0,0,0.015)_1px,transparent_1px),linear-gradient(90deg,rgba(0,0,0,0.015)_1px,transparent_1px)] bg-[size:32px_32px] pointer-events-none"></div>
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 relative">
         {/* Header */}
-        <div className="mb-10">
-          <h1 className="section-title mb-2 flex items-center gap-3">
-            <WalletIcon className="w-8 h-8 text-primary-600" /> Teacher Wallet
-          </h1>
-          <p className="section-subtitle">Manage your course earnings, payout methods, and withdrawals</p>
+        <div className="mb-10 flex items-center gap-3">
+          <div className="w-12 h-12 bg-gradient-to-br from-green-500 to-emerald-600 rounded-2xl flex items-center justify-center shadow-lg shadow-green-500/25">
+            <WalletIcon className="w-6 h-6 text-white" />
+          </div>
+          <div>
+            <h1 className="text-3xl font-extrabold text-gray-900 tracking-tight">
+              Teacher <span className="bg-gradient-to-r from-green-600 to-emerald-600 bg-clip-text text-transparent">Wallet</span>
+            </h1>
+            <p className="text-gray-500 font-medium">Manage your earnings, payouts and withdrawals</p>
+          </div>
         </div>
 
         {/* Summary Cards */}
@@ -230,11 +251,11 @@ const WalletPage = () => {
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-xl font-bold text-gray-900">Transactions</h2>
             <div className="flex items-center gap-2">
-              <select value={txnType} onChange={(e) => setTxnType(e.target.value)} className="input py-2">
+              <select value={txnType} onChange={(e) => setTxnType(e.target.value)} className="input py-2" aria-label="Filter by transaction type">
                 <option value="">All Types</option>
                 {typeOptions.map(t => (<option key={t} value={t}>{t}</option>))}
               </select>
-              <select value={txnSource} onChange={(e) => setTxnSource(e.target.value)} className="input py-2">
+              <select value={txnSource} onChange={(e) => setTxnSource(e.target.value)} className="input py-2" aria-label="Filter by source">
                 <option value="">All Sources</option>
                 {sourceOptions.map(s => (<option key={s} value={s}>{s}</option>))}
               </select>
@@ -284,7 +305,7 @@ const WalletPage = () => {
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-2">Type</label>
-                <select value={methodType} onChange={(e) => setMethodType(e.target.value as PayoutMethodType)} className="input">
+                <select value={methodType} onChange={(e) => setMethodType(e.target.value as PayoutMethodType)} className="input" aria-label="Payout method type">
                   {Object.values(PayoutMethodType).map(t => (<option key={t} value={t}>{t}</option>))}
                 </select>
               </div>
@@ -294,6 +315,7 @@ const WalletPage = () => {
               </div>
 
               {/* Simple dynamic detail fields */}
+              {/* eslint-disable @typescript-eslint/no-explicit-any */}
               {methodType === PayoutMethodType.BANK_TRANSFER ? (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   <input className="input" placeholder="Bank Name" onChange={(e) => setMethodDetails((d: any) => ({ ...d, bankName: e.target.value }))} />
@@ -306,6 +328,7 @@ const WalletPage = () => {
                   <input className="input" placeholder="Holder Name (optional)" onChange={(e) => setMethodDetails((d: any) => ({ ...d, holder: e.target.value }))} />
                 </div>
               )}
+              {/* eslint-enable @typescript-eslint/no-explicit-any */}
 
               <label className="inline-flex items-center gap-2 text-sm">
                 <input type="checkbox" checked={methodIsDefault} onChange={(e) => setMethodIsDefault(e.target.checked)} /> Set as default
@@ -333,12 +356,12 @@ const WalletPage = () => {
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-2">Amount</label>
                 <input type="number" min={0} max={summary?.availableBalance || 0} value={payoutAmount}
-                       onChange={(e) => setPayoutAmount(Number(e.target.value))} className="input" />
+                       onChange={(e) => setPayoutAmount(Number(e.target.value))} className="input" aria-label="Payout amount" />
                 <p className="text-xs text-gray-500 mt-1">Available: {currency(summary?.availableBalance || 0, summary?.currency)}</p>
               </div>
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-2">Payout Method</label>
-                <select value={payoutMethodId} onChange={(e) => setPayoutMethodId(e.target.value)} className="input">
+                <select value={payoutMethodId} onChange={(e) => setPayoutMethodId(e.target.value)} className="input" aria-label="Select payout method">
                   <option value="">Default Method</option>
                   {methods.map(m => (<option key={m.id} value={m.id}>{m.label}</option>))}
                 </select>

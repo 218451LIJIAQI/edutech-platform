@@ -62,7 +62,7 @@ const NotificationCenter = () => {
       if (wasUnread) {
         setUnreadCount((prev) => Math.max(0, prev - 1));
       }
-    } catch (error) {
+    } catch (_error) {
       toast.error('Failed to mark as read');
     }
   };
@@ -73,7 +73,7 @@ const NotificationCenter = () => {
       setNotifications((prev) => prev.map((n) => ({ ...n, isRead: true })));
       setUnreadCount(0);
       toast.success('All notifications marked as read');
-    } catch (error) {
+    } catch (_error) {
       toast.error('Failed to mark all as read');
     }
   };
@@ -83,7 +83,7 @@ const NotificationCenter = () => {
       await notificationService.deleteNotification(id);
       setNotifications((prev) => prev.filter((n) => n.id !== id));
       toast.success('Notification deleted');
-    } catch (error) {
+    } catch (_error) {
       toast.error('Failed to delete notification');
     }
   };

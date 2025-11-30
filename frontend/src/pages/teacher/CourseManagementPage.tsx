@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+﻿import { useEffect, useState, useCallback } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import {
   ArrowLeft,
@@ -104,9 +104,14 @@ const CourseManagementPage = () => {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 via-blue-50 to-indigo-50">
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-primary-50/10 to-indigo-50/20">
         <div className="flex flex-col items-center space-y-4">
-          <div className="spinner"></div>
+          <div className="relative">
+            <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-primary-500 to-indigo-600 animate-pulse flex items-center justify-center">
+              <span className="text-2xl">📚</span>
+            </div>
+            <div className="absolute inset-0 rounded-2xl bg-primary-500/20 animate-ping"></div>
+          </div>
           <p className="text-gray-600 font-medium">Loading course details...</p>
         </div>
       </div>
@@ -115,7 +120,7 @@ const CourseManagementPage = () => {
 
   if (!courseId) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 via-blue-50 to-indigo-50">
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-primary-50/10 to-indigo-50/20">
         <div className="text-center">
           <h1 className="text-2xl font-bold text-gray-900 mb-4">Course ID is missing</h1>
           <Link to="/teacher/courses" className="btn-primary">
@@ -128,7 +133,7 @@ const CourseManagementPage = () => {
 
   if (!course) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 via-blue-50 to-indigo-50">
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-primary-50/10 to-indigo-50/20">
         <div className="text-center">
           <h1 className="text-2xl font-bold text-gray-900 mb-4">Course not found</h1>
           {error && (
@@ -143,8 +148,9 @@ const CourseManagementPage = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-blue-50 to-indigo-50">
-      <div className="container mx-auto px-4 py-8">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-primary-50/10 to-indigo-50/20 relative">
+      <div className="absolute inset-0 bg-[linear-gradient(rgba(0,0,0,0.015)_1px,transparent_1px),linear-gradient(90deg,rgba(0,0,0,0.015)_1px,transparent_1px)] bg-[size:32px_32px] pointer-events-none"></div>
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 relative">
         {/* Header */}
         <div className="mb-8">
           <button type="button"
@@ -155,9 +161,13 @@ const CourseManagementPage = () => {
             <span>Back to My Courses</span>
           </button>
 
-          <div className="flex items-start justify-between">
-            <div>
-              <h1 className="text-4xl font-bold text-gray-900 mb-2">{course.title}</h1>
+          <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
+            <div className="flex items-start gap-3">
+              <div className="w-12 h-12 bg-gradient-to-br from-primary-500 to-indigo-600 rounded-2xl flex items-center justify-center shadow-lg shadow-primary-500/25 flex-shrink-0">
+                <Settings className="w-6 h-6 text-white" />
+              </div>
+              <div>
+                <h1 className="text-3xl font-extrabold text-gray-900 mb-2">{course.title}</h1>
               <div className="flex items-center space-x-4 flex-wrap">
                 <span className={`badge ${course.isPublished ? 'badge-success' : 'badge-warning'}`}>
                   {course.isPublished ? 'Published' : 'Draft'}
@@ -181,6 +191,7 @@ const CourseManagementPage = () => {
                     Hybrid Course
                   </span>
                 )}
+              </div>
               </div>
             </div>
             <Link

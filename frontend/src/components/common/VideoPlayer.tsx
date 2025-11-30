@@ -169,24 +169,26 @@ const VideoPlayer = ({
         container.requestFullscreen().catch(() => {
           // Fullscreen request failed
         });
-      } else if ((container as any).webkitRequestFullscreen) {
-        (container as any).webkitRequestFullscreen();
-      } else if ((container as any).mozRequestFullScreen) {
-        (container as any).mozRequestFullScreen();
-      } else if ((container as any).msRequestFullscreen) {
-        (container as any).msRequestFullscreen();
+      } else {
+        // Vendor-prefixed fullscreen APIs for older browsers
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const vendorContainer = container as HTMLElement & { webkitRequestFullscreen?: () => void; mozRequestFullScreen?: () => void; msRequestFullscreen?: () => void };
+        if (vendorContainer.webkitRequestFullscreen) vendorContainer.webkitRequestFullscreen();
+        else if (vendorContainer.mozRequestFullScreen) vendorContainer.mozRequestFullScreen();
+        else if (vendorContainer.msRequestFullscreen) vendorContainer.msRequestFullscreen();
       }
     } else {
       if (document.exitFullscreen) {
         document.exitFullscreen().catch(() => {
           // Exit fullscreen failed
         });
-      } else if ((document as any).webkitExitFullscreen) {
-        (document as any).webkitExitFullscreen();
-      } else if ((document as any).mozCancelFullScreen) {
-        (document as any).mozCancelFullScreen();
-      } else if ((document as any).msExitFullscreen) {
-        (document as any).msExitFullscreen();
+      } else {
+        // Vendor-prefixed exit fullscreen APIs for older browsers
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const vendorDoc = document as Document & { webkitExitFullscreen?: () => void; mozCancelFullScreen?: () => void; msExitFullscreen?: () => void };
+        if (vendorDoc.webkitExitFullscreen) vendorDoc.webkitExitFullscreen();
+        else if (vendorDoc.mozCancelFullScreen) vendorDoc.mozCancelFullScreen();
+        else if (vendorDoc.msExitFullscreen) vendorDoc.msExitFullscreen();
       }
     }
   };
@@ -312,6 +314,7 @@ const VideoPlayer = ({
                 value={isMuted ? 0 : volume}
                 onChange={handleVolumeChange}
                 className="w-20 opacity-0 group-hover:opacity-100 transition-opacity"
+                aria-label="Volume"
               />
             </div>
 
@@ -333,6 +336,7 @@ const VideoPlayer = ({
           <button
             onClick={togglePlay}
             className="w-20 h-20 bg-white/90 rounded-full flex items-center justify-center hover:bg-white hover:scale-110 transition-all"
+            aria-label="Play video"
           >
             <Play className="w-10 h-10 text-gray-900 ml-1" />
           </button>

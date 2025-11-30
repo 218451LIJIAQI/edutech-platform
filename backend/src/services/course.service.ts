@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { LessonType, CourseType } from '@prisma/client';
 import prisma from '../config/database';
 import {
@@ -153,7 +154,7 @@ class CourseService {
     }
 
     // Strip helper field before returning
-    const sanitized = courses.map(({ minPackagePrice, ...rest }) => rest);
+    const sanitized = courses.map(({ minPackagePrice: _minPackagePrice, ...rest }) => rest);
 
     return {
       courses: sanitized,

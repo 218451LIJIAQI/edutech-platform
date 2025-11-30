@@ -160,7 +160,7 @@ const PackageModal: React.FC<PackageModalProps> = ({
           <h2 className="text-xl font-bold">
             {isEditMode ? 'Edit Package' : 'Create New Package'}
           </h2>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600" aria-label="Close modal">
             <X className="w-6 h-6" />
           </button>
         </div>
@@ -330,6 +330,7 @@ const PackageModal: React.FC<PackageModalProps> = ({
                       type="button"
                       onClick={() => handleRemoveFeature(index)}
                       className="text-red-600 hover:text-red-700"
+                      aria-label={`Remove feature: ${feature}`}
                     >
                       <Trash2 className="w-4 h-4" />
                     </button>

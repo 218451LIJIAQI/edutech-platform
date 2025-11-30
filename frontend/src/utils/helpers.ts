@@ -161,3 +161,135 @@ export const cn = (...classes: (string | undefined | null | false)[]): string =>
   return classes.filter(Boolean).join(' ');
 };
 
+/**
+ * Format file size to human readable string
+ * @param bytes - File size in bytes
+ * @returns Formatted string (e.g., "1.5 MB")
+ */
+export const formatFileSize = (bytes: number): string => {
+  if (bytes === 0) return '0 Bytes';
+  const k = 1024;
+  const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`;
+};
+
+/**
+ * Generate a unique ID
+ * @param prefix - Optional prefix for the ID
+ * @returns Unique string ID
+ */
+export const generateId = (prefix = 'id'): string => {
+  return `${prefix}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+};
+
+/**
+ * Capitalize the first letter of a string
+ * @param str - String to capitalize
+ * @returns Capitalized string
+ */
+export const capitalize = (str: string): string => {
+  if (!str) return '';
+  return str.charAt(0).toUpperCase() + str.slice(1).toLowerCase();
+};
+
+/**
+ * Format number with thousand separators
+ * @param num - Number to format
+ * @returns Formatted number string (e.g., "1,234,567")
+ */
+export const formatNumber = (num: number): string => {
+  return new Intl.NumberFormat('en-US').format(num);
+};
+
+/**
+ * Format number as compact (e.g., 1.2K, 3.4M)
+ * @param num - Number to format
+ * @returns Compact number string
+ */
+export const formatCompactNumber = (num: number): string => {
+  return new Intl.NumberFormat('en-US', {
+    notation: 'compact',
+    maximumFractionDigits: 1,
+  }).format(num);
+};
+
+/**
+ * Check if a value is empty (null, undefined, empty string, empty array, empty object)
+ * @param value - Value to check
+ * @returns True if empty
+ */
+export const isEmpty = (value: unknown): boolean => {
+  if (value === null || value === undefined) return true;
+  if (typeof value === 'string') return value.trim() === '';
+  if (Array.isArray(value)) return value.length === 0;
+  if (typeof value === 'object') return Object.keys(value).length === 0;
+  return false;
+};
+
+/**
+ * Clamp a number between min and max values
+ * @param num - Number to clamp
+ * @param min - Minimum value
+ * @param max - Maximum value
+ * @returns Clamped number
+ */
+export const clamp = (num: number, min: number, max: number): number => {
+  return Math.min(Math.max(num, min), max);
+};
+
+/**
+ * Format date to time string (e.g., "2:30 PM")
+ * @param date - Date to format
+ * @returns Formatted time string
+ */
+export const formatTime = (date: string | Date): string => {
+  return new Intl.DateTimeFormat('en-US', {
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+  }).format(new Date(date));
+};
+
+/**
+ * Format date and time together
+ * @param date - Date to format
+ * @returns Formatted date and time string
+ */
+export const formatDateTime = (date: string | Date): string => {
+  return new Intl.DateTimeFormat('en-US', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+  }).format(new Date(date));
+};
+
+/**
+ * Copy text to clipboard
+ * @param text - Text to copy
+ * @returns Promise that resolves when copied
+ */
+export const copyToClipboard = async (text: string): Promise<boolean> => {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+/**
+ * Pluralize a word based on count
+ * @param count - The count
+ * @param singular - Singular form
+ * @param plural - Plural form (optional, defaults to singular + 's')
+ * @returns Pluralized string with count
+ */
+export const pluralize = (count: number, singular: string, plural?: string): string => {
+  const word = count === 1 ? singular : (plural || `${singular}s`);
+  return `${count} ${word}`;
+};
+

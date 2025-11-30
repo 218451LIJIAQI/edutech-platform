@@ -34,9 +34,11 @@ const SearchFilter = ({
   const [showFilters, setShowFilters] = useState(false);
 
   // Sync selectedFilters with initialFilters when it changes
+  const initialFiltersKey = JSON.stringify(initialFilters);
   useEffect(() => {
     setSelectedFilters(initialFilters);
-  }, [JSON.stringify(initialFilters)]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialFiltersKey]);
 
   const handleSearch = (query: string) => {
     setSearchQuery(query);
@@ -86,6 +88,7 @@ const SearchFilter = ({
             <button
               onClick={() => handleSearch('')}
               className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+              aria-label="Clear search"
             >
               <X className="w-5 h-5" />
             </button>
@@ -138,6 +141,7 @@ const SearchFilter = ({
                   value={selectedFilters[filter.name] || ''}
                   onChange={(e) => handleFilterChange(filter.name, e.target.value)}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                  aria-label={filter.label}
                 >
                   <option value="">All</option>
                   {filter.options.map((option) => (
@@ -170,6 +174,7 @@ const SearchFilter = ({
                 <button
                   onClick={() => handleFilterChange(filterName, '')}
                   className="ml-2 text-primary-600 hover:text-primary-800"
+                  aria-label={`Remove ${filter?.label || filterName} filter`}
                 >
                   <X className="w-4 h-4" />
                 </button>

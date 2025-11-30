@@ -59,7 +59,7 @@ export class LiveSessionHandler {
 
         return next();
       } catch (error) {
-        if (error instanceof (jwt as any).TokenExpiredError) {
+        if (error instanceof jwt.TokenExpiredError) {
           return next(new Error('Token expired'));
         }
         return next(new Error('Invalid token'));

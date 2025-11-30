@@ -3,16 +3,17 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { Flame, Clock3, Star, PlusCircle, Bookmark, Heart, Share2, Tag } from 'lucide-react';
 import communityService from '@/services/community.service';
 import { CommunityPost, CommunityTag, FeedQuery } from '@/types/community';
-
+import { usePageTitle } from '@/hooks';
 import toast from 'react-hot-toast';
 
-const TABS: { key: NonNullable<FeedQuery['tab']>; label: string; icon: any }[] = [
+const TABS: { key: NonNullable<FeedQuery['tab']>; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
   { key: 'hot', label: 'Hot', icon: Flame },
   { key: 'new', label: 'New', icon: Clock3 },
   { key: 'weekly', label: 'Weekly Picks', icon: Star }
 ];
 
 const CommunityHomePage = () => {
+  usePageTitle('Community');
   const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
   const [tab, setTab] = useState<NonNullable<FeedQuery['tab']>>(() => {
@@ -98,11 +99,28 @@ const CommunityHomePage = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-blue-50 to-indigo-50 py-8">
-      <div className="container mx-auto px-4">
-        <div className="flex items-center justify-between mb-6">
-          <h1 className="section-title">Community</h1>
-          <button onClick={() => navigate('/community/create')} className="btn-primary inline-flex items-center gap-2">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-primary-50/10 to-indigo-50/20 py-8 relative">
+      {/* Background Pattern */}
+      <div className="absolute inset-0 bg-[linear-gradient(rgba(0,0,0,0.015)_1px,transparent_1px),linear-gradient(90deg,rgba(0,0,0,0.015)_1px,transparent_1px)] bg-[size:32px_32px] pointer-events-none"></div>
+      
+      {/* Decorative Elements */}
+      <div className="absolute top-20 right-[10%] w-72 h-72 bg-primary-400/10 rounded-full blur-3xl pointer-events-none"></div>
+      <div className="absolute bottom-40 left-[5%] w-80 h-80 bg-indigo-400/10 rounded-full blur-3xl pointer-events-none"></div>
+      
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
+          <div className="flex items-center gap-3">
+            <div className="w-12 h-12 bg-gradient-to-br from-primary-500 to-indigo-600 rounded-2xl flex items-center justify-center shadow-lg shadow-primary-500/25">
+              <span className="text-2xl">💬</span>
+            </div>
+            <div>
+              <h1 className="text-3xl md:text-4xl font-extrabold text-gray-900 tracking-tight">
+                <span className="bg-gradient-to-r from-primary-600 to-indigo-600 bg-clip-text text-transparent">Community</span>
+              </h1>
+              <p className="text-gray-500 font-medium mt-1">Share knowledge and connect with learners</p>
+            </div>
+          </div>
+          <button onClick={() => navigate('/community/create')} className="btn-primary inline-flex items-center gap-2 shadow-lg shadow-primary-500/25">
             <PlusCircle className="w-5 h-5" /> Create Post
           </button>
         </div>

@@ -287,16 +287,18 @@ const TeacherProfileCompletionForm = ({
       {/* Years of Experience */}
       <div className="card shadow-lg">
         <h3 className="text-xl font-bold mb-4 text-gray-900">Years of Experience</h3>
-          <input
-            type="number"
-            name="yearsOfExperience"
-            value={formData.yearsOfExperience}
-            onChange={handleInputChange}
-            min="0"
-            max="70"
-            className="input"
-            required
-          />
+        <input
+          type="number"
+          name="yearsOfExperience"
+          value={formData.yearsOfExperience}
+          onChange={handleInputChange}
+          min="0"
+          max="70"
+          className="input"
+          required
+          aria-label="Years of experience"
+          placeholder="Enter your years of experience"
+        />
       </div>
 
       {/* Teaching Style */}
@@ -348,6 +350,7 @@ const TeacherProfileCompletionForm = ({
                 type="button"
                 onClick={() => removeSpecialty(index)}
                 className="hover:text-red-600"
+                aria-label={`Remove ${specialty}`}
               >
                 <X className="w-4 h-4" />
               </button>
@@ -393,6 +396,7 @@ const TeacherProfileCompletionForm = ({
                 type="button"
                 onClick={() => removeLanguage(index)}
                 className="hover:text-red-600"
+                aria-label={`Remove ${language}`}
               >
                 <X className="w-4 h-4" />
               </button>
@@ -438,6 +442,7 @@ const TeacherProfileCompletionForm = ({
                 type="button"
                 onClick={() => removeAward(index)}
                 className="text-red-600 hover:text-red-700"
+                aria-label={`Remove ${award}`}
               >
                 <X className="w-4 h-4" />
               </button>
@@ -461,6 +466,7 @@ const TeacherProfileCompletionForm = ({
                 type="button"
                 onClick={() => setFormData((prev) => ({ ...prev, profilePhoto: '' }))}
                 className="absolute top-2 right-2 bg-red-600 text-white p-1 rounded-full hover:bg-red-700"
+                aria-label="Remove profile photo"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -490,6 +496,7 @@ const TeacherProfileCompletionForm = ({
             accept="image/*"
             onChange={handleProfilePhotoUpload}
             className="hidden"
+            aria-label="Upload profile photo"
           />
         </div>
       </div>
@@ -511,6 +518,7 @@ const TeacherProfileCompletionForm = ({
                     type="button"
                     onClick={() => removeCertificatePhoto(index)}
                     className="absolute top-2 right-2 bg-red-600 text-white p-1 rounded-full hover:bg-red-700"
+                    aria-label={`Remove certificate ${index + 1}`}
                   >
                     <X className="w-4 h-4" />
                   </button>
@@ -543,6 +551,7 @@ const TeacherProfileCompletionForm = ({
             multiple
             onChange={handleCertificatePhotosUpload}
             className="hidden"
+            aria-label="Upload certificate photos"
           />
         </div>
       </div>

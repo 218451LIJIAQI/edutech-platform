@@ -3,6 +3,8 @@ import { UserRole } from '@prisma/client';
 import authService from '../services/auth.service';
 import asyncHandler from '../utils/asyncHandler';
 import { AuthenticationError } from '../utils/errors';
+import { tokenBlacklistService } from '../services/tokenBlacklist.service';
+import { clearUser as clearSentryUser } from '../config/sentry';
 
 /**
  * Authentication Controller
@@ -149,13 +151,21 @@ class AuthController {
   });
 
   /**
-   * Logout user (client-side token removal)
+   * Logout user with token blacklisting
    * POST /api/auth/logout
    */
-  logout = asyncHandler(async (_req: Request, res: Response) => {
-    // In a JWT-based auth system, logout is typically handled client-side
-    // by removing the tokens from storage
-    // This endpoint exists for consistency and can be used for logging/analytics
+  logout = asyncHandler(async (req: Request, res: Response) => {
+    // Get token from header
+    const authHeader = req.headers.authorization;
+    if (authHeader?.startsWith('Bearer ')) {
+      const token = authHeader.slice(7);
+      
+      // Add token to blacklist
+      await tokenBlacklistService.blacklist(token);
+    }
+
+    // Clear Sentry user context
+    clearSentryUser();
 
     res.status(200).json({
       status: 'success',

@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { UserRole, VerificationStatus, ReportStatus, PaymentStatus } from '@prisma/client';
 import bcrypt from 'bcrypt';
 import prisma from '../config/database';
@@ -309,7 +310,7 @@ class AdminService {
     }
 
     // If deleting a student, capture impacted teachers before deletion
-    let impactedTeacherUserIds: Set<string> = new Set();
+    const impactedTeacherUserIds: Set<string> = new Set();
     if (user.role === UserRole.STUDENT) {
       const enrollments = await prisma.enrollment.findMany({
         where: { userId },

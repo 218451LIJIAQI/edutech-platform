@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import prisma from '../config/database';
 // Note: avoid importing Prisma enums to prevent build issues before prisma generate
 // Use raw string values aligned with schema enums

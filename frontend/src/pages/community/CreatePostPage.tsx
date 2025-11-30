@@ -48,7 +48,7 @@ const CreatePostPage = () => {
     const timer = setTimeout(async () => {
       try {
         const res = await courseService.getAllCourses({ search: courseQuery, limit: 5, page: 1 });
-        const items = (res.items || res.courses || []).map((c: any) => ({ id: c.id, title: c.title }));
+        const items = (res.items || res.courses || []).map((c: { id: string; title: string }) => ({ id: c.id, title: c.title }));
         setCourseOptions(items);
       } catch (error) {
         console.error('Failed to search courses:', error);
@@ -137,10 +137,21 @@ const CreatePostPage = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-blue-50 to-indigo-50 py-8">
-      <div className="container mx-auto px-4 max-w-3xl">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-primary-50/10 to-indigo-50/20 py-8 relative">
+      <div className="absolute inset-0 bg-[linear-gradient(rgba(0,0,0,0.015)_1px,transparent_1px),linear-gradient(90deg,rgba(0,0,0,0.015)_1px,transparent_1px)] bg-[size:32px_32px] pointer-events-none"></div>
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 max-w-3xl relative">
+        <div className="flex items-center gap-3 mb-6">
+          <div className="w-12 h-12 bg-gradient-to-br from-primary-500 to-indigo-600 rounded-2xl flex items-center justify-center shadow-lg shadow-primary-500/25">
+            <Star className="w-6 h-6 text-white" />
+          </div>
+          <div>
+            <h1 className="text-3xl font-extrabold text-gray-900 tracking-tight">
+              Create <span className="bg-gradient-to-r from-primary-600 to-indigo-600 bg-clip-text text-transparent">Post</span>
+            </h1>
+            <p className="text-gray-500 font-medium">Share your knowledge with the community</p>
+          </div>
+        </div>
         <div className="card shadow-xl border border-gray-100 rounded-2xl">
-          <h1 className="text-2xl font-bold mb-6 text-gray-900">Create Post</h1>
 
           <div className="space-y-6">
             <div>

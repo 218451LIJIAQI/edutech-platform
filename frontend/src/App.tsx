@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, Suspense } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { useAuthStore } from './store/authStore';
 import { UserRole } from './types';
@@ -6,57 +6,66 @@ import { UserRole } from './types';
 // Layout
 import MainLayout from './components/layout/MainLayout';
 import PrivateRoute from './components/auth/PrivateRoute';
-
-// Pages
-import HomePage from './pages/HomePage';
 import TeacherApprovedRoute from './components/auth/TeacherApprovedRoute';
-import TeacherPendingPage from './pages/teacher/TeacherPendingPage';
-import LoginPage from './pages/auth/LoginPage';
-import RegisterPage from './pages/auth/RegisterPage';
-import CoursesPage from './pages/courses/CoursesPage';
-import CourseDetailPage from './pages/courses/CourseDetailPage';
-import TeachersPage from './pages/teachers/TeachersPage';
-import TeacherProfilePage from './pages/teachers/TeacherProfilePage';
-import StudentDashboard from './pages/student/StudentDashboard';
-import MyCoursesPage from './pages/student/MyCoursesPage';
-import CourseLearningPage from './pages/student/CourseLearningPage';
-import CheckoutPage from './pages/student/CheckoutPage';
-import ReviewCoursePage from './pages/student/ReviewCoursePage';
-import CartPage from './pages/student/CartPage';
-import CartCheckoutPage from './pages/student/CartCheckoutPage';
-import OrdersPage from './pages/student/OrdersPage';
-import OrderDetailPage from './pages/student/OrderDetailPage';
-import LiveSessionPage from './pages/student/LiveSessionPage';
-import TeacherDashboard from './pages/teacher/TeacherDashboard';
-import ManageCoursesPage from './pages/teacher/ManageCoursesPage';
-import CreateCoursePage from './pages/teacher/CreateCoursePage';
-import CourseManagementPage from './pages/teacher/CourseManagementPage';
-import VerificationPage from './pages/teacher/VerificationPage';
-import StudentsPage from './pages/teacher/StudentsPage';
-import WalletPage from './pages/teacher/WalletPage';
-import TeacherStudentManagementPage from './pages/teacher/TeacherStudentManagementPage';
-import MessagesPage from './pages/messages/MessagesPage';
-import ProfileCompletionPage from './pages/teacher/ProfileCompletionPage';
-import AdminDashboard from './pages/admin/AdminDashboard';
-import UsersManagement from './pages/admin/UsersManagement';
-import CoursesManagement from './pages/admin/CoursesManagement';
-import ReportsManagement from './pages/admin/ReportsManagement';
-import FinancialsManagement from './pages/admin/FinancialsManagement';
-import RefundsManagement from './pages/admin/RefundsManagement';
-import SupportTicketsManagement from './pages/admin/SupportTicketsManagement';
-import VerificationTeachersManagement from './pages/admin/VerificationTeachersManagement';
-import ProfilePage from './pages/ProfilePage';
-import NotFoundPage from './pages/NotFoundPage';
-import HelpCenterPage from './pages/HelpCenterPage';
-import TermsOfServicePage from './pages/TermsOfServicePage';
-import PrivacyPolicyPage from './pages/PrivacyPolicyPage';
-// Community (Student)
-import CommunityHomePage from './pages/community/CommunityHomePage';
-import CreatePostPage from './pages/community/CreatePostPage';
-import PostDetailPage from './pages/community/PostDetailPage';
-import CommunityUserProfilePage from './pages/community/CommunityUserProfilePage';
-// Report (Student)
-import StudentReportPage from './pages/student/StudentReportPage';
+import PageLoader from './components/common/PageLoader';
+
+// Lazy-loaded Pages (Code Splitting)
+import {
+  // Public
+  HomePage,
+  CoursesPage,
+  CourseDetailPage,
+  TeachersPage,
+  TeacherProfilePage,
+  HelpCenterPage,
+  TermsOfServicePage,
+  PrivacyPolicyPage,
+  NotFoundPage,
+  // Auth
+  LoginPage,
+  RegisterPage,
+  ForgotPasswordPage,
+  // Student
+  StudentDashboard,
+  MyCoursesPage,
+  CourseLearningPage,
+  CheckoutPage,
+  ReviewCoursePage,
+  CartPage,
+  CartCheckoutPage,
+  OrdersPage,
+  OrderDetailPage,
+  LiveSessionPage,
+  StudentReportPage,
+  // Teacher
+  TeacherDashboard,
+  TeacherPendingPage,
+  ManageCoursesPage,
+  CreateCoursePage,
+  CourseManagementPage,
+  VerificationPage,
+  StudentsPage,
+  WalletPage,
+  TeacherStudentManagementPage,
+  ProfileCompletionPage,
+  // Admin
+  AdminDashboard,
+  UsersManagement,
+  CoursesManagement,
+  ReportsManagement,
+  FinancialsManagement,
+  RefundsManagement,
+  SupportTicketsManagement,
+  VerificationTeachersManagement,
+  // Common
+  ProfilePage,
+  MessagesPage,
+  // Community
+  CommunityHomePage,
+  CreatePostPage,
+  PostDetailPage,
+  CommunityUserProfilePage,
+} from './pages/lazy';
 
 /**
  * Main App Component
@@ -90,12 +99,14 @@ function App() {
   }, [isAuthenticated, fetchProfile]);
 
   return (
-    <Routes>
-      <Route element={<MainLayout />}>
+    <Suspense fallback={<PageLoader message="Loading page..." />}>
+      <Routes>
+        <Route element={<MainLayout />}>
         {/* Public routes */}
         <Route path="/" element={<HomePage />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/register" element={<RegisterPage />} />
+        <Route path="/forgot-password" element={<ForgotPasswordPage />} />
         <Route path="/courses" element={<CoursesPage />} />
         <Route path="/courses/:id" element={<CourseDetailPage />} />
         <Route path="/teachers" element={<TeachersPage />} />
@@ -431,6 +442,7 @@ function App() {
         <Route path="*" element={<Navigate to="/404" replace />} />
       </Route>
     </Routes>
+    </Suspense>
   );
 }
 

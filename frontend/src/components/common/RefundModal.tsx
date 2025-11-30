@@ -144,6 +144,7 @@ const RefundModal = ({ isOpen, onClose, order, onRefundSubmitted }: RefundModalP
           <button
             onClick={onClose}
             className="text-white hover:bg-blue-600 rounded-full p-2 transition-colors"
+            aria-label="Close refund modal"
           >
             ✕
           </button>

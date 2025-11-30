@@ -221,6 +221,7 @@ const SupportTicketsManagement = () => {
             value={filterStatus}
             onChange={(e) => setFilterStatus(e.target.value)}
             className="input"
+            aria-label="Filter by status"
           >
             <option value="ALL">All</option>
             <option value="OPEN">Open</option>
@@ -235,6 +236,7 @@ const SupportTicketsManagement = () => {
             value={filterPriority}
             onChange={(e) => setFilterPriority(e.target.value)}
             className="input"
+            aria-label="Filter by priority"
           >
             <option value="">All Priorities</option>
             <option value="LOW">Low</option>
@@ -339,6 +341,7 @@ const SupportTicketsManagement = () => {
               <button
                 onClick={() => setSelectedTicket(null)}
                 className="text-white hover:bg-primary-600 rounded-full p-2"
+                aria-label="Close modal"
               >
                 ✕
               </button>

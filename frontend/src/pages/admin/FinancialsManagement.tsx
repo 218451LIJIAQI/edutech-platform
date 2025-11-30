@@ -128,7 +128,7 @@ const FinancialsManagement = () => {
   const [settStart, setSettStart] = useState('');
   const [settEnd, setSettEnd] = useState('');
   const [settPage, setSettPage] = useState(1);
-  const [settLimit, _setSettLimit] = useState(10);
+  const [settLimit] = useState(10);
   const [settRows, setSettRows] = useState<SettlementRow[]>([]);
   const [settPagination, setSettPagination] = useState<Pagination | null>(null);
   const [settLoading, setSettLoading] = useState(false);
@@ -199,13 +199,21 @@ const FinancialsManagement = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-blue-50 to-indigo-50">
-      <div className="container mx-auto px-4 py-8">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-primary-50/10 to-indigo-50/20 relative">
+      <div className="absolute inset-0 bg-[linear-gradient(rgba(0,0,0,0.015)_1px,transparent_1px),linear-gradient(90deg,rgba(0,0,0,0.015)_1px,transparent_1px)] bg-[size:32px_32px] pointer-events-none"></div>
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 relative">
         {/* Header */}
-        <div className="mb-10 flex items-center justify-between">
-          <div>
-            <h1 className="section-title mb-2">Financials Management</h1>
-            <p className="section-subtitle">Platform financials, commissions and settlements</p>
+        <div className="mb-10 flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="w-12 h-12 bg-gradient-to-br from-green-500 to-emerald-600 rounded-2xl flex items-center justify-center shadow-lg shadow-green-500/25">
+              <DollarSign className="w-6 h-6 text-white" />
+            </div>
+            <div>
+              <h1 className="text-3xl font-extrabold text-gray-900 tracking-tight">
+                Financials <span className="bg-gradient-to-r from-green-600 to-emerald-600 bg-clip-text text-transparent">Management</span>
+              </h1>
+              <p className="text-gray-500 font-medium">Platform financials, commissions and settlements</p>
+            </div>
           </div>
           {tab === 'payments' ? (
             <button
@@ -350,6 +358,7 @@ const FinancialsManagement = () => {
                       className="btn btn-outline flex items-center gap-2"
                       onClick={() => exportCSV(visiblePayments,
                         ['Paid At','User','Course','Amount','Platform','Teacher','Status'],
+                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
                         (p: any) => [
                           p.paidAt ? new Date(p.paidAt).toLocaleString() : '-',
                           `${p.user?.firstName || ''} ${p.user?.lastName || ''}`.trim(),
@@ -405,6 +414,7 @@ const FinancialsManagement = () => {
                           value={pageSize}
                           onChange={(e) => { setPage(1); setPageSize(parseInt(e.target.value)); }}
                           className="px-2 py-1 border rounded-lg text-sm"
+                          aria-label="Items per page"
                         >
                           {pageSizes.map((s) => (
                             <option key={s} value={s}>{s}/page</option>
@@ -457,6 +467,7 @@ const FinancialsManagement = () => {
                   value={commissionLimit}
                   onChange={(e) => { setCommissionPage(1); setCommissionLimit(parseInt(e.target.value)); }}
                   className="px-2 py-1 border rounded-lg text-sm"
+                  aria-label="Items per page"
                 >
                   {pageSizes.map((s) => (
                     <option key={s} value={s}>{s}</option>

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+﻿import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useCourseStore } from '@/store/courseStore';
 import { useAuthStore } from '@/store/authStore';
@@ -8,6 +8,7 @@ import { BookOpen, Clock, Star, Users, CheckCircle, PlayCircle, Video, Radio, Al
 import toast from 'react-hot-toast';
 import UniversalVideoPlayer from '@/components/common/UniversalVideoPlayer';
 import ReportSubmissionModal from '@/components/common/ReportSubmissionModal';
+import cartService from '@/services/cart.service';
 
 /**
  * Course Detail Page
@@ -73,10 +74,9 @@ const CourseDetailPage = () => {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 via-blue-50 to-indigo-50">
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-primary-50/10 to-indigo-50/20">
         <div className="flex flex-col items-center space-y-4">
-          <div className="spinner"></div>
-          <p className="text-gray-600 font-medium">Loading course details...</p>
+          <div className="relative"><div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-primary-500 to-indigo-600 animate-pulse flex items-center justify-center"><span className="text-2xl">📚</span></div><div className="absolute inset-0 rounded-2xl bg-primary-500/20 animate-ping"></div></div><p className="text-gray-600 font-medium">Loading course details...</p>
         </div>
       </div>
     );
@@ -84,7 +84,7 @@ const CourseDetailPage = () => {
 
   if (!currentCourse) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 via-blue-50 to-indigo-50">
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-primary-50/10 to-indigo-50/20">
         <div className="text-center">
           <BookOpen className="w-16 h-16 text-gray-300 mx-auto mb-4" />
           <h2 className="text-3xl font-bold mb-4 text-gray-900">Course not found</h2>
@@ -101,14 +101,17 @@ const CourseDetailPage = () => {
   const isEnrolled = currentCourse.isEnrolled;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-blue-50 to-indigo-50">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-primary-50/10 to-indigo-50/20 relative">
+      {/* Background Pattern */}
+      <div className="absolute inset-0 bg-[linear-gradient(rgba(0,0,0,0.015)_1px,transparent_1px),linear-gradient(90deg,rgba(0,0,0,0.015)_1px,transparent_1px)] bg-[size:32px_32px] pointer-events-none"></div>
+      
       {/* Hero Section */}
-      <div className="relative bg-gradient-to-br from-primary-600 via-primary-700 to-primary-900 text-white py-16 md:py-20 overflow-hidden">
+      <div className="relative bg-gradient-to-br from-primary-600 via-primary-700 to-indigo-800 text-white py-16 md:py-20 overflow-hidden">
         <div className="absolute inset-0 opacity-10">
-          <div className="absolute top-0 right-0 w-96 h-96 bg-white rounded-full blur-3xl"></div>
-          <div className="absolute bottom-0 left-0 w-96 h-96 bg-white rounded-full blur-3xl"></div>
+          <div className="absolute top-0 right-0 w-96 h-96 bg-white rounded-full blur-3xl animate-float"></div>
+          <div className="absolute bottom-0 left-0 w-96 h-96 bg-white rounded-full blur-3xl animate-float delay-300"></div>
         </div>
-        <div className="container mx-auto px-4 relative z-10">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
           <div className="max-w-4xl">
             <div className="flex items-center flex-wrap gap-3 mb-6">
               <span className="badge bg-primary-400 text-white font-semibold">{currentCourse.category}</span>
@@ -178,7 +181,7 @@ const CourseDetailPage = () => {
         </div>
       </div>
 
-      <div className="container mx-auto px-4 py-12">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           {/* Main Content */}
           <div className="lg:col-span-2 space-y-8">
@@ -346,7 +349,6 @@ const CourseDetailPage = () => {
                           <button
                             onClick={async () => {
                               try {
-                                const { default: cartService } = await import('@/services/cart.service');
                                 await cartService.addItem(pkg.id);
                                 setSelectedPackage(pkg.id);
                                 toast.success('Added to cart');

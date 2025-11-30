@@ -1,9 +1,10 @@
-import { useEffect, useState, useCallback, useMemo } from 'react';
+﻿import { useEffect, useState, useCallback, useMemo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Plus, Edit, Trash2, Eye, EyeOff, Users, Video, Radio, PlayCircle, Search, Filter, BookOpen, TrendingUp } from 'lucide-react';
 import courseService from '@/services/course.service';
 import { Course, CourseType } from '@/types';
 import { formatCurrency } from '@/utils/helpers';
+import { usePageTitle } from '@/hooks';
 import toast from 'react-hot-toast';
 
 /**
@@ -11,6 +12,7 @@ import toast from 'react-hot-toast';
  * Teacher's course management interface with improved UI
  */
 const ManageCoursesPage = () => {
+  usePageTitle('My Courses');
   const navigate = useNavigate();
   const [courses, setCourses] = useState<Course[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -43,7 +45,7 @@ const ManageCoursesPage = () => {
         !currentStatus ? 'Course published successfully' : 'Course unpublished'
       );
       fetchMyCourses();
-    } catch (error) {
+    } catch (_error) {
       toast.error('Failed to update course status');
     }
   };
@@ -116,27 +118,42 @@ const ManageCoursesPage = () => {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 via-blue-50 to-indigo-50">
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-primary-50/10 to-indigo-50/20">
         <div className="flex flex-col items-center space-y-4">
-          <div className="spinner"></div>
-          <p className="text-gray-600 font-medium">Loading your courses...</p>
+          <div className="relative">
+              <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-primary-500 to-indigo-600 animate-pulse flex items-center justify-center">
+                <span className="text-2xl">🎓</span>
+              </div>
+              <div className="absolute inset-0 rounded-2xl bg-primary-500/20 animate-ping"></div>
+            </div>
+            <p className="text-gray-600 font-medium">Loading your courses...</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-blue-50 to-indigo-50">
-      <div className="container mx-auto px-4 py-8">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-primary-50/10 to-indigo-50/20 relative">
+      {/* Background Pattern */}
+      <div className="absolute inset-0 bg-[linear-gradient(rgba(0,0,0,0.015)_1px,transparent_1px),linear-gradient(90deg,rgba(0,0,0,0.015)_1px,transparent_1px)] bg-[size:32px_32px] pointer-events-none"></div>
+      
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 relative">
         {/* Header Section */}
         <div className="mb-10">
-          <div className="flex items-center justify-between mb-8">
-            <div>
-              <h1 className="section-title mb-2">Manage Courses</h1>
-              <p className="section-subtitle">Create and manage your course offerings</p>
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 bg-gradient-to-br from-primary-500 to-indigo-600 rounded-2xl flex items-center justify-center shadow-lg shadow-primary-500/25">
+                <span className="text-2xl">🎓</span>
+              </div>
+              <div>
+                <h1 className="text-3xl md:text-4xl font-extrabold text-gray-900 tracking-tight">
+                  Manage <span className="bg-gradient-to-r from-primary-600 to-indigo-600 bg-clip-text text-transparent">Courses</span>
+                </h1>
+                <p className="text-gray-500 font-medium mt-1">Create and manage your course offerings</p>
+              </div>
             </div>
-            <Link to="/teacher/courses/new" className="btn-primary btn-lg">
-              <Plus className="w-5 h-5 mr-2" />
+            <Link to="/teacher/courses/new" className="btn-primary inline-flex items-center gap-2 shadow-lg shadow-primary-500/25 hover:shadow-xl transition-all">
+              <Plus className="w-5 h-5" />
               Create New Course
             </Link>
           </div>
@@ -212,6 +229,9 @@ const ManageCoursesPage = () => {
             <div className="relative">
               <Filter className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400 pointer-events-none" />
               <select
+                id="course-filter"
+                title="Filter courses by status"
+                aria-label="Filter courses by status"
                 value={filterStatus}
                 onChange={(e) => setFilterStatus(e.target.value as 'all' | 'published' | 'draft')}
                 className="w-full pl-12 pr-4 py-3 bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent shadow-sm transition-all appearance-none cursor-pointer"

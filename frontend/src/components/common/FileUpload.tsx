@@ -139,6 +139,7 @@ const FileUpload: React.FC<FileUploadProps> = ({
             onChange={handleFileSelect}
             disabled={disabled}
             className="hidden"
+            aria-label={label}
           />
           <div className="flex flex-col items-center space-y-2">
             <Upload className="w-12 h-12 text-gray-400" />
@@ -201,6 +202,7 @@ const FileUpload: React.FC<FileUploadProps> = ({
                   type="button"
                   onClick={handleClearFile}
                   className="p-1 text-gray-400 hover:text-gray-600"
+                  aria-label="Remove file"
                 >
                   <X className="w-5 h-5" />
                 </button>

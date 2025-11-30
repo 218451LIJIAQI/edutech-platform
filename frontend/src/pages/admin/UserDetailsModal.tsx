@@ -13,6 +13,13 @@ interface UserDetailsModalProps {
  * Display detailed user information
  */
 const UserDetailsModal = ({ isOpen, user, onClose }: UserDetailsModalProps) => {
+  const avatarUrl = useMemo(() => {
+    if (!user) return '';
+    if (user.avatar) return user.avatar;
+    const name = `${user.firstName}+${user.lastName}`;
+    return `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}`;
+  }, [user]);
+
   if (!isOpen || !user) return null;
 
   const formatDate = (date: string | Date): string => {
@@ -28,16 +35,10 @@ const UserDetailsModal = ({ isOpen, user, onClose }: UserDetailsModalProps) => {
         hour: '2-digit',
         minute: '2-digit',
       });
-    } catch (error) {
+    } catch (_error) {
       return 'Invalid Date';
     }
   };
-
-  const avatarUrl = useMemo(() => {
-    if (user.avatar) return user.avatar;
-    const name = `${user.firstName}+${user.lastName}`;
-    return `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}`;
-  }, [user.avatar, user.firstName, user.lastName]);
 
   const handleImageError = (e: React.SyntheticEvent<HTMLImageElement, Event>) => {
     const target = e.currentTarget;
@@ -227,8 +228,8 @@ const UserDetailsModal = ({ isOpen, user, onClose }: UserDetailsModalProps) => {
               <div className="mt-4">
                 <p className="text-sm text-gray-600">Enrolled Courses</p>
                 <p className="font-medium text-gray-900 mt-1">
-                  {('_count' in user && typeof (user as any)._count === 'object' && (user as any)._count?.enrollments) 
-                    ? (user as any)._count.enrollments 
+                  {('_count' in user && typeof (user as User & { _count?: { enrollments?: number } })._count === 'object' && (user as User & { _count?: { enrollments?: number } })._count?.enrollments) 
+                    ? (user as User & { _count?: { enrollments?: number } })._count?.enrollments 
                     : 0} course(s)
                 </p>
               </div>

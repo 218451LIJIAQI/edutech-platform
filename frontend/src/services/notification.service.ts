@@ -130,6 +130,7 @@ export const notificationService = {
         throw new Error('Notification message is required');
       }
 
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const env = (import.meta as any).env || {};
       const enableMock = String(env.VITE_ENABLE_NOTIFICATION_MOCK || '').toLowerCase() === 'true';
       if (enableMock) {
@@ -161,6 +162,7 @@ export const notificationService = {
             type: payload.type,
           }, { headers: { 'X-Suppress-404': '1' } });
           return { delivered: true, endpoint: ep }; // success on first working endpoint
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         } catch (e: any) {
           const status = e?.response?.status;
           // try next endpoint only for 404/405; otherwise rethrow immediately

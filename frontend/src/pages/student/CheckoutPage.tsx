@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+﻿import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { CreditCard, Lock, CheckCircle, AlertCircle } from 'lucide-react';
 import { loadStripe } from '@stripe/stripe-js';
@@ -35,6 +35,49 @@ const CheckoutForm = ({
   const [isProcessing, setIsProcessing] = useState(false);
   const [cardName, setCardName] = useState('');
   const [agreeTerms, setAgreeTerms] = useState(false);
+  
+  // Mock card state
+  const [mockCard, setMockCard] = useState({
+    number: '',
+    expiry: '',
+    cvc: '',
+  });
+
+  const formatCardNumber = (value: string) => {
+    const v = value.replace(/\s+/g, '').replace(/[^0-9]/gi, '');
+    const matches = v.match(/\d{4,16}/g);
+    const match = (matches && matches[0]) || '';
+    const parts = [];
+    for (let i = 0, len = match.length; i < len; i += 4) {
+      parts.push(match.substring(i, i + 4));
+    }
+    return parts.length ? parts.join(' ') : v;
+  };
+
+  const formatExpiry = (value: string) => {
+    const v = value.replace(/\s+/g, '').replace(/[^0-9]/gi, '');
+    if (v.length >= 2) {
+      return v.substring(0, 2) + '/' + v.substring(2, 4);
+    }
+    return v;
+  };
+
+  const validateMockCard = () => {
+    const cardNum = mockCard.number.replace(/\s/g, '');
+    if (cardNum.length < 13) {
+      toast.error('Please enter a valid card number');
+      return false;
+    }
+    if (mockCard.expiry.length < 5) {
+      toast.error('Please enter a valid expiry date (MM/YY)');
+      return false;
+    }
+    if (mockCard.cvc.length < 3) {
+      toast.error('Please enter a valid CVC');
+      return false;
+    }
+    return true;
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -57,8 +100,15 @@ const CheckoutForm = ({
 
       // Handle mock payment mode
       if (enableMockPayment) {
+        if (!validateMockCard()) {
+          toast.dismiss(loadingToast);
+          setIsProcessing(false);
+          return;
+        }
+        toast.loading('Validating card...', { id: loadingToast });
+        await new Promise((r) => setTimeout(r, 800));
         toast.loading('Processing payment...', { id: loadingToast });
-        await new Promise((r) => setTimeout(r, 1200));
+        await new Promise((r) => setTimeout(r, 1000));
         await paymentService.confirmPayment(paymentIntent.payment.id);
         toast.dismiss(loadingToast);
         toast.success('Payment successful!');
@@ -149,10 +199,48 @@ const CheckoutForm = ({
         />
       </div>
 
-      {/* Card Element (hidden in mock mode) */}
+      {/* Card Element */}
       {enableMockPayment ? (
-        <div className="bg-gradient-to-r from-gray-50 to-gray-100 border-2 border-gray-200 rounded-xl p-4 text-sm text-gray-700">
-          <p className="font-semibold">Mock payment is enabled. No card details required.</p>
+        <div>
+          <label className="block text-sm font-semibold text-gray-700 mb-3">
+            Card Information * <span className="text-xs text-orange-500 font-normal">(Mock Mode)</span>
+          </label>
+          <div className="space-y-3">
+            {/* Card Number */}
+            <div className="relative">
+              <input
+                type="text"
+                value={mockCard.number}
+                onChange={(e) => setMockCard({ ...mockCard, number: formatCardNumber(e.target.value) })}
+                className="input pr-12"
+                placeholder="4242 4242 4242 4242"
+                maxLength={19}
+              />
+              <CreditCard className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+            </div>
+            {/* Expiry and CVC */}
+            <div className="grid grid-cols-2 gap-3">
+              <input
+                type="text"
+                value={mockCard.expiry}
+                onChange={(e) => setMockCard({ ...mockCard, expiry: formatExpiry(e.target.value) })}
+                className="input"
+                placeholder="MM/YY"
+                maxLength={5}
+              />
+              <input
+                type="text"
+                value={mockCard.cvc}
+                onChange={(e) => setMockCard({ ...mockCard, cvc: e.target.value.replace(/[^0-9]/g, '').slice(0, 4) })}
+                className="input"
+                placeholder="CVC"
+                maxLength={4}
+              />
+            </div>
+          </div>
+          <p className="text-xs text-orange-600 mt-2">
+            🧪 Mock mode: Enter any card info to simulate payment
+          </p>
         </div>
       ) : (
         <div>
@@ -265,6 +353,7 @@ const CheckoutPage = () => {
       toast.error('Missing course or package information');
       navigate('/courses');
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [courseId, packageId, navigate]);
 
   const fetchCourseData = async () => {
@@ -302,10 +391,9 @@ const CheckoutPage = () => {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 via-blue-50 to-indigo-50">
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-primary-50/10 to-indigo-50/20">
         <div className="flex flex-col items-center space-y-4">
-          <div className="spinner"></div>
-          <p className="text-gray-600 font-medium">Loading checkout...</p>
+          <div className="relative"><div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-primary-500 to-indigo-600 animate-pulse flex items-center justify-center"><span className="text-2xl">💳</span></div><div className="absolute inset-0 rounded-2xl bg-primary-500/20 animate-ping"></div></div><p className="text-gray-600 font-medium">Loading checkout...</p>
         </div>
       </div>
     );
@@ -313,7 +401,7 @@ const CheckoutPage = () => {
 
   if (!course || !selectedPackage) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 via-blue-50 to-indigo-50">
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-primary-50/10 to-indigo-50/20">
         <div className="text-center">
           <p className="text-gray-600 mb-4">Course or package not found</p>
           <button className="btn-primary" onClick={() => navigate('/courses')}>Browse Courses</button>
@@ -324,7 +412,7 @@ const CheckoutPage = () => {
 
   if (paymentSuccess) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 via-blue-50 to-indigo-50">
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-primary-50/10 to-indigo-50/20">
         <div className="card max-w-md text-center shadow-lg-custom">
           <div className="inline-flex items-center justify-center w-20 h-20 bg-gradient-to-br from-green-500 to-green-600 rounded-full mb-6 mx-auto shadow-lg">
             <CheckCircle className="w-10 h-10 text-white" />
@@ -356,15 +444,23 @@ const CheckoutPage = () => {
 
   return (
     <Elements stripe={stripePromise}>
-      <div className="min-h-screen bg-gradient-to-br from-gray-50 via-blue-50 to-indigo-50 py-8">
-        <div className="container mx-auto px-4">
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-primary-50/10 to-indigo-50/20 py-8 relative">
+        <div className="absolute inset-0 bg-[linear-gradient(rgba(0,0,0,0.015)_1px,transparent_1px),linear-gradient(90deg,rgba(0,0,0,0.015)_1px,transparent_1px)] bg-[size:32px_32px] pointer-events-none"></div>
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative">
           <div className="max-w-5xl mx-auto">
             {/* Header */}
             <div className="mb-10">
-              <h1 className="section-title mb-2">Secure Checkout</h1>
-              <p className="section-subtitle">
-                Complete your purchase to start learning
-              </p>
+              <div className="flex items-center gap-3 mb-3">
+                <div className="w-12 h-12 bg-gradient-to-br from-green-500 to-emerald-600 rounded-2xl flex items-center justify-center shadow-lg shadow-green-500/25">
+                  <Lock className="w-6 h-6 text-white" />
+                </div>
+                <div>
+                  <h1 className="text-3xl font-extrabold text-gray-900 tracking-tight">
+                    Secure <span className="bg-gradient-to-r from-green-600 to-emerald-600 bg-clip-text text-transparent">Checkout</span>
+                  </h1>
+                  <p className="text-gray-500 font-medium">Complete your purchase to start learning</p>
+                </div>
+              </div>
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">

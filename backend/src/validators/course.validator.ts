@@ -1,5 +1,6 @@
 import { body, query } from 'express-validator';
 import { LessonType } from '@prisma/client';
+import { Request } from 'express';
 
 /**
  * Validation rules for course endpoints
@@ -547,7 +548,7 @@ export const getCoursesValidation = [
     .bail()
     .toFloat()
     .custom((value, { req }) => {
-      const min = (req as any)?.query?.minPrice as unknown as number | undefined;
+      const min = (req as Request)?.query?.minPrice as unknown as number | undefined;
       const max = value as unknown as number | undefined;
       if (min !== undefined && max !== undefined && Number(min) > Number(max)) {
         throw new Error(ERROR_MESSAGES.MAX_PRICE_GREATER);

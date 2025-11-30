@@ -308,6 +308,7 @@ const RefundsManagement = () => {
               <button
                 onClick={() => setSelectedRefund(null)}
                 className="text-white hover:bg-primary-600 rounded-full p-2"
+                aria-label="Close modal"
               >
                 ✕
               </button>

@@ -79,15 +79,23 @@ const CommunityUserProfilePage = () => {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 via-blue-50 to-indigo-50">
-        <div className="spinner" />
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-primary-50/10 to-indigo-50/20">
+        <div className="flex flex-col items-center space-y-4">
+          <div className="relative">
+            <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-primary-500 to-indigo-600 animate-pulse flex items-center justify-center">
+              <span className="text-2xl text-white">👤</span>
+            </div>
+            <div className="absolute inset-0 rounded-2xl bg-primary-500/20 animate-ping"></div>
+          </div>
+          <p className="text-gray-600 font-medium">Loading profile...</p>
+        </div>
       </div>
     );
   }
 
   if (!profile) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 via-blue-50 to-indigo-50">
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-primary-50/10 to-indigo-50/20">
         <div className="text-center">
           <p className="text-gray-600 mb-4">User not found</p>
         </div>
@@ -98,15 +106,16 @@ const CommunityUserProfilePage = () => {
   const isMe = user?.id === userId;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-blue-50 to-indigo-50 py-8">
-      <div className="container mx-auto px-4 max-w-4xl">
-        <div className="card shadow-xl border border-gray-100 rounded-2xl mb-6">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-primary-50/10 to-indigo-50/20 py-8 relative">
+      <div className="absolute inset-0 bg-[linear-gradient(rgba(0,0,0,0.015)_1px,transparent_1px),linear-gradient(90deg,rgba(0,0,0,0.015)_1px,transparent_1px)] bg-[size:32px_32px] pointer-events-none"></div>
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 max-w-4xl relative">
+        <div className="card shadow-xl border border-gray-100 rounded-2xl mb-6 bg-white/80 backdrop-blur-sm">
           <div className="flex items-center gap-4">
-            <div className="w-16 h-16 rounded-full bg-gray-200 flex items-center justify-center">
-              <UserIcon className="w-8 h-8 text-gray-500" />
+            <div className="w-16 h-16 rounded-full bg-gradient-to-br from-primary-500 to-indigo-600 flex items-center justify-center shadow-lg">
+              <UserIcon className="w-8 h-8 text-white" />
             </div>
             <div className="flex-1">
-              <h1 className="text-2xl font-bold text-gray-900">{isMe ? 'My Profile' : 'User Profile'}</h1>
+              <h1 className="text-2xl font-extrabold text-gray-900">{isMe ? 'My Profile' : 'User Profile'}</h1>
               <p className="text-sm text-gray-600">Followers {profile.followers} · Following {profile.following}</p>
               {profile.badges && profile.badges.length > 0 && (
                 <div className="mt-2 flex items-center gap-2 flex-wrap">

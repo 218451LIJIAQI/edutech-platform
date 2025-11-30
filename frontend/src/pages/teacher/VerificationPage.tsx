@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+﻿import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Shield, Upload, CheckCircle, Clock, XCircle, ArrowLeft, FileText } from 'lucide-react';
 import { TeacherVerification, VerificationStatus } from '@/types';
@@ -107,9 +107,14 @@ const VerificationPage = () => {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 via-blue-50 to-indigo-50">
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-primary-50/10 to-indigo-50/20">
         <div className="flex flex-col items-center space-y-4">
-          <div className="spinner"></div>
+          <div className="relative">
+            <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-primary-500 to-indigo-600 animate-pulse flex items-center justify-center">
+              <span className="text-2xl">✅</span>
+            </div>
+            <div className="absolute inset-0 rounded-2xl bg-primary-500/20 animate-ping"></div>
+          </div>
           <p className="text-gray-600 font-medium">Loading verification...</p>
         </div>
       </div>
@@ -117,8 +122,9 @@ const VerificationPage = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-blue-50 to-indigo-50 py-8">
-      <div className="container mx-auto px-4">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-primary-50/10 to-indigo-50/20 py-8 relative">
+      <div className="absolute inset-0 bg-[linear-gradient(rgba(0,0,0,0.015)_1px,transparent_1px),linear-gradient(90deg,rgba(0,0,0,0.015)_1px,transparent_1px)] bg-[size:32px_32px] pointer-events-none"></div>
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative">
         <div className="max-w-4xl mx-auto">
           {/* Header */}
           <button
@@ -129,16 +135,16 @@ const VerificationPage = () => {
             Back to Dashboard
           </button>
 
-          <div className="mb-10">
-            <h1 className="section-title mb-3 flex items-center">
-              <div className="p-2 bg-primary-100 rounded-xl mr-4">
-                <Shield className="w-8 h-8 text-primary-600" />
-              </div>
-              Teacher Verification
-            </h1>
-            <p className="section-subtitle">
-              Verify your credentials to build trust with students and increase your visibility
-            </p>
+          <div className="mb-10 flex items-center gap-3">
+            <div className="w-12 h-12 bg-gradient-to-br from-green-500 to-emerald-600 rounded-2xl flex items-center justify-center shadow-lg shadow-green-500/25">
+              <Shield className="w-6 h-6 text-white" />
+            </div>
+            <div>
+              <h1 className="text-3xl font-extrabold text-gray-900 tracking-tight">
+                Teacher <span className="bg-gradient-to-r from-green-600 to-emerald-600 bg-clip-text text-transparent">Verification</span>
+              </h1>
+              <p className="text-gray-500 font-medium">Verify your credentials to build trust with students</p>
+            </div>
           </div>
 
           {/* Benefits Section */}
