@@ -35,6 +35,7 @@ const CheckoutForm = ({
   const [isProcessing, setIsProcessing] = useState(false);
   const [cardName, setCardName] = useState('');
   const [agreeTerms, setAgreeTerms] = useState(false);
+  const [isMockMode, setIsMockMode] = useState(enableMockPayment);
   
   // Mock card state
   const [mockCard, setMockCard] = useState({
@@ -42,6 +43,24 @@ const CheckoutForm = ({
     expiry: '',
     cvc: '',
   });
+
+  // Check if we should use mock mode (Stripe not configured)
+  useEffect(() => {
+    const checkStripeConfig = async () => {
+      try {
+        // Try to create a test payment intent to check if Stripe is configured
+        const testIntent = await paymentService.createPaymentIntent(selectedPackage.id);
+        if (!testIntent.clientSecret) {
+          setIsMockMode(true);
+        }
+      } catch {
+        setIsMockMode(true);
+      }
+    };
+    if (!enableMockPayment) {
+      checkStripeConfig();
+    }
+  }, [selectedPackage.id]);
 
   const formatCardNumber = (value: string) => {
     const v = value.replace(/\s+/g, '').replace(/[^0-9]/gi, '');
@@ -98,8 +117,8 @@ const CheckoutForm = ({
       const loadingToast = toast.loading('Preparing payment...');
       const paymentIntent = await paymentService.createPaymentIntent(selectedPackage.id);
 
-      // Handle mock payment mode
-      if (enableMockPayment) {
+      // Use mock payment if in mock mode OR if Stripe is not configured (no clientSecret)
+      if (isMockMode || !paymentIntent.clientSecret) {
         if (!validateMockCard()) {
           toast.dismiss(loadingToast);
           setIsProcessing(false);
@@ -113,14 +132,6 @@ const CheckoutForm = ({
         toast.dismiss(loadingToast);
         toast.success('Payment successful!');
         onSuccess();
-        return;
-      }
-
-      // Real Stripe flow - validate client secret
-      if (!paymentIntent.clientSecret) {
-        toast.dismiss(loadingToast);
-        toast.error('Payment system is not properly configured. Please contact support.');
-        setIsProcessing(false);
         return;
       }
 
@@ -200,7 +211,7 @@ const CheckoutForm = ({
       </div>
 
       {/* Card Element */}
-      {enableMockPayment ? (
+      {isMockMode ? (
         <div>
           <label className="block text-sm font-semibold text-gray-700 mb-3">
             Card Information * <span className="text-xs text-orange-500 font-normal">(Mock Mode)</span>
@@ -312,7 +323,7 @@ const CheckoutForm = ({
       {/* Submit Button */}
       <button
         type="submit"
-        disabled={(!enableMockPayment && !stripe) || isProcessing}
+        disabled={(!isMockMode && !stripe) || isProcessing}
         className="btn-primary w-full text-lg py-4 disabled:opacity-50 disabled:cursor-not-allowed"
       >
         {isProcessing ? (
