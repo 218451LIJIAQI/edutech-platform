@@ -55,12 +55,6 @@ export class ConflictError extends AppError {
   }
 }
 
-export class UnprocessableEntityError extends AppError {
-  constructor(message: string = 'Unable to process the request') {
-    super(message, 422);
-  }
-}
-
 export class InternalServerError extends AppError {
   constructor(message: string = 'Internal server error') {
     super(message, 500);
