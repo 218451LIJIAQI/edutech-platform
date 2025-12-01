@@ -9,24 +9,5 @@ export { useSmoothLoading } from './useSmoothLoading';
 export { default as useOnClickOutside } from './useOnClickOutside';
 export { default as useOnlineStatus } from './useOnlineStatus';
 
-// React Query hooks for cached API data
-export {
-  useCourses,
-  useCourse,
-  useTeachers,
-  useTeacher,
-  useEnrollments,
-  useCart,
-  useAddToCart,
-  useRemoveFromCart,
-  useOrders,
-  useOrder,
-  useNotifications,
-  useMarkNotificationRead,
-  useCommunityPosts,
-  useCommunityPost,
-  useWallet,
-  useWalletTransactions,
-  usePrefetch,
-  useInvalidateQueries,
-} from './useQuery';
+// React Query hooks
+export { useCourses } from './useQuery';
