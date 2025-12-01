@@ -1,0 +1,12 @@
+[build]
+  command = "npm run build"
+  publish = "dist"
+
+[build.environment]
+  VITE_API_URL = "https://edutech-backend-iihu.onrender.com/api/v1"
+  VITE_SOCKET_URL = "https://edutech-backend-iihu.onrender.com"
+
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
