@@ -132,7 +132,15 @@ const CreatePostPage = () => {
       navigate(`/community/post/${created.id}`);
     } catch (error) {
       console.error('Failed to create post:', error);
-      toast.error('Failed to create post. Please try again.');
+      // Extract error message from response
+      let errorMessage = 'Failed to create post. Please try again.';
+      if (error && typeof error === 'object' && 'response' in error) {
+        const axiosError = error as { response?: { data?: { message?: string } } };
+        errorMessage = axiosError.response?.data?.message || errorMessage;
+      } else if (error instanceof Error) {
+        errorMessage = error.message || errorMessage;
+      }
+      toast.error(errorMessage);
     }
   };
 
