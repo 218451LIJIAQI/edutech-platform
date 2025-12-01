@@ -199,9 +199,10 @@ async function main() {
         });
         walletsSynced++;
         console.log(`   ✓ ${e.teacherName}: $${prev.toFixed(2)} → $${updated.availableBalance.toFixed(2)} (net +$${e.netEarnings.toFixed(2)})`);
-      } catch (err: any) {
-        errors.push({ teacher: `${e.teacherName} <${e.email}>`, error: err?.message || String(err) });
-        console.log(`   ✗ ${e.teacherName}: ERROR - ${err?.message || String(err)}`);
+      } catch (err: unknown) {
+        const errMsg = err instanceof Error ? err.message : String(err);
+        errors.push({ teacher: `${e.teacherName} <${e.email}>`, error: errMsg });
+        console.log(`   ✗ ${e.teacherName}: ERROR - ${errMsg}`);
       }
     }
 
