@@ -37,7 +37,11 @@ router.post(
   validate([
     body('content').trim().notEmpty().withMessage('Content is required').isLength({ max: 2000 }).withMessage('Content too long'),
     body('tags').optional().isArray({ max: 5 }).withMessage('Maximum 5 tags allowed'),
-    body('tags.*').optional().isString().isLength({ min: 1, max: 50 }).withMessage('Invalid tag'),
+    body('tags.*.id').optional().isUUID().withMessage('Invalid tag id'),
+    body('tags.*.name').optional().isString().isLength({ min: 1, max: 50 }).withMessage('Invalid tag name'),
+    body('media').optional().isArray({ max: 10 }).withMessage('Maximum 10 media items allowed'),
+    body('media.*.type').optional().isString().withMessage('Invalid media type'),
+    body('media.*.url').optional().isString().withMessage('Invalid media url'),
   ]),
   communityController.createPost
 );
