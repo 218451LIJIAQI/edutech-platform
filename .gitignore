@@ -65,6 +65,9 @@ uploads/*
 # Docker
 .dockerignore
 
+# TypeScript build cache
+*.tsbuildinfo
+
 # Misc
 .env.production
 .vercel
