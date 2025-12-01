@@ -128,7 +128,12 @@ if (config.NODE_ENV === 'development') {
   app.use(morgan(':method :url :status :response-time ms - :res[content-length] [:req[x-correlation-id]]'));
 }
 
-// Rate limiting
+// Health check endpoints (before rate limiter to avoid blocking)
+app.get('/api/v1/health', (_req, res) => {
+  res.status(200).json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
+// Rate limiting (exclude health check)
 app.use('/api', apiLimiter);
 
 // Static files (uploads)
