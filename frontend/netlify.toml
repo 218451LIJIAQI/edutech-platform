@@ -5,6 +5,7 @@
 [build.environment]
   VITE_API_URL = "https://edutech-backend-iihu.onrender.com/api/v1"
   VITE_SOCKET_URL = "https://edutech-backend-iihu.onrender.com"
+  # Set VITE_STRIPE_PUBLISHABLE_KEY in Netlify dashboard
 
 [[redirects]]
   from = "/*"

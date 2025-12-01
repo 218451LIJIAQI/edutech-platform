@@ -10,10 +10,7 @@ import swaggerUi from 'swagger-ui-express';
 // Config and utilities
 import config from './config/env';
 import logger from './utils/logger';
-import { initRedis, closeRedis } from './config/redis';
-import { closeAllQueues } from './config/queue';
 import { swaggerSpec } from './config/swagger';
-import { initSentry, sentryRequestHandler, sentryErrorHandler } from './config/sentry';
 
 // Routes
 import routes from './routes';
@@ -27,19 +24,9 @@ import { xssProtection, additionalSecurityHeaders } from './middleware/security'
 // Socket handlers
 import LiveSessionHandler from './socket/liveSession.handler';
 
-// Services (initialize background workers)
-import { emailService } from './services/email.service';
-
 /**
  * Edutech Platform Backend Server
- * Main application entry point with enhanced features:
- * - Redis caching and token blacklist
- * - Swagger API documentation
- * - Request correlation IDs for tracing
- * - Enhanced security (XSS protection, HSTS)
- * - Background job processing with BullMQ
- * - Sentry error monitoring
- * - Daily log rotation
+ * Main application entry point
  */
 
 // Create Express app
@@ -66,16 +53,10 @@ const io = new Server(httpServer, {
   },
 });
 
-// Initialize Sentry (must be done before other middleware)
-initSentry(app);
-
 // Trust proxy in production (needed for correct IPs and some rate limiters behind proxies)
 if (config.NODE_ENV === 'production') {
   app.set('trust proxy', 1);
 }
-
-// Sentry request handler (must be first)
-app.use(sentryRequestHandler());
 
 // Correlation ID middleware (for request tracing)
 app.use(correlationIdMiddleware);
@@ -163,23 +144,10 @@ app.get('/', (_req, res) => {
     description: 'A comprehensive learning management system',
     endpoints: {
       health: `/api/${config.API_VERSION}/health`,
-      healthDetailed: `/api/${config.API_VERSION}/health/detailed`,
       docs: '/api-docs',
-      docsJson: '/api-docs.json',
     },
-    features: [
-      'JWT Authentication with token blacklist',
-      'Redis caching',
-      'Real-time messaging via Socket.io',
-      'Background job processing',
-      'Rate limiting',
-      'Request tracing via correlation IDs',
-    ],
   });
 });
-
-// Sentry error handler (must be before other error handlers)
-app.use(sentryErrorHandler());
 
 // 404 handler
 app.use(notFound);
@@ -192,12 +160,6 @@ new LiveSessionHandler(io);
 
 // Initialize services
 const initializeServices = async () => {
-  // Initialize Redis
-  initRedis();
-  
-  // Initialize email service worker
-  emailService.initialize();
-  
   logger.info('✅ All services initialized');
 };
 
@@ -242,12 +204,6 @@ const shutdown = async (signal: string) => {
         }
       });
     });
-    
-    // Close Redis connection
-    await closeRedis();
-    
-    // Close all job queues
-    await closeAllQueues();
     
     logger.info('✅ Graceful shutdown completed');
     process.exit(0);

@@ -221,10 +221,10 @@ API requests are rate limited. See response headers for current limits:
 const options: swaggerJsdoc.Options = {
   swaggerDefinition,
   // Path to the API docs in route files
-  apis: [
-    './src/routes/*.ts',
-    './src/controllers/*.ts',
-  ],
+  // Use dist in production, src in development
+  apis: process.env.NODE_ENV === 'production'
+    ? ['./dist/routes/*.js', './dist/controllers/*.js']
+    : ['./src/routes/*.ts', './src/controllers/*.ts'],
 };
 
 export const swaggerSpec = swaggerJsdoc(options);

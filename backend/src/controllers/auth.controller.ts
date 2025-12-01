@@ -4,7 +4,6 @@ import authService from '../services/auth.service';
 import asyncHandler from '../utils/asyncHandler';
 import { AuthenticationError } from '../utils/errors';
 import { tokenBlacklistService } from '../services/tokenBlacklist.service';
-import { clearUser as clearSentryUser } from '../config/sentry';
 
 /**
  * Authentication Controller
@@ -168,9 +167,6 @@ class AuthController {
       // Add token to blacklist
       await tokenBlacklistService.blacklist(token);
     }
-
-    // Clear Sentry user context
-    clearSentryUser();
 
     res.status(200).json({
       status: 'success',

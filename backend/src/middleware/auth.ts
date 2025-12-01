@@ -5,7 +5,6 @@ import config from '../config/env';
 import { AuthenticationError, AuthorizationError } from '../utils/errors';
 import prisma from '../config/database';
 import { tokenBlacklistService } from '../services/tokenBlacklist.service';
-import { setUser as setSentryUser } from '../config/sentry';
 
 /**
  * Interface for JWT payload
@@ -78,9 +77,6 @@ export const authenticate = async (
       firstName: user.firstName,
       lastName: user.lastName,
     };
-
-    // Set user context for Sentry
-    setSentryUser({ id: user.id, email: user.email, role: user.role });
 
     next();
   } catch (error) {

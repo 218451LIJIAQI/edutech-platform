@@ -28,3 +28,7 @@ services:
         sync: false
       - key: SOCKET_CORS_ORIGIN
         sync: false
+      - key: STRIPE_SECRET_KEY
+        sync: false
+      - key: STRIPE_WEBHOOK_SECRET
+        sync: false
