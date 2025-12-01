@@ -60,9 +60,6 @@ export {
 } from './validation';
 export type { PasswordStrength, CardType, ValidationResult, Validator } from './validation';
 
-// Lazy loading utilities
-export { lazyLoad, lazyLoadWithRetry, preloadComponent } from './lazyLoad';
-
 // Error handling
 export {
   getErrorMessage,

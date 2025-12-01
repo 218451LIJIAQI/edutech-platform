@@ -12,27 +12,21 @@ export { default as ErrorBoundary } from './ErrorBoundary';
 export { default as NetworkStatus } from './NetworkStatus';
 export { default as Progress, CircularProgress } from './Progress';
 export { default as Spinner } from './Spinner';
-export { default as LoadingOverlay } from './LoadingOverlay';
-export { default as ContentLoader } from './ContentLoader';
-export { default as PageTransition } from './PageTransition';
 
 // UI Components
 export { default as Avatar, AvatarGroup } from './Avatar';
 export { default as Badge } from './Badge';
 export { default as Tooltip } from './Tooltip';
 export { default as Pagination } from './Pagination';
-export { default as Breadcrumb } from './Breadcrumb';
 export { default as Dropdown, DropdownButton } from './Dropdown';
 export { default as Card, CardHeader, CardTitle, CardContent, CardFooter, CardImage } from './Card';
 export { Tabs, TabList, Tab, TabPanel } from './Tabs';
-export { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from './Accordion';
 export { default as Alert } from './Alert';
 export { default as StatsCard, StatsGrid } from './StatsCard';
 
 // Modal & Dialogs
 export { default as ConfirmModal } from './ConfirmModal';
 export { default as Modal } from './Modal';
-export { default as Drawer } from './Drawer';
 
 // Data Display
 export { default as DataTable } from './DataTable';
@@ -42,7 +36,6 @@ export { default as SearchInput } from './SearchInput';
 export { default as DateInput } from './DateInput';
 
 // Media
-export { default as LazyImage } from './LazyImage';
 export { default as VideoPlayer } from './VideoPlayer';
 export { default as UniversalVideoPlayer } from './UniversalVideoPlayer';
 
@@ -53,15 +46,11 @@ export { default as SearchFilter } from './SearchFilter';
 // Notifications
 export { default as NotificationCenter } from './NotificationCenter';
 
-// SEO
-export { default as MetaSEO } from './MetaSEO';
-
 // Navigation
 export { default as ScrollToTop } from './ScrollToTop';
 
-// Accessibility & Portals
+// Portals
 export { default as Portal } from './Portal';
-export { default as FocusTrap } from './FocusTrap';
 
 // Tags & Labels
 export { default as Tag, TagGroup } from './Tag';
@@ -69,12 +58,4 @@ export { default as Rating } from './Rating';
 export { default as Timeline } from './Timeline';
 
 // Accessibility
-export { default as VisuallyHidden } from './VisuallyHidden';
 export { default as SkipLink } from './SkipLink';
-
-// Advanced Components
-export { default as OptimizedImage, AvatarImage } from './OptimizedImage';
-export { default as InfiniteScroll } from './InfiniteScroll';
-export { default as Collapsible } from './Collapsible';
-export { default as CountdownTimer } from './CountdownTimer';
-export { default as CopyButton, CopyText } from './CopyButton';

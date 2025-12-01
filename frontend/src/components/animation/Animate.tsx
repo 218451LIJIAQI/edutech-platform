@@ -1,6 +1,5 @@
 import { ReactNode, CSSProperties } from 'react';
 import clsx from 'clsx';
-import { useInView } from '@/hooks';
 
 type AnimationType = 
   | 'fadeIn' | 'fadeInUp' | 'fadeInDown' 
@@ -16,10 +15,6 @@ interface AnimateProps {
   delay?: number;
   /** Duration of animation (ms) */
   duration?: number;
-  /** Whether to trigger animation when element enters viewport */
-  triggerOnView?: boolean;
-  /** Only animate once when entering viewport */
-  once?: boolean;
   /** Custom className */
   className?: string;
   /** Inline styles */
@@ -48,17 +43,10 @@ const animationClasses: Record<AnimationType, string> = {
  * Wrapper component that applies entrance animations
  * 
  * @example
- * // Simple fade in
  * <Animate animation="fadeInUp">
  *   <div>Content</div>
  * </Animate>
  * 
- * // Animate on scroll into view
- * <Animate animation="slideInRight" triggerOnView>
- *   <Card>...</Card>
- * </Animate>
- * 
- * // With delay
  * <Animate animation="popIn" delay={200}>
  *   <Button>Click me</Button>
  * </Animate>
@@ -68,29 +56,18 @@ const Animate = ({
   animation = 'fadeIn',
   delay = 0,
   duration,
-  triggerOnView = false,
-  once = true,
   className,
   style,
 }: AnimateProps) => {
-  const { ref, inView } = useInView({ triggerOnce: once, enabled: triggerOnView });
-
-  const shouldAnimate = triggerOnView ? inView : true;
-
   const animationStyle: CSSProperties = {
     ...style,
     animationDelay: delay ? `${delay}ms` : undefined,
     animationDuration: duration ? `${duration}ms` : undefined,
-    opacity: triggerOnView && !shouldAnimate ? 0 : undefined,
   };
 
   return (
     <div
-      ref={triggerOnView ? (ref as React.RefObject<HTMLDivElement>) : undefined}
-      className={clsx(
-        shouldAnimate && animationClasses[animation],
-        className
-      )}
+      className={clsx(animationClasses[animation], className)}
       style={animationStyle}
     >
       {children}
