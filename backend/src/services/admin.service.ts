@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { UserRole, VerificationStatus, ReportStatus, PaymentStatus } from '@prisma/client';
+import { UserRole, VerificationStatus, ReportStatus, PaymentStatus, RegistrationStatus } from '@prisma/client';
 import bcrypt from 'bcrypt';
 import prisma from '../config/database';
 import config from '../config/env';
@@ -42,7 +42,8 @@ class AdminService {
       publishedCourses,
       totalEnrollments,
       totalRevenue,
-      pendingVerifications,
+      pendingProfileVerifications,
+      pendingRegistrations,
       openReports,
     ] = await Promise.all([
       prisma.user.count({ where: { isActive: true } }),
@@ -56,8 +57,12 @@ class AdminService {
         _sum: { amount: true },
       }),
       prisma.teacherVerification.count({ where: { status: VerificationStatus.PENDING } }),
+      prisma.teacherProfile.count({ where: { registrationStatus: RegistrationStatus.PENDING } }),
       prisma.report.count({ where: { status: ReportStatus.OPEN } }),
     ]);
+
+    // Total pending verifications = profile verifications + registrations
+    const pendingVerifications = pendingProfileVerifications + pendingRegistrations;
 
     // Build revenue data for last 12 months (YYYY-MM) using paidAt
     const now = new Date();

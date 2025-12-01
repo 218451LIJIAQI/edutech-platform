@@ -16,21 +16,26 @@ class AuthController {
    * POST /api/auth/register
    */
   register = asyncHandler(async (req: Request, res: Response) => {
-    const { email, password, firstName, lastName } = req.body as {
+    const { email, password, firstName, lastName, role } = req.body as {
       email: string;
       password: string;
       firstName: string;
       lastName: string;
+      role?: UserRole;
     };
 
-    // For security: do NOT accept role from client during self-registration
-    // Always register as STUDENT by default. Role elevation must be handled by admins.
+    // Allow STUDENT or TEACHER role during registration
+    // TEACHER accounts will require admin verification (handled via TeacherProfile status)
+    // ADMIN role is NOT allowed during self-registration for security
+    const allowedRoles: UserRole[] = [UserRole.STUDENT, UserRole.TEACHER];
+    const selectedRole = role && allowedRoles.includes(role) ? role : UserRole.STUDENT;
+
     const result = await authService.register({
       email: email.trim().toLowerCase(),
       password,
       firstName: firstName.trim(),
       lastName: lastName.trim(),
-      role: UserRole.STUDENT,
+      role: selectedRole,
     });
 
     res.status(201).json({
