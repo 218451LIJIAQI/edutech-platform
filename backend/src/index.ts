@@ -5,12 +5,9 @@ import cors from 'cors';
 import helmet from 'helmet';
 import compression from 'compression';
 import morgan from 'morgan';
-import swaggerUi from 'swagger-ui-express';
-
 // Config and utilities
 import config from './config/env';
 import logger from './utils/logger';
-import { swaggerSpec } from './config/swagger';
 
 // Routes
 import routes from './routes';
@@ -18,7 +15,6 @@ import routes from './routes';
 // Middleware
 import { errorHandler, notFound } from './middleware/errorHandler';
 import { apiLimiter } from './middleware/rateLimiter';
-import { correlationIdMiddleware } from './middleware/correlationId';
 import { xssProtection, additionalSecurityHeaders } from './middleware/security';
 
 // Socket handlers
@@ -57,9 +53,6 @@ const io = new Server(httpServer, {
 if (config.NODE_ENV === 'production') {
   app.set('trust proxy', 1);
 }
-
-// Correlation ID middleware (for request tracing)
-app.use(correlationIdMiddleware);
 
 // Security middleware
 app.use(
@@ -101,13 +94,8 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 // XSS Protection (sanitize inputs)
 app.use(xssProtection);
 
-// Logging middleware with correlation ID
-if (config.NODE_ENV === 'development') {
-  app.use(morgan('dev'));
-} else {
-  // Custom format with correlation ID
-  app.use(morgan(':method :url :status :response-time ms - :res[content-length] [:req[x-correlation-id]]'));
-}
+// Logging middleware
+app.use(morgan(config.NODE_ENV === 'development' ? 'dev' : 'combined'));
 
 // Health check endpoints (before rate limiter to avoid blocking)
 app.get('/api/v1/health', (_req, res) => {
@@ -120,19 +108,6 @@ app.use('/api', apiLimiter);
 // Static files (uploads)
 app.use('/uploads', express.static(config.UPLOAD_DIR));
 
-// Swagger API Documentation
-app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec, {
-  explorer: true,
-  customSiteTitle: 'Edutech API Documentation',
-  customCss: '.swagger-ui .topbar { display: none }',
-}));
-
-// Swagger JSON endpoint
-app.get('/api-docs.json', (_req, res) => {
-  res.setHeader('Content-Type', 'application/json');
-  res.send(swaggerSpec);
-});
-
 // API routes
 app.use(`/api/${config.API_VERSION}`, routes);
 
@@ -144,7 +119,6 @@ app.get('/', (_req, res) => {
     description: 'A comprehensive learning management system',
     endpoints: {
       health: `/api/${config.API_VERSION}/health`,
-      docs: '/api-docs',
     },
   });
 });
@@ -171,8 +145,6 @@ if (config.NODE_ENV !== 'test') {
       httpServer.listen(PORT, () => {
         logger.info(`🚀 Server running on port ${PORT} in ${config.NODE_ENV} mode`);
         logger.info(`📚 API available at http://localhost:${PORT}/api/${config.API_VERSION}`);
-        logger.info(`📖 API Docs available at http://localhost:${PORT}/api-docs`);
-        logger.info(`🔌 Socket.io server running on port ${PORT}`);
       });
     })
     .catch((err) => {

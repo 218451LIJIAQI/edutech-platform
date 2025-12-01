@@ -48,30 +48,4 @@ export function useSmoothLoading(isLoading: boolean, delay = 0) {
   };
 }
 
-/**
- * 简单版本 - 仅控制淡入
- */
-export function useFadeIn(show: boolean, duration = 500) {
-  const [isVisible, setIsVisible] = useState(false);
-
-  useEffect(() => {
-    if (show) {
-      // 延迟一帧开始动画
-      requestAnimationFrame(() => {
-        setIsVisible(true);
-      });
-    } else {
-      setIsVisible(false);
-    }
-  }, [show]);
-
-  return {
-    style: {
-      opacity: isVisible ? 1 : 0,
-      transition: `opacity ${duration}ms ease-out`,
-    },
-    isVisible,
-  };
-}
-
 export default useSmoothLoading;

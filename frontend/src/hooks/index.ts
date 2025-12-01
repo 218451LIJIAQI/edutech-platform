@@ -5,7 +5,7 @@
 
 export { default as useDebounce } from './useDebounce';
 export { default as usePageTitle } from './usePageTitle';
-export { useSmoothLoading, useFadeIn } from './useSmoothLoading';
+export { useSmoothLoading } from './useSmoothLoading';
 export { default as useOnClickOutside } from './useOnClickOutside';
 export { default as useOnlineStatus } from './useOnlineStatus';
 

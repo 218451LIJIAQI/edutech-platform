@@ -15,7 +15,6 @@ import communityRoutes from './community.routes';
 import supportRoutes from './support.routes';
 import cartRoutes from './cart.routes';
 import ordersRoutes from './orders.routes';
-import healthRoutes from './health.routes';
 
 const router = Router();
 
@@ -23,9 +22,6 @@ const router = Router();
  * API Routes
  * All routes are prefixed with /api/v1
  */
-
-// Health check routes (enhanced)
-router.use('/health', healthRoutes);
 
 // Mount routes
 router.use('/auth', authRoutes);

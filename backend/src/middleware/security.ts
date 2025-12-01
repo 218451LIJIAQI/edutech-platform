@@ -14,25 +14,6 @@ const defaultSanitizeOptions: sanitizeHtml.IOptions = {
   disallowedTagsMode: 'discard',
 };
 
-// Less strict options for fields that might contain formatted text
-const richTextSanitizeOptions: sanitizeHtml.IOptions = {
-  allowedTags: ['b', 'i', 'em', 'strong', 'a', 'p', 'br', 'ul', 'ol', 'li', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6'],
-  allowedAttributes: {
-    a: ['href', 'target', 'rel'],
-  },
-  allowedSchemes: ['http', 'https', 'mailto'],
-  transformTags: {
-    a: (tagName, attribs) => ({
-      tagName,
-      attribs: {
-        ...attribs,
-        target: '_blank',
-        rel: 'noopener noreferrer',
-      },
-    }),
-  },
-};
-
 /**
  * Recursively sanitize an object's string values
  */
@@ -81,22 +62,6 @@ export const xssProtection = (
 };
 
 /**
- * Rich text sanitization middleware for specific routes
- * Use this for routes that accept HTML content (like course descriptions)
- */
-export const richTextSanitization = (
-  req: Request,
-  _res: Response,
-  next: NextFunction
-): void => {
-  if (req.body && typeof req.body === 'object') {
-    req.body = sanitizeObject(req.body, richTextSanitizeOptions);
-  }
-  
-  next();
-};
-
-/**
  * Additional security headers middleware
  * Supplements Helmet with additional headers
  */
@@ -125,50 +90,7 @@ export const additionalSecurityHeaders = (
   next();
 };
 
-/**
- * SQL Injection basic protection
- * Note: Prisma ORM already provides protection, but this adds an extra layer
- */
-export const sqlInjectionProtection = (
-  req: Request,
-  res: Response,
-  next: NextFunction
-): void => {
-  const suspiciousPatterns = [
-    /(\b(SELECT|INSERT|UPDATE|DELETE|DROP|UNION|CREATE|ALTER|EXEC|EXECUTE)\b)/gi,
-    /(--|\||;|\/\*|\*\/)/g,
-  ];
-  
-  const checkValue = (value: unknown): boolean => {
-    if (typeof value === 'string') {
-      return suspiciousPatterns.some((pattern) => pattern.test(value));
-    }
-    if (Array.isArray(value)) {
-      return value.some(checkValue);
-    }
-    if (value && typeof value === 'object') {
-      return Object.values(value).some(checkValue);
-    }
-    return false;
-  };
-  
-  // Only check in strict mode - might cause false positives
-  const strictMode = process.env.SQL_INJECTION_STRICT === 'true';
-  
-  if (strictMode && (checkValue(req.body) || checkValue(req.query) || checkValue(req.params))) {
-    res.status(400).json({
-      status: 'error',
-      message: 'Invalid input detected',
-    });
-    return;
-  }
-  
-  next();
-};
-
 export default {
   xssProtection,
-  richTextSanitization,
   additionalSecurityHeaders,
-  sqlInjectionProtection,
 };

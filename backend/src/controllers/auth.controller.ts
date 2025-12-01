@@ -3,7 +3,6 @@ import { UserRole } from '@prisma/client';
 import authService from '../services/auth.service';
 import asyncHandler from '../utils/asyncHandler';
 import { AuthenticationError } from '../utils/errors';
-import { tokenBlacklistService } from '../services/tokenBlacklist.service';
 
 /**
  * Authentication Controller
@@ -155,19 +154,10 @@ class AuthController {
   });
 
   /**
-   * Logout user with token blacklisting
+   * Logout user
    * POST /api/auth/logout
    */
-  logout = asyncHandler(async (req: Request, res: Response) => {
-    // Get token from header
-    const authHeader = req.headers.authorization;
-    if (authHeader?.startsWith('Bearer ')) {
-      const token = authHeader.slice(7);
-      
-      // Add token to blacklist
-      await tokenBlacklistService.blacklist(token);
-    }
-
+  logout = asyncHandler(async (_req: Request, res: Response) => {
     res.status(200).json({
       status: 'success',
       message: 'Logout successful',

@@ -36,9 +36,29 @@ class WalletService {
   async ensureWallet(userId: string) {
     const trimmed = cleanString(userId);
     if (!trimmed) throw new ValidationError('Invalid userId');
-    // Use upsert to avoid race conditions creating the same wallet concurrently
-    const wallet = await prisma.wallet.upsert({ where: { userId: trimmed }, update: {}, create: { userId: trimmed } });
-    return wallet;
+    
+    try {
+      // Use upsert to create or get existing wallet
+      const wallet = await prisma.wallet.upsert({
+        where: { userId: trimmed },
+        update: {},
+        create: { userId: trimmed },
+      });
+      return wallet;
+    } catch (error: unknown) {
+      // Handle race condition: if another request created the wallet simultaneously,
+      // just fetch the existing wallet
+      if (
+        error &&
+        typeof error === 'object' &&
+        'code' in error &&
+        (error as { code: string }).code === 'P2002'
+      ) {
+        const existing = await prisma.wallet.findUnique({ where: { userId: trimmed } });
+        if (existing) return existing;
+      }
+      throw error;
+    }
   }
 
   async getSummary(userId: string) {

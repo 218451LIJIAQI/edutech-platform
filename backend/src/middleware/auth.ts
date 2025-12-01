@@ -4,11 +4,7 @@ import { UserRole } from '@prisma/client';
 import config from '../config/env';
 import { AuthenticationError, AuthorizationError } from '../utils/errors';
 import prisma from '../config/database';
-import { tokenBlacklistService } from '../services/tokenBlacklist.service';
 
-/**
- * Interface for JWT payload
- */
 interface JWTPayload {
   id: string;
   email: string;
@@ -20,8 +16,7 @@ const getBearerToken = (req: Request): string | null => {
   if (typeof headerVal !== 'string') return null;
   const match = headerVal.match(/^\s*Bearer\s+(.+)$/i);
   if (!match) return null;
-  const token = match[1].trim();
-  return token || null;
+  return match[1].trim() || null;
 };
 
 /**
@@ -36,22 +31,8 @@ export const authenticate = async (
     const token = getBearerToken(req);
     if (!token) throw new AuthenticationError('No token provided');
 
-    // Check if token is blacklisted
-    const isBlacklisted = await tokenBlacklistService.isBlacklisted(token);
-    if (isBlacklisted) {
-      throw new AuthenticationError('Token has been revoked');
-    }
-
     // Verify token
-    const decoded = jwt.verify(token, config.JWT_SECRET) as JWTPayload & { iat?: number };
-
-    // Check if user's tokens were invalidated (force logout from all devices)
-    if (decoded.iat) {
-      const isInvalid = await tokenBlacklistService.isUserTokenInvalid(decoded.id, decoded.iat);
-      if (isInvalid) {
-        throw new AuthenticationError('Session expired. Please login again.');
-      }
-    }
+    const decoded = jwt.verify(token, config.JWT_SECRET) as JWTPayload;
 
     // Get user from database
     const user = await prisma.user.findUnique({
