@@ -263,6 +263,36 @@ export const teacherService = {
     }
     return response.data.data;
   },
+
+  /**
+   * Get pending certificate verifications (Admin only)
+   * These are document/certificate submissions from teachers
+   */
+  getPendingCertificateVerifications: async (): Promise<TeacherVerification[]> => {
+    const response = await api.get<ApiResponse<TeacherVerification[]>>('/teachers/verifications/pending');
+    if (!response.data.data) {
+      throw new Error('Failed to get pending certificate verifications');
+    }
+    return response.data.data;
+  },
+
+  /**
+   * Review certificate verification (Admin only)
+   */
+  reviewCertificateVerification: async (
+    verificationId: string,
+    status: 'APPROVED' | 'REJECTED',
+    reviewNotes?: string
+  ): Promise<TeacherVerification> => {
+    const response = await api.put<ApiResponse<TeacherVerification>>(
+      `/teachers/verifications/${verificationId}/review`,
+      { status, reviewNotes }
+    );
+    if (!response.data.data) {
+      throw new Error('Failed to review certificate verification');
+    }
+    return response.data.data;
+  },
 };
 
 export default teacherService;

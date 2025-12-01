@@ -446,6 +446,16 @@ export interface TeacherVerification {
   readonly reviewNotes?: string;
   readonly submittedAt: string;
   readonly reviewedAt?: string;
+  // Included when fetching pending verifications (admin)
+  readonly teacherProfile?: {
+    id: string;
+    user?: {
+      id: string;
+      firstName: string;
+      lastName: string;
+      email: string;
+    };
+  };
 }
 
 // Teacher Profile Submission

@@ -1,14 +1,14 @@
 import { useEffect, useState, useCallback } from 'react';
 import { CheckCircle, XCircle, Clock, Eye, AlertCircle, Loader, UserPlus, X } from 'lucide-react';
 import teacherService from '@/services/teacher.service';
-import { TeacherProfile, VerificationStatus, RegistrationStatus } from '@/types';
+import { TeacherProfile, VerificationStatus, RegistrationStatus, TeacherVerification } from '@/types';
 
 /**
  * Verification Teachers Management Page
  * Admin panel for reviewing teacher registrations and profile verifications
  */
 const VerificationTeachersManagement = () => {
-  const [activeTab, setActiveTab] = useState<'registrations' | 'profiles'>('registrations');
+  const [activeTab, setActiveTab] = useState<'registrations' | 'profiles' | 'certificates'>('registrations');
 
   // Registrations
   const [pendingRegistrations, setPendingRegistrations] = useState<TeacherProfile[]>([]);
@@ -22,6 +22,11 @@ const VerificationTeachersManagement = () => {
   const [profPage, setProfPage] = useState(1);
   const [profTotalPages, setProfTotalPages] = useState(1);
   const [isLoadingProfiles, setIsLoadingProfiles] = useState(true);
+
+  // Certificates (document verifications)
+  const [pendingCertificates, setPendingCertificates] = useState<TeacherVerification[]>([]);
+  const [isLoadingCertificates, setIsLoadingCertificates] = useState(true);
+  const [certSubmittingId, setCertSubmittingId] = useState<string | null>(null);
 
   // Shared UI state
   const [selectedTeacher, setSelectedTeacher] = useState<TeacherProfile | null>(null);
@@ -65,13 +70,55 @@ const VerificationTeachersManagement = () => {
     }
   }, [profPage]);
 
+  // Fetch pending certificates
+  const fetchPendingCertificates = useCallback(async () => {
+    setIsLoadingCertificates(true);
+    try {
+      const result = await teacherService.getPendingCertificateVerifications();
+      setPendingCertificates(result || []);
+    } catch (error) {
+      console.error('Failed to fetch pending certificates:', error);
+      setErrorMessage('Failed to load pending certificate verifications.');
+      setTimeout(() => setErrorMessage(''), 5000);
+    } finally {
+      setIsLoadingCertificates(false);
+    }
+  }, []);
+
   useEffect(() => {
     if (activeTab === 'registrations') {
       fetchPendingRegistrations();
-    } else {
+    } else if (activeTab === 'profiles') {
       fetchPendingProfiles();
+    } else if (activeTab === 'certificates') {
+      fetchPendingCertificates();
     }
-  }, [activeTab, regPage, profPage, fetchPendingRegistrations, fetchPendingProfiles]);
+  }, [activeTab, regPage, profPage, fetchPendingRegistrations, fetchPendingProfiles, fetchPendingCertificates]);
+
+  // Approve/Reject Certificate
+  const handleReviewCertificate = async (verificationId: string, status: 'APPROVED' | 'REJECTED') => {
+    setCertSubmittingId(verificationId);
+    try {
+      await teacherService.reviewCertificateVerification(verificationId, status);
+      setSuccessMessage(`Certificate ${status === 'APPROVED' ? 'approved' : 'rejected'} successfully.`);
+      setTimeout(() => setSuccessMessage(''), 5000);
+      fetchPendingCertificates();
+    } catch (error) {
+      let msg = 'Failed to review certificate.';
+      if (error instanceof Error) {
+        if ('response' in error) {
+          const responseError = error as { response?: { data?: { message?: string } } };
+          msg = responseError.response?.data?.message || msg;
+        } else {
+          msg = error.message || msg;
+        }
+      }
+      setErrorMessage(msg);
+      setTimeout(() => setErrorMessage(''), 5000);
+    } finally {
+      setCertSubmittingId(null);
+    }
+  };
 
   // Approve/Reject Registration
   const handleReviewRegistration = async (teacherProfileId: string, status: RegistrationStatus) => {
@@ -214,6 +261,12 @@ const VerificationTeachersManagement = () => {
             onClick={() => setActiveTab('profiles')}
           >
             Profile Verifications
+          </button>
+          <button
+            className={`px-4 py-2 rounded-lg font-semibold transition-all ${activeTab === 'certificates' ? 'bg-primary-600 text-white' : 'bg-white border border-gray-200 text-gray-700 hover:bg-gray-100'}`}
+            onClick={() => setActiveTab('certificates')}
+          >
+            Certificates ({pendingCertificates.length})
           </button>
         </div>
 
@@ -408,6 +461,93 @@ const VerificationTeachersManagement = () => {
                 <Clock className="w-16 h-16 text-yellow-600 mx-auto mb-4" />
                 <h3 className="text-2xl font-bold text-gray-900 mb-2">No pending profiles</h3>
                 <p className="text-gray-600">Teacher profile submissions awaiting review will appear here.</p>
+              </div>
+            )}
+          </>
+        )}
+
+        {/* Certificates Tab */}
+        {activeTab === 'certificates' && (
+          <>
+            {isLoadingCertificates ? (
+              <div className="flex items-center justify-center py-20">
+                <div className="flex flex-col items-center space-y-4">
+                  <div className="spinner" />
+                  <p className="text-gray-600 font-medium">Loading pending certificates...</p>
+                </div>
+              </div>
+            ) : pendingCertificates.length > 0 ? (
+              <div className="card shadow-xl border border-gray-100 rounded-2xl overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead>
+                      <tr className="bg-gray-100 border-b border-gray-200">
+                        <th className="px-6 py-4 text-left text-sm font-bold text-gray-900">Teacher</th>
+                        <th className="px-6 py-4 text-left text-sm font-bold text-gray-900">Document Type</th>
+                        <th className="px-6 py-4 text-left text-sm font-bold text-gray-900">Document</th>
+                        <th className="px-6 py-4 text-left text-sm font-bold text-gray-900">Submitted At</th>
+                        <th className="px-6 py-4 text-left text-sm font-bold text-gray-900">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {pendingCertificates.map((cert) => (
+                        <tr key={cert.id} className="border-b border-gray-200 hover:bg-gray-50 transition-colors">
+                          <td className="px-6 py-4">
+                            <div className="flex items-center space-x-3">
+                              <div className="w-10 h-10 bg-primary-600 text-white rounded-full flex items-center justify-center font-bold">
+                                {cert.teacherProfile?.user?.firstName?.[0]}{cert.teacherProfile?.user?.lastName?.[0]}
+                              </div>
+                              <div>
+                                <p className="font-semibold text-gray-900">{cert.teacherProfile?.user?.firstName} {cert.teacherProfile?.user?.lastName}</p>
+                                <p className="text-sm text-gray-500">{cert.teacherProfile?.user?.email}</p>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 text-sm text-gray-600">{cert.documentType}</td>
+                          <td className="px-6 py-4">
+                            <a 
+                              href={cert.documentUrl} 
+                              target="_blank" 
+                              rel="noopener noreferrer"
+                              className="text-primary-600 hover:underline flex items-center gap-1"
+                            >
+                              <Eye className="w-4 h-4" /> View Document
+                            </a>
+                          </td>
+                          <td className="px-6 py-4 text-sm text-gray-600">{formatDate(cert.submittedAt)}</td>
+                          <td className="px-6 py-4">
+                            <div className="flex items-center gap-2">
+                              <button
+                                disabled={certSubmittingId === cert.id}
+                                onClick={() => handleReviewCertificate(cert.id, 'APPROVED')}
+                                className="px-3 py-2 rounded-lg bg-green-600 text-white hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 transition-colors"
+                                type="button"
+                              >
+                                {certSubmittingId === cert.id ? <Loader className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
+                                Approve
+                              </button>
+                              <button
+                                disabled={certSubmittingId === cert.id}
+                                onClick={() => handleReviewCertificate(cert.id, 'REJECTED')}
+                                className="px-3 py-2 rounded-lg bg-red-600 text-white hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 transition-colors"
+                                type="button"
+                              >
+                                {certSubmittingId === cert.id ? <Loader className="w-4 h-4 animate-spin" /> : <XCircle className="w-4 h-4" />}
+                                Reject
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            ) : (
+              <div className="card text-center py-16 shadow-xl border border-gray-100 rounded-2xl">
+                <Clock className="w-16 h-16 text-yellow-600 mx-auto mb-4" />
+                <h3 className="text-2xl font-bold text-gray-900 mb-2">No pending certificates</h3>
+                <p className="text-gray-600">Certificate submissions awaiting review will appear here.</p>
               </div>
             )}
           </>
