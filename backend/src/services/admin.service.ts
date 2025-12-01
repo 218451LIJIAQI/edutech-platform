@@ -42,8 +42,9 @@ class AdminService {
       publishedCourses,
       totalEnrollments,
       totalRevenue,
-      pendingProfileVerifications,
+      pendingCertificates,
       pendingRegistrations,
+      pendingProfiles,
       openReports,
     ] = await Promise.all([
       prisma.user.count({ where: { isActive: true } }),
@@ -58,11 +59,12 @@ class AdminService {
       }),
       prisma.teacherVerification.count({ where: { status: VerificationStatus.PENDING } }),
       prisma.teacherProfile.count({ where: { registrationStatus: RegistrationStatus.PENDING } }),
+      prisma.teacherProfile.count({ where: { profileCompletionStatus: 'PENDING_REVIEW' } }),
       prisma.report.count({ where: { status: ReportStatus.OPEN } }),
     ]);
 
-    // Total pending verifications = profile verifications + registrations
-    const pendingVerifications = pendingProfileVerifications + pendingRegistrations;
+    // Total pending verifications = registrations + profile verifications + certificates
+    const pendingVerifications = pendingRegistrations + pendingProfiles + pendingCertificates;
 
     // Build revenue data for last 12 months (YYYY-MM) using paidAt
     const now = new Date();
