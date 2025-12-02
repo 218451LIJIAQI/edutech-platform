@@ -40,4 +40,3 @@ const TeacherPendingPage = () => {
 };
 
 export default TeacherPendingPage;
-

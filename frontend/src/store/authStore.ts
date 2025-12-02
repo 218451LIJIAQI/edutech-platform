@@ -3,6 +3,7 @@ import { persist } from 'zustand/middleware';
 import { User, LoginCredentials, RegisterData } from '@/types';
 import authService from '@/services/auth.service';
 import toast from 'react-hot-toast';
+import { extractErrorMessage } from '@/utils/errorHandler';
 
 /**
  * Authentication Store
@@ -82,9 +83,9 @@ export const useAuthStore = create<AuthState>()(
           toast.success('Login successful!');
         } catch (error) {
           set({ isLoading: false });
-          const errorMessage = error instanceof Error ? error.message : 'Login failed';
+          const errorMessage = extractErrorMessage(error);
           toast.error(errorMessage);
-          throw error;
+          throw new Error(errorMessage);
         }
       },
 
@@ -122,9 +123,9 @@ export const useAuthStore = create<AuthState>()(
           toast.success('Registration successful!');
         } catch (error) {
           set({ isLoading: false });
-          const errorMessage = error instanceof Error ? error.message : 'Registration failed';
+          const errorMessage = extractErrorMessage(error);
           toast.error(errorMessage);
-          throw error;
+          throw new Error(errorMessage);
         }
       },
 
@@ -158,7 +159,7 @@ export const useAuthStore = create<AuthState>()(
         try {
           const prev = get().user;
           if (!prev) {
-            throw new Error('No user in state to update');
+            throw new Error('Please login first');
           }
           
           const updatedUser = await authService.updateProfile(data);
@@ -167,9 +168,9 @@ export const useAuthStore = create<AuthState>()(
           set({ user: mergedUser });
           toast.success('Profile updated successfully');
         } catch (error) {
-          const errorMessage = error instanceof Error ? error.message : 'Failed to update profile';
+          const errorMessage = extractErrorMessage(error);
           toast.error(errorMessage);
-          throw error;
+          throw new Error(errorMessage);
         }
       },
 
@@ -207,4 +208,3 @@ export const useAuthStore = create<AuthState>()(
 );
 
 export default useAuthStore;
-

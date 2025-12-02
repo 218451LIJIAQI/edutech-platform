@@ -37,8 +37,8 @@ router.post(
     body('orderId').optional().isUUID().withMessage('Invalid orderId'),
     body('priority')
       .optional()
-      .isIn(['low', 'medium', 'high'])
-      .withMessage('priority must be low, medium, or high'),
+      .isIn(['LOW', 'MEDIUM', 'HIGH', 'URGENT'])
+      .withMessage('priority must be LOW, MEDIUM, HIGH, or URGENT'),
   ]),
   supportController.createTicket
 );

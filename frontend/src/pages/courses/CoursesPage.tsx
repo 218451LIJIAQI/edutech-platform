@@ -17,7 +17,7 @@ const CoursesPage = () => {
   const { courses, categories, isLoading, fetchCourses, fetchCategories } = useCourseStore();
   const [searchParams, setSearchParams] = useSearchParams();
   
-  // 丝滑加载过渡
+  // Smooth loading transition
   const { showSkeleton, contentClass } = useSmoothLoading(isLoading);
 
   // Local state bound to URL params
@@ -75,7 +75,7 @@ const CoursesPage = () => {
     fetchCourses(params);
   }, [debouncedSearchQuery, category, courseType, minRating, minPrice, maxPrice, sortBy, fetchCourses]);
 
-  // 骨架屏 - 超柔和呼吸效果
+  // Skeleton - ultra soft breathing effect
   const renderSkeletons = () => (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
       {Array.from({ length: 6 }).map((_, i) => (
@@ -268,7 +268,7 @@ const CoursesPage = () => {
           </div>
         )}
 
-        {/* Results - 丝滑过渡 */}
+        {/* Results - smooth transition */}
         {showSkeleton ? renderSkeletons() : courses.length === 0 ? (
           <div className={contentClass}>
             <EmptyState
@@ -357,4 +357,3 @@ const CoursesPage = () => {
 };
 
 export default CoursesPage;
-

@@ -153,4 +153,3 @@ export interface FeedResult {
     totalPages: number;
   };
 }
-

@@ -85,17 +85,8 @@ const LoginPage = () => {
           navigate('/', { replace: true });
       }
     } catch (err) {
-      let errorMessage = 'Login failed. Please try again.';
-      
-      if (err instanceof Error) {
-        if ('response' in err) {
-          const responseError = err as { response?: { data?: { message?: string } } };
-          errorMessage = responseError.response?.data?.message || errorMessage;
-        } else {
-          errorMessage = err.message || errorMessage;
-        }
-      }
-      
+      // Error is already formatted by authStore using extractErrorMessage
+      const errorMessage = err instanceof Error ? err.message : 'Login failed, please try again';
       setError(errorMessage);
     } finally {
       setIsLoading(false);
@@ -268,4 +259,3 @@ const LoginPage = () => {
 };
 
 export default LoginPage;
-

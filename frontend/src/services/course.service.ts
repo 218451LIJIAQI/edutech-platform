@@ -183,4 +183,3 @@ export const courseService = {
 };
 
 export default courseService;
-

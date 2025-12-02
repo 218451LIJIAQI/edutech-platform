@@ -98,7 +98,6 @@ const TeacherDashboard = () => {
           </div>
         </div>
 
-
         {/* Verification Alert */}
         {!stats.isVerified && (
           <div className="bg-gradient-to-r from-warning-50 via-amber-50 to-yellow-50 rounded-2xl p-6 mb-8 border border-warning-200/60 shadow-lg relative overflow-hidden">

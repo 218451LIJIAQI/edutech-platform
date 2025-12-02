@@ -30,4 +30,3 @@ const TeacherApprovedRoute = ({ children }: TeacherApprovedRouteProps) => {
 };
 
 export default TeacherApprovedRoute;
-

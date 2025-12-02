@@ -588,4 +588,3 @@ const TeacherProfileCompletionForm = ({
 };
 
 export default TeacherProfileCompletionForm;
-

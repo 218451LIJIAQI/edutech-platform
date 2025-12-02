@@ -91,8 +91,6 @@ const PostDetailPage = () => {
     }
   };
 
-
-
   if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-primary-50/10 to-indigo-50/20">
@@ -226,4 +224,3 @@ const PostDetailPage = () => {
 };
 
 export default PostDetailPage;
-

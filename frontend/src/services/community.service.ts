@@ -19,10 +19,7 @@ interface Store {
  */
 function translateTagName(name: string): string {
   const map: Record<string, string> = {
-    '软件测试': 'Software Testing',
-    '云计算入门': 'Cloud Computing Basics',
-    '我在学习APP开发': 'Learning App Development',
-    '今日进度': 'Today Progress',
+    // Map legacy Chinese tag names to English
   };
   return map[name] ?? name;
 }
@@ -384,4 +381,3 @@ export const communityService = {
 };
 
 export default communityService;
-

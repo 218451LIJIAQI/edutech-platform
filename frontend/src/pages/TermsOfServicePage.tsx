@@ -217,4 +217,3 @@ const TermsOfServicePage = () => {
 };
 
 export default TermsOfServicePage;
-

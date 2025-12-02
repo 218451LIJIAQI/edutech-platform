@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '@/store/authStore';
 import { UserRole } from '@/types';
 import { usePageTitle } from '@/hooks';
-import { BookOpen, Mail, Lock, ShieldCheck, Eye, EyeOff, AlertCircle, ArrowRight } from 'lucide-react';
+import { BookOpen, Mail, Lock, ShieldCheck, Eye, EyeOff, AlertCircle, ArrowRight, Info } from 'lucide-react';
 
 /**
  * Register Page Component
@@ -20,6 +20,7 @@ const RegisterPage = () => {
     role: UserRole.STUDENT,
   });
   const [error, setError] = useState('');
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
@@ -38,10 +39,34 @@ const RegisterPage = () => {
     e.preventDefault();
     setError('');
 
+    // Client-side validation
+    const errors: Record<string, string> = {};
+    
+    if (formData.firstName.length < 2) {
+      errors.firstName = 'First name must be at least 2 characters';
+    }
+    if (formData.lastName.length < 2) {
+      errors.lastName = 'Last name must be at least 2 characters';
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
+      errors.email = 'Please enter a valid email address';
+    }
+    if (formData.password.length < 8) {
+      errors.password = 'Password must be at least 8 characters';
+    } else if (!/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).+$/.test(formData.password)) {
+      errors.password = 'Password must contain uppercase, lowercase, and a number';
+    }
     if (formData.password !== formData.confirmPassword) {
-      setError('Passwords do not match');
+      errors.confirmPassword = 'Passwords do not match';
+    }
+    
+    if (Object.keys(errors).length > 0) {
+      setFieldErrors(errors);
+      setError('Please check and fix the errors below');
       return;
     }
+    
+    setFieldErrors({});
 
     setIsLoading(true);
 
@@ -72,18 +97,8 @@ const RegisterPage = () => {
           navigate('/');
       }
     } catch (err) {
-      let errorMessage = 'Registration failed. Please try again.';
-      
-      if (err instanceof Error) {
-        // Handle axios error response
-        if ('response' in err) {
-          const axiosError = err as { response?: { data?: { message?: string } } };
-          errorMessage = axiosError.response?.data?.message || err.message || errorMessage;
-        } else {
-          errorMessage = err.message || errorMessage;
-        }
-      }
-      
+      // Error is already formatted by authStore using extractErrorMessage
+      const errorMessage = err instanceof Error ? err.message : 'Registration failed, please try again';
       setError(errorMessage);
     } finally {
       setIsLoading(false);
@@ -127,41 +142,51 @@ const RegisterPage = () => {
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <label htmlFor="firstName" className="block text-sm font-semibold text-gray-700">
-                  First Name
+                  First Name <span className="text-danger-500">*</span>
                 </label>
                 <input
                   id="firstName"
                   name="firstName"
                   type="text"
                   required
-                  className="input"
-                  placeholder="John"
+                  className={`input ${fieldErrors.firstName ? 'input-error' : ''}`}
+                  placeholder="Enter first name"
                   value={formData.firstName}
                   onChange={handleChange}
                 />
+                {fieldErrors.firstName && (
+                  <p className="text-xs text-danger-600 flex items-center gap-1">
+                    <AlertCircle className="w-3 h-3" /> {fieldErrors.firstName}
+                  </p>
+                )}
               </div>
 
               <div className="space-y-2">
                 <label htmlFor="lastName" className="block text-sm font-semibold text-gray-700">
-                  Last Name
+                  Last Name <span className="text-danger-500">*</span>
                 </label>
                 <input
                   id="lastName"
                   name="lastName"
                   type="text"
                   required
-                  className="input"
-                  placeholder="Doe"
+                  className={`input ${fieldErrors.lastName ? 'input-error' : ''}`}
+                  placeholder="Enter last name"
                   value={formData.lastName}
                   onChange={handleChange}
                 />
+                {fieldErrors.lastName && (
+                  <p className="text-xs text-danger-600 flex items-center gap-1">
+                    <AlertCircle className="w-3 h-3" /> {fieldErrors.lastName}
+                  </p>
+                )}
               </div>
             </div>
 
             {/* Email */}
             <div className="space-y-2">
               <label htmlFor="email" className="block text-sm font-semibold text-gray-700">
-                Email Address
+                Email Address <span className="text-danger-500">*</span>
               </label>
               <div className="relative group">
                 <input
@@ -169,7 +194,7 @@ const RegisterPage = () => {
                   name="email"
                   type="email"
                   required
-                  className="input pl-12 group-hover:border-primary-300 transition-colors"
+                  className={`input pl-12 group-hover:border-primary-300 transition-colors ${fieldErrors.email ? 'input-error' : ''}`}
                   placeholder="you@example.com"
                   value={formData.email}
                   onChange={handleChange}
@@ -178,6 +203,11 @@ const RegisterPage = () => {
                   <Mail className="w-5 h-5" />
                 </div>
               </div>
+              {fieldErrors.email && (
+                <p className="text-xs text-danger-600 flex items-center gap-1">
+                  <AlertCircle className="w-3 h-3" /> {fieldErrors.email}
+                </p>
+              )}
             </div>
 
             {/* Role Selection */}
@@ -244,11 +274,19 @@ const RegisterPage = () => {
               </div>
             </div>
 
+            {/* Password Requirements Info */}
+            <div className="flex items-start gap-2 p-3 bg-primary-50/50 rounded-xl border border-primary-100">
+              <Info className="w-4 h-4 text-primary-600 mt-0.5 flex-shrink-0" />
+              <p className="text-xs text-primary-700">
+                Password must be at least 8 characters and contain uppercase, lowercase, and a number
+              </p>
+            </div>
+
             {/* Password Fields */}
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <label htmlFor="password" className="block text-sm font-semibold text-gray-700">
-                  Password
+                  Password <span className="text-danger-500">*</span>
                 </label>
                 <div className="relative group">
                   <input
@@ -256,7 +294,7 @@ const RegisterPage = () => {
                     name="password"
                     type={showPassword ? 'text' : 'password'}
                     required
-                    className="input pl-12 pr-12 group-hover:border-primary-300 transition-colors"
+                    className={`input pl-12 pr-12 group-hover:border-primary-300 transition-colors ${fieldErrors.password ? 'input-error' : ''}`}
                     placeholder="••••••••"
                     value={formData.password}
                     onChange={handleChange}
@@ -273,11 +311,16 @@ const RegisterPage = () => {
                     {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
                   </button>
                 </div>
+                {fieldErrors.password && (
+                  <p className="text-xs text-danger-600 flex items-center gap-1">
+                    <AlertCircle className="w-3 h-3" /> {fieldErrors.password}
+                  </p>
+                )}
               </div>
 
               <div className="space-y-2">
                 <label htmlFor="confirmPassword" className="block text-sm font-semibold text-gray-700">
-                  Confirm Password
+                  Confirm Password <span className="text-danger-500">*</span>
                 </label>
                 <div className="relative group">
                   <input
@@ -285,7 +328,7 @@ const RegisterPage = () => {
                     name="confirmPassword"
                     type={showConfirmPassword ? 'text' : 'password'}
                     required
-                    className="input pl-12 pr-12 group-hover:border-primary-300 transition-colors"
+                    className={`input pl-12 pr-12 group-hover:border-primary-300 transition-colors ${fieldErrors.confirmPassword ? 'input-error' : ''}`}
                     placeholder="••••••••"
                     value={formData.confirmPassword}
                     onChange={handleChange}
@@ -302,6 +345,11 @@ const RegisterPage = () => {
                     {showConfirmPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
                   </button>
                 </div>
+                {fieldErrors.confirmPassword && (
+                  <p className="text-xs text-danger-600 flex items-center gap-1">
+                    <AlertCircle className="w-3 h-3" /> {fieldErrors.confirmPassword}
+                  </p>
+                )}
               </div>
             </div>
 
@@ -358,4 +406,3 @@ const RegisterPage = () => {
 };
 
 export default RegisterPage;
-

@@ -526,4 +526,3 @@ const CourseLearningPage = () => {
 };
 
 export default CourseLearningPage;
-

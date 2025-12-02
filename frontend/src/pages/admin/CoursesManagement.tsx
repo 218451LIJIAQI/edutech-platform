@@ -1,4 +1,4 @@
-﻿import { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Course } from '@/types';
 import adminService from '@/services/admin.service';
 import SearchFilter from '@/components/common/SearchFilter';
@@ -122,7 +122,7 @@ const CoursesManagement = () => {
               <div className="flex flex-col items-center space-y-4">
                 <div className="relative">
                   <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-primary-500 to-indigo-600 animate-pulse flex items-center justify-center">
-                    <span className="text-2xl">📚</span>
+                    <span className="text-2xl">??</span>
                   </div>
                   <div className="absolute inset-0 rounded-2xl bg-primary-500/20 animate-ping"></div>
                 </div>
@@ -221,4 +221,3 @@ const CoursesManagement = () => {
 };
 
 export default CoursesManagement;
-

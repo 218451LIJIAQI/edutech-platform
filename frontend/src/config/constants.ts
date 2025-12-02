@@ -71,4 +71,3 @@ export const ROUTES = {
     VERIFICATION: '/admin/verification-teachers',
   },
 } as const;
-

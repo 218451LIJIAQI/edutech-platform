@@ -298,4 +298,3 @@ const HelpCenterPage = () => {
 };
 
 export default HelpCenterPage;
-

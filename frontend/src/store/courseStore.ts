@@ -150,4 +150,3 @@ export const useCourseStore = create<CourseState>((set) => ({
 }));
 
 export default useCourseStore;
-

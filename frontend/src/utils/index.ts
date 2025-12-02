@@ -13,3 +13,15 @@ export {
   capitalize,
   formatTime,
 } from './helpers';
+
+// Error handling
+export {
+  extractErrorMessage,
+  extractFieldErrors,
+  translateErrorMessage,
+  isValidationError,
+  isAuthError,
+  isForbiddenError,
+  ApiError,
+  type FieldErrors,
+} from './errorHandler';

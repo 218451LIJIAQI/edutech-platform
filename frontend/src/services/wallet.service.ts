@@ -203,4 +203,3 @@ const walletService = {
 };
 
 export default walletService;
-

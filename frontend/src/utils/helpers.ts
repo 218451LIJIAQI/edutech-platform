@@ -93,5 +93,3 @@ export const formatTime = (date: string | Date): string => {
     hour12: true,
   }).format(new Date(date));
 };
-
-

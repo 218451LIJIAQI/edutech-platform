@@ -1,4 +1,4 @@
-﻿import { useEffect, useState, useCallback, useMemo } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import { AlertCircle, CheckCircle, Clock, XCircle, ChevronRight } from 'lucide-react';
 import { Report, ReportStatus, ReportType } from '@/types';
 import reportService from '@/services/report.service';
@@ -90,7 +90,7 @@ const StudentReportPage = () => {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-primary-50/10 to-indigo-50/20">
         <div className="flex flex-col items-center space-y-4">
-          <div className="relative"><div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-primary-500 to-indigo-600 animate-pulse flex items-center justify-center"><span className="text-2xl">📊</span></div><div className="absolute inset-0 rounded-2xl bg-primary-500/20 animate-ping"></div></div><p className="text-gray-600 font-medium">Loading your reports...</p>
+          <div className="relative"><div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-primary-500 to-indigo-600 animate-pulse flex items-center justify-center"><span className="text-2xl">??</span></div><div className="absolute inset-0 rounded-2xl bg-primary-500/20 animate-ping"></div></div><p className="text-gray-600 font-medium">Loading your reports...</p>
         </div>
       </div>
     );
@@ -119,7 +119,7 @@ const StudentReportPage = () => {
         {error && (
           <div className="card p-6 mb-8 bg-red-50 border border-red-200 rounded-2xl">
             <div className="flex items-center gap-3">
-              <span className="text-2xl">⚠️</span>
+              <span className="text-2xl">??</span>
               <div>
                 <h3 className="font-bold text-red-900 mb-1">Error loading reports</h3>
                 <p className="text-red-700 text-sm">{error}</p>
@@ -246,7 +246,7 @@ const StudentReportPage = () => {
                   onClick={() => setSelectedReport(null)}
                   className="text-gray-500 hover:text-gray-700 transition-colors"
                 >
-                  ✕
+                  ?
                 </button>
               </div>
 
@@ -361,4 +361,3 @@ const StudentReportPage = () => {
 };
 
 export default StudentReportPage;
-

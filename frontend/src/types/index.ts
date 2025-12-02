@@ -572,4 +572,3 @@ export interface PayoutRequest {
   readonly requestedAt: string;
   readonly processedAt?: string;
 }
-

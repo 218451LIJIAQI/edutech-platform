@@ -253,4 +253,3 @@ const UserDetailsModal = ({ isOpen, user, onClose }: UserDetailsModalProps) => {
 };
 
 export default UserDetailsModal;
-

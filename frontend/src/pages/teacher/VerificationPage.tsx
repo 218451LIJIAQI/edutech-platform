@@ -1,4 +1,4 @@
-﻿import { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Shield, Upload, CheckCircle, Clock, XCircle, ArrowLeft, FileText } from 'lucide-react';
 import { TeacherVerification, VerificationStatus } from '@/types';
@@ -111,7 +111,7 @@ const VerificationPage = () => {
         <div className="flex flex-col items-center space-y-4">
           <div className="relative">
             <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-primary-500 to-indigo-600 animate-pulse flex items-center justify-center">
-              <span className="text-2xl">✅</span>
+              <span className="text-2xl">?</span>
             </div>
             <div className="absolute inset-0 rounded-2xl bg-primary-500/20 animate-ping"></div>
           </div>
@@ -228,19 +228,19 @@ const VerificationPage = () => {
                   <p className="font-bold text-blue-900 mb-3">Document Guidelines:</p>
                   <ul className="text-sm text-blue-800 space-y-2">
                     <li className="flex items-start">
-                      <span className="mr-2">✓</span>
+                      <span className="mr-2">?</span>
                       <span>Ensure document is clear and legible</span>
                     </li>
                     <li className="flex items-start">
-                      <span className="mr-2">✓</span>
+                      <span className="mr-2">?</span>
                       <span>All information must be visible</span>
                     </li>
                     <li className="flex items-start">
-                      <span className="mr-2">✓</span>
+                      <span className="mr-2">?</span>
                       <span>Document must be valid and not expired</span>
                     </li>
                     <li className="flex items-start">
-                      <span className="mr-2">✓</span>
+                      <span className="mr-2">?</span>
                       <span>Photos should be well-lit and in focus</span>
                     </li>
                   </ul>
@@ -369,4 +369,3 @@ const VerificationPage = () => {
 };
 
 export default VerificationPage;
-

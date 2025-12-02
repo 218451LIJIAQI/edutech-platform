@@ -18,7 +18,7 @@ const StudentDashboard = () => {
   const [isLoading, setIsLoading] = useState(true);
   const { user } = useAuthStore();
   
-  // 丝滑加载过渡
+  // Smooth loading transition
   const { showSkeleton, contentClass } = useSmoothLoading(isLoading);
 
   const stats = useMemo(() => {
@@ -61,7 +61,7 @@ const StudentDashboard = () => {
     fetchDashboardData();
   }, [fetchDashboardData]);
 
-  // 骨架屏 - 柔和呼吸效果
+  // Skeleton - soft breathing effect
   const renderSkeleton = () => (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       {/* Loading Header */}
@@ -102,7 +102,7 @@ const StudentDashboard = () => {
       <div className="absolute top-20 right-[10%] w-72 h-72 bg-primary-400/10 rounded-full blur-3xl pointer-events-none"></div>
       <div className="absolute bottom-40 left-[5%] w-80 h-80 bg-indigo-400/10 rounded-full blur-3xl pointer-events-none"></div>
       
-      {/* 骨架屏或内容 - 丝滑过渡 */}
+      {/* Skeleton or content - smooth transition */}
       {showSkeleton ? renderSkeleton() : (
       <div className={`max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 relative ${contentClass}`}>
         {/* Header */}

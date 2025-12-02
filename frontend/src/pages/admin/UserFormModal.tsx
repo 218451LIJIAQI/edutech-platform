@@ -419,4 +419,3 @@ const UserFormModal = ({ isOpen, user, onClose, onSuccess }: UserFormModalProps)
 };
 
 export default UserFormModal;
-

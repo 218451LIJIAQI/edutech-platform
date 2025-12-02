@@ -186,4 +186,3 @@ const BatchOperationsModal = ({
 };
 
 export default BatchOperationsModal;
-

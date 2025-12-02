@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Star, ArrowLeft, Send } from 'lucide-react';
 import { Course, Enrollment } from '@/types';
@@ -190,6 +190,7 @@ const ReviewCoursePage = () => {
                       onMouseEnter={() => setHoverRating(star)}
                       onMouseLeave={() => setHoverRating(0)}
                       className="focus:outline-none transition-transform hover:scale-125 active:scale-95"
+                      aria-label={`Rate ${star} star${star > 1 ? 's' : ''}`}
                     >
                       <Star
                         className={`w-12 h-12 ${
@@ -206,9 +207,9 @@ const ReviewCoursePage = () => {
                 <div className="text-center">
                   {rating > 0 && (
                     <p className="text-2xl font-bold text-primary-600">
-                      {rating === 5 && '⭐ Excellent!'}
-                      {rating === 4 && '👍 Very Good'}
-                      {rating === 3 && '😊 Good'}
+                      {rating === 5 && '🌟 Excellent!'}
+                      {rating === 4 && '😊 Very Good'}
+                      {rating === 3 && '👍 Good'}
                       {rating === 2 && '😐 Fair'}
                       {rating === 1 && '😞 Poor'}
                     </p>
@@ -309,4 +310,3 @@ const ReviewCoursePage = () => {
 };
 
 export default ReviewCoursePage;
-

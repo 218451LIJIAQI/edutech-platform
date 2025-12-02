@@ -180,4 +180,3 @@ const CommunityUserProfilePage = () => {
 };
 
 export default CommunityUserProfilePage;
-

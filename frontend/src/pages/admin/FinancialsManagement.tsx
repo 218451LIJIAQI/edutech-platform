@@ -168,8 +168,6 @@ const FinancialsManagement = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab, settPage, settLimit, settStart, settEnd]);
 
-
-
   const formatMoney = (v: number | undefined) =>
     (v ?? 0).toLocaleString(undefined, { style: 'currency', currency: 'USD' });
 

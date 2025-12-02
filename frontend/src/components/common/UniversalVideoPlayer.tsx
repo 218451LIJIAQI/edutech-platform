@@ -162,4 +162,3 @@ const UniversalVideoPlayer = ({
 };
 
 export default UniversalVideoPlayer;
-

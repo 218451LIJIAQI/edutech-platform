@@ -351,4 +351,3 @@ const LessonModal: React.FC<LessonModalProps> = ({
 };
 
 export default LessonModal;
-

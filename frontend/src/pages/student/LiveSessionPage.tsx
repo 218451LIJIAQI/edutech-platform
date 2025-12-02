@@ -171,4 +171,3 @@ const LiveSessionPage = () => {
 };
 
 export default LiveSessionPage;
-

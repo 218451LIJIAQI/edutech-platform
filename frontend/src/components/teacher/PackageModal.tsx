@@ -374,4 +374,3 @@ const PackageModal: React.FC<PackageModalProps> = ({
 };
 
 export default PackageModal;
-

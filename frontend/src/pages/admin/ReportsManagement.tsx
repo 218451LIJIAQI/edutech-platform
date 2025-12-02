@@ -1,4 +1,4 @@
-﻿import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { Report } from '@/types';
 import adminService from '@/services/admin.service';
 import { AlertCircle } from 'lucide-react';
@@ -68,7 +68,7 @@ const ReportsManagement = () => {
           {isLoading ? (
             <div className="flex justify-center py-16">
               <div className="flex flex-col items-center space-y-4">
-                <div className="relative"><div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-primary-500 to-indigo-600 animate-pulse flex items-center justify-center"><span className="text-2xl">📋</span></div><div className="absolute inset-0 rounded-2xl bg-primary-500/20 animate-ping"></div></div><p className="text-gray-600 font-medium">Loading reports...</p>
+                <div className="relative"><div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-primary-500 to-indigo-600 animate-pulse flex items-center justify-center"><span className="text-2xl">??</span></div><div className="absolute inset-0 rounded-2xl bg-primary-500/20 animate-ping"></div></div><p className="text-gray-600 font-medium">Loading reports...</p>
               </div>
             </div>
           ) : reports.length === 0 ? (
@@ -131,4 +131,3 @@ const ReportsManagement = () => {
 };
 
 export default ReportsManagement;
-

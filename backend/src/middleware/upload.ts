@@ -1,11 +1,8 @@
 import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
-import multer, { FileFilterCallback } from 'multer';
-import { Request } from 'express';
+import multer from 'multer';
 import config from '../config/env';
-import { ValidationError } from '../utils/errors';
-import logger from '../utils/logger';
 
 // Ensure upload directory exists (absolute path resolved in env config)
 const uploadDir = config.UPLOAD_DIR;
@@ -55,78 +52,6 @@ const storage = multer.diskStorage({
   },
 });
 
-// File filter helper to check both extension and mimetype
-const createFileFilter = (allowedExts: string[], allowedMimes: string[]) => {
-  return (_req: Request, file: Express.Multer.File, cb: FileFilterCallback) => {
-    const ext = path.extname(file.originalname).toLowerCase();
-    const mime = (file.mimetype || '').toLowerCase();
-    const ok = allowedExts.includes(ext) && allowedMimes.includes(mime);
-    if (ok) {
-      return cb(null, true);
-    }
-    return cb(
-      new ValidationError(
-        `Invalid file type. Allowed extensions: ${allowedExts.join(', ')}; Allowed mimetypes: ${allowedMimes.join(', ')}`
-      )
-    );
-  };
-};
-
-// Predefined upload configurations
-const imageExts = ['.jpg', '.jpeg', '.png', '.gif', '.webp'];
-const imageMimes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
-
-const videoExts = ['.mp4', '.mov', '.avi', '.mkv', '.webm'];
-const videoMimes = ['video/mp4', 'video/quicktime', 'video/x-msvideo', 'video/x-matroska', 'video/webm'];
-
-const docExts = ['.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx', '.txt'];
-const docMimes = [
-  'application/pdf',
-  'application/msword',
-  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-  'application/vnd.ms-excel',
-  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-  'application/vnd.ms-powerpoint',
-  'application/vnd.openxmlformats-officedocument.presentationml.presentation',
-  'text/plain',
-];
-
-/**
- * Upload configuration for images (avatars, thumbnails)
- */
-export const uploadImage = multer({
-  storage,
-  limits: {
-    fileSize: 5 * 1024 * 1024, // 5MB
-    files: 1,
-  },
-  fileFilter: createFileFilter(imageExts, imageMimes),
-});
-
-/**
- * Upload configuration for videos
- */
-export const uploadVideo = multer({
-  storage,
-  limits: {
-    fileSize: config.MAX_FILE_SIZE, // up to configured size (default 50MB)
-    files: 1,
-  },
-  fileFilter: createFileFilter(videoExts, videoMimes),
-});
-
-/**
- * Upload configuration for documents (PDFs, Word docs, etc.)
- */
-export const uploadDocument = multer({
-  storage,
-  limits: {
-    fileSize: 10 * 1024 * 1024, // 10MB
-    files: 1,
-  },
-  fileFilter: createFileFilter(docExts, docMimes),
-});
-
 /**
  * Generic upload configuration for any file type
  */
@@ -137,25 +62,4 @@ export const uploadAny = multer({
   },
 });
 
-/**
- * Helper function to delete uploaded file
- */
-export const deleteFile = (filePath: string): void => {
-  try {
-    if (filePath && fs.existsSync(filePath)) {
-      fs.unlinkSync(filePath);
-      logger.debug('File deleted successfully', { filePath });
-    }
-  } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    logger.error('Failed to delete file', { filePath, error: errorMessage });
-  }
-};
-
-export default {
-  uploadImage,
-  uploadVideo,
-  uploadDocument,
-  uploadAny,
-  deleteFile,
-};
+export default { uploadAny };

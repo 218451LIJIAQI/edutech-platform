@@ -11,6 +11,7 @@ import toast from 'react-hot-toast';
 import supportService from '@/services/support.service';
 import { SupportTicket, SupportTicketMessage, SupportTicketPriority, SupportTicketStatus } from '@/types';
 import { useAuthStore } from '@/store/authStore';
+import { extractErrorMessage } from '@/utils/errorHandler';
 
 /**
  * Customer Support Chat Component
@@ -141,7 +142,8 @@ const CustomerSupportChat = ({ open, onClose }: CustomerSupportChatProps) => {
       await selectTicket(ticket.id);
     } catch (e) {
       console.error(e);
-      toast.error('Failed to create chat');
+      const errorMessage = extractErrorMessage(e);
+      toast.error(errorMessage || 'Failed to create chat');
     } finally {
       setIsCreating(false);
     }
@@ -156,7 +158,8 @@ const CustomerSupportChat = ({ open, onClose }: CustomerSupportChatProps) => {
       await loadTickets();
     } catch (e) {
       console.error(e);
-      toast.error('Failed to close conversation');
+      const errorMessage = extractErrorMessage(e);
+      toast.error(errorMessage || 'Failed to close conversation');
     }
   };
 

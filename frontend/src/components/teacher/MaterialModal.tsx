@@ -288,4 +288,3 @@ const MaterialModal: React.FC<MaterialModalProps> = ({
 };
 
 export default MaterialModal;
-

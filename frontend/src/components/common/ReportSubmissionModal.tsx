@@ -227,4 +227,3 @@ const ReportSubmissionModal = ({
 };
 
 export default ReportSubmissionModal;
-

@@ -183,4 +183,3 @@ const CustomerSupportWidget = ({ onOpenChat }: CustomerSupportWidgetProps) => {
 };
 
 export default CustomerSupportWidget;
-

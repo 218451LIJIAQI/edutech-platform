@@ -215,4 +215,3 @@ const CommunityHomePage = () => {
 };
 
 export default CommunityHomePage;
-
