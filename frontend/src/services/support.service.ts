@@ -1,6 +1,17 @@
 import api from './api';
 import { ApiResponse, SupportTicket, SupportTicketMessage } from '@/types';
 
+/**
+ * Support Statistics Interface
+ */
+export interface SupportStats {
+  totalConversations: number;
+  activeConversations: number;
+  resolvedConversations: number;
+  averageResponseTime: number;
+  satisfactionRating: number;
+}
+
 const supportService = {
   /**
    * Create a new support ticket
@@ -90,6 +101,20 @@ const supportService = {
       throw new Error('Failed to get support tickets for order');
     }
     return res.data.data;
+  },
+
+  /**
+   * Get support statistics for the current user
+   */
+  getStats: async (): Promise<SupportStats> => {
+    const res = await api.get<ApiResponse<SupportStats>>('/support/stats');
+    return res.data.data || {
+      totalConversations: 0,
+      activeConversations: 0,
+      resolvedConversations: 0,
+      averageResponseTime: 0,
+      satisfactionRating: 0,
+    };
   },
 };
 

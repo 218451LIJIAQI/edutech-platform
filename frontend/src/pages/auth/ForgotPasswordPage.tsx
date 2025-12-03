@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { BookOpen, Mail, ArrowLeft, CheckCircle, Send } from 'lucide-react';
+import { BookOpen, Mail, ArrowLeft, Send } from 'lucide-react';
 import { usePageTitle } from '@/hooks';
 
 /**
@@ -12,7 +12,6 @@ const ForgotPasswordPage = () => {
   
   const [email, setEmail] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [isSubmitted, setIsSubmitted] = useState(false);
   const [error, setError] = useState('');
 
   const validateEmail = (email: string): boolean => {
@@ -36,66 +35,12 @@ const ForgotPasswordPage = () => {
 
     setIsLoading(true);
 
-    try {
-      // TODO: Implement actual password reset API call
-      // await authService.forgotPassword(email);
-      
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 1500));
-      
-      setIsSubmitted(true);
-    } catch (_err) {
-      setError('Failed to send reset email. Please try again.');
-    } finally {
-      setIsLoading(false);
-    }
+    // Password reset functionality is not yet implemented
+    // Show a helpful message to the user
+    await new Promise(resolve => setTimeout(resolve, 500));
+    setError('Password reset is currently not available. Please contact support for assistance.');
+    setIsLoading(false);
   };
-
-  // Success state
-  if (isSubmitted) {
-    return (
-      <div className="min-h-[calc(100vh-4rem)] flex items-center justify-center py-12 px-4 relative overflow-hidden">
-        {/* Background */}
-        <div className="absolute inset-0 bg-gradient-to-br from-slate-50 via-primary-50/20 to-indigo-50/40"></div>
-        <div className="absolute inset-0 bg-[linear-gradient(rgba(0,0,0,0.02)_1px,transparent_1px),linear-gradient(90deg,rgba(0,0,0,0.02)_1px,transparent_1px)] bg-[size:32px_32px]"></div>
-        
-        <div className="max-w-md w-full relative z-10 animate-fadeInUp">
-          <div className="bg-white/90 backdrop-blur-xl rounded-3xl shadow-2xl shadow-gray-900/5 p-8 border border-gray-100/80 text-center">
-            <div className="w-20 h-20 bg-gradient-to-br from-success-100 to-success-50 rounded-2xl flex items-center justify-center mx-auto mb-6">
-              <CheckCircle className="w-10 h-10 text-success-500" />
-            </div>
-            
-            <h2 className="text-2xl font-bold text-gray-900 mb-3">Check Your Email</h2>
-            <p className="text-gray-500 mb-6">
-              We've sent a password reset link to <span className="font-semibold text-gray-700">{email}</span>
-            </p>
-            <p className="text-sm text-gray-400 mb-8">
-              Didn't receive the email? Check your spam folder or try again with a different email address.
-            </p>
-            
-            <div className="space-y-3">
-              <button
-                onClick={() => {
-                  setIsSubmitted(false);
-                  setEmail('');
-                }}
-                className="w-full px-4 py-3 text-primary-600 font-semibold bg-primary-50 hover:bg-primary-100 rounded-xl transition-colors"
-              >
-                Try Different Email
-              </button>
-              <Link
-                to="/login"
-                className="w-full px-4 py-3 text-gray-600 font-medium hover:text-gray-900 rounded-xl transition-colors flex items-center justify-center gap-2"
-              >
-                <ArrowLeft className="w-4 h-4" />
-                Back to Login
-              </Link>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="min-h-[calc(100vh-4rem)] flex items-center justify-center py-12 px-4 relative overflow-hidden">

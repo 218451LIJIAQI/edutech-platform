@@ -8,7 +8,7 @@ import {
   Loader,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
-import customerSupportService, { SupportStats } from '@/services/customer-support.service';
+import supportService, { SupportStats } from '@/services/support.service';
 
 /**
  * Customer Support Widget Component
@@ -29,7 +29,7 @@ const CustomerSupportWidget = ({ onOpenChat }: CustomerSupportWidgetProps) => {
   const loadStats = useCallback(async () => {
     try {
       setIsLoading(true);
-      const data = await customerSupportService.getStats();
+      const data = await supportService.getStats();
       setStats(data);
     } catch (error) {
       console.error('Failed to load support stats:', error);
