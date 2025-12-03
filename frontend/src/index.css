@@ -1356,16 +1356,10 @@
   }
 
   /* ==================== HOVER EFFECTS ==================== */
-  .hover-lift {
-    @apply transition-transform duration-300 hover:-translate-y-1;
-  }
+  /* Note: .hover-lift and .hover-glow are defined later with enhanced styles */
 
   .hover-scale {
     @apply transition-transform duration-300 hover:scale-105;
-  }
-
-  .hover-glow {
-    @apply transition-shadow duration-300 hover:shadow-glow;
   }
 
   .hover-bright {
@@ -1442,10 +1436,7 @@
   @apply focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2;
 }
 
-/* ==================== SELECTION ==================== */
-::selection {
-  @apply bg-primary-200 text-primary-900;
-}
+/* Note: ::selection is defined in @layer base */
 
 /* ==================== PRINT STYLES ==================== */
 @media print {
@@ -1730,20 +1721,9 @@
   animation: progress-indeterminate 1.5s ease-in-out infinite;
 }
 
-/* Blur In Animation */
-@keyframes blur-in {
-  from {
-    opacity: 0;
-    filter: blur(10px);
-  }
-  to {
-    opacity: 1;
-    filter: blur(0);
-  }
-}
-
+/* Note: blur-in animation uses blurIn keyframe defined earlier */
 .blur-in {
-  animation: blur-in 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation: blurIn 0.4s ease-out forwards;
 }
 
 /* Card Loading Placeholder */
@@ -1814,16 +1794,7 @@
   animation: list-item-enter 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
-/* Loading skeleton pulse enhanced */
-@keyframes pulse-soft {
-  0%, 100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.5;
-  }
-}
-
+/* Loading skeleton pulse enhanced - uses pulse-soft keyframe defined earlier */
 .pulse-soft {
-  animation: pulse-soft 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  animation: pulse-slow 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
 }
