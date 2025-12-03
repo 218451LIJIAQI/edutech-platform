@@ -76,28 +76,22 @@ const CourseLearningPage = () => {
     ]);
   };
 
+  // Toggle hand raise (prototype)
   const toggleHand = () => {
-    setHandRaised((prev) => {
-      const nowRaised = !prev;
-      setChatMessages((messages) => [
-        ...messages,
-        { id: generateId(), user: "System", type: "system" as const, text: nowRaised ? "You raised your hand" : "You lowered your hand", timestamp: Date.now() },
-      ]);
-      toast.success(nowRaised ? "Hand raised" : "Hand lowered");
-      return nowRaised;
-    });
+    const nowRaised = !handRaised;
+    setHandRaised(nowRaised);
+    setChatMessages((messages) => [
+      ...messages,
+      { id: generateId(), user: "System", type: "system" as const, text: nowRaised ? "You raised your hand" : "You lowered your hand", timestamp: Date.now() },
+    ]);
+    toast.success(nowRaised ? "Hand raised" : "Hand lowered");
   };
 
+  // Toggle microphone on/off (prototype - no real permission logic)
   const toggleMic = () => {
-    setMicEnabled((prev) => {
-      const now = !prev;
-      toast(
-        now
-          ? "Mic requested (teacher approval required in real session)"
-          : "Mic off"
-      );
-      return now;
-    });
+    const nowEnabled = !micEnabled;
+    setMicEnabled(nowEnabled);
+    toast.success(nowEnabled ? "Microphone enabled successfully" : "Microphone disabled successfully");
   };
 
   useEffect(() => {

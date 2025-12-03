@@ -1,4 +1,4 @@
-﻿import { useState, useEffect } from 'react';
+﻿import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { CreditCard, Lock, CheckCircle, AlertCircle } from 'lucide-react';
 import { loadStripe } from '@stripe/stripe-js';
@@ -356,6 +356,7 @@ const CheckoutPage = () => {
   );
   const [isLoading, setIsLoading] = useState(true);
   const [paymentSuccess, setPaymentSuccess] = useState(false);
+  const redirectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     if (courseId && packageId) {
@@ -364,6 +365,12 @@ const CheckoutPage = () => {
       toast.error('Missing course or package information');
       navigate('/courses');
     }
+    // Cleanup timeout on unmount
+    return () => {
+      if (redirectTimeoutRef.current) {
+        clearTimeout(redirectTimeoutRef.current);
+      }
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [courseId, packageId, navigate]);
 
@@ -395,9 +402,18 @@ const CheckoutPage = () => {
 
   const handlePaymentSuccess = () => {
     setPaymentSuccess(true);
-    setTimeout(() => {
-      navigate(`/student/courses`);
-    }, 2000);
+    // Auto-redirect to My Courses after 5 seconds if user doesn't click anything
+    redirectTimeoutRef.current = setTimeout(() => {
+      navigate('/student/courses');
+    }, 5000);
+  };
+
+  // Cancel auto-redirect and navigate to learning page
+  const handleStartLearning = () => {
+    if (redirectTimeoutRef.current) {
+      clearTimeout(redirectTimeoutRef.current);
+    }
+    navigate(`/courses/${courseId}/learn`);
   };
 
   if (isLoading) {
@@ -435,7 +451,7 @@ const CheckoutPage = () => {
           <div className="space-y-3">
             <button
               type="button"
-              onClick={() => navigate(`/courses/${courseId}/learn`)}
+              onClick={handleStartLearning}
               className="btn-primary w-full"
             >
               Start Learning

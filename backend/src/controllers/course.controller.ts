@@ -352,8 +352,8 @@ class CourseController {
       throw new BadRequestError('Price must be a non-negative number');
     }
 
-    if (discount !== undefined && (typeof discount !== 'number' || discount < 0 || discount > 100)) {
-      throw new BadRequestError('Discount must be a number between 0 and 100');
+    if (discount !== undefined && typeof discount !== 'number') {
+      throw new BadRequestError('Discount must be a number');
     }
 
     const lessonPackage = await courseService.createPackage(userId, courseId.trim(), {
@@ -414,8 +414,8 @@ class CourseController {
       throw new BadRequestError('Price must be a non-negative number');
     }
 
-    if (discount !== undefined && (typeof discount !== 'number' || discount < 0 || discount > 100)) {
-      throw new BadRequestError('Discount must be a number between 0 and 100');
+    if (discount !== undefined && typeof discount !== 'number') {
+      throw new BadRequestError('Discount must be a number');
     }
 
     const lessonPackage = await courseService.updatePackage(userId, id.trim(), {

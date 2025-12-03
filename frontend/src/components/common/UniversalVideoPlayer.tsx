@@ -55,6 +55,30 @@ const UniversalVideoPlayer = ({
     return match ? match[1] : null;
   };
 
+  // Check if URL is an image
+  const isImageUrl = (url: string): boolean => {
+    const imageExtensions = /\.(jpg|jpeg|png|gif|webp|svg|bmp|ico|tiff|heic|heif)(\?.*)?$/i;
+    return imageExtensions.test(url);
+  };
+
+  // If URL is an image, render as static image
+  if (isImageUrl(resolvedSrc)) {
+    return (
+      <div className="aspect-video bg-gray-900 rounded-lg overflow-hidden relative flex items-center justify-center">
+        {title && (
+          <div className="absolute top-0 left-0 right-0 bg-gray-900/80 text-white px-4 py-2 text-sm font-medium z-10">
+            {title}
+          </div>
+        )}
+        <img
+          src={resolvedSrc}
+          alt={title || 'Lesson content'}
+          className="w-full h-full object-contain"
+        />
+      </div>
+    );
+  }
+
   // Determine video type and render appropriate player
   if (src.includes('youtube.com') || src.includes('youtu.be')) {
     // YouTube video
