@@ -1,0 +1,600 @@
+import { useCallback, useState, useEffect, useRef } from 'react';
+import clientLogger from '@/utils/logger';
+import { useNavigate } from 'react-router-dom';
+import { useAuthStore } from '@/store/auth-store';
+import { User, Mail, Shield, Edit2, Save, X, ImagePlus, Link as LinkIcon, Trash2, Lock } from 'lucide-react';
+import toast from 'react-hot-toast';
+import uploadService from '@/services/upload.service';
+import authService from '@/services/auth.service';
+import { useOverlayAccessibility, usePageTitle } from '@/hooks';
+import { extractErrorMessage } from '@/utils/error-handler';
+import ConfirmationModal from '@/components/common/ConfirmationModal';
+import { normalizeSafeHttpUrl } from '@/utils/safe-url';
+
+const PASSWORD_COMPLEXITY = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).+$/;
+
+const getPasswordValidationError = (password: string, confirmation: string) => {
+  if (!password) {
+    return 'New password is required';
+  }
+
+  if (password.length < 8) {
+    return 'Password must be at least 8 characters';
+  }
+
+  if (!PASSWORD_COMPLEXITY.test(password)) {
+    return 'Password must contain uppercase, lowercase, and a number';
+  }
+
+  if (password !== confirmation) {
+    return 'Passwords do not match';
+  }
+
+  return '';
+};
+
+/**
+ * Profile Page
+ * User profile management with edit capabilities
+ */
+const ProfilePage = () => {
+  usePageTitle('My Profile');
+  const navigate = useNavigate();
+  const { user, updateProfile, logout, fetchProfile } = useAuthStore();
+  const [isEditing, setIsEditing] = useState(false);
+  const [formData, setFormData] = useState({
+    firstName: user?.firstName || '',
+    lastName: user?.lastName || '',
+  });
+  const [isSaving, setIsSaving] = useState(false);
+
+  // Avatar editing state
+  const [avatarUrlInput, setAvatarUrlInput] = useState('');
+  const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
+
+  // Change password modal state
+  const [showPwdModal, setShowPwdModal] = useState(false);
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [isChangingPwd, setIsChangingPwd] = useState(false);
+  const [showDeleteAccountModal, setShowDeleteAccountModal] = useState(false);
+  const [isDeletingAccount, setIsDeletingAccount] = useState(false);
+  const passwordModalRef = useRef<HTMLDivElement | null>(null);
+  const currentPasswordInputRef = useRef<HTMLInputElement | null>(null);
+  const passwordValidationError = getPasswordValidationError(
+    newPassword,
+    confirmPassword
+  );
+  const passwordValidationMessage =
+    newPassword || confirmPassword ? passwordValidationError : '';
+  const canChangePassword = Boolean(currentPassword) && !passwordValidationError;
+
+  useEffect(() => {
+    if (user) {
+      setFormData({
+        firstName: user.firstName,
+        lastName: user.lastName,
+      });
+    }
+  }, [user]);
+
+  // Ensure we have full profile (including createdAt) after login or profile edits
+  useEffect(() => {
+    if (user && !user.createdAt) {
+      void fetchProfile().catch((error) => {
+        clientLogger.error('Failed to fetch profile:', error);
+      });
+    }
+  }, [user, fetchProfile]);
+
+  const closePasswordModal = useCallback(() => {
+    if (isChangingPwd) {
+      return;
+    }
+
+    setShowPwdModal(false);
+    setCurrentPassword('');
+    setNewPassword('');
+    setConfirmPassword('');
+  }, [isChangingPwd]);
+
+  useOverlayAccessibility({
+    isOpen: showPwdModal,
+    containerRef: passwordModalRef,
+    initialFocusRef: currentPasswordInputRef,
+    onClose: closePasswordModal,
+    trapFocus: true,
+    lockBodyScroll: true,
+  });
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setFormData({
+      ...formData,
+      [e.target.name]: e.target.value,
+    });
+  };
+
+  const handleSave = async () => {
+    if (!formData.firstName.trim() || !formData.lastName.trim()) {
+      toast.error('First name and last name are required');
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      await updateProfile(formData);
+      setIsEditing(false);
+      toast.success('Profile updated successfully');
+    } catch (error) {
+      clientLogger.error('Failed to update profile:', error);
+      toast.error(extractErrorMessage(error, 'Failed to update profile'));
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleCancel = () => {
+    setFormData({
+      firstName: user?.firstName || '',
+      lastName: user?.lastName || '',
+    });
+    setIsEditing(false);
+  };
+
+  const handleDeleteAccount = async () => {
+    setIsDeletingAccount(true);
+    try {
+      await authService.deleteAccount();
+      toast.success('Account deleted');
+      await logout({ silent: true, skipServer: true });
+      navigate('/');
+    } catch (error) {
+      clientLogger.error('Failed to delete account:', error);
+      toast.error(extractErrorMessage(error, 'Failed to delete account'));
+    } finally {
+      setIsDeletingAccount(false);
+      setShowDeleteAccountModal(false);
+    }
+  };
+
+  const handleRemoveAvatar = async () => {
+    setIsUploadingAvatar(true);
+    try {
+      await updateProfile({ avatar: null });
+      setAvatarUrlInput('');
+      toast.success('Avatar removed');
+    } catch (error) {
+      clientLogger.error('Failed to remove avatar:', error);
+      toast.error(extractErrorMessage(error, 'Failed to remove avatar'));
+    } finally {
+      setIsUploadingAvatar(false);
+    }
+  };
+
+  return (
+    <>
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-primary-50/10 to-indigo-50/20 py-8 relative">
+      {/* Background Pattern */}
+      <div className="absolute inset-0 bg-[linear-gradient(rgba(0,0,0,0.015)_1px,transparent_1px),linear-gradient(90deg,rgba(0,0,0,0.015)_1px,transparent_1px)] bg-[size:32px_32px] pointer-events-none"></div>
+
+      {/* Decorative Elements */}
+      <div className="absolute top-20 right-[10%] w-72 h-72 bg-primary-400/10 rounded-full blur-3xl pointer-events-none"></div>
+      <div className="absolute bottom-40 left-[5%] w-80 h-80 bg-indigo-400/10 rounded-full blur-3xl pointer-events-none"></div>
+
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative">
+        <div className="max-w-2xl mx-auto">
+          <div className="flex items-center gap-3 mb-8">
+            <div className="w-12 h-12 bg-gradient-to-br from-primary-500 to-indigo-600 rounded-2xl flex items-center justify-center shadow-lg shadow-primary-500/25">
+              <User className="w-6 h-6 text-white" />
+            </div>
+            <div>
+              <h1 className="text-3xl font-extrabold text-gray-900">
+                My <span className="bg-gradient-to-r from-primary-600 to-indigo-600 bg-clip-text text-transparent">Profile</span>
+              </h1>
+              <p className="text-gray-500 font-medium">Manage your account settings</p>
+            </div>
+          </div>
+
+          {/* Profile Card */}
+          <div className="card mb-6 shadow-xl border border-gray-100 rounded-2xl">
+            <div className="flex items-center justify-between mb-8">
+              <h2 className="text-2xl font-bold text-gray-900">Personal Information</h2>
+            {!isEditing ? (
+              <button
+                type="button"
+                onClick={() => setIsEditing(true)}
+                className="btn-outline btn-sm flex items-center space-x-2"
+              >
+                <Edit2 className="w-4 h-4" />
+                <span>Edit</span>
+              </button>
+            ) : (
+              <div className="flex space-x-2">
+                <button
+                  type="button"
+                  onClick={handleCancel}
+                  className="btn-secondary btn-sm flex items-center space-x-2"
+                >
+                  <X className="w-4 h-4" />
+                  <span>Cancel</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSave}
+                  disabled={isSaving}
+                  className="btn-primary btn-sm flex items-center space-x-2"
+                >
+                  <Save className="w-4 h-4" />
+                  <span>{isSaving ? 'Saving...' : 'Save'}</span>
+                </button>
+              </div>
+            )}
+          </div>
+
+          <div className="space-y-6">
+            {/* Avatar */}
+              <div className="flex items-center space-x-6 pb-6 border-b border-gray-200">
+                {user?.avatar ? (
+                  <img
+                    src={user.avatar}
+                    alt={`${user.firstName} ${user.lastName}`}
+                    className="w-24 h-24 rounded-2xl object-cover shadow-lg"
+                  />
+                ) : (
+                <div className="w-24 h-24 bg-gradient-to-br from-primary-600 to-primary-700 text-white rounded-2xl flex items-center justify-center text-3xl font-bold shadow-lg">
+                {user?.firstName?.[0] || ''}{user?.lastName?.[0] || ''}
+              </div>
+                )}
+              <div>
+                  <p className="font-bold text-2xl text-gray-900">
+                  {user?.firstName} {user?.lastName}
+                </p>
+                  <p className="text-sm text-gray-600 mt-1">{user?.email}</p>
+
+                  {/* Avatar Editor */}
+                  <div className="mt-3 flex items-center gap-2 flex-wrap">
+                    <label className="btn-outline btn-sm inline-flex items-center gap-2 cursor-pointer">
+                      <ImagePlus className="w-4 h-4" /> Upload Avatar
+                      <input
+                        type="file"
+                        accept="image/*"
+                        hidden
+                        onChange={async (e) => {
+                          if (!e.target.files || !e.target.files[0]) return;
+                          setIsUploadingAvatar(true);
+                          try {
+                            const url = await uploadService.uploadAvatar(e.target.files[0]);
+                            await updateProfile({ avatar: url });
+                            setAvatarUrlInput('');
+                            toast.success('Avatar updated');
+                          } catch (error) {
+                            clientLogger.error('Failed to upload avatar:', error);
+                            toast.error(extractErrorMessage(error, 'Failed to upload avatar'));
+                          } finally {
+                            setIsUploadingAvatar(false);
+                          }
+                        }}
+                      />
+                    </label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="text"
+                        value={avatarUrlInput}
+                        onChange={(e) => setAvatarUrlInput(e.target.value)}
+                        placeholder="Paste image URL"
+                        className="input h-9 w-64"
+                      />
+                      <button
+                        type="button"
+                        className="btn-outline btn-sm"
+                        disabled={isUploadingAvatar || !avatarUrlInput.trim()}
+                        onClick={async () => {
+                          const url = avatarUrlInput.trim();
+                          const safeAvatarUrl = normalizeSafeHttpUrl(url);
+
+                          if (!safeAvatarUrl) {
+                            toast.error('Please enter a valid http(s) image URL');
+                            return;
+                          }
+
+                          try {
+                            await updateProfile({ avatar: safeAvatarUrl });
+                            toast.success('Avatar updated');
+                            setAvatarUrlInput('');
+                          } catch (error) {
+                            clientLogger.error('Failed to update avatar from URL:', error);
+                            toast.error(extractErrorMessage(error, 'Invalid avatar URL'));
+                          }
+                        }}
+                      >
+                        <LinkIcon className="w-4 h-4 mr-1" /> Use URL
+                      </button>
+                      <button
+                        type="button"
+                        className="btn-secondary btn-sm inline-flex items-center gap-1"
+                        disabled={isUploadingAvatar || !user?.avatar}
+                        onClick={() => {
+                          void handleRemoveAvatar();
+                        }}
+                      >
+                        <Trash2 className="w-4 h-4" /> Remove
+                      </button>
+                    </div>
+                  </div>
+                </div>
+            </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* First Name */}
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 mb-3 flex items-center space-x-2">
+                    <div className="p-2 bg-primary-100 rounded-lg">
+                      <User className="w-4 h-4 text-primary-600" />
+                    </div>
+                    <span>First Name</span>
+                  </label>
+                  {isEditing ? (
+                    <input
+                      type="text"
+                      name="firstName"
+                      value={formData.firstName}
+                      onChange={handleChange}
+                      className="input"
+                      placeholder="Enter first name"
+                    />
+                  ) : (
+                    <p className="text-lg font-semibold text-gray-900">{user?.firstName}</p>
+                  )}
+                </div>
+
+                {/* Last Name */}
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 mb-3 flex items-center space-x-2">
+                    <div className="p-2 bg-primary-100 rounded-lg">
+                      <User className="w-4 h-4 text-primary-600" />
+                    </div>
+                    <span>Last Name</span>
+                  </label>
+                  {isEditing ? (
+                    <input
+                      type="text"
+                      name="lastName"
+                      value={formData.lastName}
+                      onChange={handleChange}
+                      className="input"
+                      placeholder="Enter last name"
+                    />
+                  ) : (
+                    <p className="text-lg font-semibold text-gray-900">{user?.lastName}</p>
+                  )}
+                </div>
+
+                {/* Email (Read-only) */}
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 mb-3 flex items-center space-x-2">
+                    <div className="p-2 bg-blue-100 rounded-lg">
+                      <Mail className="w-4 h-4 text-blue-600" />
+                    </div>
+                    <span>Email Address</span>
+                  </label>
+                  <p className="text-lg font-semibold text-gray-900">{user?.email}</p>
+                  <p className="text-xs text-gray-500 mt-2">Email cannot be changed</p>
+                </div>
+
+                {/* Role (Read-only) */}
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 mb-3 flex items-center space-x-2">
+                    <div className="p-2 bg-purple-100 rounded-lg">
+                      <Shield className="w-4 h-4 text-purple-600" />
+                    </div>
+                    <span>Account Type</span>
+                  </label>
+                  <div className="inline-block">
+                    <span className="badge-primary capitalize">
+                      {user?.role.toLowerCase()}
+                    </span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Account Status */}
+          <div className="card bg-gradient-to-r from-green-50 to-green-100 border-2 border-green-200 mb-6">
+            <div className="flex items-center space-x-4">
+              <div className="p-3 bg-green-200 rounded-lg flex-shrink-0">
+                <Shield className="w-6 h-6 text-green-700" />
+            </div>
+            <div>
+                <h3 className="font-bold text-green-900 text-lg">Account Active</h3>
+                <p className="text-sm text-green-700 mt-1">
+                Your account is in good standing
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* Teacher Profile Link */}
+        {user?.role === 'TEACHER' && (
+            <div className="card bg-gradient-to-r from-primary-50 to-primary-100 border-2 border-primary-200 mb-6">
+              <h3 className="font-bold text-lg text-gray-900 mb-2">Teacher Profile</h3>
+              <p className="text-sm text-gray-700 mb-4">
+              Manage your teaching profile, certifications, and verification status
+            </p>
+            <button
+              type="button"
+              onClick={() => navigate('/teacher/profile-completion')}
+              className="btn-primary"
+            >
+              Go to Teacher Profile
+            </button>
+          </div>
+        )}
+
+        {/* Security Section */}
+        <div className="card mt-6">
+            <h2 className="text-2xl font-bold text-gray-900 mb-6">Security</h2>
+          <div className="space-y-4">
+              <div className="flex items-center justify-between p-4 bg-gradient-to-r from-gray-50 to-gray-100 rounded-xl border border-gray-200 hover:border-gray-300 transition-all">
+              <div>
+                  <p className="font-bold text-gray-900">Password</p>
+                  <p className="text-sm text-gray-600 mt-1">Hidden for security</p>
+              </div>
+              <button type="button" className="btn-outline btn-sm" onClick={() => setShowPwdModal(true)}>
+                Change Password
+              </button>
+            </div>
+
+              <div className="flex items-center justify-between p-4 bg-gradient-to-r from-gray-50 to-gray-100 rounded-xl border border-gray-200">
+              <div>
+                  <p className="font-bold text-gray-900">Account Created</p>
+                  <p className="text-sm text-gray-600 mt-1">
+                  {user?.createdAt ? new Date(user.createdAt).toLocaleString() : 'N/A'}
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Danger Zone */}
+          <div className="card border-2 border-red-200 mt-6 bg-gradient-to-r from-red-50 to-red-100">
+            <h2 className="text-2xl font-bold text-red-700 mb-6">Danger Zone</h2>
+          <div className="space-y-4">
+              <div className="flex items-center justify-between p-4 bg-red-100 rounded-xl border border-red-300">
+              <div>
+                  <p className="font-bold text-red-900">Delete Account</p>
+                  <p className="text-sm text-red-700 mt-1">
+                  Permanently delete your account and all associated data
+                </p>
+              </div>
+              <button
+                type="button"
+                className="btn-danger btn-sm inline-flex items-center gap-2"
+                onClick={() => setShowDeleteAccountModal(true)}
+              >
+                <Trash2 className="w-4 h-4" /> Delete Account
+              </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    {/* Change Password Modal */}
+    {showPwdModal && (
+      <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+        <div
+          ref={passwordModalRef}
+          tabIndex={-1}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="change-password-title"
+          aria-describedby="change-password-description"
+          className="bg-white rounded-2xl p-6 w-full max-w-md shadow-xl"
+        >
+          <h3 id="change-password-title" className="text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
+            <Lock className="w-5 h-5 text-primary-600" /> Change Password
+          </h3>
+          <p id="change-password-description" className="sr-only">
+            Enter your current password and choose a new password for your account.
+          </p>
+          <div className="space-y-3">
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 mb-2">Current Password</label>
+              <input
+                ref={currentPasswordInputRef}
+                type="password"
+                className="input"
+                value={currentPassword}
+                onChange={(e) => setCurrentPassword(e.target.value)}
+                placeholder="Enter current password"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 mb-2">New Password</label>
+              <input
+                type="password"
+                className="input"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                placeholder="At least 8 characters, include upper/lower/number"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 mb-2">Confirm New Password</label>
+              <input
+                type="password"
+                className="input"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                placeholder="Re-enter new password"
+              />
+            </div>
+          </div>
+          <div className="mt-5 flex items-center justify-end gap-2">
+            <button type="button" className="btn-outline" onClick={closePasswordModal} disabled={isChangingPwd}>Cancel</button>
+            <button
+              type="button"
+              className="btn-primary"
+              disabled={isChangingPwd || !canChangePassword}
+              onClick={async () => {
+                if (!currentPassword) {
+                  toast.error('Current password is required');
+                  return;
+                }
+
+                const validationError = getPasswordValidationError(newPassword, confirmPassword);
+                if (validationError) {
+                  toast.error(validationError);
+                  return;
+                }
+                setIsChangingPwd(true);
+                try {
+                  await authService.changePassword(currentPassword, newPassword);
+                  await logout({ silent: true, skipServer: true });
+                  toast.success('Password changed. Please sign in again.');
+                  setShowPwdModal(false);
+                  setCurrentPassword('');
+                  setNewPassword('');
+                  setConfirmPassword('');
+                  navigate('/login', { replace: true });
+                } catch (err: unknown) {
+                  toast.error(extractErrorMessage(err, 'Failed to change password'));
+                } finally {
+                  setIsChangingPwd(false);
+                }
+              }}
+            >
+              {isChangingPwd ? 'Changing...' : 'Change Password'}
+            </button>
+          </div>
+          {passwordValidationMessage ? (
+            <p className="mt-3 text-sm text-danger-600" role="alert">
+              {passwordValidationMessage}
+            </p>
+          ) : null}
+        </div>
+      </div>
+    )}
+
+    <ConfirmationModal
+      isOpen={showDeleteAccountModal}
+      title="Delete account"
+      description="This will permanently delete your account and all related data. This action cannot be undone."
+      confirmLabel="Delete Account"
+      tone="danger"
+      isLoading={isDeletingAccount}
+      onClose={() => {
+        if (!isDeletingAccount) {
+          setShowDeleteAccountModal(false);
+        }
+      }}
+      onConfirm={handleDeleteAccount}
+    />
+    </>
+  );
+};
+
+export default ProfilePage;

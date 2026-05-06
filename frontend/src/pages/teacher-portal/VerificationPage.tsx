@@ -1,0 +1,526 @@
+import { useState, useEffect, useCallback, useMemo } from 'react';
+import clientLogger from '@/utils/logger';
+import { useNavigate } from 'react-router-dom';
+import { Shield, Upload, CheckCircle, Clock, XCircle, ArrowLeft, FileText } from 'lucide-react';
+import { TeacherVerification, VerificationStatus } from '@/types';
+import teacherService from '@/services/teacher.service';
+import uploadService from '@/services/upload.service';
+import FileUpload from '@/components/common/FileUpload';
+import toast from 'react-hot-toast';
+import { extractErrorMessage } from '@/utils/error-handler';
+import { openProtectedAsset } from '@/utils/protected-assets';
+import { usePageTitle } from '@/hooks';
+import { useAuthStore } from '@/store/auth-store';
+
+/**
+ * Teacher Verification Page
+ * Interface for teachers to submit verification documents
+ */
+const VerificationPage = () => {
+  const navigate = useNavigate();
+  usePageTitle('Teacher Verification');
+  const { user } = useAuthStore();
+
+  const [verifications, setVerifications] = useState<TeacherVerification[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showForm, setShowForm] = useState(false);
+
+  // Form state
+  const [documentType, setDocumentType] = useState('');
+  const [documentFile, setDocumentFile] = useState<File | null>(null);
+
+  const latestVerification = useMemo(() => {
+    if (verifications.length === 0) {
+      return null;
+    }
+
+    return verifications.reduce((latest, current) => {
+      const latestTimestamp = new Date(
+        latest.reviewedAt ?? latest.submittedAt
+      ).getTime();
+      const currentTimestamp = new Date(
+        current.reviewedAt ?? current.submittedAt
+      ).getTime();
+
+      return currentTimestamp > latestTimestamp ? current : latest;
+    });
+  }, [verifications]);
+
+  const teacherVerificationStatus = user?.teacherProfile?.verificationStatus;
+  const isTeacherVerified = Boolean(user?.teacherProfile?.isVerified);
+  const hasVerificationHistory = verifications.length > 0;
+  const effectiveVerificationStatus =
+    isTeacherVerified || teacherVerificationStatus === VerificationStatus.APPROVED
+      ? VerificationStatus.APPROVED
+      : latestVerification?.status;
+  const hasPendingSubmission = latestVerification?.status === VerificationStatus.PENDING;
+  const canSubmitVerification =
+    effectiveVerificationStatus !== VerificationStatus.APPROVED &&
+    !hasPendingSubmission;
+  const isVerifiedWithoutHistory =
+    effectiveVerificationStatus === VerificationStatus.APPROVED &&
+    !hasVerificationHistory;
+
+  const fetchVerifications = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      const data = await teacherService.getMyVerifications();
+      setVerifications(data);
+    } catch (error) {
+      clientLogger.error('Failed to fetch verifications:', error);
+      toast.error(extractErrorMessage(error, 'Failed to load verifications'));
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void fetchVerifications();
+  }, [fetchVerifications]);
+
+  const handleSubmitVerification = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (!documentType) {
+      toast.error('Please select a document type');
+      return;
+    }
+
+    if (!documentFile) {
+      toast.error('Please upload a document');
+      return;
+    }
+
+    setIsSubmitting(true);
+    const loadingToast = toast.loading('Uploading document...');
+    try {
+      // Upload document
+      const documentUrl = await uploadService.uploadVerificationDoc(documentFile);
+      toast.dismiss(loadingToast);
+
+      // Submit verification
+      await teacherService.submitVerification(documentType, documentUrl);
+
+      toast.success('Verification submitted successfully!');
+      setShowForm(false);
+      setDocumentType('');
+      setDocumentFile(null);
+
+      // Refresh verifications
+      await fetchVerifications();
+    } catch (error) {
+      toast.dismiss(loadingToast);
+      clientLogger.error('Failed to submit verification:', error);
+      toast.error(extractErrorMessage(error, 'Failed to submit verification. Please try again.'));
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleOpenVerificationDocument = async (assetUrl: string) => {
+    try {
+      await openProtectedAsset(assetUrl);
+    } catch (error) {
+      clientLogger.error('Failed to open verification document:', error);
+      toast.error(extractErrorMessage(error, 'Failed to open document'));
+    }
+  };
+
+  const getStatusIcon = (status: VerificationStatus) => {
+    switch (status) {
+      case VerificationStatus.APPROVED:
+        return <CheckCircle className="w-5 h-5 text-green-600" />;
+      case VerificationStatus.REJECTED:
+        return <XCircle className="w-5 h-5 text-red-600" />;
+      case VerificationStatus.PENDING:
+        return <Clock className="w-5 h-5 text-yellow-600" />;
+      default:
+        return <Clock className="w-5 h-5 text-gray-400" />;
+    }
+  };
+
+  const getStatusBadge = (status: VerificationStatus) => {
+    switch (status) {
+      case VerificationStatus.APPROVED:
+        return <span className="badge-success">Approved</span>;
+      case VerificationStatus.REJECTED:
+        return <span className="badge-error">Rejected</span>;
+      case VerificationStatus.PENDING:
+        return <span className="badge-warning">Pending Review</span>;
+      default:
+        return <span className="badge">Unknown</span>;
+    }
+  };
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-primary-50/10 to-indigo-50/20">
+        <div className="flex flex-col items-center space-y-4">
+          <div className="relative">
+            <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-primary-500 to-indigo-600 animate-pulse flex items-center justify-center">
+              <Shield className="w-8 h-8 text-white" />
+            </div>
+            <div className="absolute inset-0 rounded-2xl bg-primary-500/20 animate-ping"></div>
+          </div>
+          <p className="text-gray-600 font-medium">Loading verification...</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-primary-50/10 to-indigo-50/20 py-8 relative">
+      <div className="absolute inset-0 bg-[linear-gradient(rgba(0,0,0,0.015)_1px,transparent_1px),linear-gradient(90deg,rgba(0,0,0,0.015)_1px,transparent_1px)] bg-[size:32px_32px] pointer-events-none"></div>
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative">
+        <div className="max-w-4xl mx-auto">
+          {/* Header */}
+          <button
+            type="button"
+            onClick={() => navigate('/teacher')}
+            className="btn-outline mb-8"
+          >
+            <ArrowLeft className="w-4 h-4 mr-2" />
+            Back to Dashboard
+          </button>
+
+          <div className="mb-10 flex items-center gap-3">
+            <div className="w-12 h-12 bg-gradient-to-br from-green-500 to-emerald-600 rounded-2xl flex items-center justify-center shadow-lg shadow-green-500/25">
+              <Shield className="w-6 h-6 text-white" />
+            </div>
+            <div>
+              <h1 className="text-3xl font-extrabold text-gray-900">
+                Teacher <span className="bg-gradient-to-r from-green-600 to-emerald-600 bg-clip-text text-transparent">Verification</span>
+              </h1>
+              <p className="text-gray-500 font-medium">Verify your credentials to build trust with students</p>
+            </div>
+          </div>
+
+          {/* Benefits Section */}
+          <div className="card mb-8 bg-gradient-to-br from-primary-50 to-blue-50 border-2 border-primary-200 shadow-xl rounded-2xl">
+            <h2 className="text-xl font-bold mb-4 text-gray-900">Benefits of Verification</h2>
+            <ul className="space-y-3">
+              {[
+                'Verified badge on your profile',
+                'Higher ranking in search results',
+                'Increased student trust and enrollment',
+                'Access to premium features',
+              ].map((benefit, index) => (
+                <li key={index} className="flex items-start">
+                  <div className="p-1 bg-primary-200 rounded-lg mr-3 mt-0.5">
+                    <CheckCircle className="w-5 h-5 text-primary-700" />
+                  </div>
+                  <span className="text-gray-700 font-medium text-lg">{benefit}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          {effectiveVerificationStatus === VerificationStatus.APPROVED && (
+            <div className="card mb-8 border border-green-200 bg-gradient-to-r from-green-50 to-emerald-50 shadow-xl rounded-2xl">
+              <div className="flex items-start gap-4">
+                <div className="rounded-2xl bg-green-100 p-3">
+                  <CheckCircle className="h-6 w-6 text-green-700" />
+                </div>
+                <div className="space-y-2">
+                  <h2 className="text-xl font-bold text-green-900">Verification complete</h2>
+                  <p className="text-sm text-green-800">
+                    Your teacher profile is already verified and your trust badge is active for students.
+                  </p>
+                  {isVerifiedWithoutHistory && (
+                    <p className="text-sm text-green-700">
+                      This workspace does not have a verification document history for your approved status.
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {hasPendingSubmission && (
+            <div className="card mb-8 border border-amber-200 bg-gradient-to-r from-amber-50 to-yellow-50 shadow-xl rounded-2xl">
+              <div className="flex items-start gap-4">
+                <div className="rounded-2xl bg-amber-100 p-3">
+                  <Clock className="h-6 w-6 text-amber-700" />
+                </div>
+                <div className="space-y-2">
+                  <h2 className="text-xl font-bold text-amber-900">Verification under review</h2>
+                  <p className="text-sm text-amber-800">
+                    Your latest verification document has been submitted and is waiting for admin review.
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {effectiveVerificationStatus === VerificationStatus.REJECTED && latestVerification?.reviewNotes && (
+            <div className="card mb-8 border border-red-200 bg-gradient-to-r from-red-50 to-rose-50 shadow-xl rounded-2xl">
+              <div className="flex items-start gap-4">
+                <div className="rounded-2xl bg-red-100 p-3">
+                  <XCircle className="h-6 w-6 text-red-700" />
+                </div>
+                <div className="space-y-2">
+                  <h2 className="text-xl font-bold text-red-900">Verification needs updates</h2>
+                  <p className="text-sm text-red-800">
+                    Your previous document was rejected. Review the admin notes below and submit an updated document.
+                  </p>
+                  <p className="text-sm text-red-700">
+                    {latestVerification.reviewNotes}
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Verification Form */}
+          {!showForm && canSubmitVerification ? (
+            <div className="card shadow-xl border border-gray-100 rounded-2xl">
+              <div className="text-center py-12">
+                <div className="w-20 h-20 bg-gradient-to-br from-primary-100 to-primary-200 rounded-full flex items-center justify-center mx-auto mb-6">
+                  <Shield className="w-10 h-10 text-primary-600" />
+                </div>
+                <h3 className="text-2xl font-bold mb-3 text-gray-900">
+                  {effectiveVerificationStatus === VerificationStatus.REJECTED
+                    ? 'Resubmit Verification Documents'
+                    : 'Submit Verification Documents'}
+                </h3>
+                <p className="text-gray-600 mb-8 text-lg">
+                  {effectiveVerificationStatus === VerificationStatus.REJECTED
+                    ? 'Upload a clearer or updated document so the admin team can review it again'
+                    : 'Upload your teaching certificates, degrees, or identification documents'}
+                </p>
+                <button type="button" onClick={() => setShowForm(true)} className="btn-primary btn-lg">
+                  <Upload className="w-5 h-5 mr-2" />
+                  {effectiveVerificationStatus === VerificationStatus.REJECTED
+                    ? 'Submit Updated Document'
+                    : 'Start Verification'}
+                </button>
+              </div>
+            </div>
+          ) : showForm ? (
+            <div className="card shadow-xl border border-gray-100 rounded-2xl">
+              <h2 className="text-2xl font-bold mb-6 text-gray-900">Upload Verification Document</h2>
+              <form onSubmit={handleSubmitVerification} className="space-y-6">
+                {/* Document Type */}
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-3">
+                    Document Type *
+                  </label>
+                  <select
+                    value={documentType}
+                    onChange={(e) => setDocumentType(e.target.value)}
+                    className="input"
+                    required
+                  >
+                    <option value="">Select document type</option>
+                    <option value="teaching_certificate">Teaching Certificate</option>
+                    <option value="degree">Academic Degree</option>
+                    <option value="professional_license">Professional License</option>
+                    <option value="id_card">Government ID</option>
+                    <option value="other">Other Certification</option>
+                  </select>
+                </div>
+
+                {/* File Upload */}
+                <div>
+                  <FileUpload
+                    label="Upload Document *"
+                    accept="image/*,application/pdf"
+                    maxSize={10}
+                    onFileSelect={setDocumentFile}
+                    preview={true}
+                  />
+                  <p className="text-xs text-gray-500 mt-2 font-medium">
+                    Accepted formats: PDF, JPG, PNG (max 10MB)
+                  </p>
+                </div>
+
+
+                {/* Guidelines */}
+                <div className="bg-gradient-to-r from-blue-50 to-blue-100 border-2 border-blue-200 rounded-xl p-5">
+                  <p className="font-bold text-blue-900 mb-3">Document Guidelines:</p>
+                  <ul className="text-sm text-blue-800 space-y-2">
+                    <li className="flex items-start">
+                      <CheckCircle className="w-4 h-4 mr-2 mt-0.5 text-blue-600 flex-shrink-0" />
+                      <span>Ensure document is clear and legible</span>
+                    </li>
+                    <li className="flex items-start">
+                      <CheckCircle className="w-4 h-4 mr-2 mt-0.5 text-blue-600 flex-shrink-0" />
+                      <span>All information must be visible</span>
+                    </li>
+                    <li className="flex items-start">
+                      <CheckCircle className="w-4 h-4 mr-2 mt-0.5 text-blue-600 flex-shrink-0" />
+                      <span>Document must be valid and not expired</span>
+                    </li>
+                    <li className="flex items-start">
+                      <CheckCircle className="w-4 h-4 mr-2 mt-0.5 text-blue-600 flex-shrink-0" />
+                      <span>Photos should be well-lit and in focus</span>
+                    </li>
+                  </ul>
+                </div>
+
+                {/* Buttons */}
+                <div className="flex items-center justify-end space-x-4 pt-4">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowForm(false);
+                      setDocumentType('');
+                      setDocumentFile(null);
+                    }}
+                    className="btn-outline"
+                    disabled={isSubmitting}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isSubmitting || !documentFile}
+                    className="btn-primary btn-lg"
+                  >
+                    {isSubmitting ? (
+                      <span className="flex items-center">
+                        <div className="spinner mr-2"></div>
+                        Submitting...
+                      </span>
+                    ) : (
+                      <>
+                        <Upload className="w-4 h-4 mr-2" />
+                        Submit for Review
+                      </>
+                    )}
+                  </button>
+                </div>
+              </form>
+            </div>
+          ) : hasPendingSubmission ? (
+            <div className="card shadow-xl border border-amber-200 bg-gradient-to-r from-amber-50 to-yellow-50 rounded-2xl">
+              <div className="flex items-start gap-4">
+                <div className="rounded-2xl bg-amber-100 p-3">
+                  <Clock className="h-6 w-6 text-amber-700" />
+                </div>
+                <div>
+                  <h3 className="text-xl font-bold text-amber-900">Waiting for review</h3>
+                  <p className="mt-2 text-sm text-amber-800">
+                    You already have a verification submission in progress. We will unlock any next steps here once the admin team finishes reviewing it.
+                  </p>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="card shadow-xl border border-green-200 bg-gradient-to-r from-green-50 to-emerald-50 rounded-2xl">
+              <div className="flex items-start gap-4">
+                <div className="rounded-2xl bg-green-100 p-3">
+                  <CheckCircle className="h-6 w-6 text-green-700" />
+                </div>
+                <div>
+                  <h3 className="text-xl font-bold text-green-900">No action needed</h3>
+                  <p className="mt-2 text-sm text-green-800">
+                    Your verification is already complete. You can return to your dashboard and keep teaching.
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Verification History */}
+          {verifications.length > 0 && (
+            <div className="card mt-8 shadow-xl border border-gray-100 rounded-2xl">
+              <h2 className="text-2xl font-bold mb-6 text-gray-900">Verification History</h2>
+              <div className="space-y-4">
+                {verifications.map((verification) => (
+                  (() => {
+                    const documentAccessUrl =
+                      verification.accessUrl ?? verification.documentUrl;
+
+                    return (
+                      <div
+                        key={verification.id}
+                        className="flex items-start justify-between p-5 bg-gradient-to-r from-gray-50 to-gray-100 rounded-xl border border-gray-200 hover:border-gray-300 transition-all"
+                      >
+                        <div className="flex items-start space-x-4">
+                          <div className="mt-1 p-2 bg-white rounded-lg">{getStatusIcon(verification.status)}</div>
+                          <div className="flex-1">
+                            <div className="flex items-center space-x-3 mb-2">
+                              <h3 className="font-bold capitalize text-gray-900">
+                                {verification.documentType.replace(/_/g, ' ')}
+                              </h3>
+                              {getStatusBadge(verification.status)}
+                            </div>
+                            <p className="text-sm text-gray-600 mb-1">
+                              Submitted on{' '}
+                              {new Date(verification.submittedAt).toLocaleDateString()}
+                            </p>
+                            {verification.reviewedAt && (
+                              <p className="text-sm text-gray-600 mb-2">
+                                Reviewed on{' '}
+                                {new Date(verification.reviewedAt).toLocaleDateString()}
+                              </p>
+                            )}
+                            {verification.reviewNotes && (
+                              <div className="mt-3 p-3 bg-white rounded-lg border border-gray-200">
+                                <p className="text-xs text-gray-500 mb-1 font-semibold">Admin Notes:</p>
+                                <p className="text-sm text-gray-700">
+                                  {verification.reviewNotes}
+                                </p>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                        {documentAccessUrl ? (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              void handleOpenVerificationDocument(documentAccessUrl)
+                            }
+                            className="btn-sm btn-outline"
+                          >
+                            <FileText className="w-4 h-4 mr-1" />
+                            View
+                          </button>
+                        ) : (
+                          <span className="text-xs font-medium text-amber-700">
+                            File unavailable
+                          </span>
+                        )}
+                      </div>
+                    );
+                  })()
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* FAQ Section */}
+          <div className="card mt-8 shadow-xl border border-gray-100 rounded-2xl">
+            <h2 className="text-2xl font-bold mb-6 text-gray-900">Frequently Asked Questions</h2>
+            <div className="space-y-5">
+              <div className="p-4 bg-gray-50 rounded-xl">
+                <h3 className="font-bold mb-2 text-gray-900">How long does verification take?</h3>
+                <p className="text-sm text-gray-700">
+                  Most verifications are reviewed within 2-3 business days.
+                </p>
+              </div>
+              <div className="p-4 bg-gray-50 rounded-xl">
+                <h3 className="font-bold mb-2 text-gray-900">What documents are accepted?</h3>
+                <p className="text-sm text-gray-700">
+                  Teaching certificates, academic degrees, professional licenses, and
+                  government-issued IDs.
+                </p>
+              </div>
+              <div className="p-4 bg-gray-50 rounded-xl">
+                <h3 className="font-bold mb-2 text-gray-900">What if my verification is rejected?</h3>
+                <p className="text-sm text-gray-700">
+                  You can resubmit with a different or clearer document. Check the admin
+                  notes for specific feedback.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default VerificationPage;
