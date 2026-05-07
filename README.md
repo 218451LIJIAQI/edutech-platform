@@ -1,58 +1,205 @@
 # FlexiLearnProject / Edutech Platform
 
-This repository contains a full-stack online learning platform. The local folder is named `FlexiLearnProject`, while the codebase, package metadata, UI branding, and API responses primarily use the name `Edutech` / `EduTech Platform`.
+This repository contains a full-stack online learning platform built with `React`, `Vite`, `TypeScript`, `Express`, `Prisma`, and `PostgreSQL`.
 
-This is not just a static course showcase or a simple CRUD demo. Based on the current implementation, it is a multi-role education platform that covers students, teachers, and administrators, with modules for courses, teacher approval, checkout and refunds, learning progress, community, direct messaging, notifications, support tickets, teacher wallets and payouts, admin operations, and promotional ads.
+The local folder is named `FlexiLearnProject`, while the codebase, package metadata, API responses, and most UI branding use the name `Edutech` / `EduTech Platform`.
 
-## Overview
+This README is intentionally written to match the current codebase as closely as possible. It describes what is already implemented, what is partially implemented, and what is intentionally not in the repository yet.
 
-The project is designed to cover the full business flow of an online education platform:
+## Table of Contents
 
-- from user registration to course access
-- from teacher onboarding to teacher approval
-- from checkout to refunds and support
-- from course operations to platform administration
+- [At a Glance](#at-a-glance)
+- [Key Facts First](#key-facts-first)
+- [Quick Start](#quick-start)
+- [Architecture at a Glance](#architecture-at-a-glance)
+- [Roles and Capabilities](#roles-and-capabilities)
+- [Typical End-to-End Flows](#typical-end-to-end-flows)
+- [Core Modules Already Implemented](#core-modules-already-implemented)
+- [Tech Stack](#tech-stack)
+- [Frontend Architecture](#frontend-architecture)
+- [Backend Architecture](#backend-architecture)
+- [Database Design Overview](#database-design-overview)
+- [API Modules](#api-modules)
+- [Real-Time and Live Session Notes](#real-time-and-live-session-notes)
+- [Uploads and Protected Assets](#uploads-and-protected-assets)
+- [Security and Risk Controls](#security-and-risk-controls)
+- [Internationalization and Frontend Experience](#internationalization-and-frontend-experience)
+- [Project Structure](#project-structure)
+- [Full Local Setup from Scratch](#full-local-setup-from-scratch)
+- [How to Get the First Admin on a Fresh Database](#how-to-get-the-first-admin-on-a-fresh-database)
+- [Recommended Demo Paths](#recommended-demo-paths)
+- [Common Commands](#common-commands)
+- [Environment Variables](#environment-variables)
+- [Troubleshooting Notes](#troubleshooting-notes)
+- [How to Describe This Project Accurately](#how-to-describe-this-project-accurately)
+- [Current Status Summary](#current-status-summary)
+- [Commit and Cleanup Guidance](#commit-and-cleanup-guidance)
 
-In practice, the repository is closer to:
+## At a Glance
+
+This project is much closer to a business-oriented online education platform than to a simple CRUD demo.
+
+It already includes:
+
+- separate guest, student, teacher, and admin experiences
+- teacher onboarding and approval
+- course creation and lesson management
+- package-based course pricing
+- simulated checkout, orders, enrollments, refunds, and wallet bookkeeping
+- community, messaging, notifications, and support tickets
+- admin moderation and finance-related operations
+- Socket.IO-based real-time live session coordination
+
+It is best described as:
 
 - an online education platform
 - a course commerce platform
 - a teacher onboarding and approval platform
 - an admin operations platform
 
-and not just:
+It is not best described as:
 
-- a course landing website
-- a front-end-only prototype
-- a basic practice project with only CRUD pages
+- a static landing page
+- a frontend-only prototype
+- a toy CRUD practice project
 
 ## Key Facts First
 
-To keep this README fully aligned with the actual codebase, these points matter:
+These points are important if you want to describe the repository accurately.
 
-1. The current payment flow is a simulated checkout, not a real third-party payment gateway.
-   The frontend checkout pages explicitly state that this build uses simulated checkout. The backend still creates real business records such as payments, orders, enrollments, and wallet transactions, but the repository does not integrate Stripe, PayPal, FPX, or a bank card processor.
+1. The payment flow is simulated, not connected to a real payment gateway.
+   The frontend checkout UI clearly presents the flow as simulated checkout. The backend still creates meaningful business records such as orders, payments, enrollments, wallet transactions, and refunds, but there is no Stripe, PayPal gateway capture flow, FPX integration, or bank card processor in this repository.
 
-2. The live session feature is not a built-in video conferencing system.
-   The repository does implement Socket.IO-based real-time class state, join/leave, chat, hand-raise, start-session, and end-session logic, but the actual meeting room is opened through `meetingUrl`, which points to an external live meeting link.
+2. The live session feature is not a built-in video conferencing stack.
+   The repository implements Socket.IO-based session state, join and leave behavior, chat, hand raise, and teacher session controls. The actual meeting room is opened through `meetingUrl`, which points to an external live meeting link.
 
 3. The Prisma seed is intentionally empty.
-   `backend/prisma/seed.js` does not create default users, courses, orders, or test data. The project is intentionally designed to start from an empty baseline database.
+   `backend/prisma/seed.js` does not create demo users, courses, orders, or default admin accounts. The project is designed to start from an empty baseline database.
 
 4. A fresh database does not automatically include an admin account.
-   Public registration only allows `STUDENT` and `TEACHER`. To test admin features, an existing user must be promoted to `ADMIN`, for example through Prisma Studio or a direct database update.
+   Public registration allows `STUDENT` and `TEACHER`. To test admin workflows, an existing user must be promoted to `ADMIN`.
 
-5. There are currently no project-owned automated test files in this repository.
-   Type checking and builds are available, but there is no `backend` / `frontend` test suite with `*.test.*` or `*.spec.*` files in the source project itself.
+5. The repository currently does not include project-owned automated tests.
+   Type checking and production builds are available, but there is no `backend` or `frontend` test suite with `*.test.*` or `*.spec.*` files in the source project itself.
+
+6. The root `package.json` is not a monorepo task runner.
+   Backend and frontend are started separately. In practice, local development uses one terminal for `backend` and one terminal for `frontend`.
+
+## Quick Start
+
+If you only want to get the platform running locally as fast as possible, this is the shortest correct path.
+
+### 1. Requirements
+
+- Node.js `>= 20`
+- npm
+- PostgreSQL
+
+### 2. Backend Setup
+
+Copy `backend/.env.example` to `backend/.env`, then update the database URL, JWT secrets, and CORS values if needed.
+
+```bash
+cd backend
+npm ci
+npm run prisma:migrate
+npm run dev
+```
+
+Default backend address:
+
+```text
+http://localhost:3000
+```
+
+Health endpoints:
+
+```text
+http://localhost:3000/api/v1/health
+http://localhost:3000/api/v1/ready
+```
+
+### 3. Frontend Setup
+
+Copy `frontend/.env.example` to `frontend/.env`.
+
+```bash
+cd frontend
+npm ci
+npm run dev
+```
+
+Default frontend address:
+
+```text
+http://localhost:5173
+```
+
+### 4. Important First-Test Note
+
+If you want to test admin functionality, you must manually promote one user to `ADMIN`. A fresh database will not create one for you automatically.
+
+## Architecture at a Glance
+
+```mermaid
+flowchart LR
+    A["Guest / Student / Teacher / Admin Browser"] --> B["React 18 + Vite + TypeScript Frontend"]
+    B --> C["Express 4 + TypeScript API<br/>/api/v1"]
+    B <--> D["Socket.IO Real-Time Layer"]
+    C --> E["Prisma ORM"]
+    E --> F[("PostgreSQL")]
+    C --> G["Validated Upload Storage"]
+    B --> H["External Meeting Room via meetingUrl"]
+```
+
+### What This Means in Practice
+
+- the frontend is a real SPA, not a static mockup
+- the backend is a real API with business rules and persistence
+- the database schema models commerce, learning, support, communication, and admin workflows
+- real-time behavior exists for live-session coordination
+- actual video conferencing is delegated to an external meeting URL
 
 ## Roles and Capabilities
 
 | Role | Main capabilities currently implemented |
 | --- | --- |
-| Guest | Home page, course browsing, course details, teacher browsing, teacher details, help center, login, register, forgot password, terms page, privacy page |
-| Student | Cart, single-course checkout, cart checkout, my courses, course learning page, quiz submission, course reviews, orders, refund requests, notifications, direct messages, community, reports, support tickets, live sessions, profile |
-| Teacher | Basic profile, extended profile, certifications, identity verification submission, course creation, lesson management, package management, material uploads, course notifications, student stats, student management, earnings view, wallet, payout methods, payout requests |
-| Admin | Platform overview, user management, batch operations, audit logs, course moderation, teacher verification review, teacher profile review, report handling, refund handling, support ticket handling, ad management, financial analytics, payout review |
+| Guest | home page, course browsing, course details, teacher browsing, teacher details, help center, login, register, forgot password, terms page, privacy page |
+| Student | cart, single-course checkout, cart checkout, my courses, course learning page, quiz submission, course reviews, orders, refund requests, notifications, direct messages, community, reports, support tickets, live sessions, profile |
+| Teacher | basic profile, extended profile, certifications, identity verification submission, course creation, lesson management, package management, material uploads, course notifications, student stats, student management, earnings view, wallet, payout methods, payout requests |
+| Admin | platform overview, user management, batch operations, audit logs, course moderation, teacher verification review, teacher profile review, report handling, refund handling, support ticket handling, ad management, financial analytics, payout review |
+
+## Typical End-to-End Flows
+
+One of the strongest parts of this repository is that it already models several complete business flows instead of isolated pages.
+
+### Student Flow
+
+1. register or log in
+2. browse courses and teachers
+3. add courses to cart or buy directly
+4. complete simulated checkout
+5. receive enrollment access
+6. study lessons, submit quizzes, and track progress
+7. leave reviews or request refunds when needed
+
+### Teacher Flow
+
+1. register as `TEACHER`
+2. complete teacher profile information
+3. upload certifications and verification materials
+4. submit profile and verification for review
+5. wait for admin approval
+6. create courses, lessons, packages, and materials
+7. manage students, notifications, wallet, and payout requests
+
+### Admin Flow
+
+1. access admin dashboard with an `ADMIN` account
+2. review teacher verification and profile submissions
+3. moderate courses, reports, and support tickets
+4. review refunds and payout requests
+5. manage ads, users, and platform analytics
 
 ## Core Modules Already Implemented
 
@@ -69,7 +216,11 @@ To keep this README fully aligned with the actual codebase, these points matter:
 - short-lived password reset token flow
 - account deactivation
 
-On the implementation side, the backend uses JWT-based auth, while the frontend uses Axios interceptors to attach access tokens and attempt session recovery through `/auth/refresh` when needed.
+Implementation notes:
+
+- the backend uses JWT-based authentication
+- refresh tokens are part of the auth design
+- the frontend uses Axios interceptors for token attachment and refresh attempts
 
 ### 2. Teacher Onboarding and Approval
 
@@ -78,9 +229,9 @@ On the implementation side, the backend uses JWT-based auth, while the frontend 
 - teachers can upload certifications and verification materials
 - teachers can submit profile and verification data for review
 - admins can review registration status, verification status, and extended profile submissions
-- only approved teachers can access the full teacher operations flow
+- only approved teachers can move through the full teacher operations flow
 
-This means the teacher workflow is intentionally approval-gated rather than "register and immediately teach."
+This means the teacher experience is intentionally approval-gated rather than open immediately after registration.
 
 ### 3. Course and Learning Content Management
 
@@ -89,11 +240,14 @@ This means the teacher workflow is intentionally approval-gated rather than "reg
 - course details
 - lesson management
 - lesson package management
-- course materials upload and download
+- course material upload and download
 - lesson quiz submission and quiz result tracking
 - course notification dispatch
 
-The pricing model is not a single flat course price. It is structured as `course + multiple packages`, which supports different price points, durations, student limits, and feature sets.
+Important modeling note:
+
+- pricing is structured as `course + multiple packages`, not one flat course price
+- packages support different prices, durations, limits, and configuration options
 
 ### 4. Student Checkout, Orders, and Refunds
 
@@ -109,15 +263,15 @@ The pricing model is not a single flat course price. It is structured as `course
 - refund request submission
 - refund history
 
-The commerce flow is already implemented at a meaningful business level, including:
+The commerce flow already includes meaningful business logic such as:
 
 - order states
 - payment states
 - refund states
 - platform commission
 - teacher net earnings
-- order and cart coordination
 - automatic enrollment creation
+- cart and order coordination
 
 ### 5. Teacher Wallet and Payouts
 
@@ -147,9 +301,9 @@ Supported payout method types defined in code:
 - comments
 - user community profile
 - user post listing
-- follow / unfollow-style social relationship flow
+- follow and unfollow-style relationship flow
 
-Community posts can include tags, media, and course references, so this is more than a plain text feed.
+Community posts can include tags, media, and course references, so this module goes beyond a plain text feed.
 
 ### 7. Direct Messaging and Notifications
 
@@ -192,7 +346,7 @@ Community posts can include tags, media, and course references, so this is more 
 ### 11. Ads and Promotion Slots
 
 - admin-managed ad campaigns
-- current schema placement includes `LOGIN_MODAL`
+- schema placement includes `LOGIN_MODAL`
 - the frontend includes login promotion modal support
 
 ## Tech Stack
@@ -223,9 +377,9 @@ Community posts can include tags, media, and course references, so this is more 
 | Language | TypeScript |
 | ORM | Prisma 5 |
 | Database | PostgreSQL |
-| Auth | JWT, refresh tokens, httpOnly-cookie refresh flow |
+| Auth | JWT, refresh tokens, cookie-based refresh flow |
 | Uploads | Multer |
-| Real-Time Server | Socket.io |
+| Real-Time Server | Socket.IO |
 | Security | Helmet, CORS, rate limiting, sanitize-html, custom security headers |
 | Logging | Morgan + Winston |
 | Password Hashing | bcryptjs |
@@ -243,60 +397,62 @@ Community posts can include tags, media, and course references, so this is more 
 
 ## Frontend Architecture
 
-The frontend is a `React + Vite + TypeScript` single-page application, but it is organized beyond a basic `pages + components` structure.
+The frontend is a `React + Vite + TypeScript` single-page application with route-level and business-module separation.
 
 ### Frontend Structure
 
 | Directory | Purpose |
 | --- | --- |
 | `frontend/src/app` | main route configuration |
-| `frontend/src/pages` | page-level components, loaded with `React.lazy()` for route-based splitting |
-| `frontend/src/components` | reusable UI components grouped by admin / auth / common / layout / student / teacher |
-| `frontend/src/features` | higher-level business modules such as course editor and course management |
+| `frontend/src/pages` | page-level components loaded with `React.lazy()` for route-based splitting |
+| `frontend/src/components` | reusable UI components grouped by admin, auth, common, layout, student, and teacher |
+| `frontend/src/features` | larger business modules such as course editor and course management |
 | `frontend/src/services` | API layer wrappers |
-| `frontend/src/store` | Zustand state stores |
+| `frontend/src/store` | Zustand stores |
 | `frontend/src/hooks` | custom hooks |
 | `frontend/src/types` | frontend business types |
-| `frontend/src/utils` | helpers, runtime URL logic, error handling, asset normalization, auth storage helpers |
+| `frontend/src/utils` | helpers for runtime URLs, asset normalization, storage, and error handling |
 | `frontend/src/lib` | lower-level configuration such as i18n bootstrap |
 | `frontend/src/locales` | English, Chinese, and Malay translation resources |
 
 ### Important Frontend Characteristics
 
-- routes are split by guest, student, teacher, and admin access
+- routes are separated by guest, student, teacher, and admin access patterns
 - page-level lazy loading is enabled
 - `vite.config.ts` proxies `/api`, `/uploads`, and `/socket.io`
-- Axios interceptors centralize auth, token refresh, and error handling
-- auth state is managed in Zustand and synchronized across tabs
-- i18n infrastructure exists for `en`, `zh`, and `ms`
-- pages such as home, navigation, checkout, live session, and admin dashboards are connected to real service layers rather than static placeholders
+- Axios interceptors centralize auth handling, token refresh attempts, and error handling
+- auth state is stored with Zustand
+- multilingual infrastructure exists for `en`, `zh`, and `ms`
+- dashboard, checkout, live-session, and admin pages are connected to real service layers rather than static placeholders
 
 ## Backend Architecture
 
-The backend follows a layered structure that is easier to maintain over time:
+The backend follows a layered structure that is much easier to maintain than a single-file Express app.
 
-- `routes` handle routing and role-based access wiring
-- `controllers` handle HTTP input/output
-- `services` contain business logic
-- `middleware` handles auth, security, rate limiting, error handling, uploads, and shared request concerns
-- `config` contains environment, database, and CORS configuration
-- `utils` contains logger setup, custom errors, sanitization helpers, and other utilities
-- `socket` contains live session real-time logic
+### Backend Layers
+
+- `routes` wire URL prefixes, auth middleware, and role boundaries
+- `controllers` handle request and response shaping
+- `services` contain the main business logic
+- `middleware` handles auth, security, sanitization, uploads, rate limiting, request IDs, and error handling
+- `config` stores environment, database, and origin policy configuration
+- `utils` contains logging, errors, and shared helpers
+- `socket` contains live-session real-time behavior
 
 ### Important Backend Characteristics
 
 - the API is mounted under `/api/v1`
 - dedicated `health` and `ready` endpoints are exposed
 - graceful shutdown is implemented
-- every request gets a request ID
+- every request receives a request ID
 - request input is sanitized for XSS protection
-- auth-related routes are rate-limited
+- API traffic is rate-limited
 - sensitive fields such as passwords, tokens, cookies, and bank details are redacted from logs
-- uploads are validated by type, extension, file signature, and file size
+- uploads are validated by type, extension, signature, size, and path safety rules
 
 ## Database Design Overview
 
-`backend/prisma/schema.prisma` is one of the strongest parts of the project. The schema already covers most of the platform's core business areas.
+`backend/prisma/schema.prisma` is one of the strongest parts of the repository. The schema already models multiple real platform concerns instead of only users and courses.
 
 ### 1. User and Permission Models
 
@@ -320,7 +476,7 @@ The backend follows a layered structure that is easier to maintain over time:
 - `Enrollment`
 - `Review`
 
-### 3. Commerce and Support Models
+### 3. Commerce and Finance Models
 
 - `CartItem`
 - `Order`
@@ -350,10 +506,10 @@ The backend follows a layered structure that is easier to maintain over time:
 
 ### 5. Schema Characteristics
 
-- clear enums are used for roles, payments, orders, reports, support, refunds, and payouts
-- money values rely on `Decimal`
-- wallet, order, payment, and audit records are modeled with safer history-preserving behavior
-- courses are modeled as a combination of course, lessons, packages, materials, and live sessions
+- enums are used for roles, orders, payments, refunds, reports, support, and payouts
+- money values use `Decimal`
+- finance-related records preserve historical information instead of flattening everything into a user table
+- courses are modeled as course, lessons, packages, materials, and live sessions rather than as a single content blob
 
 ## API Modules
 
@@ -373,7 +529,7 @@ All API routes are mounted under:
 | Courses | `/courses` | course listing, course details, lessons, packages, materials, notifications, quizzes |
 | Enrollments | `/enrollments` | my courses, access checks, progress updates, teacher-side student and course stats |
 | Payments | `/payments` | create checkout, confirm payment, teacher earnings, admin refunds |
-| Orders | `/orders` | order history, order details, cancellation, refund requests and refund lookup |
+| Orders | `/orders` | order history, order details, cancellation, refund requests, refund lookup |
 | Cart | `/cart` | cart CRUD and clear |
 | Reviews | `/reviews` | course review flow |
 | Reports | `/reports` | student reports and admin moderation |
@@ -405,14 +561,14 @@ The real-time layer is implemented in:
 
 ### Actual Boundaries of the Live Session Feature
 
-- it is not a built-in video streaming or WebRTC conferencing stack
-- the UI shows session status and chat
-- if `meetingUrl` exists, the page opens an external meeting room
-- in short: live session coordination is implemented in-repo, while the actual meeting room is external
+- it is not a built-in WebRTC or native video streaming stack
+- the in-repo logic handles session coordination and chat
+- if `meetingUrl` exists, the frontend opens an external meeting room
+- the correct description is: live session coordination is implemented in-repo, while the actual meeting room is external
 
 ## Uploads and Protected Assets
 
-The upload flow is not a generic "accept any file" mechanism. It is folder-based, type-restricted, and validated.
+The upload system is folder-based, validated, and partially protected. It is not a generic "upload any file anywhere" pipeline.
 
 ### Supported Upload Categories
 
@@ -422,12 +578,12 @@ The upload flow is not a generic "accept any file" mechanism. It is folder-based
 | `support-attachments` | support attachments | 10MB |
 | `community-images` | community images | 10MB |
 | `thumbnails` | course thumbnails | 5MB |
-| `videos` | course / lesson videos | 500MB |
+| `videos` | course or lesson videos | 500MB |
 | `documents` | course documents | 50MB |
-| `avatars` | avatars | 5MB |
+| `avatars` | user avatars | 5MB |
 | `verifications` | teacher verification materials | 10MB |
 | `teacher-profiles` | teacher profile images | 5MB |
-| `teacher-certificates` | teacher certificates / PDFs | 10MB |
+| `teacher-certificates` | teacher certificates or PDFs | 10MB |
 
 ### Upload Security Rules
 
@@ -445,38 +601,36 @@ The upload flow is not a generic "accept any file" mechanism. It is folder-based
 - `support-attachments`
 - `teacher-certificates`
 
-So the platform does not simply expose every upload directory as a fully public asset bucket.
-
 ## Security and Risk Controls
 
-Based on the current codebase, the project already includes several meaningful protections:
+Based on the current implementation, the project already includes several meaningful protections:
 
-- JWT access token + refresh token model
+- JWT access token plus refresh token model
 - refresh-token-based session recovery
 - token version invalidation
 - failed-login tracking and temporary account locking
 - `helmet`
-- origin-based `cors` control with local dev allowances
+- origin-based `cors` control with local-development allowances
 - `express-rate-limit`
 - request sanitization using `sanitize-html`
-- log redaction for sensitive fields
+- redaction of sensitive values in logs
 - protected upload directories
 
 ## Internationalization and Frontend Experience
 
 ### Internationalization
 
-The frontend already has i18n infrastructure and includes these resource directories:
+The frontend already includes multilingual infrastructure and these resource directories:
 
 - `frontend/src/locales/en`
 - `frontend/src/locales/zh`
 - `frontend/src/locales/ms`
 
-So the safest accurate statement is:
+The safest accurate statement is:
 
 - the project already has multilingual infrastructure
 - English, Chinese, and Malay resources exist in the codebase
-- but it should not be described as "every screen is fully translated" unless each page is verified end-to-end
+- it should not be described as "every screen is fully translated" unless every page is verified end-to-end
 
 ### Frontend Experience Notes
 
@@ -485,7 +639,7 @@ So the safest accurate statement is:
 - route-based code splitting
 - toast feedback
 - network status and error boundary components
-- page-level loading, skeleton, and transition patterns
+- loading, skeleton, and transition patterns across page flows
 
 ## Project Structure
 
@@ -536,65 +690,63 @@ FlexiLearnProject/
 └─ README.md
 ```
 
-## Requirements
+## Full Local Setup from Scratch
 
-- Node.js `>= 20`
-- npm
-- PostgreSQL
+This section is the longer version of the quick start, with a bit more context.
 
-For local development, it is best to run:
+### 1. Prepare PostgreSQL
 
-- one terminal for the backend
-- one terminal for the frontend
-
-The root `package.json` does not currently provide a monorepo-style unified start script.
-
-## Local Setup from Scratch
-
-### 1. Install Backend Dependencies
-
-```bash
-cd backend
-npm ci
-cp .env.example .env
-```
-
-Then update `backend/.env` with your own database connection, JWT secrets, and CORS values.
-
-The example configuration currently uses:
+The backend example config uses:
 
 ```env
 DATABASE_URL="postgresql://postgres:postgres@localhost:5432/edutech_platform?schema=public"
 ```
 
-So you need a PostgreSQL database ready locally, for example:
+So you need a local PostgreSQL database ready, for example:
 
 - database name: `edutech_platform`
-- credentials: whatever matches your own local setup
+- credentials: whatever matches your local PostgreSQL setup
 
-### 2. Run Prisma Migrations
+### 2. Install Backend Dependencies
+
+Copy `backend/.env.example` to `backend/.env`, then configure:
+
+- `DATABASE_URL`
+- `JWT_SECRET`
+- `JWT_REFRESH_SECRET`
+- `CORS_ORIGIN`
+- `SOCKET_CORS_ORIGIN`
+
+Install dependencies:
+
+```bash
+cd backend
+npm ci
+```
+
+### 3. Run Prisma Migrations
 
 ```bash
 cd backend
 npm run prisma:migrate
 ```
 
-If you only want to generate the Prisma Client first:
+If you only want to generate Prisma Client first:
 
 ```bash
 npm run prisma:generate
 ```
 
-### 3. Understand the Seed Behavior
+### 4. Understand the Seed Behavior
 
 ```bash
 cd backend
 npm run seed
 ```
 
-This command does not insert sample data. It only reports that the project intentionally uses an empty baseline database.
+This command does not populate demo data. It only confirms that the project intentionally starts from an empty database baseline.
 
-### 4. Start the Backend
+### 5. Start the Backend
 
 ```bash
 cd backend
@@ -607,29 +759,39 @@ Default backend address:
 http://localhost:3000
 ```
 
-Health endpoints:
+Important URLs:
 
 ```text
+http://localhost:3000/
 http://localhost:3000/api/v1/health
 http://localhost:3000/api/v1/ready
 ```
 
-### 5. Start the Frontend
+### 6. Install Frontend Dependencies
+
+Copy `frontend/.env.example` to `frontend/.env`.
+
+Install dependencies:
 
 ```bash
 cd frontend
 npm ci
-cp .env.example .env
+```
+
+### 7. Start the Frontend
+
+```bash
+cd frontend
 npm run dev
 ```
 
-Default frontend dev address:
+Default frontend development address:
 
 ```text
 http://localhost:5173
 ```
 
-Default frontend env values:
+Default frontend environment values:
 
 ```env
 VITE_API_URL=/api/v1
@@ -637,46 +799,67 @@ VITE_SOCKET_URL=
 VITE_DEV_BACKEND_ORIGIN=http://localhost:3000
 ```
 
-That means the frontend uses the Vite dev proxy for `/api`, `/uploads`, and `/socket.io`.
+This means:
+
+- `/api` is proxied to the backend in development
+- `/uploads` is proxied to the backend in development
+- `/socket.io` is proxied with WebSocket support in development
 
 ## How to Get the First Admin on a Fresh Database
 
-This is one of the easiest places to get blocked when testing the platform.
+This is one of the most common testing blockers in this repository.
 
 ### Why It Happens
 
 - public registration only creates `STUDENT` or `TEACHER`
 - the seed does not create an admin
-- but teacher approval, refund handling, support management, and payout review all require admin access
+- teacher approval, refund review, support handling, payout review, and other operations require admin access
 
 ### Correct Approach
 
-1. Register a normal account through the frontend
-2. Open Prisma Studio
+1. Register a normal account through the frontend.
+2. Open Prisma Studio.
 
 ```bash
 cd backend
 npm run prisma:studio
 ```
 
-3. Open the `User` table
-4. Change one user's `role` to `ADMIN`
-5. Log in again with that account
+3. Open the `User` table.
+4. Change one user's `role` to `ADMIN`.
+5. Log in again with that account.
 
-That gives you access to the admin dashboard so you can continue testing verification, ads, refunds, support, and payout review flows.
+## Recommended Demo Paths
 
-## Recommended Teacher Testing Flow
+If you want to present the project clearly to a teacher, teammate, reviewer, or interviewer, these are the easiest truthful demo paths.
 
-If you want to test the teacher path end-to-end, this order is recommended:
+### Demo Path A: Student Purchase and Learning
 
-1. register a `TEACHER` account
-2. log in as the teacher
-3. complete the teacher profile
-4. submit extended profile data, certifications, and verification materials
-5. approve the teacher through an admin account
-6. return to the teacher side and test course creation, student management, wallet, and payout flows
+1. register a student account
+2. browse available courses
+3. add a course to the cart or use direct checkout
+4. complete simulated checkout
+5. open the purchased course from "my courses"
+6. view lessons, materials, and quiz flow
+7. show order history and refund request flow
 
-In other words, many teacher pages are intentionally gated by approval state, not opened immediately after registration.
+### Demo Path B: Teacher Approval to Course Publishing
+
+1. register a teacher account
+2. complete teacher basic and extended profile sections
+3. upload certification and verification materials
+4. submit for review
+5. switch to an admin account and approve the teacher
+6. return to the teacher side
+7. create a course, add lessons, add packages, and upload materials
+
+### Demo Path C: Admin Operations
+
+1. log in as `ADMIN`
+2. show teacher verification review
+3. show reports or support ticket management
+4. show refund review or payout review
+5. show ad management or platform overview analytics
 
 ## Common Commands
 
@@ -738,16 +921,16 @@ In other words, many teacher pages are intentionally gated by approval state, no
 | Variable | Purpose |
 | --- | --- |
 | `VITE_API_URL` | API base path |
-| `VITE_SOCKET_URL` | socket server URL, or current-origin-based fallback when empty |
+| `VITE_SOCKET_URL` | socket server URL, or current-origin fallback when empty |
 | `VITE_DEV_BACKEND_ORIGIN` | Vite dev proxy backend target |
 
-### Optional Public-Site Frontend Variables
+### Optional Frontend Public-Site Variables
 
 These are supported by the codebase even though they are not currently listed in `frontend/.env.example`:
 
 | Variable | Purpose |
 | --- | --- |
-| `VITE_SUPPORT_EMAIL` | help center / footer support email |
+| `VITE_SUPPORT_EMAIL` | help center or footer support email |
 | `VITE_LEGAL_EMAIL` | legal contact email |
 | `VITE_PRIVACY_EMAIL` | privacy contact email |
 | `VITE_SUPPORT_PHONE` | support phone |
@@ -761,35 +944,61 @@ These are supported by the codebase even though they are not currently listed in
 | `VITE_PRIVACY_LAST_UPDATED` | privacy last-updated date |
 | `VITE_GOVERNING_LAW` | governing law text |
 
+## Troubleshooting Notes
+
+### The seed ran, but no users or courses appeared
+
+That is expected. The seed is intentionally empty.
+
+### I cannot access admin pages
+
+That is also expected on a fresh database. Promote an existing user to `ADMIN` through Prisma Studio or a direct database update.
+
+### The frontend loads, but API requests fail
+
+Check:
+
+- that the backend is running on `http://localhost:3000`
+- that `frontend/.env` still points development traffic to the correct backend
+- that `CORS_ORIGIN` and `SOCKET_CORS_ORIGIN` allow the frontend origin
+
+### Live session opens the page, but not a built-in video room
+
+That is expected. The repository manages session state and chat, but the actual meeting room depends on `meetingUrl`.
+
+### Why are backend and frontend started separately
+
+Because the root project does not currently define a unified monorepo dev runner. Local development is intentionally split into two app processes.
+
 ## How to Describe This Project Accurately
 
-If you want to present it to a teacher, teammate, interviewer, or in a portfolio, an accurate description would be:
+If you want a strong but still accurate one-paragraph description, this is a safe version:
 
-> This is a full-stack online education platform built with React, Vite, TypeScript, Express, Prisma, and PostgreSQL. It is not just a course showcase frontend. It implements separate student, teacher, and admin role flows, including course management, teacher approval, simulated checkout and orders, refunds, wallets, community features, messaging, notifications, support tickets, admin operations, and live session state management.
+> This is a full-stack online education platform built with React, Vite, TypeScript, Express, Prisma, and PostgreSQL. It is not just a course showcase frontend. The repository implements separate student, teacher, and admin flows, including teacher approval, course management, simulated checkout and orders, refunds, wallet and payout logic, community features, messaging, notifications, support tickets, admin moderation, and real-time live session state management.
 
-If you want a slightly more conservative description:
+If you want a more conservative description:
 
-> This is a fairly complete online education platform prototype / business-oriented full-stack system. The main workflows are implemented, but payments are still simulated, live sessions rely on external meeting links, the database starts from an empty baseline, and automated tests are not yet present.
+> This is a fairly complete business-oriented edtech platform prototype. The main workflows are implemented across frontend, backend, and database layers, but payments are still simulated, live sessions rely on external meeting links, the database starts empty, and automated tests are not yet included.
 
 ## Current Status Summary
 
 ### What the Project Already Achieves
 
-- complete frontend/backend separation
+- clear frontend and backend separation
 - high-coverage business schema
-- clear multi-role design
-- structured route and permission separation
-- substantial admin functionality
-- implemented order, refund, and wallet flows
-- real-time session and chat support
+- meaningful multi-role workflow design
+- route and permission separation
+- substantial admin operations surface
+- implemented order, refund, wallet, and payout-related flows
+- real-time session coordination and chat support
 
 ### What the Project Does Not Yet Include
 
 - no real payment gateway integration
 - no built-in native video conferencing stack
-- no default seed data
+- no default sample seed data
 - no project-owned automated test suite
-- no unified root-level one-command start script
+- no unified root-level one-command development script
 
 ## Commit and Cleanup Guidance
 
@@ -805,4 +1014,4 @@ When sharing or pushing the repository, these runtime artifacts should usually s
 - TypeScript build info files
 - local QA screenshots
 
-These belong to local runtime or debugging workflows, not to the core source code of the project.
+These belong to local runtime, debugging, or generated output rather than the core source code of the project.
