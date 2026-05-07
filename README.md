@@ -2,10 +2,6 @@
 
 This repository contains a full-stack online learning platform built with `React`, `Vite`, `TypeScript`, `Express`, `Prisma`, and `PostgreSQL`.
 
-The local folder is named `FlexiLearnProject`, while the codebase, package metadata, API responses, and most UI branding use the name `Edutech` / `EduTech Platform`.
-
-This README is intentionally written to match the current codebase as closely as possible. It describes what is already implemented, what is partially implemented, and what is intentionally not in the repository yet.
-
 ## Table of Contents
 
 - [At a Glance](#at-a-glance)
