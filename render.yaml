@@ -3,7 +3,7 @@ services:
     name: flexilearn
     runtime: node
     plan: free
-    buildCommand: npm ci --prefix backend && npm ci --prefix frontend && npm run build --prefix frontend && npm run build --prefix backend
+    buildCommand: npm ci --include=dev --prefix backend && npm ci --include=dev --prefix frontend && npm run build --prefix frontend && npm run build --prefix backend
     startCommand: npm run prisma:deploy --prefix backend && npm run start --prefix backend
     healthCheckPath: /api/v1/health
     envVars:
