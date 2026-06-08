@@ -68,6 +68,19 @@ const io = new Server(httpServer, {
 // Security middleware.
 app.use(
   helmet({
+    contentSecurityPolicy: {
+      directives: {
+        "connect-src": ["'self'", "https:", "wss:"],
+        "frame-src": [
+          "'self'",
+          "https://www.youtube.com",
+          "https://www.youtube-nocookie.com",
+          "https://player.vimeo.com",
+        ],
+        "img-src": ["'self'", "data:", "https:"],
+        "media-src": ["'self'", "https:"],
+      },
+    },
     crossOriginResourcePolicy: { policy: "cross-origin" },
   }),
 );

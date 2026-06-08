@@ -150,8 +150,8 @@ export default function ThumbnailSourceField({
                   className="flex aspect-video w-full max-w-xs items-center justify-center rounded-lg border border-gray-200 bg-gray-100 px-4 text-center text-sm text-gray-600"
                   role="status"
                 >
-                  Unable to preview this image link. Please check that the URL is valid, public,
-                  and uses HTTP or HTTPS.
+                  Unable to preview this image link. Please check that the URL is public and
+                  allows external embedding, or upload the image file instead.
                 </div>
               )}
             </div>
