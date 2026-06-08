@@ -6,7 +6,6 @@ The Render Blueprint in `render.yaml` creates:
 
 - one Node Web Service named `flexilearn`
 - one Render PostgreSQL database named `flexilearn-db`
-- one 1 GB persistent disk for uploads
 
 The backend serves the built Vite frontend in production, so the deployed app uses the same origin for the frontend, API, uploads, and Socket.IO:
 
@@ -28,13 +27,16 @@ For a school prototype, this is simpler than splitting frontend and backend into
 
 ## Cost
 
-The checked-in `render.yaml` uses paid-but-small prototype resources:
+The checked-in `render.yaml` uses free prototype resources:
 
-- Web Service: `starter`
-- PostgreSQL: `basic-256mb`
-- Upload disk: `1 GB`
+- Web Service: `free`
+- PostgreSQL: `free`
+- no persistent upload disk
 
-This avoids free-tier sleep and free database expiry problems during grading or user testing. If you only need a very short demo, you can change the web service and database plans to `free`, but remove the `disk` block or uploads will not be persistent.
+This avoids the Render payment-information prompt. The tradeoffs are that the
+web service can sleep when inactive, the free database is temporary, and uploaded
+files are not persistent across deploys/restarts. For a school prototype/demo,
+that is usually acceptable.
 
 ## Deploy Steps
 
@@ -117,8 +119,30 @@ WHERE email = 'your-email@example.com';
 
 - Payments are simulated in this repository.
 - Live sessions coordinate state and chat with Socket.IO, but the actual meeting room is an external meeting URL.
-- Uploaded files are stored on the Render disk. The checked-in disk is enough for prototype use, but do not ask users to upload large course videos for grading.
+- Uploaded files use the service filesystem on the free plan, so they are only suitable for short demo sessions and can disappear after redeploys/restarts.
+- Upload size is capped at 10 MB in the free Blueprint to keep prototype usage light.
 - Render service names must be unique inside your Render account. If Render changes the final public URL, use whatever URL Render shows for the `flexilearn` web service.
+
+## Upgrade Later
+
+If the project needs a more stable demo window, change the web service plan to
+`starter`, change the database plan to `basic-256mb`, and add a disk block:
+
+```yaml
+disk:
+  name: flexilearn-uploads
+  mountPath: /var/data
+  sizeGB: 1
+```
+
+Then set:
+
+```yaml
+- key: UPLOAD_DIR
+  value: /var/data/uploads
+```
+
+Render will ask for payment information for that upgraded setup.
 
 ## Local Verification Commands
 
