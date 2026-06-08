@@ -19,6 +19,7 @@ interface AppConfig {
   NODE_ENV: NodeEnv;
   PORT: number;
   API_VERSION: string;
+  FRONTEND_DIST_DIR: string;
 
   // Database
   DATABASE_URL: string;
@@ -241,14 +242,30 @@ const resolveUploadDir = (value: string | undefined): string => {
 
 const uploadDir = resolveUploadDir(uploadDirFromEnv);
 
-const corsOrigin = parseCorsOrigin(
-  process.env.CORS_ORIGIN,
-  "http://localhost:5173",
-);
+const resolveFrontendDistDir = (value: string | undefined): string => {
+  if (!value || value.trim().length === 0) {
+    return path.resolve(projectRootDir, "..", "frontend", "dist");
+  }
+
+  if (path.isAbsolute(value)) {
+    return value;
+  }
+
+  return path.resolve(projectRootDir, value);
+};
+
+const frontendDistDir = resolveFrontendDistDir(process.env.FRONTEND_DIST_DIR);
+
+const defaultPublicOrigin =
+  IS_PROD && process.env.RENDER_EXTERNAL_URL
+    ? process.env.RENDER_EXTERNAL_URL
+    : "http://localhost:5173";
+
+const corsOrigin = parseCorsOrigin(process.env.CORS_ORIGIN, defaultPublicOrigin);
 
 const socketCorsOrigin = parseCorsOrigin(
   process.env.SOCKET_CORS_ORIGIN || process.env.CORS_ORIGIN,
-  "http://localhost:5173",
+  defaultPublicOrigin,
 );
 
 const config: AppConfig = {
@@ -256,6 +273,7 @@ const config: AppConfig = {
   NODE_ENV,
   PORT: parseInteger(process.env.PORT, 3000, 1, 65535, "PORT"),
   API_VERSION: parseApiVersion(process.env.API_VERSION),
+  FRONTEND_DIST_DIR: frontendDistDir,
 
   // Database
   DATABASE_URL,

@@ -1,5 +1,7 @@
 import express, { Application } from "express";
 import { createServer } from "http";
+import fs from "fs";
+import path from "path";
 import { Server } from "socket.io";
 import cors from "cors";
 import helmet from "helmet";
@@ -216,8 +218,23 @@ app.use(
 // API routes.
 app.use(API_PREFIX, routes);
 
+// Serve the Vite production build from the API service in production.
+// This keeps the prototype deploy simple: one Render Web Service plus Postgres.
+if (isProduction && fs.existsSync(config.FRONTEND_DIST_DIR)) {
+  app.use(
+    express.static(config.FRONTEND_DIST_DIR, {
+      index: false,
+      maxAge: "1h",
+    }),
+  );
+}
+
 // Root endpoint.
 app.get("/", (_req, res) => {
+  if (isProduction && fs.existsSync(config.FRONTEND_DIST_DIR)) {
+    return res.sendFile(path.join(config.FRONTEND_DIST_DIR, "index.html"));
+  }
+
   res.status(200).json({
     name: "Edutech Platform API",
     version: "1.0.0",
@@ -229,6 +246,20 @@ app.get("/", (_req, res) => {
     },
   });
 });
+
+if (isProduction && fs.existsSync(config.FRONTEND_DIST_DIR)) {
+  app.get("*", (req, res, next) => {
+    if (
+      req.path.startsWith("/api/") ||
+      req.path.startsWith("/uploads") ||
+      req.path.startsWith("/socket.io")
+    ) {
+      return next();
+    }
+
+    return res.sendFile(path.join(config.FRONTEND_DIST_DIR, "index.html"));
+  });
+}
 
 // 404 handler.
 app.use(notFound);
