@@ -4,8 +4,7 @@ services:
     runtime: node
     plan: free
     buildCommand: npm ci --prefix backend && npm ci --prefix frontend && npm run build --prefix frontend && npm run build --prefix backend
-    preDeployCommand: npm run prisma:deploy --prefix backend
-    startCommand: npm run start --prefix backend
+    startCommand: npm run prisma:deploy --prefix backend && npm run start --prefix backend
     healthCheckPath: /api/v1/health
     envVars:
       - key: NODE_ENV

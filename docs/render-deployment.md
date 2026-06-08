@@ -23,7 +23,7 @@ For a school prototype, this is simpler than splitting frontend and backend into
 - no manual `VITE_API_URL` or `VITE_SOCKET_URL` needed
 - fewer CORS mistakes
 - Socket.IO stays on the same origin
-- Prisma migrations run automatically before each deploy
+- Prisma migrations run automatically when the service starts
 
 ## Cost
 
@@ -122,6 +122,7 @@ WHERE email = 'your-email@example.com';
 - Uploaded files use the service filesystem on the free plan, so they are only suitable for short demo sessions and can disappear after redeploys/restarts.
 - Upload size is capped at 10 MB in the free Blueprint to keep prototype usage light.
 - Render service names must be unique inside your Render account. If Render changes the final public URL, use whatever URL Render shows for the `flexilearn` web service.
+- The free Render web service does not support `preDeployCommand`, so migrations run in `startCommand` before the Node server starts.
 
 ## Upgrade Later
 
