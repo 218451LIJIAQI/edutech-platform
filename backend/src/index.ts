@@ -13,6 +13,7 @@ import config from "./config/env";
 import prisma, { disconnectPrisma } from "./config/database";
 import { appCorsOptions, socketCorsOptions } from "./config/origin-policy";
 import logger from "./utils/logger";
+import { bootstrapAdminAccount } from "./services/bootstrap-admin.service";
 
 // Routes
 import routes from "./routes";
@@ -272,6 +273,7 @@ new LiveSessionHandler(io);
 
 // Initialize application services.
 const initializeServices = async () => {
+  await bootstrapAdminAccount();
   logger.info("All services initialized");
 };
 
