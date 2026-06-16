@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import clientLogger from '@/utils/logger';
-import adminService, { FinancialStats, PaginationMeta, SettlementSummaryRow, TeacherCommissionListItem } from '@/services/admin.service';
-import { DollarSign, TrendingUp, PieChart, Receipt, Calendar, RefreshCcw, Percent, Search, Download } from 'lucide-react';
+import adminService, { FinancialStats, PaginationMeta, SettlementSummaryRow, TeacherCommissionListItem, FinancialReportSummaryData, TeacherSettlementsData, TeacherSettlementItem } from '@/services/admin.service';
+import { DollarSign, TrendingUp, PieChart, Receipt, Calendar, RefreshCcw, Percent, Search, Download, Zap, FileText } from 'lucide-react';
 import { RevenueAnalytics } from '@/components/admin';
 import toast from 'react-hot-toast';
 import { extractErrorMessage } from '@/utils/error-handler';
@@ -29,7 +29,7 @@ const getPaymentCourseTitle = (payment: AdminPaymentRow): string => {
 
 const FinancialsManagement = () => {
   usePageTitle('Financial Management');
-  const [tab, setTab] = useState<'payments' | 'commissions' | 'settlements' | 'analytics'>('payments');
+  const [tab, setTab] = useState<'payments' | 'commissions' | 'settlements' | 'analytics' | 'auto-reports'>('payments');
 
   // Financial overview & payments
   const [stats, setStats] = useState<FinancialStats | null>(null);
@@ -159,6 +159,14 @@ const FinancialsManagement = () => {
   const [settLoading, setSettLoading] = useState(false);
   const [settlementRequestKey, setSettlementRequestKey] = useState(0);
 
+  // Auto-Reports state
+  const [autoReportSummary, setAutoReportSummary] = useState<FinancialReportSummaryData | null>(null);
+  const [autoReportSettlements, setAutoReportSettlements] = useState<TeacherSettlementItem[]>([]);
+  const [autoReportSettlementsTotals, setAutoReportSettlementsTotals] = useState<TeacherSettlementsData['totals'] | null>(null);
+  const [autoReportLoading, setAutoReportLoading] = useState(false);
+  const [autoReportExporting, setAutoReportExporting] = useState(false);
+  const [autoReportRequestKey, setAutoReportRequestKey] = useState(0);
+
   const hasSettlementDateRangeError = useMemo(
     () => Boolean(settStart && settEnd && settStart > settEnd),
     [settStart, settEnd]
@@ -203,6 +211,52 @@ const FinancialsManagement = () => {
       isActive = false;
     };
   }, [tab, settPage, settLimit, appliedSettStart, appliedSettEnd, settlementRequestKey]);
+
+  // Auto-Reports data loading
+  useEffect(() => {
+    if (tab !== 'auto-reports') return;
+    let isActive = true;
+    const loadAutoReports = async () => {
+      setAutoReportLoading(true);
+      try {
+        const [summary, settlements] = await Promise.all([
+          adminService.getFinancialReportSummary(),
+          adminService.getTeacherSettlements({ limit: 20 }),
+        ]);
+        if (isActive) {
+          setAutoReportSummary(summary);
+          setAutoReportSettlements(settlements.settlements);
+          setAutoReportSettlementsTotals(settlements.totals);
+        }
+      } catch (error: unknown) {
+        if (isActive) {
+          clientLogger.error('Failed to load auto-reports:', error);
+          toast.error(extractErrorMessage(error, 'Failed to load auto-reports'));
+        }
+      } finally {
+        if (isActive) setAutoReportLoading(false);
+      }
+    };
+    void loadAutoReports();
+    return () => { isActive = false; };
+  }, [tab, autoReportRequestKey]);
+
+  const handleAutoReportExport = async () => {
+    setAutoReportExporting(true);
+    try {
+      const data = await adminService.getFinancialExportData({});
+      const headers = ['ID', 'Date', 'User', 'Course', 'Amount', 'Platform Commission', 'Teacher Earning', 'Status'];
+      const rows = data.payments.map((p) => [p.id, p.date, p.userName, p.courseName, p.amount, p.platformCommission, p.teacherEarning, p.status]);
+      const csv = buildCsvContent([headers, ...rows]);
+      downloadCsvFile(csv, `financial-report-${new Date().toISOString().slice(0, 10)}.csv`);
+      toast.success('Financial report exported successfully');
+    } catch (error: unknown) {
+      clientLogger.error('Failed to export financial report:', error);
+      toast.error(extractErrorMessage(error, 'Failed to export report'));
+    } finally {
+      setAutoReportExporting(false);
+    }
+  };
 
   const formatMoney = (v: number | undefined) =>
     (v ?? 0).toLocaleString(undefined, { style: 'currency', currency: 'USD' });
@@ -265,6 +319,26 @@ const FinancialsManagement = () => {
             >
               <RefreshCcw className="w-4 h-4" /> Refresh
             </button>
+          ) : tab === 'auto-reports' ? (
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => void handleAutoReportExport()}
+                disabled={autoReportExporting}
+                className="btn btn-outline flex items-center gap-2"
+                title="Export CSV"
+              >
+                <Download className="w-4 h-4" /> {autoReportExporting ? 'Exporting...' : 'Export CSV'}
+              </button>
+              <button
+                type="button"
+                onClick={() => setAutoReportRequestKey((k) => k + 1)}
+                className="btn btn-outline flex items-center gap-2"
+                title="Refresh"
+              >
+                <RefreshCcw className="w-4 h-4" /> Refresh
+              </button>
+            </div>
           ) : null}
         </div>
 
@@ -297,6 +371,13 @@ const FinancialsManagement = () => {
             onClick={() => setTab('analytics')}
           >
             Analytics
+          </button>
+          <button
+            type="button"
+            className={`px-4 py-2 rounded-lg font-semibold flex items-center gap-1.5 ${tab === 'auto-reports' ? 'bg-gradient-to-r from-green-600 to-emerald-600 text-white shadow-md' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+            onClick={() => setTab('auto-reports')}
+          >
+            <Zap className="w-4 h-4" /> Auto Reports
           </button>
         </div>
 
@@ -789,8 +870,115 @@ const FinancialsManagement = () => {
               )}
             </div>
           </div>
-        ) : (
+        ) : tab === 'analytics' ? (
           <RevenueAnalytics />
+        ) : (
+          /* Auto Reports Tab */
+          <div className="space-y-6">
+            {autoReportLoading ? (
+              <div className="flex items-center justify-center py-20">
+                <div className="flex flex-col items-center space-y-4">
+                  <div className="spinner" />
+                  <p className="text-gray-600 font-medium">Generating automated reports...</p>
+                </div>
+              </div>
+            ) : (
+              <>
+                {/* Summary Cards */}
+                {autoReportSummary && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                    {([
+                      { label: 'Today', data: autoReportSummary.daily, cardClass: 'bg-gradient-to-br from-blue-50 to-blue-100 border border-blue-200', iconClass: 'text-blue-600', labelClass: 'text-blue-700' },
+                      { label: 'This Week', data: autoReportSummary.weekly, cardClass: 'bg-gradient-to-br from-green-50 to-green-100 border border-green-200', iconClass: 'text-green-600', labelClass: 'text-green-700' },
+                      { label: 'This Month', data: autoReportSummary.monthly, cardClass: 'bg-gradient-to-br from-purple-50 to-purple-100 border border-purple-200', iconClass: 'text-purple-600', labelClass: 'text-purple-700' },
+                      { label: 'All Time', data: autoReportSummary.allTime, cardClass: 'bg-gradient-to-br from-amber-50 to-amber-100 border border-amber-200', iconClass: 'text-amber-600', labelClass: 'text-amber-700' },
+                    ] as const).map((period) => (
+                      <div key={period.label} className={`${period.cardClass} rounded-xl p-5`}>
+                        <div className="flex items-center gap-2 mb-3">
+                          <FileText className={`w-4 h-4 ${period.iconClass}`} />
+                          <span className={`text-xs font-semibold ${period.labelClass} uppercase`}>{period.label}</span>
+                        </div>
+                        <p className="text-xl font-bold text-gray-900">{formatMoney(period.data.totalRevenue)}</p>
+                        <div className="mt-2 grid grid-cols-2 gap-2 text-xs">
+                          <div>
+                            <p className="text-gray-500">Platform</p>
+                            <p className="font-semibold text-gray-700">{formatMoney(period.data.platformEarnings)}</p>
+                          </div>
+                          <div>
+                            <p className="text-gray-500">Teachers</p>
+                            <p className="font-semibold text-gray-700">{formatMoney(period.data.teacherEarnings)}</p>
+                          </div>
+                          <div>
+                            <p className="text-gray-500">Refunds</p>
+                            <p className="font-semibold text-red-600">-{formatMoney(period.data.totalRefunds)}</p>
+                          </div>
+                          <div>
+                            <p className="text-gray-500">Net Revenue</p>
+                            <p className="font-semibold text-green-700">{formatMoney(period.data.netRevenue)}</p>
+                          </div>
+                        </div>
+                        <div className="mt-2 text-xs text-gray-500">
+                          {period.data.transactionCount} transactions, {period.data.refundCount} refunds
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Auto-Computed Teacher Settlements */}
+                <div className="card shadow-xl border border-gray-100 rounded-2xl">
+                  <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Zap className="w-5 h-5 text-green-600" />
+                      <h3 className="text-lg font-bold text-gray-900">Auto-Computed Teacher Settlements</h3>
+                    </div>
+                    {autoReportSettlementsTotals && (
+                      <div className="flex items-center gap-4 text-sm">
+                        <span className="text-gray-500">Total Earnings: <strong className="text-gray-900">{formatMoney(autoReportSettlementsTotals.totalEarnings)}</strong></span>
+                        <span className="text-gray-500">Deductions: <strong className="text-red-600">{formatMoney(autoReportSettlementsTotals.totalRefundDeductions)}</strong></span>
+                        <span className="text-gray-500">Net: <strong className="text-green-700">{formatMoney(autoReportSettlementsTotals.totalNetSettlement)}</strong></span>
+                      </div>
+                    )}
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full">
+                      <thead>
+                        <tr className="bg-gray-50 border-b border-gray-200">
+                          <th className="px-6 py-3 text-left text-xs font-bold text-gray-700 uppercase">Teacher</th>
+                          <th className="px-6 py-3 text-left text-xs font-bold text-gray-700 uppercase">Courses</th>
+                          <th className="px-6 py-3 text-left text-xs font-bold text-gray-700 uppercase">Students</th>
+                          <th className="px-6 py-3 text-left text-xs font-bold text-gray-700 uppercase">Earnings</th>
+                          <th className="px-6 py-3 text-left text-xs font-bold text-gray-700 uppercase">Deductions</th>
+                          <th className="px-6 py-3 text-left text-xs font-bold text-gray-700 uppercase">Pending Payouts</th>
+                          <th className="px-6 py-3 text-left text-xs font-bold text-gray-700 uppercase">Net Settlement</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100">
+                        {autoReportSettlements.length === 0 ? (
+                          <tr><td colSpan={7} className="px-6 py-8 text-center text-gray-500">No settlement data available</td></tr>
+                        ) : (
+                          autoReportSettlements.map((s) => (
+                            <tr key={s.teacherProfileId} className="hover:bg-gray-50 transition-colors">
+                              <td className="px-6 py-4">
+                                <p className="font-semibold text-gray-900 text-sm">{s.teacherName}</p>
+                                <p className="text-xs text-gray-500">{s.teacherEmail}</p>
+                              </td>
+                              <td className="px-6 py-4 text-sm text-gray-700">{s.courseCount}</td>
+                              <td className="px-6 py-4 text-sm text-gray-700">{s.totalStudents}</td>
+                              <td className="px-6 py-4 text-sm font-medium text-gray-900">{formatMoney(s.totalEarnings)}</td>
+                              <td className="px-6 py-4 text-sm font-medium text-red-600">-{formatMoney(s.totalRefundDeductions)}</td>
+                              <td className="px-6 py-4 text-sm text-amber-700">{formatMoney(s.pendingPayouts)}</td>
+                              <td className="px-6 py-4 text-sm font-bold text-green-700">{formatMoney(s.netSettlement)}</td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
         )}
       </div>
     </div>

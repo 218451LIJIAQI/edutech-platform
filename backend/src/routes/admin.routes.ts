@@ -7,6 +7,7 @@ import refundAdminController from "../controllers/refund-admin.controller";
 import supportAdminController from "../controllers/support-admin.controller";
 import walletAdminController from "../controllers/wallet-admin.controller";
 import adsController from "../controllers/ads.controller";
+import financialReportController from "../controllers/financial-report.controller";
 
 import { authenticate, authorize } from "../middleware/auth";
 import { validate } from "../middleware/validate";
@@ -258,6 +259,21 @@ router.post(
   "/wallet/payouts/:id/review",
   validate(uuidParam("id")),
   walletAdminController.reviewPayout,
+);
+
+// ================================
+// FINANCIAL REPORTS (AUTO-GENERATED)
+// ================================
+
+router.get("/financial-reports/summary", financialReportController.getSummary);
+router.get(
+  "/financial-reports/teacher-settlements",
+  financialReportController.getTeacherSettlements,
+);
+router.get("/financial-reports/export", financialReportController.exportData);
+router.get(
+  "/financial-reports/auto-verification-stats",
+  financialReportController.getAutoVerificationStats,
 );
 
 export default router;

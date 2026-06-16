@@ -1,7 +1,8 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import clientLogger from '@/utils/logger';
-import { CheckCircle, XCircle, Clock, Eye, AlertCircle, Loader, UserPlus, X } from 'lucide-react';
+import { CheckCircle, XCircle, Clock, Eye, AlertCircle, Loader, UserPlus, X, Zap, Shield } from 'lucide-react';
 import teacherService from '@/services/teacher.service';
+import adminService, { type AutoVerificationStats } from '@/services/admin.service';
 import { TeacherProfile, VerificationStatus, RegistrationStatus, TeacherVerification } from '@/types';
 import { extractErrorMessage } from '@/utils/error-handler';
 import { useOverlayAccessibility, usePageTitle, useTimeoutManager } from '@/hooks';
@@ -48,6 +49,10 @@ const VerificationTeachersManagement = () => {
   const [pendingCertificates, setPendingCertificates] = useState<TeacherVerification[]>([]);
   const [isLoadingCertificates, setIsLoadingCertificates] = useState(true);
   const [certSubmittingId, setCertSubmittingId] = useState<string | null>(null);
+
+  // Auto-verification stats
+  const [autoVerificationStats, setAutoVerificationStats] = useState<AutoVerificationStats | null>(null);
+  const [certFilter, setCertFilter] = useState<'all' | 'needs_review'>('all');
 
   // Shared UI state
   const [selectedTeacher, setSelectedTeacher] = useState<TeacherProfile | null>(null);
@@ -119,6 +124,16 @@ const VerificationTeachersManagement = () => {
     }
   }, [showTemporaryError]);
 
+  // Fetch auto-verification stats
+  const fetchAutoVerificationStats = useCallback(async () => {
+    try {
+      const stats = await adminService.getAutoVerificationStats();
+      setAutoVerificationStats(stats);
+    } catch (error) {
+      clientLogger.error('Failed to fetch auto-verification stats:', error);
+    }
+  }, []);
+
   useEffect(() => {
     if (activeTab === 'registrations') {
       fetchPendingRegistrations();
@@ -126,8 +141,9 @@ const VerificationTeachersManagement = () => {
       fetchPendingProfiles();
     } else if (activeTab === 'certificates') {
       fetchPendingCertificates();
+      fetchAutoVerificationStats();
     }
-  }, [activeTab, regPage, profPage, fetchPendingRegistrations, fetchPendingProfiles, fetchPendingCertificates]);
+  }, [activeTab, regPage, profPage, fetchPendingRegistrations, fetchPendingProfiles, fetchPendingCertificates, fetchAutoVerificationStats]);
 
   // Approve/Reject Certificate
   const handleReviewCertificate = async (
@@ -583,6 +599,66 @@ const VerificationTeachersManagement = () => {
         {/* Certificates Tab */}
         {activeTab === 'certificates' && (
           <>
+            {/* Auto-Verification Stats Banner */}
+            {autoVerificationStats && (
+              <div className="mb-6 grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div className="bg-gradient-to-br from-blue-50 to-blue-100 border border-blue-200 rounded-xl p-4">
+                  <div className="flex items-center gap-2 mb-1">
+                    <Shield className="w-4 h-4 text-blue-600" />
+                    <span className="text-xs font-semibold text-blue-700 uppercase">Total Processed</span>
+                  </div>
+                  <p className="text-2xl font-bold text-blue-900">{autoVerificationStats.totalProcessed}</p>
+                </div>
+                <div className="bg-gradient-to-br from-green-50 to-green-100 border border-green-200 rounded-xl p-4">
+                  <div className="flex items-center gap-2 mb-1">
+                    <Zap className="w-4 h-4 text-green-600" />
+                    <span className="text-xs font-semibold text-green-700 uppercase">Auto-Approved</span>
+                  </div>
+                  <p className="text-2xl font-bold text-green-900">{autoVerificationStats.autoApproved}</p>
+                </div>
+                <div className="bg-gradient-to-br from-amber-50 to-amber-100 border border-amber-200 rounded-xl p-4">
+                  <div className="flex items-center gap-2 mb-1">
+                    <Clock className="w-4 h-4 text-amber-600" />
+                    <span className="text-xs font-semibold text-amber-700 uppercase">Needs Review</span>
+                  </div>
+                  <p className="text-2xl font-bold text-amber-900">{autoVerificationStats.flaggedForReview}</p>
+                </div>
+                <div className="bg-gradient-to-br from-purple-50 to-purple-100 border border-purple-200 rounded-xl p-4">
+                  <div className="flex items-center gap-2 mb-1">
+                    <CheckCircle className="w-4 h-4 text-purple-600" />
+                    <span className="text-xs font-semibold text-purple-700 uppercase">Approval Rate</span>
+                  </div>
+                  <p className="text-2xl font-bold text-purple-900">{autoVerificationStats.autoApprovalRate}%</p>
+                </div>
+              </div>
+            )}
+
+            {/* Filter Toggle */}
+            <div className="mb-4 flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => setCertFilter('needs_review')}
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                  certFilter === 'needs_review'
+                    ? 'bg-primary-600 text-white shadow-md'
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }`}
+              >
+                Needs Manual Review
+              </button>
+              <button
+                type="button"
+                onClick={() => setCertFilter('all')}
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                  certFilter === 'all'
+                    ? 'bg-primary-600 text-white shadow-md'
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }`}
+              >
+                Show All
+              </button>
+            </div>
+
             {isLoadingCertificates ? (
               <div className="flex items-center justify-center py-20">
                 <div className="flex flex-col items-center space-y-4">
@@ -590,7 +666,12 @@ const VerificationTeachersManagement = () => {
                   <p className="text-gray-600 font-medium">Loading pending certificates...</p>
                 </div>
               </div>
-            ) : pendingCertificates.length > 0 ? (
+            ) : (() => {
+              const filteredCertificates = certFilter === 'needs_review'
+                ? pendingCertificates.filter((c) => c.verificationMethod === 'AUTO')
+                : pendingCertificates;
+
+              return filteredCertificates.length > 0 ? (
               <div className="card shadow-xl border border-gray-100 rounded-2xl overflow-hidden">
                 <div className="overflow-x-auto">
                   <table className="w-full">
@@ -598,13 +679,14 @@ const VerificationTeachersManagement = () => {
                       <tr className="bg-gray-100 border-b border-gray-200">
                         <th className="px-6 py-4 text-left text-sm font-bold text-gray-900">Teacher</th>
                         <th className="px-6 py-4 text-left text-sm font-bold text-gray-900">Document Type</th>
+                        <th className="px-6 py-4 text-left text-sm font-bold text-gray-900">Method</th>
                         <th className="px-6 py-4 text-left text-sm font-bold text-gray-900">Document</th>
                         <th className="px-6 py-4 text-left text-sm font-bold text-gray-900">Submitted At</th>
                         <th className="px-6 py-4 text-left text-sm font-bold text-gray-900">Actions</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {pendingCertificates.map((cert) => (
+                      {filteredCertificates.map((cert) => (
                         (() => {
                           const documentAccessUrl =
                             cert.accessUrl ?? cert.documentUrl;
@@ -623,6 +705,17 @@ const VerificationTeachersManagement = () => {
                                 </div>
                               </td>
                               <td className="px-6 py-4 text-sm text-gray-600">{cert.documentType}</td>
+                              <td className="px-6 py-4">
+                                {cert.verificationMethod === 'AUTO' ? (
+                                  <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-green-100 text-green-700 border border-green-200">
+                                    <Zap className="w-3 h-3" /> Auto
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-blue-100 text-blue-700 border border-blue-200">
+                                    <Shield className="w-3 h-3" /> Manual
+                                  </span>
+                                )}
+                              </td>
                               <td className="px-6 py-4">
                                 {documentAccessUrl ? (
                                   <button
@@ -679,7 +772,8 @@ const VerificationTeachersManagement = () => {
                 <h3 className="text-2xl font-bold text-gray-900 mb-2">No pending certificates</h3>
                 <p className="text-gray-600">Certificate submissions awaiting review will appear here.</p>
               </div>
-            )}
+            );
+            })()}
           </>
         )}
       </div>

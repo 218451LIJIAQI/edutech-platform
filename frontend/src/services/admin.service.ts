@@ -459,6 +459,117 @@ const adminService = {
       })),
     };
   },
+
+  /**
+   * Get auto-generated financial report summary
+   */
+  getFinancialReportSummary: async (): Promise<FinancialReportSummaryData> => {
+    const response = await api.get<ApiResponse<FinancialReportSummaryData>>('/admin/financial-reports/summary');
+    return extractData(response);
+  },
+
+  /**
+   * Get auto-computed teacher settlements
+   */
+  getTeacherSettlements: async (params?: {
+    page?: number;
+    limit?: number;
+    startDate?: string;
+    endDate?: string;
+  }): Promise<TeacherSettlementsData> => {
+    const response = await api.get<ApiResponse<TeacherSettlementsData>>('/admin/financial-reports/teacher-settlements', { params });
+    return extractData(response);
+  },
+
+  /**
+   * Get financial export data
+   */
+  getFinancialExportData: async (params?: {
+    startDate?: string;
+    endDate?: string;
+  }): Promise<FinancialExportData> => {
+    const response = await api.get<ApiResponse<FinancialExportData>>('/admin/financial-reports/export', { params });
+    return extractData(response);
+  },
+
+  /**
+   * Get auto-verification statistics
+   */
+  getAutoVerificationStats: async (): Promise<AutoVerificationStats> => {
+    const response = await api.get<ApiResponse<AutoVerificationStats>>('/admin/financial-reports/auto-verification-stats');
+    return extractData(response);
+  },
 };
+
+export interface FinancialPeriodSummary {
+  period: string;
+  totalRevenue: number;
+  platformEarnings: number;
+  teacherEarnings: number;
+  totalRefunds: number;
+  netRevenue: number;
+  transactionCount: number;
+  refundCount: number;
+}
+
+export interface FinancialReportSummaryData {
+  daily: FinancialPeriodSummary;
+  weekly: FinancialPeriodSummary;
+  monthly: FinancialPeriodSummary;
+  allTime: FinancialPeriodSummary;
+}
+
+export interface TeacherSettlementItem {
+  teacherProfileId: string;
+  teacherName: string;
+  teacherEmail: string;
+  totalEarnings: number;
+  totalRefundDeductions: number;
+  pendingPayouts: number;
+  netSettlement: number;
+  totalStudents: number;
+  courseCount: number;
+  commissionRate: number | null;
+}
+
+export interface TeacherSettlementsData {
+  settlements: TeacherSettlementItem[];
+  totals: {
+    totalEarnings: number;
+    totalRefundDeductions: number;
+    totalNetSettlement: number;
+  };
+  pagination: PaginationMeta;
+}
+
+export interface FinancialExportData {
+  payments: Array<{
+    id: string;
+    date: string;
+    userName: string;
+    courseName: string;
+    amount: number;
+    platformCommission: number;
+    teacherEarning: number;
+    status: string;
+  }>;
+  refunds: Array<{
+    id: string;
+    date: string;
+    userName: string;
+    amount: number;
+    status: string;
+    method: string;
+  }>;
+  summary: FinancialPeriodSummary;
+}
+
+export interface AutoVerificationStats {
+  totalProcessed: number;
+  autoApproved: number;
+  flaggedForReview: number;
+  manuallyReviewed: number;
+  autoApprovalRate: number;
+}
 
 export default adminService;

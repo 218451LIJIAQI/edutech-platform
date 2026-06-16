@@ -687,7 +687,32 @@ class TeacherService {
       },
     });
 
+    // Trigger auto-verification asynchronously (non-blocking)
+    void this.triggerAutoVerification(verification.id);
+
     return mapVerificationAccess(verification);
+  }
+
+  /**
+   * Trigger auto-verification for a newly submitted document.
+   * Runs asynchronously so it doesn't block the submission response.
+   */
+  private async triggerAutoVerification(
+    verificationId: string,
+  ): Promise<void> {
+    try {
+      const autoVerificationService = (
+        await import("./auto-verification.service")
+      ).default;
+      await autoVerificationService.processVerification(verificationId);
+    } catch (error) {
+      // Auto-verification failure should never block the submission flow
+      const logger = (await import("../utils/logger")).default;
+      logger.error("Auto-verification processing failed (non-blocking)", {
+        verificationId,
+        error,
+      });
+    }
   }
 
   /**

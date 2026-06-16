@@ -169,6 +169,11 @@ enum PayoutRequestStatus {
   CANCELLED
 }
 
+enum VerificationMethod {
+  MANUAL
+  AUTO
+}
+
 // ================================
 // USER MANAGEMENT
 // ================================
@@ -375,11 +380,12 @@ model TeacherVerification {
   teacherProfileId String             @map("teacher_profile_id")
   documentType     String             @map("document_type")
   documentUrl      String             @map("document_url")
-  status           VerificationStatus @default(PENDING)
-  reviewedBy       String?            @map("reviewed_by")
-  reviewNotes      String?            @map("review_notes")
-  submittedAt      DateTime           @default(now()) @map("submitted_at")
-  reviewedAt       DateTime?          @map("reviewed_at")
+  status             VerificationStatus @default(PENDING)
+  verificationMethod VerificationMethod @default(MANUAL) @map("verification_method")
+  reviewedBy         String?            @map("reviewed_by")
+  reviewNotes        String?            @map("review_notes")
+  submittedAt        DateTime           @default(now()) @map("submitted_at")
+  reviewedAt         DateTime?          @map("reviewed_at")
 
   teacherProfile TeacherProfile @relation(fields: [teacherProfileId], references: [id], onDelete: Cascade)
   reviewer       User?          @relation("TeacherVerificationReviewer", fields: [reviewedBy], references: [id], onDelete: SetNull)

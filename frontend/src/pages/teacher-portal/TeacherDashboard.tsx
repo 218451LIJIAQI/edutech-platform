@@ -1,13 +1,14 @@
 import { useEffect, useState, useCallback } from 'react';
 import clientLogger from '@/utils/logger';
 import { Link } from 'react-router-dom';
-import { DollarSign, Users, BookOpen, Star, TrendingUp, Award, ArrowRight, Plus, Sparkles, CheckCircle, Clock } from 'lucide-react';
+import { DollarSign, Users, BookOpen, Star, TrendingUp, Award, ArrowRight, Plus, Sparkles, CheckCircle, Clock, Zap } from 'lucide-react';
 import teacherService from '@/services/teacher.service';
 import paymentService from '@/services/payment.service';
 import { formatCurrency } from '@/utils/helpers';
 import { TeacherStats, PaymentWithDetails } from '@/types';
 import { useAuthStore } from '@/store/auth-store';
 import { usePageTitle } from '@/hooks';
+import QuickStartGuide from '@/components/teacher/QuickStartGuide';
 
 /**
  * Teacher Dashboard
@@ -34,6 +35,7 @@ const TeacherDashboard = () => {
   }>>([]);
   const [totalEarnings, setTotalEarnings] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
+  const [isQuickStartOpen, setIsQuickStartOpen] = useState(false);
 
   const fetchDashboardData = useCallback(async () => {
     setIsLoading(true);
@@ -75,6 +77,7 @@ const TeacherDashboard = () => {
   }
 
   return (
+    <>
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-primary-50/10 to-indigo-50/20 relative">
       {/* Background Pattern */}
       <div className="absolute inset-0 bg-[linear-gradient(rgba(0,0,0,0.015)_1px,transparent_1px),linear-gradient(90deg,rgba(0,0,0,0.015)_1px,transparent_1px)] bg-[size:32px_32px] pointer-events-none"></div>
@@ -98,6 +101,34 @@ const TeacherDashboard = () => {
             </div>
           </div>
         </div>
+
+        {/* Quick Start Card */}
+        {stats.totalCourses === 0 && (
+          <div className="bg-gradient-to-r from-green-50 via-emerald-50 to-teal-50 rounded-2xl p-6 mb-8 border border-green-200/60 shadow-lg relative overflow-hidden">
+            <div className="absolute top-0 right-0 w-32 h-32 bg-green-400/10 rounded-full -translate-y-1/2 translate-x-1/2"></div>
+            <div className="flex items-start gap-4 relative">
+              <div className="p-3 bg-green-100 rounded-xl flex-shrink-0">
+                <Zap className="w-6 h-6 text-green-600" />
+              </div>
+              <div className="flex-1">
+                <h3 className="font-bold text-green-900 mb-2 text-lg flex items-center gap-2">
+                  <Sparkles className="w-5 h-5" />
+                  Quick Start: Create Your First Course
+                </h3>
+                <p className="text-sm text-green-700 mb-4">Get your first course up and running in just 2 minutes. Fill in the basics and add your first lesson — pricing and materials can come later!</p>
+                <button
+                  type="button"
+                  onClick={() => setIsQuickStartOpen(true)}
+                  className="inline-flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-green-500 to-emerald-600 text-white font-semibold rounded-xl shadow-lg shadow-green-500/25 hover:shadow-xl transition-all duration-300"
+                >
+                  <Zap className="w-4 h-4" />
+                  Quick Start
+                  <ArrowRight className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Verification Alert */}
         {!stats.isVerified && (
@@ -369,6 +400,15 @@ const TeacherDashboard = () => {
         </div>
       </div>
     </div>
+
+    <QuickStartGuide
+      isOpen={isQuickStartOpen}
+      onClose={() => {
+        setIsQuickStartOpen(false);
+        fetchDashboardData();
+      }}
+    />
+    </>
   );
 };
 

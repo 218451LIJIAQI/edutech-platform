@@ -1,7 +1,7 @@
 ﻿import { useEffect, useState, useCallback, useMemo } from 'react';
 import clientLogger from '@/utils/logger';
 import { Link, useNavigate } from 'react-router-dom';
-import { Plus, Edit, Trash2, Eye, EyeOff, Users, Video, Radio, PlayCircle, Search, Filter, BookOpen, TrendingUp, CheckCircle } from 'lucide-react';
+import { Plus, Edit, Trash2, Eye, EyeOff, Users, Video, Radio, PlayCircle, Search, Filter, BookOpen, TrendingUp, CheckCircle, Zap } from 'lucide-react';
 import courseService from '@/services/course.service';
 import { Course, CourseType } from '@/types';
 import { formatCurrency } from '@/utils/helpers';
@@ -9,6 +9,7 @@ import { usePageTitle } from '@/hooks';
 import toast from 'react-hot-toast';
 import { extractErrorMessage } from '@/utils/error-handler';
 import ConfirmationModal from '@/components/common/ConfirmationModal';
+import QuickStartGuide from '@/components/teacher/QuickStartGuide';
 import { resolveBackendAssetUrl } from '@/utils/runtime';
 import { getCourseLessonCount, getCourseMaterialCount } from '@/utils/course-counts';
 
@@ -26,6 +27,7 @@ const ManageCoursesPage = () => {
   const [failedThumbnailCourseIds, setFailedThumbnailCourseIds] = useState<Set<string>>(new Set());
   const [coursePendingDelete, setCoursePendingDelete] = useState<Course | null>(null);
   const [isDeletingCourse, setIsDeletingCourse] = useState(false);
+  const [isQuickStartOpen, setIsQuickStartOpen] = useState(false);
 
   const fetchMyCourses = useCallback(async () => {
     setIsLoading(true);
@@ -154,10 +156,20 @@ const ManageCoursesPage = () => {
                 <p className="text-gray-500 font-medium mt-1">Create and manage your course offerings</p>
               </div>
             </div>
-            <Link to="/teacher/courses/new" className="btn-primary inline-flex items-center gap-2 shadow-lg shadow-primary-500/25 hover:shadow-xl transition-all">
-              <Plus className="w-5 h-5" />
-              Create New Course
-            </Link>
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => setIsQuickStartOpen(true)}
+                className="inline-flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-green-500 to-emerald-600 text-white font-semibold rounded-xl shadow-lg shadow-green-500/25 hover:shadow-xl transition-all"
+              >
+                <Zap className="w-5 h-5" />
+                Quick Start
+              </button>
+              <Link to="/teacher/courses/new" className="btn-primary inline-flex items-center gap-2 shadow-lg shadow-primary-500/25 hover:shadow-xl transition-all">
+                <Plus className="w-5 h-5" />
+                Create New Course
+              </Link>
+            </div>
           </div>
 
           {/* Statistics Cards */}
@@ -493,6 +505,14 @@ const ManageCoursesPage = () => {
           </div>
         )}
       </div>
+
+      <QuickStartGuide
+        isOpen={isQuickStartOpen}
+        onClose={() => {
+          setIsQuickStartOpen(false);
+          fetchMyCourses();
+        }}
+      />
 
       <ConfirmationModal
         isOpen={Boolean(coursePendingDelete)}

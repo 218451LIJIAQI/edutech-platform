@@ -55,6 +55,8 @@ export interface TeacherStats {
   readonly isVerified: boolean;
 }
 
+export type VerificationMethod = 'MANUAL' | 'AUTO';
+
 export interface TeacherVerification {
   readonly id: string;
   readonly teacherProfileId: string;
@@ -62,6 +64,7 @@ export interface TeacherVerification {
   readonly documentUrl: string;
   readonly accessUrl?: string;
   readonly status: VerificationStatus;
+  readonly verificationMethod?: VerificationMethod;
   readonly reviewedBy?: string;
   readonly reviewNotes?: string;
   readonly submittedAt: string;
