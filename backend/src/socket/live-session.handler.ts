@@ -331,8 +331,8 @@ class LiveSessionHandler {
       }
 
       if (!isTeacher && session.maxParticipants) {
-        const room = this.io.sockets.adapter.rooms.get(normalizedSessionId);
-        const participantCount = room?.size ?? 0;
+        const participants = await this.io.in(normalizedSessionId).fetchSockets();
+        const participantCount = participants.length;
 
         if (participantCount >= session.maxParticipants) {
           this.emitSocketError(
@@ -353,7 +353,7 @@ class LiveSessionHandler {
         return;
       }
 
-      socket.join(normalizedSessionId);
+      await socket.join(normalizedSessionId);
 
       const user = await prisma.user.findUnique({
         where: { id: socket.userId },

@@ -2,6 +2,7 @@ import fs from "fs/promises";
 import { Request, Response } from "express";
 import asyncHandler from "../utils/async-handler";
 import { ValidationError } from "../utils/errors";
+import { persistUploads } from "../utils/upload-storage";
 import {
   resolveUploadCategory,
   validateStoredUpload,
@@ -141,6 +142,7 @@ class UploadController {
 
     try {
       const uploadedFile = this.buildUploadedFileResponse(req, file);
+      await persistUploads([file]);
 
       sendSuccess(res, uploadedFile, "File uploaded successfully");
     } catch (error) {
@@ -164,6 +166,7 @@ class UploadController {
       const uploadedFiles = files.map((file) =>
         this.buildUploadedFileResponse(req, file),
       );
+      await persistUploads(files);
 
       sendSuccess(
         res,

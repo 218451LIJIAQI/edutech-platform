@@ -3,6 +3,8 @@ import { createServer } from "http";
 import fs from "fs";
 import path from "path";
 import { Server } from "socket.io";
+import { createAdapter } from "@socket.io/postgres-adapter";
+import { Pool } from "pg";
 import cors from "cors";
 import helmet from "helmet";
 import compression from "compression";
@@ -13,6 +15,7 @@ import config from "./config/env";
 import prisma, { disconnectPrisma } from "./config/database";
 import { appCorsOptions, socketCorsOptions } from "./config/origin-policy";
 import logger from "./utils/logger";
+import { serveStoredUpload } from "./utils/upload-storage";
 import { bootstrapAdminAccount } from "./services/bootstrap-admin.service";
 
 // Routes
@@ -64,6 +67,16 @@ const io = new Server(httpServer, {
   pingTimeout: 60_000,
   maxHttpBufferSize: 1_000_000,
 });
+
+if (process.env.VERCEL) {
+  // LISTEN/NOTIFY requires the direct connection rather than transaction pooling.
+  const pool = new Pool({
+    connectionString: process.env.DATABASE_URL_UNPOOLED || process.env.DATABASE_URL,
+    max: 3,
+  });
+  pool.on("error", (error) => logger.error("Live session database error", { error }));
+  io.adapter(createAdapter(pool));
+}
 
 // Security middleware.
 app.use(
@@ -219,7 +232,7 @@ app.use("/uploads", (req, res, next) => {
 
 app.use(
   "/uploads",
-  express.static(config.UPLOAD_DIR, {
+  process.env.VERCEL ? serveStoredUpload : express.static(config.UPLOAD_DIR, {
     index: false,
     dotfiles: "deny",
     maxAge: isProduction ? "1d" : 0,
@@ -352,7 +365,7 @@ const shutdown = async (signal: string) => {
 
 // Start server.
 // Skipped during tests so test suites can import the app without opening a port.
-if (!isTest) {
+if (!isTest && !process.env.VERCEL) {
   initializeServices()
     .then(() => {
       httpServer.listen(PORT, () => {

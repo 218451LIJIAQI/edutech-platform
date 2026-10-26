@@ -1,0 +1,19 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": null,
+  "installCommand": "npm ci --include=dev --prefix backend && npm ci --include=dev --prefix frontend",
+  "buildCommand": "VITE_MAX_UPLOAD_BYTES=4000000 npm run vercel-build",
+  "outputDirectory": "frontend/dist",
+  "functions": {
+    "api/index.js": {
+      "maxDuration": 300,
+      "includeFiles": "backend/dist/**"
+    }
+  },
+  "rewrites": [
+    { "source": "/api/:path*", "destination": "/api/index" },
+    { "source": "/socket.io/:path*", "destination": "/api/index" },
+    { "source": "/uploads/:path*", "destination": "/api/index" },
+    { "source": "/((?!api/|socket.io/|uploads/|assets/).*)", "destination": "/index.html" }
+  ]
+}
