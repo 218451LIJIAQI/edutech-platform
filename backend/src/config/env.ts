@@ -218,6 +218,7 @@ if (IS_PROD && JWT_SECRET === JWT_REFRESH_SECRET) {
 const uploadDirFromEnv = process.env.UPLOAD_DIR?.trim();
 const resolveUploadDir = (value: string | undefined): string => {
   if (!value) {
+    if (process.env.VERCEL) return "/tmp/edutech-uploads";
     return path.resolve(projectRootDir, "uploads");
   }
 
@@ -257,7 +258,9 @@ const resolveFrontendDistDir = (value: string | undefined): string => {
 const frontendDistDir = resolveFrontendDistDir(process.env.FRONTEND_DIST_DIR);
 
 const defaultPublicOrigin =
-  IS_PROD && process.env.RENDER_EXTERNAL_URL
+  IS_PROD && process.env.VERCEL_PROJECT_PRODUCTION_URL
+    ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
+    : IS_PROD && process.env.RENDER_EXTERNAL_URL
     ? process.env.RENDER_EXTERNAL_URL
     : "http://localhost:5173";
 
@@ -339,7 +342,7 @@ const config: AppConfig = {
   // File upload
   MAX_FILE_SIZE: parseInteger(
     process.env.MAX_FILE_SIZE,
-    500 * 1024 * 1024,
+    process.env.VERCEL ? 4_000_000 : 500 * 1024 * 1024,
     1,
     undefined,
     "MAX_FILE_SIZE",

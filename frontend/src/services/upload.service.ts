@@ -99,7 +99,10 @@ function getFileExtension(fileName: string): string {
  * Validate file before upload
  */
 function validateFile(file: File, folder: UploadFolder): void {
-  const limits = FILE_SIZE_LIMITS[folder];
+  const hostedLimit = Number(import.meta.env.VITE_MAX_UPLOAD_BYTES);
+  const limits = Number.isFinite(hostedLimit) && hostedLimit > 0
+    ? Math.min(FILE_SIZE_LIMITS[folder], hostedLimit)
+    : FILE_SIZE_LIMITS[folder];
   const allowedTypes = ALLOWED_MIME_TYPES[folder];
   const allowedExtensions = ALLOWED_FILE_EXTENSIONS[folder];
 

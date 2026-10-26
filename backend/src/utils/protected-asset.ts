@@ -4,6 +4,7 @@ import type { Response } from "express";
 import config from "../config/env";
 import { NotFoundError, ValidationError } from "./errors";
 import { extractUploadPathFromUrlOrPath } from "./url-or-path";
+import { restoreUpload } from "./upload-storage";
 
 const DEFAULT_FILENAME = "file";
 const HTTP_URL_PATTERN = /^https?:\/\/.+/i;
@@ -148,13 +149,13 @@ export const applyProtectedAssetHeaders = (
   }
 };
 
-export const buildProtectedAssetDescriptor = (
+export const buildProtectedAssetDescriptor = async (
   fileUrl: string,
   options: {
     allowedFolders: string[];
     fallbackFileName?: string;
   },
-): ProtectedAssetDescriptor => {
+): Promise<ProtectedAssetDescriptor> => {
   const trimmedFileUrl = fileUrl.trim();
 
   if (!trimmedFileUrl) {
@@ -210,6 +211,7 @@ export const buildProtectedAssetDescriptor = (
     throw new ValidationError("Invalid upload file path");
   }
 
+  await restoreUpload(normalizedUploadPath, absoluteFilePath);
   const fileStats = getExistingFileStats(absoluteFilePath);
 
   if (!fileStats.isFile()) {

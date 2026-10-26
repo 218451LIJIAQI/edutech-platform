@@ -12,6 +12,17 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+// Small demo uploads survive serverless instance replacement. Folder access
+// is still enforced by the existing public/protected asset routes.
+model StoredUpload {
+  path      String   @id
+  content   Bytes
+  mimeType  String   @map("mime_type")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("stored_uploads")
+}
+
 // ================================
 // ENUMS
 // ================================

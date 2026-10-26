@@ -105,6 +105,7 @@ const LiveSessionPage = () => {
     const socketUrl = getSocketServerUrl();
     const socketOptions = {
       autoConnect: true,
+      transports: ['websocket'],
       auth: (callback: (data: { token?: string }) => void) => {
         const currentToken = getAccessToken();
         callback(currentToken ? { token: currentToken } : {});
