@@ -2,7 +2,7 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": null,
   "installCommand": "npm ci --include=dev --prefix backend && npm ci --include=dev --prefix frontend",
-  "buildCommand": "npm run vercel-build",
+  "buildCommand": "VITE_MAX_UPLOAD_BYTES=4000000 npm run vercel-build",
   "outputDirectory": "frontend/dist",
   "functions": {
     "api/index.js": {
