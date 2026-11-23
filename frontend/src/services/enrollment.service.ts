@@ -19,23 +19,34 @@ const enrollmentService = {
 
   updateProgress: async (
     id: string,
-    completedLessons: number | string[],
-    progress: number
+    completedLessons: number,
+    progress: number,
+    completedLessonIds?: string[]
   ): Promise<Enrollment> => {
     const enrollmentId = requireNonEmptyId(id, 'Enrollment ID');
-    if (Array.isArray(completedLessons)) {
-      if (completedLessons.some((lessonId) => typeof lessonId !== 'string' || !lessonId.trim())) {
-        throw new Error('Completed lesson IDs must be non-empty strings');
-      }
-    } else if (completedLessons < 0) {
+    if (completedLessons < 0) {
       throw new Error('Completed lessons cannot be negative');
     }
     if (progress < 0 || progress > 100) {
       throw new Error('Progress must be between 0 and 100');
     }
+
+    const payload: {
+      completedLessons: number;
+      progress: number;
+      completedLessonIds?: string[];
+    } = {
+      completedLessons,
+      progress,
+    };
+
+    if (Array.isArray(completedLessonIds)) {
+      payload.completedLessonIds = completedLessonIds;
+    }
+
     const response = await api.put<ApiResponse<Enrollment>>(
       `/enrollments/${enrollmentId}/progress`,
-      { completedLessons, progress }
+      payload
     );
     return normalizeEnrollmentAssets(extractData(response));
   },

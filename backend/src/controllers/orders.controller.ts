@@ -15,6 +15,10 @@ import {
 
 const MAX_REASON_LENGTH = 1000;
 const MAX_NOTES_LENGTH = 2000;
+const SUPPORTED_STUDENT_REFUND_METHODS: readonly RefundMethod[] = [
+  RefundMethod.ORIGINAL_PAYMENT,
+  RefundMethod.BANK_TRANSFER,
+] as const;
 
 class OrdersController {
   getMyOrders = asyncHandler(async (req: Request, res: Response) => {
@@ -47,7 +51,7 @@ class OrdersController {
     });
     const refundMethod = parseOptionalEnum(
       req.body?.refundMethod,
-      RefundMethod,
+      SUPPORTED_STUDENT_REFUND_METHODS,
       "refundMethod",
     );
     const bankDetails = parseOptionalString(

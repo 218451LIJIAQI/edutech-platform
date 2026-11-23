@@ -19,8 +19,6 @@ interface PersistedAuthState {
   version?: number;
 }
 
-const hasLocalStorage = (): boolean => typeof localStorage !== 'undefined';
-
 function hasRecoverablePersistedState(
   persistedState?: PersistedAuthState['state'] | null
 ): boolean {
@@ -28,10 +26,6 @@ function hasRecoverablePersistedState(
 }
 
 function getPersistedAuthState(): PersistedAuthState | null {
-  if (!hasLocalStorage()) {
-    return null;
-  }
-
   try {
     const raw = localStorage.getItem(AUTH_STORAGE_KEY);
     if (!raw) {
@@ -47,10 +41,6 @@ function getPersistedAuthState(): PersistedAuthState | null {
 }
 
 function removeAuthStorageKey(key: string, warningMessage: string) {
-  if (!hasLocalStorage()) {
-    return;
-  }
-
   try {
     localStorage.removeItem(key);
   } catch (error) {
@@ -119,10 +109,6 @@ function emitAuthSessionSyncEvent(type: AuthSessionSyncEvent) {
 function patchPersistedAuthState(
   patch: Pick<NonNullable<PersistedAuthState['state']>, 'isAuthenticated' | 'user'>
 ) {
-  if (!hasLocalStorage()) {
-    return;
-  }
-
   try {
     const parsed = getPersistedAuthState();
     if (!parsed) {
@@ -149,10 +135,6 @@ function patchPersistedAuthState(
 }
 
 function hydrateLegacyAccessToken() {
-  if (!hasLocalStorage()) {
-    return;
-  }
-
   try {
     const legacyAccessToken = localStorage.getItem('accessToken');
     if (legacyAccessToken) {
@@ -244,66 +226,5 @@ export function subscribeToAuthSessionSync(
 
   return () => {
     channel.removeEventListener('message', handleMessage);
-  };
-}
-
-export function extractBearerToken(authorizationHeader?: unknown): string | null {
-  if (typeof authorizationHeader !== 'string') {
-    return null;
-  }
-
-  const match = authorizationHeader.trim().match(/^Bearer\s+(.+)$/i);
-  return match?.[1]?.trim() || null;
-}
-
-export function shouldClearSessionOnRefreshFailure(httpStatus?: number): boolean {
-  return httpStatus === 401 || httpStatus === 403;
-}
-
-export interface TokenRefreshCoordinatorDeps {
-  getCurrentToken: () => string | null;
-  setCurrentToken: (token: string) => void;
-  performRefreshRequest: () => Promise<string | null>;
-  onTerminalAuthFailure: () => void;
-  extractHttpStatus?: (error: unknown) => number | undefined;
-}
-
-export function createTokenRefreshCoordinator(deps: TokenRefreshCoordinatorDeps) {
-  let inflightPromise: Promise<string | null> | null = null;
-
-  const acquireFreshToken = async (failedBearerToken?: string | null): Promise<string | null> => {
-    const latestToken = deps.getCurrentToken();
-    if (latestToken && failedBearerToken && latestToken !== failedBearerToken) {
-      return latestToken;
-    }
-
-    if (!inflightPromise) {
-      inflightPromise = (async () => {
-        try {
-          const nextToken = await deps.performRefreshRequest();
-          if (!nextToken) {
-            deps.onTerminalAuthFailure();
-            return null;
-          }
-
-          deps.setCurrentToken(nextToken);
-          return nextToken;
-        } catch (error) {
-          const status = deps.extractHttpStatus?.(error);
-          if (shouldClearSessionOnRefreshFailure(status)) {
-            deps.onTerminalAuthFailure();
-          }
-          throw error;
-        } finally {
-          inflightPromise = null;
-        }
-      })();
-    }
-
-    return inflightPromise;
-  };
-
-  return {
-    acquireFreshToken,
   };
 }

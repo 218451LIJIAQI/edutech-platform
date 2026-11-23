@@ -26,8 +26,12 @@ export const teacherEarningsPaymentInclude = {
   order: {
     include: {
       refunds: {
-        where: { status: RefundStatus.COMPLETED },
-        select: { amount: true },
+        where: {
+          status: RefundStatus.COMPLETED,
+        },
+        select: {
+          amount: true,
+        },
       },
       items: {
         include: {
@@ -128,6 +132,33 @@ const sortByPaidAtDescending = <T extends { paidAt: Date | null }>(
       new Date(left.paidAt || 0).getTime(),
   );
 
+const resolvePaymentRetainedRatio = (
+  payment: TeacherEarningsPaymentRecord,
+): number => {
+  if (payment.status !== PaymentStatus.COMPLETED) {
+    return 0;
+  }
+
+  const grossAmount = toNumber(payment.amount);
+  if (grossAmount <= 0) {
+    return 1;
+  }
+
+  const completedRefundAmount = (payment.order?.refunds ?? []).reduce(
+    (sum, refund) => sum + Math.max(0, toNumber(refund.amount)),
+    0,
+  );
+
+  if (completedRefundAmount <= 0) {
+    return 1;
+  }
+
+  return Math.max(
+    0,
+    Math.min(1, (grossAmount - completedRefundAmount) / grossAmount),
+  );
+};
+
 const collectTeacherPaymentSlices = (
   payments: TeacherEarningsPaymentRecord[],
   teacherProfileId: string,
@@ -136,23 +167,20 @@ const collectTeacherPaymentSlices = (
   const slices: ResolvedTeacherPaymentSlice[] = [];
 
   for (const payment of payments) {
-    if (
-      payment.status !== PaymentStatus.COMPLETED &&
-      payment.status !== PaymentStatus.REFUNDED
-    ) {
+    const retainedRatio = resolvePaymentRetainedRatio(payment);
+    if (retainedRatio <= 0) {
       continue;
     }
 
     if (payment.packageId) {
-      if (payment.status === PaymentStatus.REFUNDED) {
-        continue;
-      }
       const lessonPackage = payment.package;
       if (lessonPackage?.course?.teacherProfileId === teacherProfileId) {
         slices.push({
           id: payment.id,
-          amount: roundMoney(payment.amount),
-          teacherEarning: roundMoney(payment.teacherEarning),
+          amount: roundMoney(toNumber(payment.amount) * retainedRatio),
+          teacherEarning: roundMoney(
+            toNumber(payment.teacherEarning) * retainedRatio,
+          ),
           paidAt: payment.paidAt,
           status: payment.status,
           lessonPackage,
@@ -162,81 +190,30 @@ const collectTeacherPaymentSlices = (
       continue;
     }
 
-    const items = payment.order?.items ?? [];
-    if (items.length === 0) {
-      continue;
-    }
-
-    const orderItemsTotal = roundMoney(
-      items.reduce((sum, item) => sum + Math.max(0, toNumber(item.finalPrice)), 0),
-    );
-    const completedRefundTotal = roundMoney(
-      (payment.order?.refunds ?? []).reduce(
-        (sum, refund) => sum + Math.max(0, toNumber(refund.amount)),
-        0,
-      ),
-    );
-
-    if (
-      payment.status === PaymentStatus.REFUNDED ||
-      (orderItemsTotal > 0 && completedRefundTotal >= orderItemsTotal)
-    ) {
-      continue;
-    }
-
-    let allocatedRefund = 0;
-    items.forEach((item, index) => {
-      const isLastItem = index === items.length - 1;
-      const itemPrice = roundMoney(Math.max(0, toNumber(item.finalPrice)));
-      const itemRefundPortion =
-        completedRefundTotal > 0 && orderItemsTotal > 0
-          ? isLastItem
-            ? roundMoney(completedRefundTotal - allocatedRefund)
-            : roundMoney((itemPrice / orderItemsTotal) * completedRefundTotal)
-          : 0;
-      allocatedRefund = roundMoney(allocatedRefund + itemRefundPortion);
-
+    for (const item of payment.order?.items ?? []) {
       const lessonPackage = item.package;
       if (lessonPackage?.course?.teacherProfileId !== teacherProfileId) {
-        return;
+        continue;
       }
 
-      const netItemAmount = Math.max(
-        0,
-        roundMoney(itemPrice - itemRefundPortion),
-      );
-      const grossTeacherEarning = roundMoney(
-        calculateTeacherNetEarning(
-          itemPrice,
-          lessonPackage.course.teacherProfile,
-          defaultCommissionRate,
-        ),
-      );
-      const refundedTeacherEarning =
-        itemRefundPortion > 0
-          ? roundMoney(
-              calculateTeacherNetEarning(
-                itemRefundPortion,
-                lessonPackage.course.teacherProfile,
-                defaultCommissionRate,
-              ),
-            )
-          : 0;
-      const netTeacherEarning = Math.max(
-        0,
-        roundMoney(grossTeacherEarning - refundedTeacherEarning),
-      );
+      const effectiveItemGross = toNumber(item.finalPrice) * retainedRatio;
 
       slices.push({
         id: `${payment.id}:${item.id}`,
-        amount: netItemAmount,
-        teacherEarning: netTeacherEarning,
+        amount: roundMoney(effectiveItemGross),
+        teacherEarning: roundMoney(
+          calculateTeacherNetEarning(
+            effectiveItemGross,
+            lessonPackage.course.teacherProfile,
+            defaultCommissionRate,
+          ),
+        ),
         paidAt: payment.paidAt,
         status: payment.status,
         lessonPackage,
         user: payment.user,
       });
-    });
+    }
   }
 
   return sortByPaidAtDescending(slices);

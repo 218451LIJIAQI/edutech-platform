@@ -8,19 +8,31 @@ export interface LiveSession {
   readonly id: string;
   readonly lessonId: string;
   readonly title: string;
-  readonly description?: string;
+  readonly description?: string | null;
   readonly scheduledAt: string;
-  readonly startedAt?: string;
-  readonly endedAt?: string;
-  readonly duration: number;
-  readonly roomId?: string;
-  readonly recordingUrl?: string;
-  readonly maxParticipants?: number;
+  readonly startedAt?: string | null;
+  readonly endedAt?: string | null;
+  readonly duration?: number | null;
+  readonly meetingUrl?: string | null;
+  readonly roomId?: string | null;
+  readonly maxParticipants?: number | null;
   readonly status: LiveSessionStatus;
+  readonly recordingUrl?: string | null;
   readonly createdAt?: string;
-  readonly updatedAt?: string;
-  readonly lesson?: Pick<Lesson, 'id' | 'title' | 'orderIndex' | 'type' | 'isFree'> & {
-    readonly course?: Pick<Course, 'id' | 'title'>;
+  readonly isInstructor?: boolean;
+  readonly canManageSession?: boolean;
+  readonly lesson?: {
+    readonly id: string;
+    readonly title: string;
+    readonly orderIndex?: number;
+    readonly isFree?: boolean;
+    readonly courseId: string;
+    readonly course?: {
+      readonly id: string;
+      readonly title: string;
+      readonly isPublished?: boolean;
+      readonly teacherProfileId?: string;
+    };
   };
 }
 
@@ -33,14 +45,12 @@ export interface Course {
   readonly courseType: CourseType;
   readonly thumbnail?: string;
   readonly previewVideoUrl?: string;
-  readonly rating?: number;
-  readonly totalStudents?: number;
-  readonly totalRevenue?: number;
   readonly isPublished: boolean;
   readonly createdAt: string;
   readonly updatedAt: string;
   readonly teacherProfile?: TeacherProfile;
   readonly lessons?: Lesson[];
+  readonly liveSessions?: LiveSession[];
   readonly packages?: LessonPackage[];
   readonly materials?: Material[];
   readonly isEnrolled?: boolean;
@@ -73,6 +83,7 @@ export interface Lesson {
   readonly quiz?: LessonQuiz | null;
   readonly orderIndex: number;
   readonly isFree: boolean;
+  readonly liveSessions?: LiveSession[];
 }
 
 export interface QuizSubmissionResultItem {
@@ -133,6 +144,7 @@ export interface Enrollment {
   readonly expiresAt?: string;
   readonly progress: number;
   readonly completedLessons: number;
+  readonly completedLessonIds?: string[];
   readonly isActive: boolean;
   readonly user?: User;
   readonly package?: LessonPackage & { course?: Course };

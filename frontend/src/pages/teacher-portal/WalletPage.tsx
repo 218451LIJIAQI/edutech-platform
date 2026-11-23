@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import clientLogger from '@/utils/logger';
-import { Wallet as WalletIcon, DollarSign, ArrowDownToLine, ArrowUpRight, Settings, Plus, CheckCircle, XCircle, CreditCard, Building2, Trash2 } from 'lucide-react';
+import { Wallet as WalletIcon, DollarSign, ArrowDownToLine, ArrowUpRight, Settings, Plus, CheckCircle, XCircle, CreditCard, Building2, Trash2, ShieldAlert } from 'lucide-react';
 import walletService from '@/services/wallet.service';
 import { PayoutMethod, PayoutMethodType, PayoutRequest, WalletSummary, WalletTransactionSource, WalletTransactionType } from '@/types';
 import { useOverlayAccessibility, usePageTitle } from '@/hooks';
@@ -51,6 +51,10 @@ const getPayoutReviewText = (payout: PayoutRequest) => {
     return 'Approved and waiting for transfer processing';
   }
 
+  if (payout.status === 'PROCESSING') {
+    return 'Transfer processing in progress';
+  }
+
   if (payout.status === 'PENDING') {
     return 'Awaiting admin review';
   }
@@ -94,11 +98,13 @@ const WalletPage = () => {
   const payoutModalRef = useRef<HTMLDivElement | null>(null);
   const payoutAmountInputRef = useRef<HTMLInputElement | null>(null);
   const hasLoadedWalletRef = useRef(false);
-  const activeRefundHold = summary?.activeRefundHold || 0;
+
+  const reservedForRefunds = summary?.reservedForRefunds || 0;
   const withdrawableBalance =
-    summary?.withdrawableBalance ??
-    Math.max(0, (summary?.availableBalance || 0) - activeRefundHold);
-  const hasAvailableBalance = withdrawableBalance > 0;
+    summary?.withdrawableBalance !== undefined
+      ? summary.withdrawableBalance
+      : Math.max(0, (summary?.availableBalance || 0) - reservedForRefunds);
+  const hasWithdrawableBalance = withdrawableBalance > 0;
 
   const updateMethodDetails = (field: string, value: string) => {
     setMethodDetails((details) => ({ ...details, [field]: value }));
@@ -122,7 +128,6 @@ const WalletPage = () => {
   };
 
   const closeMethodModal = () => {
-    if (isSubmitting) return;
     resetMethodForm();
     setMethodModalOpen(false);
   };
@@ -139,7 +144,6 @@ const WalletPage = () => {
   };
 
   const closePayoutModal = () => {
-    if (isSubmitting) return;
     resetPayoutForm();
     setPayoutModalOpen(false);
   };
@@ -249,13 +253,19 @@ const WalletPage = () => {
     if (!summary) return;
     if (methods.length === 0) { toast.error('Add a payout method before requesting a payout'); return; }
     if (payoutAmount <= 0) { toast.error('Enter a valid amount'); return; }
-    if (payoutAmount > summary.availableBalance) { toast.error('Amount exceeds available balance'); return; }
+    if (payoutAmount > withdrawableBalance) {
+      toast.error(
+        reservedForRefunds > 0
+          ? `Amount exceeds withdrawable balance (${currency(withdrawableBalance, summary.currency)}) after active refund holds`
+          : 'Amount exceeds available balance'
+      );
+      return;
+    }
     setIsSubmitting(true);
     try {
       await walletService.requestPayout({ amount: payoutAmount, methodId: payoutMethodId || undefined, note: payoutNote || undefined });
       toast.success('Payout requested');
-      resetPayoutForm();
-      setPayoutModalOpen(false);
+      closePayoutModal();
       setReloadKey((currentKey) => currentKey + 1);
     } catch (error: unknown) {
       clientLogger.error('Failed to request payout:', error);
@@ -266,21 +276,17 @@ const WalletPage = () => {
   };
 
   const addMethod = async () => {
-    if (isSubmitting || !validateMethodForm()) {
+    if (!validateMethodForm()) {
       return;
     }
-    setIsSubmitting(true);
     try {
       await walletService.addPayoutMethod({ type: methodType, label: methodLabel, details: methodDetails, isDefault: methodIsDefault });
       toast.success('Payout method added');
-      resetMethodForm();
-      setMethodModalOpen(false);
+      closeMethodModal();
       setReloadKey((currentKey) => currentKey + 1);
     } catch (error: unknown) {
       clientLogger.error('Failed to add payout method:', error);
       toast.error(extractErrorMessage(error, 'Failed to add method'));
-    } finally {
-      setIsSubmitting(false);
     }
   };
 
@@ -353,18 +359,25 @@ const WalletPage = () => {
         </div>
 
         {/* Summary Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
           <div className="card bg-gradient-to-br from-green-500 to-green-600 text-white shadow-xl">
             <div className="flex items-center justify-between mb-2">
               <div className="p-3 bg-white/20 rounded-xl"><DollarSign className="w-6 h-6" /></div>
             </div>
-            <p className="text-green-100 text-sm font-bold uppercase mb-2">Available Balance</p>
-            <div className="text-4xl font-bold">{currency(summary?.availableBalance || 0, summary?.currency)}</div>
-            {activeRefundHold > 0 && (
-              <p className="mt-2 text-xs text-green-100">
-                Withdrawable now: {currency(withdrawableBalance, summary?.currency)} ({currency(activeRefundHold, summary?.currency)} held for pending refunds)
-              </p>
-            )}
+            <p className="text-green-100 text-sm font-bold uppercase mb-2">Withdrawable Balance</p>
+            <div className="text-3xl font-bold">{currency(withdrawableBalance, summary?.currency)}</div>
+            <p className="text-xs text-green-100 mt-2">
+              Ledger available: {currency(summary?.availableBalance || 0, summary?.currency)}
+            </p>
+          </div>
+
+          <div className="card bg-gradient-to-br from-amber-500 to-orange-600 text-white shadow-xl">
+            <div className="flex items-center justify-between mb-2">
+              <div className="p-3 bg-white/20 rounded-xl"><ShieldAlert className="w-6 h-6" /></div>
+            </div>
+            <p className="text-amber-100 text-sm font-bold uppercase mb-2">Reserved for Refunds</p>
+            <div className="text-3xl font-bold">{currency(reservedForRefunds, summary?.currency)}</div>
+            <p className="text-xs text-amber-100 mt-2">Active student refund review holds</p>
           </div>
 
           <div className="card bg-gradient-to-br from-blue-500 to-blue-600 text-white shadow-xl">
@@ -372,7 +385,8 @@ const WalletPage = () => {
               <div className="p-3 bg-white/20 rounded-xl"><ArrowDownToLine className="w-6 h-6" /></div>
             </div>
             <p className="text-blue-100 text-sm font-bold uppercase mb-2">Pending Payout</p>
-            <div className="text-4xl font-bold">{currency(summary?.pendingPayout || 0, summary?.currency)}</div>
+            <div className="text-3xl font-bold">{currency(summary?.pendingPayout || 0, summary?.currency)}</div>
+            <p className="text-xs text-blue-100 mt-2">Queued for admin review & transfer</p>
           </div>
 
           <div className="card bg-gradient-to-br from-purple-500 to-purple-600 text-white shadow-xl">
@@ -380,7 +394,8 @@ const WalletPage = () => {
               <div className="p-3 bg-white/20 rounded-xl"><Settings className="w-6 h-6" /></div>
             </div>
             <p className="text-purple-100 text-sm font-bold uppercase mb-2">Payout Methods</p>
-            <div className="text-4xl font-bold">{methods.length}</div>
+            <div className="text-3xl font-bold">{methods.length}</div>
+            <p className="text-xs text-purple-100 mt-2">Configured withdrawal destinations</p>
           </div>
         </div>
 
@@ -390,7 +405,7 @@ const WalletPage = () => {
             type="button"
             className="btn-primary flex items-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
             onClick={openPayoutModal}
-            disabled={methods.length === 0 || !hasAvailableBalance}
+            disabled={methods.length === 0 || !hasWithdrawableBalance}
           >
             <ArrowUpRight className="w-5 h-5" /> Request Payout
           </button>
@@ -403,9 +418,11 @@ const WalletPage = () => {
           <div className="mb-8 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
             Add a payout method before requesting withdrawals.
           </div>
-        ) : !hasAvailableBalance ? (
+        ) : !hasWithdrawableBalance ? (
           <div className="mb-8 rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">
-            Available balance must be greater than zero before you can request a payout.
+            {reservedForRefunds > 0
+              ? `Your available balance currently has ${currency(reservedForRefunds, summary?.currency)} reserved for active refund requests.`
+              : 'Withdrawable balance must be greater than zero before you can request a payout.'}
           </div>
         ) : null}
 
@@ -637,9 +654,14 @@ const WalletPage = () => {
               </p>
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-2">Amount</label>
-                <input ref={payoutAmountInputRef} type="number" min={0} max={summary?.availableBalance || 0} value={payoutAmount}
+                <input ref={payoutAmountInputRef} type="number" min={0} max={withdrawableBalance} value={payoutAmount}
                        onChange={(e) => setPayoutAmount(Number(e.target.value))} className="input" aria-label="Payout amount" />
-                <p className="text-xs text-gray-500 mt-1">Available: {currency(summary?.availableBalance || 0, summary?.currency)}</p>
+                <p className="text-xs text-gray-500 mt-1">
+                  Withdrawable: {currency(withdrawableBalance, summary?.currency)}
+                  {reservedForRefunds > 0
+                    ? ` (Ledger available: ${currency(summary?.availableBalance || 0, summary?.currency)}, Reserved for refunds: ${currency(reservedForRefunds, summary?.currency)})`
+                    : ''}
+                </p>
               </div>
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-2">Payout Method</label>

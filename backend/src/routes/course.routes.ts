@@ -14,6 +14,9 @@ import {
   updatePackageValidation,
   uploadMaterialValidation,
   updateMaterialValidation,
+  createLiveSessionValidation,
+  updateLiveSessionValidation,
+  endLiveSessionValidation,
   sendCourseNotificationValidation,
   getCoursesValidation,
 } from "../validators/course.validator";
@@ -42,6 +45,55 @@ router.get("/categories/all", courseController.getCategories);
 router.get("/my-courses", approvedTeacherOnly, courseController.getMyCourses);
 
 router.get(
+  "/live-sessions/:id",
+  authenticate,
+  validate(liveSessionIdParam),
+  courseController.getLiveSessionById,
+);
+
+router.post(
+  "/lessons/:id/live-sessions",
+  approvedTeacherOnly,
+  validate([lessonIdParam, ...createLiveSessionValidation]),
+  courseController.createLiveSession,
+);
+
+router.put(
+  "/live-sessions/:id",
+  approvedTeacherOnly,
+  validate([liveSessionIdParam, ...updateLiveSessionValidation]),
+  courseController.updateLiveSession,
+);
+
+router.post(
+  "/live-sessions/:id/start",
+  approvedTeacherOnly,
+  validate(liveSessionIdParam),
+  courseController.startLiveSession,
+);
+
+router.post(
+  "/live-sessions/:id/end",
+  approvedTeacherOnly,
+  validate([liveSessionIdParam, ...endLiveSessionValidation]),
+  courseController.endLiveSession,
+);
+
+router.delete(
+  "/live-sessions/:id",
+  approvedTeacherOnly,
+  validate(liveSessionIdParam),
+  courseController.deleteLiveSession,
+);
+
+router.get(
+  "/:id/live-sessions",
+  optionalAuth,
+  validate(courseIdParam),
+  courseController.getCourseLiveSessions,
+);
+
+router.get(
   "/:id/quiz-attempts",
   approvedTeacherOnly,
   validate(courseIdParam),
@@ -53,27 +105,6 @@ router.get(
   studentOnly,
   validate(courseIdParam),
   courseController.getMyCourseQuizAttempts,
-);
-
-router.get(
-  "/:id/live-sessions",
-  authenticate,
-  validate(courseIdParam),
-  courseController.getCourseLiveSessions,
-);
-
-router.post(
-  "/lessons/:id/live-sessions",
-  approvedTeacherOnly,
-  validate(lessonIdParam),
-  courseController.createLiveSession,
-);
-
-router.patch(
-  "/live-sessions/:id/status",
-  approvedTeacherOnly,
-  validate(liveSessionIdParam),
-  courseController.updateLiveSessionStatus,
 );
 
 router.post(

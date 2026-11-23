@@ -9,7 +9,7 @@ import toast from 'react-hot-toast';
 import ReportSubmissionModal from '@/components/common/ReportSubmissionModal';
 import UniversalVideoPlayer from '@/components/common/UniversalVideoPlayer';
 import { extractErrorMessage } from '@/utils/error-handler';
-import { shareLink } from '@/utils/clipboard';
+import { copyTextToClipboard } from '@/utils/clipboard';
 import { resolveBackendAssetUrl } from '@/utils/runtime';
 import { usePageTitle } from '@/hooks';
 
@@ -33,7 +33,6 @@ const PostDetailPage = () => {
   const [isLoading, setIsLoading] = useState(true);
 
   const [commentInput, setCommentInput] = useState('');
-  const [isSubmittingComment, setIsSubmittingComment] = useState(false);
   const [isReportModalOpen, setIsReportModalOpen] = useState(false);
   const canReportPost = Boolean(user && post && post.authorId !== user.id);
 
@@ -63,21 +62,12 @@ const PostDetailPage = () => {
   const onShare = async () => {
     if (!post) return;
     const url = `${window.location.origin}/community/post/${post.id}`;
-    const result = await shareLink(url, {
-      title: post.title || 'Community post',
-      text: 'Check out this post in the community.',
-    });
-    if (result === 'shared') {
-      toast.success('Sharing options opened');
-      return;
-    }
-    if (result === 'copied') {
+    const copied = await copyTextToClipboard(url);
+    if (copied) {
       toast.success('Link copied to clipboard');
       return;
     }
-    if (result === 'unavailable') {
-      toast.error('Unable to share this link right now. Please copy it from the address bar.');
-    }
+    toast.error('Unable to copy this link right now. Please copy it from the address bar.');
   };
 
   const toggleLike = async () => {
@@ -103,13 +93,12 @@ const PostDetailPage = () => {
   };
 
   const addComment = async () => {
-    if (!user || !post || isSubmittingComment) return;
+    if (!user || !post) return;
     const text = commentInput.trim();
     if (!text) {
       toast.error('Please enter a comment');
       return;
     }
-    setIsSubmittingComment(true);
     try {
       const c = await communityService.addComment(post.id, text);
       setComments((prev) => [...prev, c]);
@@ -118,8 +107,6 @@ const PostDetailPage = () => {
     } catch (error) {
       clientLogger.error('Failed to add comment:', error);
       toast.error(extractErrorMessage(error, 'Failed to add comment'));
-    } finally {
-      setIsSubmittingComment(false);
     }
   };
 

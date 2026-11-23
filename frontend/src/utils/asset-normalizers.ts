@@ -5,6 +5,7 @@ import type {
   Enrollment,
   Lesson,
   LessonPackage,
+  LiveSession,
   Material,
   Order,
   OrderItem,
@@ -223,11 +224,21 @@ export const normalizeUserAssets = (user?: User): User | undefined =>
       }
     : user;
 
+export const normalizeLiveSessionAssets = (
+  session: LiveSession
+): LiveSession => ({
+  ...session,
+  duration: toOptionalFiniteNumber(session.duration) ?? null,
+  maxParticipants: toOptionalFiniteNumber(session.maxParticipants) ?? null,
+  recordingUrl: normalizeAssetUrl(session.recordingUrl ?? undefined) ?? null,
+});
+
 export const normalizeLessonAssets = (lesson: Lesson): Lesson => ({
   ...lesson,
   duration: toOptionalFiniteNumber(lesson.duration),
   orderIndex: toFiniteNumber(lesson.orderIndex),
   videoUrl: normalizeAssetUrl(lesson.videoUrl),
+  liveSessions: lesson.liveSessions?.map(normalizeLiveSessionAssets),
 });
 
 export const normalizeLessonPackage = <
@@ -249,7 +260,7 @@ export const normalizeLessonPackage = <
 export const normalizeMaterialAssets = (material: Material): Material => ({
   ...material,
   fileSize: toFiniteNumber(material.fileSize),
-  fileUrl: normalizeAssetUrl(material.fileUrl),
+  fileUrl: material.fileUrl,
   accessUrl: normalizeAssetUrl(material.accessUrl),
 });
 
@@ -264,9 +275,28 @@ export const normalizeCourseAssets = (course: Course): Course => ({
   previewVideoUrl: normalizeAssetUrl(course.previewVideoUrl),
   teacherProfile: normalizeTeacherProfileAssets(course.teacherProfile),
   lessons: course.lessons?.map(normalizeLessonAssets),
+  liveSessions: course.liveSessions?.map(normalizeLiveSessionAssets),
   packages: course.packages?.map(normalizeLessonPackage),
   materials: course.materials?.map(normalizeMaterialAssets),
 });
+
+const normalizeCompletedLessonIdList = (value: unknown): string[] | undefined => {
+  if (!Array.isArray(value)) {
+    return undefined;
+  }
+
+  const seen = new Set<string>();
+  const list: string[] = [];
+  for (const item of value) {
+    if (typeof item !== 'string') continue;
+    const trimmed = item.trim();
+    if (trimmed && !seen.has(trimmed)) {
+      seen.add(trimmed);
+      list.push(trimmed);
+    }
+  }
+  return list;
+};
 
 export const normalizeEnrollmentAssets = (
   enrollment: Enrollment
@@ -274,6 +304,9 @@ export const normalizeEnrollmentAssets = (
   ...enrollment,
   progress: toFiniteNumber(enrollment.progress),
   completedLessons: toFiniteNumber(enrollment.completedLessons),
+  completedLessonIds: normalizeCompletedLessonIdList(
+    enrollment.completedLessonIds
+  ),
   user: normalizeUserAssets(enrollment.user),
   package: enrollment.package
     ? normalizeLessonPackage(enrollment.package)
@@ -317,6 +350,7 @@ export const normalizeOrder = (order: Order): Order => ({
   ...order,
   totalAmount: toFiniteNumber(order.totalAmount),
   refundAmount: toOptionalFiniteNumber(order.refundAmount),
+  refundableAmount: toOptionalFiniteNumber(order.refundableAmount),
   items: order.items?.map(normalizeOrderItem),
 });
 

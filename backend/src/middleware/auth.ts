@@ -23,6 +23,7 @@ export interface AuthenticatedUser {
   role: UserRole;
   firstName: string;
   lastName: string;
+  tokenVersion: number;
 }
 
 const AUTH_USER_SELECT = {
@@ -38,7 +39,9 @@ const AUTH_USER_SELECT = {
   tokenVersion: true,
 } as const;
 
-export const extractBearerToken = (authorizationHeader?: unknown): string | null => {
+export const extractBearerToken = (
+  authorizationHeader?: unknown,
+): string | null => {
   if (typeof authorizationHeader !== "string") {
     return null;
   }
@@ -61,6 +64,55 @@ const isAuthTokenPayload = (
 
   const candidate = payload as Partial<AuthTokenPayload>;
   return typeof candidate.id === "string" && candidate.id.trim().length > 0;
+};
+
+/**
+ * Re-verifies that a user account is still active, unlocked, and on the expected
+ * `tokenVersion` (used by both HTTP token authentication and live Socket.IO events).
+ */
+export const verifyActiveAuthenticatedUser = async (
+  userId: string,
+  expectedTokenVersion?: number,
+): Promise<AuthenticatedUser> => {
+  const normalizedId = userId?.trim();
+  if (!normalizedId) {
+    throw new AuthenticationError("Invalid token");
+  }
+
+  const user = await prisma.user.findUnique({
+    where: { id: normalizedId },
+    select: AUTH_USER_SELECT,
+  });
+
+  if (!user) {
+    throw new AuthenticationError("User not found");
+  }
+
+  if (!user.isActive) {
+    throw new AuthenticationError("User account is inactive");
+  }
+
+  const unlockedUser = await unlockUserIfLockExpired(user);
+
+  if (unlockedUser.isLocked) {
+    throw new AuthenticationError("User account is locked");
+  }
+
+  if (
+    expectedTokenVersion !== undefined &&
+    unlockedUser.tokenVersion !== expectedTokenVersion
+  ) {
+    throw new AuthenticationError("Session expired. Please sign in again");
+  }
+
+  return {
+    id: unlockedUser.id,
+    email: unlockedUser.email,
+    role: unlockedUser.role,
+    firstName: unlockedUser.firstName,
+    lastName: unlockedUser.lastName,
+    tokenVersion: unlockedUser.tokenVersion,
+  };
 };
 
 /**
@@ -89,36 +141,7 @@ export const authenticateAccessToken = async (
     throw new AuthenticationError("Invalid token");
   }
 
-  const user = await prisma.user.findUnique({
-    where: { id: decoded.id.trim() },
-    select: AUTH_USER_SELECT,
-  });
-
-  if (!user) {
-    throw new AuthenticationError("User not found");
-  }
-
-  if (!user.isActive) {
-    throw new AuthenticationError("User account is inactive");
-  }
-
-  const unlockedUser = await unlockUserIfLockExpired(user);
-
-  if (unlockedUser.isLocked) {
-    throw new AuthenticationError("User account is locked");
-  }
-
-  if (unlockedUser.tokenVersion !== tokenVersion) {
-    throw new AuthenticationError("Session expired. Please sign in again");
-  }
-
-  return {
-    id: unlockedUser.id,
-    email: unlockedUser.email,
-    role: unlockedUser.role,
-    firstName: unlockedUser.firstName,
-    lastName: unlockedUser.lastName,
-  };
+  return verifyActiveAuthenticatedUser(decoded.id, tokenVersion);
 };
 
 export const authenticate = async (

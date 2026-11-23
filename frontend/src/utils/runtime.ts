@@ -181,5 +181,9 @@ export const getSocketServerUrl = (): string => {
     return trimTrailingSlash(configuredSocketUrl);
   }
 
-  return getBackendOrigin();
+  if (typeof window !== 'undefined' && window.location?.origin) {
+    return window.location.origin;
+  }
+
+  return '';
 };

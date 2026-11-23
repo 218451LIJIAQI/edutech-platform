@@ -1,4 +1,4 @@
-import { PaymentStatus, Prisma, RefundStatus } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 import config from "../../config/env";
 import prisma from "../../config/database";
 import { ValidationError } from "../../utils/errors";
@@ -14,18 +14,13 @@ import {
 import {
   buildRevenueAnalytics,
   buildSettlementRows,
-  createCompletedPaymentWhere,
-  createPaidOrRefundedPaymentWhere,
+  createPaidPaymentWhere,
   createPaymentUserRelationFilter,
+  getPaymentRetainedRatio,
   settlementPaymentInclude,
 } from "./admin-metrics";
 import { buildPaginationMeta, normalizePagination } from "../shared/pagination";
-import { toNullableNumber } from "../shared/payment-utils";
-import {
-  resolvePaymentCommissionBreakdown,
-  resolveRefundCommissionBreakdown,
-  roundCurrency,
-} from "../shared/settlement-calculator";
+import { roundMoney, toNullableNumber, toNumber } from "../shared/payment-utils";
 import { validateDateRange } from "../shared/service-helpers";
 
 type RevenueGroupBy = "day" | "week" | "month";
@@ -42,123 +37,58 @@ const normalizeRevenueGroupBy = (groupBy?: RevenueGroupBy): RevenueGroupBy => {
 
 export const getAdminFinancials = async (startDate?: Date, endDate?: Date) => {
   validateDateRange(startDate, endDate);
-  const paidWhere = createPaidOrRefundedPaymentWhere(startDate, endDate);
-  const refundDateFilter =
-    startDate || endDate
-      ? {
-          ...(startDate ? { gte: startDate } : {}),
-          ...(endDate ? { lte: endDate } : {}),
-        }
-      : undefined;
-  const defaultCommissionRate = config.PLATFORM_COMMISSION_RATE ?? 10;
+  const where = createPaidPaymentWhere(startDate, endDate);
 
-  const [payments, grossTotals, completedRefunds, directRefundedPayments] =
-    await Promise.all([
-      prisma.payment.findMany({
-        where: paidWhere,
-        include: adminFinancialPaymentsInclude,
-        orderBy: { paidAt: "desc" },
-        take: 100,
-      }),
-      prisma.payment.aggregate({
-        where: paidWhere,
-        _sum: {
-          amount: true,
-          platformCommission: true,
-          teacherEarning: true,
-        },
-        _count: true,
-      }),
-      prisma.refund.findMany({
-        where: {
-          status: RefundStatus.COMPLETED,
-          ...(refundDateFilter ? { completedAt: refundDateFilter } : {}),
-        },
-        select: {
-          amount: true,
-          order: {
-            select: {
-              items: {
-                select: {
-                  finalPrice: true,
-                  package: {
-                    select: {
-                      course: {
-                        select: {
-                          teacherProfileId: true,
-                          teacherProfile: {
-                            select: { commissionRate: true },
-                          },
-                        },
-                      },
-                    },
-                  },
-                },
-              },
+  const [recentPayments, allPaidForTotals] = await Promise.all([
+    prisma.payment.findMany({
+      where,
+      include: adminFinancialPaymentsInclude,
+      orderBy: { paidAt: "desc" },
+      take: 100,
+    }),
+    prisma.payment.findMany({
+      where,
+      select: {
+        amount: true,
+        platformCommission: true,
+        teacherEarning: true,
+        status: true,
+        orderId: true,
+        order: {
+          select: {
+            refunds: {
+              where: { status: "COMPLETED" },
+              select: { amount: true, completedAt: true },
             },
           },
         },
-      }),
-      prisma.payment.findMany({
-        where: {
-          status: PaymentStatus.REFUNDED,
-          orderId: null,
-          paidAt: { not: null },
-          ...(refundDateFilter ? { updatedAt: refundDateFilter } : {}),
-        },
-        select: {
-          amount: true,
-          platformCommission: true,
-          teacherEarning: true,
-        },
-      }),
-    ]);
+      },
+    }),
+  ]);
 
-  const grossBreakdown = resolvePaymentCommissionBreakdown(
-    {
-      amount: grossTotals._sum.amount,
-      platformCommission: grossTotals._sum.platformCommission,
-      teacherEarning: grossTotals._sum.teacherEarning,
-    },
-    defaultCommissionRate,
-  );
+  let totalRevenue = 0;
+  let platformEarnings = 0;
+  let teacherEarnings = 0;
 
-  const refundBreakdowns = [
-    ...completedRefunds.map((refund) =>
-      resolveRefundCommissionBreakdown(refund, defaultCommissionRate),
-    ),
-    ...directRefundedPayments.map((payment) =>
-      resolveRefundCommissionBreakdown(payment, defaultCommissionRate),
-    ),
-  ];
+  for (const payment of allPaidForTotals) {
+    const retainedRatio = getPaymentRetainedRatio(payment);
+    if (retainedRatio <= 0) {
+      continue;
+    }
 
-  const refundedGross = roundCurrency(
-    refundBreakdowns.reduce((sum, item) => sum + item.amount, 0),
-  );
-  const refundedCommission = roundCurrency(
-    refundBreakdowns.reduce((sum, item) => sum + item.platformCommission, 0),
-  );
-  const refundedTeacher = roundCurrency(
-    refundBreakdowns.reduce((sum, item) => sum + item.teacherEarning, 0),
-  );
+    totalRevenue += toNumber(payment.amount) * retainedRatio;
+    platformEarnings += toNumber(payment.platformCommission) * retainedRatio;
+    teacherEarnings += toNumber(payment.teacherEarning) * retainedRatio;
+  }
 
   return {
     totals: {
-      totalRevenue: Math.max(
-        0,
-        roundCurrency(grossBreakdown.amount - refundedGross),
-      ),
-      platformEarnings: Math.max(
-        0,
-        roundCurrency(grossBreakdown.platformCommission - refundedCommission),
-      ),
-      teacherEarnings: Math.max(
-        0,
-        roundCurrency(grossBreakdown.teacherEarning - refundedTeacher),
-      ),
-      transactionCount: grossTotals._count,
+      totalRevenue: roundMoney(totalRevenue),
+      platformEarnings: roundMoney(platformEarnings),
+      teacherEarnings: roundMoney(teacherEarnings),
+      transactionCount: allPaidForTotals.length,
     },
-    recentPayments: payments,
+    recentPayments,
   };
 };
 
@@ -179,7 +109,7 @@ export const getAdminSettlements = async (
   });
 
   const payments = await prisma.payment.findMany({
-    where: createCompletedPaymentWhere(startDate, endDate),
+    where: createPaidPaymentWhere(startDate, endDate),
     include: settlementPaymentInclude,
     orderBy: { paidAt: "desc" },
   });
@@ -206,7 +136,7 @@ export const getAdminInvoices = async (
 
   validateDateRange(startDate, endDate);
 
-  const baseWhere = createPaidOrRefundedPaymentWhere(startDate, endDate);
+  const baseWhere = createPaidPaymentWhere(startDate, endDate);
   const userRelationFilter = createPaymentUserRelationFilter(search);
   const where: Prisma.PaymentWhereInput = userRelationFilter
     ? { ...baseWhere, user: userRelationFilter }
@@ -247,7 +177,7 @@ export const getAdminRevenueAnalytics = async (
   validateDateRange(startDate, endDate);
 
   const payments = await prisma.payment.findMany({
-    where: createCompletedPaymentWhere(startDate, endDate),
+    where: createPaidPaymentWhere(startDate, endDate),
     include: settlementPaymentInclude,
     orderBy: { paidAt: "asc" },
   });

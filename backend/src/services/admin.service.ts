@@ -320,9 +320,7 @@ class AdminService {
           },
         },
         payments: {
-          where: {
-            status: { in: [PaymentStatus.COMPLETED, PaymentStatus.REFUNDED] },
-          },
+          where: { status: PaymentStatus.COMPLETED },
         },
         reviewsGiven: true,
         reviewsReceived: true,
@@ -341,11 +339,6 @@ class AdminService {
   async updateUserStatus(userId: string, isActive: boolean, adminId?: string) {
     const user = await requireUser(userId);
     ensureNotAdminUser(user, "Cannot modify admin user status");
-
-    const impactedTeacherUserIds =
-      user.role === UserRole.STUDENT && user.isActive !== isActive
-        ? await collectImpactedTeacherUserIdsForStudent(user.id)
-        : new Set<string>();
 
     const updatedUser = await prisma.$transaction(async (tx) => {
       const nextUser = await tx.user.update({
@@ -375,8 +368,6 @@ class AdminService {
 
       return nextUser;
     });
-
-    await recalculateTeacherStudentCounts(impactedTeacherUserIds);
 
     return this.withoutPassword(updatedUser);
   }
@@ -540,12 +531,6 @@ class AdminService {
         ? undefined
         : normalizeAdminAvatarUrl(data.avatar);
 
-    const impactedTeacherUserIds =
-      (user.role === UserRole.STUDENT || nextRole === UserRole.STUDENT) &&
-      (data.isActive !== undefined || data.role !== undefined)
-        ? await collectImpactedTeacherUserIdsForStudent(userId)
-        : new Set<string>();
-
     const oldValues = {
       firstName: user.firstName,
       lastName: user.lastName,
@@ -559,7 +544,7 @@ class AdminService {
       isLocked: user.isLocked,
     };
 
-    const updatedUser = await prisma.$transaction(async (tx) => {
+    return prisma.$transaction(async (tx) => {
       const invalidateSessions = shouldInvalidateSessions({
         isActive: data.isActive,
         isLocked: data.isLocked,
@@ -622,10 +607,6 @@ class AdminService {
 
       return this.withoutPassword(nextUser);
     });
-
-    await recalculateTeacherStudentCounts(impactedTeacherUserIds);
-
-    return updatedUser;
   }
 
   async resetUserPassword(
@@ -742,58 +723,30 @@ class AdminService {
 
   async batchDeleteUsers(userIds: string[], adminId?: string) {
     const normalizedIds = this.normalizeUserIds(userIds);
-    const existingUsers = await prisma.user.findMany({
-      where: { id: { in: normalizedIds } },
-      select: { id: true, role: true, firstName: true, lastName: true },
-    });
-    const userMap = new Map(existingUsers.map((u) => [u.id, u]));
+    const users = await this.assertUsersExist(normalizedIds);
 
-    const eligibleUserIds: string[] = [];
-    const failed: Array<{ userId: string; reason: string }> = [];
-
-    for (const userId of normalizedIds) {
-      const target = userMap.get(userId);
-      if (!target) {
-        failed.push({ userId, reason: "User not found" });
-        continue;
-      }
-      if (target.role === UserRole.ADMIN) {
-        failed.push({ userId, reason: "Admin accounts cannot be deleted" });
-        continue;
-      }
-      if (target.role === UserRole.TEACHER) {
-        try {
-          await assertTeacherHasNoActiveStudents(
-            target.id,
-            `${target.firstName} ${target.lastName}`,
-          );
-        } catch (error) {
-          failed.push({
-            userId,
-            reason:
-              error instanceof Error
-                ? error.message
-                : "Teacher has active enrolled students",
-          });
-          continue;
-        }
-      }
-      eligibleUserIds.push(userId);
+    if (users.some((user) => user.role === UserRole.ADMIN)) {
+      throw new ValidationError("Cannot delete admin users");
     }
 
-    if (eligibleUserIds.length === 0 && failed.length > 0) {
-      throw new ValidationError(failed[0].reason);
+    const teachers = users.filter((user) => user.role === UserRole.TEACHER);
+    for (const teacher of teachers) {
+      await assertTeacherHasNoActiveStudents(
+        teacher.id,
+        `${teacher.firstName} ${teacher.lastName}`,
+      );
     }
 
-    const studentIds = eligibleUserIds.filter(
-      (id) => userMap.get(id)?.role === UserRole.STUDENT,
-    );
+    const studentIds = users
+      .filter((user) => user.role === UserRole.STUDENT)
+      .map((user) => user.id);
+
     const impactedTeacherUserIds =
       await collectImpactedTeacherUserIdsForStudents(studentIds);
 
     await prisma.$transaction(async (tx) => {
       await tx.user.updateMany({
-        where: { id: { in: eligibleUserIds } },
+        where: { id: { in: normalizedIds } },
         data: {
           isActive: false,
           isLocked: true,
@@ -806,7 +759,7 @@ class AdminService {
 
       if (adminId) {
         await tx.userAuditLog.createMany({
-          data: eligibleUserIds.map((userId) => ({
+          data: normalizedIds.map((userId) => ({
             adminId,
             userId,
             action: "SOFT_DELETE",
@@ -818,11 +771,7 @@ class AdminService {
 
     await recalculateTeacherStudentCounts(impactedTeacherUserIds);
 
-    return {
-      affected: eligibleUserIds.length,
-      succeeded: eligibleUserIds,
-      failed,
-    };
+    return { affected: normalizedIds.length };
   }
 
   async batchUpdateUserStatus(
@@ -831,44 +780,15 @@ class AdminService {
     adminId: string,
   ) {
     const normalizedIds = this.normalizeUserIds(userIds);
-    const existingUsers = await prisma.user.findMany({
-      where: { id: { in: normalizedIds } },
-      select: { id: true, role: true },
-    });
-    const userMap = new Map(existingUsers.map((u) => [u.id, u]));
+    const users = await this.assertUsersExist(normalizedIds);
 
-    const eligibleUserIds: string[] = [];
-    const failed: Array<{ userId: string; reason: string }> = [];
-
-    for (const userId of normalizedIds) {
-      const target = userMap.get(userId);
-      if (!target) {
-        failed.push({ userId, reason: "User not found" });
-        continue;
-      }
-      if (target.role === UserRole.ADMIN) {
-        failed.push({
-          userId,
-          reason: "Admin accounts cannot be batch-updated",
-        });
-        continue;
-      }
-      eligibleUserIds.push(userId);
+    if (users.some((user) => user.role === UserRole.ADMIN)) {
+      throw new ValidationError("Cannot batch-update admin users");
     }
-
-    if (eligibleUserIds.length === 0 && failed.length > 0) {
-      throw new ValidationError(failed[0].reason);
-    }
-
-    const studentIds = eligibleUserIds.filter(
-      (id) => userMap.get(id)?.role === UserRole.STUDENT,
-    );
-    const impactedTeacherUserIds =
-      await collectImpactedTeacherUserIdsForStudents(studentIds);
 
     await prisma.$transaction(async (tx) => {
       await tx.user.updateMany({
-        where: { id: { in: eligibleUserIds } },
+        where: { id: { in: normalizedIds } },
         data: {
           isActive,
           isLocked: isActive ? false : undefined,
@@ -880,7 +800,7 @@ class AdminService {
       });
 
       await tx.userAuditLog.createMany({
-        data: eligibleUserIds.map((userId) => ({
+        data: normalizedIds.map((userId) => ({
           adminId,
           userId,
           action: isActive ? "ACTIVATE" : "DEACTIVATE",
@@ -889,13 +809,7 @@ class AdminService {
       });
     });
 
-    await recalculateTeacherStudentCounts(impactedTeacherUserIds);
-
-    return {
-      affected: eligibleUserIds.length,
-      succeeded: eligibleUserIds,
-      failed,
-    };
+    return { affected: normalizedIds.length };
   }
 
   async getUserAuditLogs(filters: {

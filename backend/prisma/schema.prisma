@@ -542,8 +542,9 @@ model Enrollment {
   enrolledAt       DateTime  @default(now()) @map("enrolled_at")
   expiresAt        DateTime? @map("expires_at")
   progress         Int       @default(0)
-  completedLessons Int       @default(0) @map("completed_lessons")
-  isActive         Boolean   @default(true) @map("is_active")
+  completedLessons   Int       @default(0) @map("completed_lessons")
+  completedLessonIds Json      @default("[]") @map("completed_lesson_ids")
+  isActive           Boolean   @default(true) @map("is_active")
 
   user    User          @relation(fields: [userId], references: [id], onDelete: Cascade)
   package LessonPackage @relation(fields: [packageId], references: [id], onDelete: Cascade)

@@ -76,8 +76,6 @@ app.use(
           "https://www.youtube.com",
           "https://www.youtube-nocookie.com",
           "https://player.vimeo.com",
-          "https://www.dailymotion.com",
-          "https://geo.dailymotion.com",
         ],
         "img-src": ["'self'", "data:", "https:"],
         "media-src": ["'self'", "https:"],

@@ -37,6 +37,33 @@ export const isHttpUrl = (value: string): boolean => {
   }
 };
 
+export const isSafeExternalHttpUrl = (value: string): boolean => {
+  if (typeof value !== "string") {
+    return false;
+  }
+
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return false;
+  }
+
+  try {
+    const url = new URL(trimmed);
+    if (url.protocol !== "http:" && url.protocol !== "https:") {
+      return false;
+    }
+    if (!url.hostname || url.username || url.password) {
+      return false;
+    }
+    if (url.pathname.startsWith(UPLOADS_SEGMENT)) {
+      return false;
+    }
+    return true;
+  } catch {
+    return false;
+  }
+};
+
 const isRootRelativePath = (value: string): boolean => {
   return value.startsWith("/") && !value.startsWith("//");
 };

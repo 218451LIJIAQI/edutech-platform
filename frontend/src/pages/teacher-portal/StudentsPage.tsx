@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import clientLogger from '@/utils/logger';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Users, Mail, Calendar, TrendingUp, Download, ArrowLeft, Search } from 'lucide-react';
-import { Enrollment, Course, User } from '@/types';
+import { Enrollment, Course } from '@/types';
 import courseService from '@/services/course.service';
 import enrollmentService from '@/services/enrollment.service';
 import toast from 'react-hot-toast';
@@ -10,11 +10,6 @@ import { extractErrorMessage } from '@/utils/error-handler';
 import { buildCsvContent, downloadCsvFile } from '@/utils/download';
 import { getCourseLessonCount } from '@/utils/course-counts';
 import { usePageTitle } from '@/hooks';
-
-// Extended Enrollment type with user data (as returned by backend)
-interface EnrollmentWithUser extends Enrollment {
-  user?: User;
-}
 
 /**
  * Students Management Page
@@ -27,7 +22,7 @@ const StudentsPage = () => {
 
   const [courses, setCourses] = useState<Course[]>([]);
   const [selectedCourse, setSelectedCourse] = useState<Course | null>(null);
-  const [students, setStudents] = useState<EnrollmentWithUser[]>([]);
+  const [students, setStudents] = useState<Enrollment[]>([]);
   const [stats, setStats] = useState({
     totalStudents: 0,
     averageProgress: 0,

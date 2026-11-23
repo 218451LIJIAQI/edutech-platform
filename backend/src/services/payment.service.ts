@@ -9,7 +9,6 @@ import {
   ValidationError,
   InternalServerError,
 } from "../utils/errors";
-import { assertPackageHasAvailableCapacity } from "./cart.service";
 import ordersService from "./orders.service";
 import walletService from "./wallet.service";
 import {
@@ -34,10 +33,11 @@ import {
   calculatePlatformCommission,
   calculateTeacherNetEarning,
   roundMoney,
-  toNumber,
 } from "./shared/payment-utils";
 import {
+  assertPackageHasCapacity,
   buildCurrentEnrollmentWhere,
+  countActivePackageEnrollments,
   countDistinctActiveStudentsForTeacherProfile,
   isEnrollmentCurrentlyActive,
 } from "./shared/enrollment-access";
@@ -63,7 +63,7 @@ type ConfirmPaymentResult =
 
 type SinglePaymentConfirmationTransactionResult =
   | { kind: "unavailable-package" }
-  | { kind: "capacity-exceeded"; message: string }
+  | { kind: "capacity-exceeded" }
   | { kind: "stale-package" }
   | { kind: "already-processed" }
   | { kind: "single-complete"; payment: PaymentModel; enrollmentId: string };
@@ -74,7 +74,7 @@ type CartPaymentConfirmationTransactionResult =
   | { kind: "stale-order" }
   | { kind: "duplicate-course-order" }
   | { kind: "unavailable-order" }
-  | { kind: "capacity-exceeded"; message: string }
+  | { kind: "capacity-exceeded" }
   | { kind: "already-processed" }
   | { kind: "order-complete"; payment: PaymentModel; orderId: string };
 
@@ -82,6 +82,12 @@ type PaymentSplit = {
   amount: number;
   platformCommission: number;
   teacherEarning: number;
+};
+
+type LockedLessonPackageRow = {
+  id: string;
+  max_students: number | null;
+  is_active: boolean;
 };
 
 const haveSamePackages = (left: string[], right: string[]): boolean => {
@@ -131,6 +137,28 @@ const failOrderCheckout = async (
   return failedUpdate;
 };
 
+const lockPackagesForUpdate = async (
+  tx: Prisma.TransactionClient,
+  packageIds: string[],
+): Promise<Map<string, LockedLessonPackageRow>> => {
+  const sortedUniqueIds = [...new Set(packageIds)].sort((a, b) =>
+    a.localeCompare(b),
+  );
+  if (sortedUniqueIds.length === 0) {
+    return new Map();
+  }
+
+  const rows = await tx.$queryRaw<LockedLessonPackageRow[]>`
+    SELECT "id", "max_students", "is_active"
+    FROM "lesson_packages"
+    WHERE "id" IN (${Prisma.join(sortedUniqueIds)})
+    ORDER BY "id" ASC
+    FOR UPDATE
+  `;
+
+  return new Map(rows.map((row) => [row.id, row]));
+};
+
 class PaymentService {
   private async createPendingOrderPayment(
     userId: string,
@@ -174,9 +202,14 @@ class PaymentService {
     return { payment, split };
   }
 
-  private async syncTeacherWalletCredits(payment: PaymentModel): Promise<void> {
+  private async syncTeacherWalletCredits(
+    payment: PaymentModel,
+    tx?: Prisma.TransactionClient,
+  ): Promise<void> {
+    const client = tx ?? prisma;
+
     if (payment.packageId) {
-      const lessonPackage = await prisma.lessonPackage.findUnique({
+      const lessonPackage = await client.lessonPackage.findUnique({
         where: { id: payment.packageId },
         include: {
           course: {
@@ -195,13 +228,14 @@ class PaymentService {
           paymentId: payment.id,
           packageId: payment.packageId,
         },
+        tx,
       );
       return;
     }
 
     if (!payment.orderId) return;
 
-    const order = await prisma.order.findUnique({
+    const order = await client.order.findUnique({
       where: { id: payment.orderId },
       include: orderPaymentItemsInclude,
     });
@@ -220,24 +254,15 @@ class PaymentService {
         ),
       );
 
-      await walletService.creditForTeacher(teacherProfile.userId, teacherNet, {
-        paymentId: payment.id,
-        orderItemId: item.id,
-      });
-    }
-  }
-
-  private async trySyncTeacherWalletCredits(
-    payment: PaymentModel,
-    context: Record<string, unknown>,
-  ): Promise<void> {
-    try {
-      await this.syncTeacherWalletCredits(payment);
-    } catch (error) {
-      logger.error("Failed to synchronize teacher wallet credits", {
-        ...context,
-        error,
-      });
+      await walletService.creditForTeacher(
+        teacherProfile.userId,
+        teacherNet,
+        {
+          paymentId: payment.id,
+          orderItemId: item.id,
+        },
+        tx,
+      );
     }
   }
 
@@ -245,11 +270,15 @@ class PaymentService {
     payment: PaymentModel,
     context: Record<string, unknown>,
   ): Promise<ConfirmPaymentResult> {
-    await this.trySyncTeacherWalletCredits(payment, {
-      ...context,
-      paymentId: payment.id,
-      state: "completed-reconciliation",
-    });
+    try {
+      await this.syncTeacherWalletCredits(payment);
+    } catch (error) {
+      logger.error("Failed to reconcile teacher wallet credits", {
+        ...context,
+        paymentId: payment.id,
+        error,
+      });
+    }
 
     if (payment.packageId) {
       const enrollment = await prisma.enrollment.findFirst({
@@ -427,11 +456,7 @@ class PaymentService {
     }
 
     for (const item of cartItems) {
-      await assertPackageHasAvailableCapacity(
-        prisma,
-        item.package,
-        referenceDate,
-      );
+      await assertPackageHasCapacity(prisma, item.package, referenceDate);
     }
 
     const reusablePayment = await this.findReusablePendingCartPayment(
@@ -492,12 +517,6 @@ class PaymentService {
     if (existingEnrollment) {
       throw new ValidationError("You are already enrolled in this package");
     }
-
-    await assertPackageHasAvailableCapacity(
-      prisma,
-      lessonPackage,
-      referenceDate,
-    );
 
     const reusableOrderPayment = await this.findReusablePendingCartPayment(
       normalizedUserId,
@@ -600,10 +619,14 @@ class PaymentService {
 
     if (payment.packageId && payment.package) {
       const pkg = payment.package;
-      const confirmationTime = new Date();
+      const now = new Date();
+      const confirmationTime = now < payment.createdAt ? payment.createdAt : now;
 
       const result: SinglePaymentConfirmationTransactionResult =
         await prisma.$transaction(async (tx) => {
+          const lockedMap = await lockPackagesForUpdate(tx, [pkg.id]);
+          const lockedPkg = lockedMap.get(pkg.id);
+
           const currentPackage = await tx.lessonPackage.findUnique({
             where: { id: pkg.id },
             include: {
@@ -612,15 +635,14 @@ class PaymentService {
                   id: true,
                   isPublished: true,
                   teacherProfileId: true,
-                  teacherProfile: {
-                    select: { userId: true },
-                  },
                 },
               },
             },
           });
 
           if (
+            !lockedPkg ||
+            !lockedPkg.is_active ||
             !currentPackage ||
             !currentPackage.isActive ||
             !currentPackage.course?.isPublished
@@ -653,21 +675,16 @@ class PaymentService {
             };
           }
 
-          try {
-            await assertPackageHasAvailableCapacity(
+          if (lockedPkg.max_students !== null) {
+            const activeCount = await countActivePackageEnrollments(
               tx,
-              currentPackage,
+              pkg.id,
               confirmationTime,
             );
-          } catch (error) {
-            await markPendingPaymentFailed(tx, normalizedPaymentId);
-            return {
-              kind: "capacity-exceeded" as const,
-              message:
-                error instanceof Error
-                  ? error.message
-                  : "This package has reached its maximum student capacity",
-            };
+            if (activeCount >= lockedPkg.max_students) {
+              await markPendingPaymentFailed(tx, normalizedPaymentId);
+              return { kind: "capacity-exceeded" as const };
+            }
           }
 
           const paymentUpdate = await tx.payment.updateMany({
@@ -686,29 +703,17 @@ class PaymentService {
             where: { id: normalizedPaymentId },
           });
 
-          const teacherEarning = roundMoney(updatedPayment.teacherEarning);
           const enrollment =
             await this.upsertActiveEnrollmentAndIncrementTeacher(tx, {
               userId: payment.userId,
               packageId: pkg.id,
               duration: pkg.duration,
               teacherProfileId: currentPackage.course.teacherProfileId,
-              teacherEarning,
+              teacherEarning: roundMoney(updatedPayment.teacherEarning),
               confirmationTime,
             });
 
-          const teacherUserId = currentPackage.course.teacherProfile?.userId;
-          if (teacherUserId && teacherEarning > 0) {
-            await walletService.creditForTeacherInTransaction(
-              tx,
-              teacherUserId,
-              teacherEarning,
-              {
-                paymentId: updatedPayment.id,
-                packageId: pkg.id,
-              },
-            );
-          }
+          await this.syncTeacherWalletCredits(updatedPayment, tx);
 
           return {
             kind: "single-complete" as const,
@@ -736,7 +741,9 @@ class PaymentService {
       }
 
       if (result.kind === "capacity-exceeded") {
-        throw new ValidationError(result.message);
+        throw new ValidationError(
+          "This package has reached its maximum student capacity",
+        );
       }
 
       if (result.kind === "stale-package") {
@@ -757,7 +764,8 @@ class PaymentService {
     }
 
     if (payment.orderId) {
-      const confirmationTime = new Date();
+      const now = new Date();
+      const confirmationTime = now < payment.createdAt ? payment.createdAt : now;
 
       const result: CartPaymentConfirmationTransactionResult =
         await prisma.$transaction(async (tx) => {
@@ -780,11 +788,22 @@ class PaymentService {
             return { kind: "order-not-payable" as const };
           }
 
+          const orderPackageIds = order.items.map((item) => item.packageId);
+          const lockedPackages = await lockPackagesForUpdate(
+            tx,
+            orderPackageIds,
+          );
+
           if (
-            order.items.some(
-              (item) =>
-                !item.package?.isActive || !item.package.course?.isPublished,
-            )
+            order.items.some((item) => {
+              const locked = lockedPackages.get(item.packageId);
+              return (
+                !locked ||
+                !locked.is_active ||
+                !item.package?.isActive ||
+                !item.package.course?.isPublished
+              );
+            })
           ) {
             await failOrderCheckout(tx, normalizedPaymentId, order.id);
             return { kind: "unavailable-order" as const };
@@ -822,29 +841,30 @@ class PaymentService {
           }
 
           for (const item of order.items) {
-            try {
-              await assertPackageHasAvailableCapacity(
+            const locked = lockedPackages.get(item.packageId);
+            if (locked && locked.max_students !== null) {
+              const activeCount = await countActivePackageEnrollments(
                 tx,
-                item.package,
+                item.packageId,
                 confirmationTime,
               );
-            } catch (error) {
-              await failOrderCheckout(tx, normalizedPaymentId, order.id);
-              return {
-                kind: "capacity-exceeded" as const,
-                message:
-                  error instanceof Error
-                    ? error.message
-                    : "One or more packages have reached maximum student capacity",
-              };
+              if (activeCount >= locked.max_students) {
+                await failOrderCheckout(tx, normalizedPaymentId, order.id);
+                return { kind: "capacity-exceeded" as const };
+              }
             }
           }
+
+          const effectivePaidAt =
+            confirmationTime < order.createdAt
+              ? order.createdAt
+              : confirmationTime;
 
           const paymentUpdate = await tx.payment.updateMany({
             where: { id: normalizedPaymentId, status: PaymentStatus.PENDING },
             data: {
               status: PaymentStatus.COMPLETED,
-              paidAt: confirmationTime,
+              paidAt: effectivePaidAt,
             },
           });
 
@@ -858,12 +878,11 @@ class PaymentService {
 
           for (const item of order.items) {
             const pkg = item.package;
-            const teacherProfile = pkg?.course?.teacherProfile;
             const netTeacherEarning = pkg?.course
               ? roundMoney(
                   calculateTeacherNetEarning(
                     item.finalPrice,
-                    teacherProfile,
+                    pkg.course.teacherProfile,
                     config.PLATFORM_COMMISSION_RATE,
                   ),
                 )
@@ -876,20 +895,8 @@ class PaymentService {
                 duration: pkg.duration,
                 teacherProfileId: pkg.course.teacherProfileId,
                 teacherEarning: netTeacherEarning,
-                confirmationTime,
+                confirmationTime: effectivePaidAt,
               });
-
-              if (teacherProfile && netTeacherEarning > 0) {
-                await walletService.creditForTeacherInTransaction(
-                  tx,
-                  teacherProfile.userId,
-                  netTeacherEarning,
-                  {
-                    paymentId: updatedPayment.id,
-                    orderItemId: item.id,
-                  },
-                );
-              }
             }
           }
 
@@ -897,7 +904,7 @@ class PaymentService {
             where: { id: order.id },
             data: {
               status: OrderStatus.PAID,
-              paidAt: confirmationTime,
+              paidAt: effectivePaidAt,
             },
           });
 
@@ -909,6 +916,8 @@ class PaymentService {
               },
             },
           });
+
+          await this.syncTeacherWalletCredits(updatedPayment, tx);
 
           return {
             kind: "order-complete" as const,
@@ -931,14 +940,10 @@ class PaymentService {
         throw new ValidationError("This payment has already been processed");
       }
 
-      if (result.kind === "capacity-exceeded") {
-        throw new ValidationError(result.message);
-      }
-
       const errorByKind: Record<
         Exclude<
           CartPaymentConfirmationTransactionResult["kind"],
-          "order-complete" | "already-processed" | "capacity-exceeded"
+          "order-complete" | "already-processed"
         >,
         () => never
       > = {
@@ -961,6 +966,11 @@ class PaymentService {
         "unavailable-order": () => {
           throw new ValidationError(
             "This checkout is stale because one or more packages are no longer available",
+          );
+        },
+        "capacity-exceeded": () => {
+          throw new ValidationError(
+            "One or more packages in your checkout have reached their maximum student capacity",
           );
         },
       };
@@ -1091,6 +1101,10 @@ class PaymentService {
       );
     }
 
+    if (roundMoney(payment.amount) <= 0) {
+      throw new ValidationError("Free course payments cannot be refunded");
+    }
+
     if (!payment.packageId) {
       throw new ValidationError("Invalid payment state");
     }
@@ -1129,40 +1143,41 @@ class PaymentService {
       });
 
       const teacherProfile = lessonPackage?.course?.teacherProfile;
-      const teacherRefundDebit = roundMoney(payment.teacherEarning);
       if (teacherProfile) {
-        if (teacherRefundDebit > 0) {
-          await walletService.debitForRefundInTransaction(
-            tx,
+        const debitAmount = roundMoney(payment.teacherEarning);
+        if (debitAmount > 0) {
+          await walletService.debitForRefund(
             teacherProfile.userId,
-            teacherRefundDebit,
+            debitAmount,
             {
               paymentId: payment.id,
               packageId: normalizedPackageId,
             },
+            tx,
           );
         }
+
+        const currentTeacher = await tx.teacherProfile.findUnique({
+          where: { id: teacherProfile.id },
+          select: { totalEarnings: true },
+        });
+
+        const safeDecrement = currentTeacher
+          ? Math.min(roundMoney(currentTeacher.totalEarnings), debitAmount)
+          : 0;
 
         const activeStudentCount =
           await countDistinctActiveStudentsForTeacherProfile(
             tx,
             teacherProfile.id,
           );
-        const currentProfile = await tx.teacherProfile.findUnique({
-          where: { id: teacherProfile.id },
-          select: { totalEarnings: true },
-        });
-        const nextTotalEarnings = Math.max(
-          0,
-          roundMoney(
-            toNumber(currentProfile?.totalEarnings) - teacherRefundDebit,
-          ),
-        );
 
         await tx.teacherProfile.update({
           where: { id: teacherProfile.id },
           data: {
-            totalEarnings: nextTotalEarnings,
+            ...(safeDecrement > 0
+              ? { totalEarnings: { decrement: safeDecrement } }
+              : {}),
             totalStudents: activeStudentCount,
           },
         });

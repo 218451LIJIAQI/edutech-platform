@@ -1,14 +1,49 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import clientLogger from '@/utils/logger';
-import adminService, { FinancialStats, PaginationMeta, SettlementSummaryRow, TeacherCommissionListItem, FinancialReportSummaryData, TeacherSettlementsData, TeacherSettlementItem } from '@/services/admin.service';
-import { DollarSign, TrendingUp, PieChart, Receipt, Calendar, RefreshCcw, Percent, Search, Download, Zap, FileText } from 'lucide-react';
-import { AdminPayoutsPanel, RevenueAnalytics } from '@/components/admin';
+import adminService, {
+  AdminPayoutReviewAction,
+  FinancialStats,
+  PaginationMeta,
+  SettlementSummaryRow,
+  TeacherCommissionListItem,
+  FinancialReportSummaryData,
+  TeacherSettlementsData,
+  TeacherSettlementItem,
+} from '@/services/admin.service';
+import {
+  DollarSign,
+  TrendingUp,
+  PieChart,
+  Receipt,
+  Calendar,
+  RefreshCcw,
+  Percent,
+  Search,
+  Download,
+  Zap,
+  FileText,
+  Wallet,
+  CheckCircle2,
+  XCircle,
+  Clock3,
+  X,
+} from 'lucide-react';
+import { RevenueAnalytics } from '@/components/admin';
 import toast from 'react-hot-toast';
 import { extractErrorMessage } from '@/utils/error-handler';
 import { buildCsvContent, downloadCsvFile } from '@/utils/download';
-import { usePageTitle } from '@/hooks';
+import { useOverlayAccessibility, usePageTitle } from '@/hooks';
+import { AdminPayoutRequest, PayoutRequestStatus } from '@/types';
 
 const pageSizes = [10, 20, 50];
+
+type FinancialsTab =
+  | 'payments'
+  | 'commissions'
+  | 'settlements'
+  | 'payouts'
+  | 'analytics'
+  | 'auto-reports';
 
 type AdminPaymentRow = FinancialStats['recentPayments'][number];
 
@@ -40,10 +75,52 @@ const getPaymentStatusClass = (status?: string): string => {
   }
 };
 
+const getPayoutStatusBadgeClass = (status: PayoutRequestStatus): string => {
+  switch (status) {
+    case PayoutRequestStatus.PAID:
+      return 'bg-emerald-100 text-emerald-700';
+    case PayoutRequestStatus.APPROVED:
+      return 'bg-blue-100 text-blue-700';
+    case PayoutRequestStatus.PROCESSING:
+      return 'bg-purple-100 text-purple-700';
+    case PayoutRequestStatus.PENDING:
+      return 'bg-amber-100 text-amber-700';
+    case PayoutRequestStatus.REJECTED:
+    case PayoutRequestStatus.CANCELLED:
+      return 'bg-red-100 text-red-700';
+    default:
+      return 'bg-gray-100 text-gray-700';
+  }
+};
+
+const formatPayoutDestinationSummary = (payout: AdminPayoutRequest): string => {
+  const method = payout.method;
+  if (!method) {
+    return 'No payout method attached';
+  }
+
+  const details = method.details || {};
+  if (method.type === 'BANK_TRANSFER') {
+    const bankName = typeof details.bankName === 'string' ? details.bankName : '';
+    const accountName =
+      typeof details.accountName === 'string' ? details.accountName : '';
+    const accountNo =
+      typeof details.accountNo === 'string' ? details.accountNo : '';
+    const parts = [bankName, accountName, accountNo].filter(Boolean);
+    return parts.length > 0
+      ? `${method.label} (${parts.join(' • ')})`
+      : `${method.label} (BANK_TRANSFER)`;
+  }
+
+  const walletId = typeof details.walletId === 'string' ? details.walletId : '';
+  return walletId
+    ? `${method.label} (${method.type}: ${walletId})`
+    : `${method.label} (${method.type})`;
+};
+
 const FinancialsManagement = () => {
   usePageTitle('Financial Management');
-  const [tab, setTab] = useState<'payments' | 'commissions' | 'settlements' | 'payouts' | 'analytics' | 'auto-reports'>('payments');
-  const [payoutRequestKey, setPayoutRequestKey] = useState(0);
+  const [tab, setTab] = useState<FinancialsTab>('payments');
 
   // Financial overview & payments
   const [stats, setStats] = useState<FinancialStats | null>(null);
@@ -94,7 +171,10 @@ const FinancialsManagement = () => {
       } catch (error: unknown) {
         if (isActive) {
           clientLogger.error('Failed to load financial stats:', error);
-          const errorMessage = extractErrorMessage(error, 'Failed to load financial stats');
+          const errorMessage = extractErrorMessage(
+            error,
+            'Failed to load financial stats'
+          );
           toast.error(errorMessage);
         }
       } finally {
@@ -115,8 +195,11 @@ const FinancialsManagement = () => {
   const [commissionSearch, setCommissionSearch] = useState('');
   const [commissionPage, setCommissionPage] = useState(1);
   const [commissionLimit, setCommissionLimit] = useState(10);
-  const [commissionRows, setCommissionRows] = useState<TeacherCommissionListItem[]>([]);
-  const [commissionPagination, setCommissionPagination] = useState<PaginationMeta | null>(null);
+  const [commissionRows, setCommissionRows] = useState<
+    TeacherCommissionListItem[]
+  >([]);
+  const [commissionPagination, setCommissionPagination] =
+    useState<PaginationMeta | null>(null);
   const [commissionLoading, setCommissionLoading] = useState(false);
   const [editing, setEditing] = useState<Record<string, number | null>>({});
   const [appliedCommissionSearch, setAppliedCommissionSearch] = useState('');
@@ -144,7 +227,10 @@ const FinancialsManagement = () => {
       } catch (error: unknown) {
         if (isActive) {
           clientLogger.error('Failed to load commissions:', error);
-          const errorMessage = extractErrorMessage(error, 'Failed to load commissions');
+          const errorMessage = extractErrorMessage(
+            error,
+            'Failed to load commissions'
+          );
           toast.error(errorMessage);
         }
       } finally {
@@ -159,7 +245,13 @@ const FinancialsManagement = () => {
     return () => {
       isActive = false;
     };
-  }, [tab, commissionPage, commissionLimit, appliedCommissionSearch, commissionRequestKey]);
+  }, [
+    tab,
+    commissionPage,
+    commissionLimit,
+    appliedCommissionSearch,
+    commissionRequestKey,
+  ]);
 
   // Settlements state
   const [settStart, setSettStart] = useState('');
@@ -169,14 +261,44 @@ const FinancialsManagement = () => {
   const [settPage, setSettPage] = useState(1);
   const [settLimit] = useState(10);
   const [settRows, setSettRows] = useState<SettlementSummaryRow[]>([]);
-  const [settPagination, setSettPagination] = useState<PaginationMeta | null>(null);
+  const [settPagination, setSettPagination] = useState<PaginationMeta | null>(
+    null
+  );
   const [settLoading, setSettLoading] = useState(false);
   const [settlementRequestKey, setSettlementRequestKey] = useState(0);
 
+  // Payouts state
+  const [payoutStatusFilter, setPayoutStatusFilter] = useState<
+    'ALL' | PayoutRequestStatus
+  >('ALL');
+  const [payoutPage, setPayoutPage] = useState(1);
+  const [payoutLimit, setPayoutLimit] = useState(20);
+  const [payoutRows, setPayoutRows] = useState<AdminPayoutRequest[]>([]);
+  const [payoutTotal, setPayoutTotal] = useState(0);
+  const [payoutLoading, setPayoutLoading] = useState(false);
+  const [payoutRequestKey, setPayoutRequestKey] = useState(0);
+  const [reviewingPayout, setReviewingPayout] = useState<{
+    payout: AdminPayoutRequest;
+    action: AdminPayoutReviewAction;
+  } | null>(null);
+  const [payoutAdminNote, setPayoutAdminNote] = useState('');
+  const [payoutExternalRef, setPayoutExternalRef] = useState('');
+  const [isSubmittingPayoutReview, setIsSubmittingPayoutReview] =
+    useState(false);
+
+  const payoutModalRef = useRef<HTMLDivElement | null>(null);
+  const payoutModalPrimaryInputRef = useRef<HTMLInputElement | HTMLTextAreaElement | null>(
+    null
+  );
+
   // Auto-Reports state
-  const [autoReportSummary, setAutoReportSummary] = useState<FinancialReportSummaryData | null>(null);
-  const [autoReportSettlements, setAutoReportSettlements] = useState<TeacherSettlementItem[]>([]);
-  const [autoReportSettlementsTotals, setAutoReportSettlementsTotals] = useState<TeacherSettlementsData['totals'] | null>(null);
+  const [autoReportSummary, setAutoReportSummary] =
+    useState<FinancialReportSummaryData | null>(null);
+  const [autoReportSettlements, setAutoReportSettlements] = useState<
+    TeacherSettlementItem[]
+  >([]);
+  const [autoReportSettlementsTotals, setAutoReportSettlementsTotals] =
+    useState<TeacherSettlementsData['totals'] | null>(null);
   const [autoReportLoading, setAutoReportLoading] = useState(false);
   const [autoReportExporting, setAutoReportExporting] = useState(false);
   const [autoReportRequestKey, setAutoReportRequestKey] = useState(0);
@@ -185,6 +307,22 @@ const FinancialsManagement = () => {
     () => Boolean(settStart && settEnd && settStart > settEnd),
     [settStart, settEnd]
   );
+
+  const closePayoutReviewModal = () => {
+    if (isSubmittingPayoutReview) return;
+    setReviewingPayout(null);
+    setPayoutAdminNote('');
+    setPayoutExternalRef('');
+  };
+
+  useOverlayAccessibility({
+    isOpen: Boolean(reviewingPayout),
+    containerRef: payoutModalRef,
+    initialFocusRef: payoutModalPrimaryInputRef as React.RefObject<HTMLElement>,
+    onClose: closePayoutReviewModal,
+    trapFocus: true,
+    lockBodyScroll: true,
+  });
 
   useEffect(() => {
     if (tab !== 'settlements') {
@@ -209,7 +347,10 @@ const FinancialsManagement = () => {
       } catch (error: unknown) {
         if (isActive) {
           clientLogger.error('Failed to load settlements:', error);
-          const errorMessage = extractErrorMessage(error, 'Failed to load settlements');
+          const errorMessage = extractErrorMessage(
+            error,
+            'Failed to load settlements'
+          );
           toast.error(errorMessage);
         }
       } finally {
@@ -224,7 +365,56 @@ const FinancialsManagement = () => {
     return () => {
       isActive = false;
     };
-  }, [tab, settPage, settLimit, appliedSettStart, appliedSettEnd, settlementRequestKey]);
+  }, [
+    tab,
+    settPage,
+    settLimit,
+    appliedSettStart,
+    appliedSettEnd,
+    settlementRequestKey,
+  ]);
+
+  // Payouts data loading
+  useEffect(() => {
+    if (tab !== 'payouts') {
+      return;
+    }
+
+    let isActive = true;
+
+    const loadPayouts = async () => {
+      setPayoutLoading(true);
+      try {
+        const data = await adminService.listPayouts({
+          status:
+            payoutStatusFilter === 'ALL' ? undefined : payoutStatusFilter,
+          limit: payoutLimit,
+          offset: (payoutPage - 1) * payoutLimit,
+        });
+        if (isActive) {
+          setPayoutRows(data.items);
+          setPayoutTotal(data.total);
+        }
+      } catch (error: unknown) {
+        if (isActive) {
+          clientLogger.error('Failed to load payout requests:', error);
+          toast.error(
+            extractErrorMessage(error, 'Failed to load payout requests')
+          );
+        }
+      } finally {
+        if (isActive) {
+          setPayoutLoading(false);
+        }
+      }
+    };
+
+    void loadPayouts();
+
+    return () => {
+      isActive = false;
+    };
+  }, [tab, payoutStatusFilter, payoutPage, payoutLimit, payoutRequestKey]);
 
   // Auto-Reports data loading
   useEffect(() => {
@@ -252,17 +442,85 @@ const FinancialsManagement = () => {
       }
     };
     void loadAutoReports();
-    return () => { isActive = false; };
+    return () => {
+      isActive = false;
+    };
   }, [tab, autoReportRequestKey]);
+
+  const openPayoutReviewModal = (
+    payout: AdminPayoutRequest,
+    action: AdminPayoutReviewAction
+  ) => {
+    setReviewingPayout({ payout, action });
+    setPayoutAdminNote(payout.adminNote || '');
+    setPayoutExternalRef(payout.externalReference || '');
+  };
+
+  const handleConfirmPayoutReview = async () => {
+    if (!reviewingPayout || isSubmittingPayoutReview) return;
+
+    const trimmedNote = payoutAdminNote.trim();
+    const trimmedRef = payoutExternalRef.trim();
+
+    if (reviewingPayout.action === 'reject' && !trimmedNote) {
+      toast.error('Please enter an admin note explaining why the payout is rejected.');
+      return;
+    }
+
+    if (reviewingPayout.action === 'paid' && !trimmedRef) {
+      toast.error('Please enter the bank/transfer external reference ID.');
+      return;
+    }
+
+    setIsSubmittingPayoutReview(true);
+    try {
+      await adminService.reviewPayout(reviewingPayout.payout.id, {
+        action: reviewingPayout.action,
+        adminNote: trimmedNote || undefined,
+        externalReference: trimmedRef || undefined,
+      });
+      toast.success(`Payout ${reviewingPayout.action}d successfully`);
+      setReviewingPayout(null);
+      setPayoutAdminNote('');
+      setPayoutExternalRef('');
+      setPayoutRequestKey((k) => k + 1);
+    } catch (error: unknown) {
+      clientLogger.error('Failed to review payout:', error);
+      toast.error(extractErrorMessage(error, 'Failed to update payout status'));
+    } finally {
+      setIsSubmittingPayoutReview(false);
+    }
+  };
 
   const handleAutoReportExport = async () => {
     setAutoReportExporting(true);
     try {
       const data = await adminService.getFinancialExportData({});
-      const headers = ['ID', 'Date', 'User', 'Course', 'Amount', 'Platform Commission', 'Teacher Earning', 'Status'];
-      const rows = data.payments.map((p) => [p.id, p.date, p.userName, p.courseName, p.amount, p.platformCommission, p.teacherEarning, p.status]);
+      const headers = [
+        'ID',
+        'Date',
+        'User',
+        'Course',
+        'Amount',
+        'Platform Commission',
+        'Teacher Earning',
+        'Status',
+      ];
+      const rows = data.payments.map((p) => [
+        p.id,
+        p.date,
+        p.userName,
+        p.courseName,
+        p.amount,
+        p.platformCommission,
+        p.teacherEarning,
+        p.status,
+      ]);
       const csv = buildCsvContent([headers, ...rows]);
-      downloadCsvFile(csv, `financial-report-${new Date().toISOString().slice(0, 10)}.csv`);
+      downloadCsvFile(
+        csv,
+        `financial-report-${new Date().toISOString().slice(0, 10)}.csv`
+      );
       toast.success('Financial report exported successfully');
     } catch (error: unknown) {
       clientLogger.error('Failed to export financial report:', error);
@@ -275,7 +533,11 @@ const FinancialsManagement = () => {
   const formatMoney = (v: number | undefined) =>
     (v ?? 0).toLocaleString(undefined, { style: 'currency', currency: 'USD' });
 
-  const exportCSV = <T,>(rows: T[], headers: string[], mapper: (row: T) => Array<string | number | null | undefined>) => {
+  const exportCSV = <T,>(
+    rows: T[],
+    headers: string[],
+    mapper: (row: T) => Array<string | number | null | undefined>
+  ) => {
     if (!rows || rows.length === 0) {
       toast.error('No data to export');
       return;
@@ -289,6 +551,8 @@ const FinancialsManagement = () => {
     }
   };
 
+  const payoutTotalPages = Math.max(1, Math.ceil(payoutTotal / payoutLimit));
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-primary-50/10 to-indigo-50/20 relative">
       <div className="absolute inset-0 bg-[linear-gradient(rgba(0,0,0,0.015)_1px,transparent_1px),linear-gradient(90deg,rgba(0,0,0,0.015)_1px,transparent_1px)] bg-[size:32px_32px] pointer-events-none"></div>
@@ -301,9 +565,14 @@ const FinancialsManagement = () => {
             </div>
             <div>
               <h1 className="text-3xl font-extrabold text-gray-900">
-                Financials <span className="bg-gradient-to-r from-green-600 to-emerald-600 bg-clip-text text-transparent">Management</span>
+                Financials{' '}
+                <span className="bg-gradient-to-r from-green-600 to-emerald-600 bg-clip-text text-transparent">
+                  Management
+                </span>
               </h1>
-              <p className="text-gray-500 font-medium">Platform financials, commissions and settlements</p>
+              <p className="text-gray-500 font-medium">
+                Platform financials, commissions, settlements and teacher payouts
+              </p>
             </div>
           </div>
           {tab === 'payments' ? (
@@ -318,7 +587,9 @@ const FinancialsManagement = () => {
           ) : tab === 'commissions' ? (
             <button
               type="button"
-              onClick={() => setCommissionRequestKey((currentKey) => currentKey + 1)}
+              onClick={() =>
+                setCommissionRequestKey((currentKey) => currentKey + 1)
+              }
               className="btn btn-outline flex items-center gap-2"
               title="Refresh"
             >
@@ -327,21 +598,56 @@ const FinancialsManagement = () => {
           ) : tab === 'settlements' ? (
             <button
               type="button"
-              onClick={() => setSettlementRequestKey((currentKey) => currentKey + 1)}
+              onClick={() =>
+                setSettlementRequestKey((currentKey) => currentKey + 1)
+              }
               className="btn btn-outline flex items-center gap-2"
               title="Refresh"
             >
               <RefreshCcw className="w-4 h-4" /> Refresh
             </button>
           ) : tab === 'payouts' ? (
-            <button
-              type="button"
-              onClick={() => setPayoutRequestKey((currentKey) => currentKey + 1)}
-              className="btn btn-outline flex items-center gap-2"
-              title="Refresh"
-            >
-              <RefreshCcw className="w-4 h-4" /> Refresh
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() =>
+                  exportCSV(
+                    payoutRows,
+                    [
+                      'Requested At',
+                      'Teacher',
+                      'Email',
+                      'Amount',
+                      'Status',
+                      'Destination',
+                      'External Reference',
+                    ],
+                    (row) => [
+                      new Date(row.requestedAt).toLocaleString(),
+                      `${row.wallet?.user?.firstName || ''} ${
+                        row.wallet?.user?.lastName || ''
+                      }`.trim() || '-',
+                      row.wallet?.user?.email || '-',
+                      row.amount,
+                      row.status,
+                      formatPayoutDestinationSummary(row),
+                      row.externalReference || '-',
+                    ]
+                  )
+                }
+                className="btn btn-outline flex items-center gap-2"
+              >
+                <Download className="w-4 h-4" /> Export CSV
+              </button>
+              <button
+                type="button"
+                onClick={() => setPayoutRequestKey((k) => k + 1)}
+                className="btn btn-outline flex items-center gap-2"
+                title="Refresh"
+              >
+                <RefreshCcw className="w-4 h-4" /> Refresh
+              </button>
+            </div>
           ) : tab === 'auto-reports' ? (
             <div className="flex items-center gap-2">
               <button
@@ -351,7 +657,8 @@ const FinancialsManagement = () => {
                 className="btn btn-outline flex items-center gap-2"
                 title="Export CSV"
               >
-                <Download className="w-4 h-4" /> {autoReportExporting ? 'Exporting...' : 'Export CSV'}
+                <Download className="w-4 h-4" />{' '}
+                {autoReportExporting ? 'Exporting...' : 'Export CSV'}
               </button>
               <button
                 type="button"
@@ -366,45 +673,69 @@ const FinancialsManagement = () => {
         </div>
 
         {/* Tabs */}
-        <div className="mb-6 flex items-center gap-3">
+        <div className="mb-6 flex flex-wrap items-center gap-3">
           <button
             type="button"
-            className={`px-4 py-2 rounded-lg font-semibold ${tab === 'payments' ? 'bg-primary-600 text-white' : 'bg-gray-100 text-gray-600'}`}
+            className={`px-4 py-2 rounded-lg font-semibold ${
+              tab === 'payments'
+                ? 'bg-primary-600 text-white'
+                : 'bg-gray-100 text-gray-600'
+            }`}
             onClick={() => setTab('payments')}
           >
             Payments
           </button>
           <button
             type="button"
-            className={`px-4 py-2 rounded-lg font-semibold ${tab === 'commissions' ? 'bg-primary-600 text-white' : 'bg-gray-100 text-gray-600'}`}
+            className={`px-4 py-2 rounded-lg font-semibold ${
+              tab === 'commissions'
+                ? 'bg-primary-600 text-white'
+                : 'bg-gray-100 text-gray-600'
+            }`}
             onClick={() => setTab('commissions')}
           >
             Commissions
           </button>
           <button
             type="button"
-            className={`px-4 py-2 rounded-lg font-semibold ${tab === 'settlements' ? 'bg-primary-600 text-white' : 'bg-gray-100 text-gray-600'}`}
+            className={`px-4 py-2 rounded-lg font-semibold ${
+              tab === 'settlements'
+                ? 'bg-primary-600 text-white'
+                : 'bg-gray-100 text-gray-600'
+            }`}
             onClick={() => setTab('settlements')}
           >
             Settlements
           </button>
           <button
             type="button"
-            className={`px-4 py-2 rounded-lg font-semibold ${tab === 'payouts' ? 'bg-primary-600 text-white' : 'bg-gray-100 text-gray-600'}`}
+            className={`px-4 py-2 rounded-lg font-semibold inline-flex items-center gap-1.5 ${
+              tab === 'payouts'
+                ? 'bg-primary-600 text-white'
+                : 'bg-gray-100 text-gray-600'
+            }`}
             onClick={() => setTab('payouts')}
           >
-            Payouts
+            <Wallet className="w-4 h-4" /> Payouts
           </button>
           <button
             type="button"
-            className={`px-4 py-2 rounded-lg font-semibold ${tab === 'analytics' ? 'bg-primary-600 text-white' : 'bg-gray-100 text-gray-600'}`}
+            className={`px-4 py-2 rounded-lg font-semibold ${
+              tab === 'analytics'
+                ? 'bg-primary-600 text-white'
+                : 'bg-gray-100 text-gray-600'
+            }`}
             onClick={() => setTab('analytics')}
           >
             Analytics
           </button>
           <button
             type="button"
-            className={`px-4 py-2 rounded-lg font-semibold flex items-center gap-1.5 ${tab === 'auto-reports' ? 'bg-gradient-to-r from-green-600 to-emerald-600 text-white shadow-md' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+            className={`px-4 py-2 rounded-lg font-semibold flex items-center gap-1.5 ${
+              tab === 'auto-reports'
+                ? 'bg-gradient-to-r from-green-600 to-emerald-600 text-white shadow-md'
+                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+            }`}
             onClick={() => setTab('auto-reports')}
           >
             <Zap className="w-4 h-4" /> Auto Reports
@@ -417,7 +748,12 @@ const FinancialsManagement = () => {
             <div className="card mb-6 shadow-xl border border-gray-100 rounded-2xl">
               <div className="flex flex-col md:flex-row md:items-end gap-4">
                 <div className="flex-1">
-                  <label htmlFor="payment-start-date" className="block text-sm font-medium text-gray-700 mb-1">Start Date</label>
+                  <label
+                    htmlFor="payment-start-date"
+                    className="block text-sm font-medium text-gray-700 mb-1"
+                  >
+                    Start Date
+                  </label>
                   <div className="flex items-center gap-2">
                     <Calendar className="w-4 h-4 text-gray-400" />
                     <input
@@ -430,7 +766,12 @@ const FinancialsManagement = () => {
                   </div>
                 </div>
                 <div className="flex-1">
-                  <label htmlFor="payment-end-date" className="block text-sm font-medium text-gray-700 mb-1">End Date</label>
+                  <label
+                    htmlFor="payment-end-date"
+                    className="block text-sm font-medium text-gray-700 mb-1"
+                  >
+                    End Date
+                  </label>
                   <div className="flex items-center gap-2">
                     <Calendar className="w-4 h-4 text-gray-400" />
                     <input
@@ -438,12 +779,18 @@ const FinancialsManagement = () => {
                       type="date"
                       value={endDate}
                       onChange={(e) => setEndDate(e.target.value)}
-                      className={`input py-2 ${hasPaymentDateRangeError ? 'border-red-500 focus:ring-red-500' : ''}`}
+                      className={`input py-2 ${
+                        hasPaymentDateRangeError
+                          ? 'border-red-500 focus:ring-red-500'
+                          : ''
+                      }`}
                       aria-invalid={hasPaymentDateRangeError}
                     />
                   </div>
                   {hasPaymentDateRangeError && (
-                    <p className="mt-1 text-sm text-red-600">End date must be the same as or later than start date.</p>
+                    <p className="mt-1 text-sm text-red-600">
+                      End date must be the same as or later than start date.
+                    </p>
                   )}
                 </div>
                 <div className="flex gap-2">
@@ -493,31 +840,47 @@ const FinancialsManagement = () => {
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
                   <div className="card bg-gradient-to-br from-green-500 to-green-600 text-white">
                     <div className="flex items-center justify-between">
-                      <h3 className="text-sm font-semibold text-green-100">Total Revenue</h3>
+                      <h3 className="text-sm font-semibold text-green-100">
+                        Total Revenue
+                      </h3>
                       <DollarSign className="w-5 h-5 text-white/90" />
                     </div>
-                    <p className="text-3xl font-bold mt-2">{formatMoney(stats?.totals.totalRevenue)}</p>
+                    <p className="text-3xl font-bold mt-2">
+                      {formatMoney(stats?.totals.totalRevenue)}
+                    </p>
                   </div>
                   <div className="card bg-gradient-to-br from-blue-500 to-blue-600 text-white">
                     <div className="flex items-center justify-between">
-                      <h3 className="text-sm font-semibold text-blue-100">Platform Earnings</h3>
+                      <h3 className="text-sm font-semibold text-blue-100">
+                        Platform Earnings
+                      </h3>
                       <PieChart className="w-5 h-5 text-white/90" />
                     </div>
-                    <p className="text-3xl font-bold mt-2">{formatMoney(stats?.totals.platformEarnings)}</p>
+                    <p className="text-3xl font-bold mt-2">
+                      {formatMoney(stats?.totals.platformEarnings)}
+                    </p>
                   </div>
                   <div className="card bg-gradient-to-br from-purple-500 to-purple-600 text-white">
                     <div className="flex items-center justify-between">
-                      <h3 className="text-sm font-semibold text-purple-100">Teacher Earnings</h3>
+                      <h3 className="text-sm font-semibold text-purple-100">
+                        Teacher Earnings
+                      </h3>
                       <TrendingUp className="w-5 h-5 text-white/90" />
                     </div>
-                    <p className="text-3xl font-bold mt-2">{formatMoney(stats?.totals.teacherEarnings)}</p>
+                    <p className="text-3xl font-bold mt-2">
+                      {formatMoney(stats?.totals.teacherEarnings)}
+                    </p>
                   </div>
                   <div className="card bg-gradient-to-br from-orange-500 to-orange-600 text-white">
                     <div className="flex items-center justify-between">
-                      <h3 className="text-sm font-semibold text-orange-100">Transactions</h3>
+                      <h3 className="text-sm font-semibold text-orange-100">
+                        Transactions
+                      </h3>
                       <Receipt className="w-5 h-5 text-white/90" />
                     </div>
-                    <p className="text-3xl font-bold mt-2">{stats?.totals.transactionCount ?? 0}</p>
+                    <p className="text-3xl font-bold mt-2">
+                      {stats?.totals.transactionCount ?? 0}
+                    </p>
                   </div>
                 </div>
 
@@ -527,48 +890,104 @@ const FinancialsManagement = () => {
                     <button
                       type="button"
                       className="btn btn-outline flex items-center gap-2"
-                      onClick={() => exportCSV(visiblePayments,
-                        ['Paid At','User','Course','Amount','Platform','Teacher','Status'],
-                        (payment) => [
-                          payment.paidAt ? new Date(payment.paidAt).toLocaleString() : '-',
-                          `${payment.user?.firstName || ''} ${payment.user?.lastName || ''}`.trim(),
-                          getPaymentCourseTitle(payment),
-                          payment.amount,
-                          payment.platformCommission,
-                          payment.teacherEarning,
-                          payment.status
-                        ])}
+                      onClick={() =>
+                        exportCSV(
+                          visiblePayments,
+                          [
+                            'Paid At',
+                            'User',
+                            'Course',
+                            'Amount',
+                            'Platform',
+                            'Teacher',
+                            'Status',
+                          ],
+                          (payment) => [
+                            payment.paidAt
+                              ? new Date(payment.paidAt).toLocaleString()
+                              : '-',
+                            `${payment.user?.firstName || ''} ${
+                              payment.user?.lastName || ''
+                            }`.trim(),
+                            getPaymentCourseTitle(payment),
+                            payment.amount,
+                            payment.platformCommission,
+                            payment.teacherEarning,
+                            payment.status,
+                          ]
+                        )
+                      }
                     >
-                      <Download className="w-4 h-4"/> Export CSV
+                      <Download className="w-4 h-4" /> Export CSV
                     </button>
                   </div>
                   <table className="w-full">
                     <thead className="bg-gradient-to-r from-gray-50 to-gray-100 border-b-2 border-gray-200">
                       <tr>
-                        <th className="px-6 py-4 text-left font-bold text-gray-900">Paid At</th>
-                        <th className="px-6 py-4 text-left font-bold text-gray-900">User</th>
-                        <th className="px-6 py-4 text-left font-bold text-gray-900">Course</th>
-                        <th className="px-6 py-4 text-left font-bold text-gray-900">Amount</th>
-                        <th className="px-6 py-4 text-left font-bold text-gray-900">Platform</th>
-                        <th className="px-6 py-4 text-left font-bold text-gray-900">Teacher</th>
-                        <th className="px-6 py-4 text-left font-bold text-gray-900">Status</th>
+                        <th className="px-6 py-4 text-left font-bold text-gray-900">
+                          Paid At
+                        </th>
+                        <th className="px-6 py-4 text-left font-bold text-gray-900">
+                          User
+                        </th>
+                        <th className="px-6 py-4 text-left font-bold text-gray-900">
+                          Course
+                        </th>
+                        <th className="px-6 py-4 text-left font-bold text-gray-900">
+                          Amount
+                        </th>
+                        <th className="px-6 py-4 text-left font-bold text-gray-900">
+                          Platform
+                        </th>
+                        <th className="px-6 py-4 text-left font-bold text-gray-900">
+                          Teacher
+                        </th>
+                        <th className="px-6 py-4 text-left font-bold text-gray-900">
+                          Status
+                        </th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100">
                       {visiblePayments.length === 0 ? (
                         <tr>
-                          <td colSpan={7} className="px-6 py-8 text-center text-gray-500">No payments in selected period</td>
+                          <td
+                            colSpan={7}
+                            className="px-6 py-8 text-center text-gray-500"
+                          >
+                            No payments in selected period
+                          </td>
                         </tr>
                       ) : (
                         visiblePayments.map((p) => (
-                          <tr key={p.id} className="hover:bg-gradient-to-r hover:from-gray-50 hover:to-gray-100 transition-all">
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{p.paidAt ? new Date(p.paidAt).toLocaleString() : '-'}</td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{p.user?.firstName} {p.user?.lastName}</td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{getPaymentCourseTitle(p)}</td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold">{formatMoney(p.amount)}</td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm">{formatMoney(p.platformCommission)}</td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm">{formatMoney(p.teacherEarning)}</td>
-                            <td className={`px-6 py-4 whitespace-nowrap text-sm ${getPaymentStatusClass(p.status)}`}>
+                          <tr
+                            key={p.id}
+                            className="hover:bg-gradient-to-r hover:from-gray-50 hover:to-gray-100 transition-all"
+                          >
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
+                              {p.paidAt
+                                ? new Date(p.paidAt).toLocaleString()
+                                : '-'}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
+                              {p.user?.firstName} {p.user?.lastName}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
+                              {getPaymentCourseTitle(p)}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold">
+                              {formatMoney(p.amount)}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm">
+                              {formatMoney(p.platformCommission)}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm">
+                              {formatMoney(p.teacherEarning)}
+                            </td>
+                            <td
+                              className={`px-6 py-4 whitespace-nowrap text-sm ${getPaymentStatusClass(
+                                p.status
+                              )}`}
+                            >
                               {p.status || 'COMPLETED'}
                             </td>
                           </tr>
@@ -578,39 +997,50 @@ const FinancialsManagement = () => {
                   </table>
 
                   {/* Pagination controls */}
-                  {stats && stats.recentPayments && stats.recentPayments.length > 0 && (
-                    <div className="px-6 py-4 border-t flex items-center justify-between">
-                      <div className="text-sm text-gray-700">Page {page} of {totalPages}</div>
-                      <div className="flex items-center gap-3">
-                        <select
-                          value={pageSize}
-                          onChange={(e) => { setPage(1); setPageSize(Number.parseInt(e.target.value, 10)); }}
-                          className="px-2 py-1 border rounded-lg text-sm"
-                          aria-label="Items per page"
-                        >
-                          {pageSizes.map((s) => (
-                            <option key={s} value={s}>{s}/page</option>
-                          ))}
-                        </select>
-                        <button
-                          type="button"
-                          className="btn-outline btn-sm"
-                          disabled={page <= 1}
-                          onClick={() => setPage((p) => Math.max(1, p - 1))}
-                        >
-                          Previous
-                        </button>
-                        <button
-                          type="button"
-                          className="btn-primary btn-sm"
-                          disabled={page >= totalPages}
-                          onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                        >
-                          Next
-                        </button>
+                  {stats &&
+                    stats.recentPayments &&
+                    stats.recentPayments.length > 0 && (
+                      <div className="px-6 py-4 border-t flex items-center justify-between">
+                        <div className="text-sm text-gray-700">
+                          Page {page} of {totalPages}
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <select
+                            value={pageSize}
+                            onChange={(e) => {
+                              setPage(1);
+                              setPageSize(Number.parseInt(e.target.value, 10));
+                            }}
+                            className="px-2 py-1 border rounded-lg text-sm"
+                            aria-label="Items per page"
+                          >
+                            {pageSizes.map((s) => (
+                              <option key={s} value={s}>
+                                {s}/page
+                              </option>
+                            ))}
+                          </select>
+                          <button
+                            type="button"
+                            className="btn-outline btn-sm"
+                            disabled={page <= 1}
+                            onClick={() => setPage((p) => Math.max(1, p - 1))}
+                          >
+                            Previous
+                          </button>
+                          <button
+                            type="button"
+                            className="btn-primary btn-sm"
+                            disabled={page >= totalPages}
+                            onClick={() =>
+                              setPage((p) => Math.min(totalPages, p + 1))
+                            }
+                          >
+                            Next
+                          </button>
+                        </div>
                       </div>
-                    </div>
-                  )}
+                    )}
                 </div>
               </>
             )}
@@ -644,12 +1074,17 @@ const FinancialsManagement = () => {
                 <label className="text-sm text-gray-600">Per page</label>
                 <select
                   value={commissionLimit}
-                  onChange={(e) => { setCommissionPage(1); setCommissionLimit(Number.parseInt(e.target.value, 10)); }}
+                  onChange={(e) => {
+                    setCommissionPage(1);
+                    setCommissionLimit(Number.parseInt(e.target.value, 10));
+                  }}
                   className="px-2 py-1 border rounded-lg text-sm"
                   aria-label="Items per page"
                 >
                   {pageSizes.map((s) => (
-                    <option key={s} value={s}>{s}</option>
+                    <option key={s} value={s}>
+                      {s}
+                    </option>
                   ))}
                 </select>
               </div>
@@ -660,13 +1095,27 @@ const FinancialsManagement = () => {
               <table className="w-full">
                 <thead className="bg-gradient-to-r from-gray-50 to-gray-100 border-b-2 border-gray-200">
                   <tr>
-                    <th className="px-6 py-4 text-left font-bold text-gray-900">Teacher</th>
-                    <th className="px-6 py-4 text-left font-bold text-gray-900">Email</th>
-                    <th className="px-6 py-4 text-left font-bold text-gray-900">Students</th>
-                    <th className="px-6 py-4 text-left font-bold text-gray-900">Rating</th>
-                    <th className="px-6 py-4 text-left font-bold text-gray-900">Total Earnings</th>
-                    <th className="px-6 py-4 text-left font-bold text-gray-900">Commission Rate</th>
-                    <th className="px-6 py-4 text-right font-bold text-gray-900">Actions</th>
+                    <th className="px-6 py-4 text-left font-bold text-gray-900">
+                      Teacher
+                    </th>
+                    <th className="px-6 py-4 text-left font-bold text-gray-900">
+                      Email
+                    </th>
+                    <th className="px-6 py-4 text-left font-bold text-gray-900">
+                      Students
+                    </th>
+                    <th className="px-6 py-4 text-left font-bold text-gray-900">
+                      Rating
+                    </th>
+                    <th className="px-6 py-4 text-left font-bold text-gray-900">
+                      Total Earnings
+                    </th>
+                    <th className="px-6 py-4 text-left font-bold text-gray-900">
+                      Commission Rate
+                    </th>
+                    <th className="px-6 py-4 text-right font-bold text-gray-900">
+                      Actions
+                    </th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
@@ -678,19 +1127,40 @@ const FinancialsManagement = () => {
                     </tr>
                   ) : commissionRows.length === 0 ? (
                     <tr>
-                      <td colSpan={7} className="px-6 py-8 text-center text-gray-500">No teachers found</td>
+                      <td
+                        colSpan={7}
+                        className="px-6 py-8 text-center text-gray-500"
+                      >
+                        No teachers found
+                      </td>
                     </tr>
                   ) : (
                     commissionRows.map((t) => {
                       const key = t.id;
-                      const currentRate = editing[key] !== undefined ? editing[key] : (t.teacherProfile?.commissionRate ?? null);
+                      const currentRate =
+                        editing[key] !== undefined
+                          ? editing[key]
+                          : (t.teacherProfile?.commissionRate ?? null);
                       return (
-                        <tr key={t.id} className="hover:bg-gradient-to-r hover:from-gray-50 hover:to-gray-100 transition-all">
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 font-semibold">{t.firstName} {t.lastName}</td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{t.email}</td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{t.teacherProfile?.totalStudents ?? 0}</td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{(t.teacherProfile?.averageRating ?? 0).toFixed(1)}</td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{formatMoney(t.teacherProfile?.totalEarnings)}</td>
+                        <tr
+                          key={t.id}
+                          className="hover:bg-gradient-to-r hover:from-gray-50 hover:to-gray-100 transition-all"
+                        >
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 font-semibold">
+                            {t.firstName} {t.lastName}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
+                            {t.email}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
+                            {t.teacherProfile?.totalStudents ?? 0}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
+                            {(t.teacherProfile?.averageRating ?? 0).toFixed(1)}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
+                            {formatMoney(t.teacherProfile?.totalEarnings)}
+                          </td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
                             <div className="flex items-center gap-2">
                               <Percent className="w-4 h-4 text-gray-400" />
@@ -699,23 +1169,37 @@ const FinancialsManagement = () => {
                                 step="0.1"
                                 min={0}
                                 max={100}
-                                value={currentRate === null || currentRate === undefined ? '' : currentRate}
+                                value={
+                                  currentRate === null ||
+                                  currentRate === undefined
+                                    ? ''
+                                    : currentRate
+                                }
                                 onChange={(e) => {
                                   const v = e.target.value;
-                                  setEditing((prev) => ({ ...prev, [key]: v === '' ? null : Number(v) }));
+                                  setEditing((prev) => ({
+                                    ...prev,
+                                    [key]: v === '' ? null : Number(v),
+                                  }));
                                 }}
                                 placeholder="Default"
                                 className="w-28 px-2 py-1 border rounded-lg"
                               />
-                              {currentRate !== null && currentRate !== undefined && (
-                                <button
-                                  type="button"
-                                  className="text-xs text-gray-500 hover:text-gray-700 underline"
-                                  onClick={() => setEditing((prev) => ({ ...prev, [key]: null }))}
-                                >
-                                  Reset
-                                </button>
-                              )}
+                              {currentRate !== null &&
+                                currentRate !== undefined && (
+                                  <button
+                                    type="button"
+                                    className="text-xs text-gray-500 hover:text-gray-700 underline"
+                                    onClick={() =>
+                                      setEditing((prev) => ({
+                                        ...prev,
+                                        [key]: null,
+                                      }))
+                                    }
+                                  >
+                                    Reset
+                                  </button>
+                                )}
                             </div>
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-right text-sm">
@@ -727,25 +1211,41 @@ const FinancialsManagement = () => {
                                   const value: number | null =
                                     editing[key] !== undefined
                                       ? editing[key]
-                                      : (t.teacherProfile?.commissionRate ?? null);
+                                      : (t.teacherProfile?.commissionRate ??
+                                        null);
                                   if (
                                     value !== null &&
-                                    (!Number.isFinite(value) || value < 0 || value > 100)
+                                    (!Number.isFinite(value) ||
+                                      value < 0 ||
+                                      value > 100)
                                   ) {
-                                    toast.error('Commission rate must be between 0 and 100');
+                                    toast.error(
+                                      'Commission rate must be between 0 and 100'
+                                    );
                                     return;
                                   }
-                                  await adminService.updateTeacherCommission(t.id, value);
+                                  await adminService.updateTeacherCommission(
+                                    t.id,
+                                    value
+                                  );
                                   toast.success('Commission saved');
                                   setEditing((prev) => {
                                     const next = { ...prev };
                                     delete next[key];
                                     return next;
                                   });
-                                  setCommissionRequestKey((currentKey) => currentKey + 1);
+                                  setCommissionRequestKey(
+                                    (currentKey) => currentKey + 1
+                                  );
                                 } catch (error: unknown) {
-                                  clientLogger.error('Failed to save commission:', error);
-                                  const errorMessage = extractErrorMessage(error, 'Failed to save commission');
+                                  clientLogger.error(
+                                    'Failed to save commission:',
+                                    error
+                                  );
+                                  const errorMessage = extractErrorMessage(
+                                    error,
+                                    'Failed to save commission'
+                                  );
                                   toast.error(errorMessage);
                                 }
                               }}
@@ -763,21 +1263,33 @@ const FinancialsManagement = () => {
               {/* Pagination */}
               {commissionPagination && commissionPagination.totalPages > 1 && (
                 <div className="px-6 py-4 border-t flex items-center justify-between">
-                  <div className="text-sm text-gray-700">Page {commissionPagination.page} of {commissionPagination.totalPages}</div>
+                  <div className="text-sm text-gray-700">
+                    Page {commissionPagination.page} of{' '}
+                    {commissionPagination.totalPages}
+                  </div>
                   <div className="flex items-center gap-2">
                     <button
                       type="button"
                       className="btn-outline btn-sm"
                       disabled={commissionPagination.page <= 1}
-                      onClick={() => setCommissionPage((p) => Math.max(1, p - 1))}
+                      onClick={() =>
+                        setCommissionPage((p) => Math.max(1, p - 1))
+                      }
                     >
                       Previous
                     </button>
                     <button
                       type="button"
                       className="btn-primary btn-sm"
-                      disabled={commissionPagination.page >= commissionPagination.totalPages}
-                      onClick={() => setCommissionPage((p) => Math.min(commissionPagination.totalPages, p + 1))}
+                      disabled={
+                        commissionPagination.page >=
+                        commissionPagination.totalPages
+                      }
+                      onClick={() =>
+                        setCommissionPage((p) =>
+                          Math.min(commissionPagination.totalPages, p + 1)
+                        )
+                      }
                     >
                       Next
                     </button>
@@ -791,14 +1303,30 @@ const FinancialsManagement = () => {
             {/* Filters */}
             <div className="card flex flex-col md:flex-row md:items-end gap-4">
               <div className="flex-1">
-                <label htmlFor="settlement-start-date" className="block text-sm font-medium text-gray-700 mb-1">Start Date</label>
+                <label
+                  htmlFor="settlement-start-date"
+                  className="block text-sm font-medium text-gray-700 mb-1"
+                >
+                  Start Date
+                </label>
                 <div className="flex items-center gap-2">
                   <Calendar className="w-4 h-4 text-gray-400" />
-                  <input id="settlement-start-date" type="date" value={settStart} onChange={(e) => setSettStart(e.target.value)} className="input py-2" />
+                  <input
+                    id="settlement-start-date"
+                    type="date"
+                    value={settStart}
+                    onChange={(e) => setSettStart(e.target.value)}
+                    className="input py-2"
+                  />
                 </div>
               </div>
               <div className="flex-1">
-                <label htmlFor="settlement-end-date" className="block text-sm font-medium text-gray-700 mb-1">End Date</label>
+                <label
+                  htmlFor="settlement-end-date"
+                  className="block text-sm font-medium text-gray-700 mb-1"
+                >
+                  End Date
+                </label>
                 <div className="flex items-center gap-2">
                   <Calendar className="w-4 h-4 text-gray-400" />
                   <input
@@ -806,12 +1334,18 @@ const FinancialsManagement = () => {
                     type="date"
                     value={settEnd}
                     onChange={(e) => setSettEnd(e.target.value)}
-                    className={`input py-2 ${hasSettlementDateRangeError ? 'border-red-500 focus:ring-red-500' : ''}`}
+                    className={`input py-2 ${
+                      hasSettlementDateRangeError
+                        ? 'border-red-500 focus:ring-red-500'
+                        : ''
+                    }`}
                     aria-invalid={hasSettlementDateRangeError}
                   />
                 </div>
                 {hasSettlementDateRangeError && (
-                  <p className="mt-1 text-sm text-red-600">End date must be the same as or later than start date.</p>
+                  <p className="mt-1 text-sm text-red-600">
+                    End date must be the same as or later than start date.
+                  </p>
                 )}
               </div>
               <div className="flex items-center gap-3">
@@ -850,10 +1384,29 @@ const FinancialsManagement = () => {
                 <button
                   type="button"
                   className="btn btn-outline flex items-center gap-2"
-                  onClick={() => exportCSV(settRows, ['Teacher','Email','Gross','Platform','Teacher','Transactions'],
-                    (row) => [row.teacherName, row.teacherEmail || '-', row.totalGross, row.platformCommission, row.teacherEarning, row.transactions])}
+                  onClick={() =>
+                    exportCSV(
+                      settRows,
+                      [
+                        'Teacher',
+                        'Email',
+                        'Gross',
+                        'Platform',
+                        'Teacher',
+                        'Transactions',
+                      ],
+                      (row) => [
+                        row.teacherName,
+                        row.teacherEmail || '-',
+                        row.totalGross,
+                        row.platformCommission,
+                        row.teacherEarning,
+                        row.transactions,
+                      ]
+                    )
+                  }
                 >
-                  <Download className="w-4 h-4"/> Export CSV
+                  <Download className="w-4 h-4" /> Export CSV
                 </button>
               </div>
             </div>
@@ -863,28 +1416,66 @@ const FinancialsManagement = () => {
               <table className="w-full">
                 <thead className="bg-gradient-to-r from-gray-50 to-gray-100 border-b-2 border-gray-200">
                   <tr>
-                    <th className="px-6 py-4 text-left font-bold text-gray-900">Teacher</th>
-                    <th className="px-6 py-4 text-left font-bold text-gray-900">Email</th>
-                    <th className="px-6 py-4 text-left font-bold text-gray-900">Gross</th>
-                    <th className="px-6 py-4 text-left font-bold text-gray-900">Platform</th>
-                    <th className="px-6 py-4 text-left font-bold text-gray-900">Teacher</th>
-                    <th className="px-6 py-4 text-left font-bold text-gray-900">Transactions</th>
+                    <th className="px-6 py-4 text-left font-bold text-gray-900">
+                      Teacher
+                    </th>
+                    <th className="px-6 py-4 text-left font-bold text-gray-900">
+                      Email
+                    </th>
+                    <th className="px-6 py-4 text-left font-bold text-gray-900">
+                      Gross
+                    </th>
+                    <th className="px-6 py-4 text-left font-bold text-gray-900">
+                      Platform
+                    </th>
+                    <th className="px-6 py-4 text-left font-bold text-gray-900">
+                      Teacher
+                    </th>
+                    <th className="px-6 py-4 text-left font-bold text-gray-900">
+                      Transactions
+                    </th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
                   {settLoading ? (
-                    <tr><td colSpan={6} className="px-6 py-10 text-center"><div className="spinner mx-auto" /></td></tr>
+                    <tr>
+                      <td colSpan={6} className="px-6 py-10 text-center">
+                        <div className="spinner mx-auto" />
+                      </td>
+                    </tr>
                   ) : settRows.length === 0 ? (
-                    <tr><td colSpan={6} className="px-6 py-8 text-center text-gray-500">No data</td></tr>
+                    <tr>
+                      <td
+                        colSpan={6}
+                        className="px-6 py-8 text-center text-gray-500"
+                      >
+                        No data
+                      </td>
+                    </tr>
                   ) : (
                     settRows.map((r) => (
-                      <tr key={r.teacherUserId} className="hover:bg-gradient-to-r hover:from-gray-50 hover:to-gray-100 transition-all">
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 font-semibold">{r.teacherName}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{r.teacherEmail || '-'}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm">{formatMoney(r.totalGross)}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm">{formatMoney(r.platformCommission)}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm">{formatMoney(r.teacherEarning)}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm">{r.transactions}</td>
+                      <tr
+                        key={r.teacherUserId}
+                        className="hover:bg-gradient-to-r hover:from-gray-50 hover:to-gray-100 transition-all"
+                      >
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 font-semibold">
+                          {r.teacherName}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
+                          {r.teacherEmail || '-'}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm">
+                          {formatMoney(r.totalGross)}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm">
+                          {formatMoney(r.platformCommission)}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm">
+                          {formatMoney(r.teacherEarning)}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm">
+                          {r.transactions}
+                        </td>
                       </tr>
                     ))
                   )}
@@ -893,17 +1484,338 @@ const FinancialsManagement = () => {
 
               {settPagination && settPagination.totalPages > 1 && (
                 <div className="px-6 py-4 border-t flex items-center justify-between">
-                  <div className="text-sm text-gray-700">Page {settPagination.page} of {settPagination.totalPages}</div>
+                  <div className="text-sm text-gray-700">
+                    Page {settPagination.page} of {settPagination.totalPages}
+                  </div>
                   <div className="flex items-center gap-2">
-                    <button type="button" className="btn-outline btn-sm" disabled={settPagination.page <= 1} onClick={() => setSettPage((p) => Math.max(1, p - 1))}>Previous</button>
-                    <button type="button" className="btn-primary btn-sm" disabled={settPagination.page >= settPagination.totalPages} onClick={() => setSettPage((p) => Math.min(settPagination.totalPages, p + 1))}>Next</button>
+                    <button
+                      type="button"
+                      className="btn-outline btn-sm"
+                      disabled={settPagination.page <= 1}
+                      onClick={() => setSettPage((p) => Math.max(1, p - 1))}
+                    >
+                      Previous
+                    </button>
+                    <button
+                      type="button"
+                      className="btn-primary btn-sm"
+                      disabled={
+                        settPagination.page >= settPagination.totalPages
+                      }
+                      onClick={() =>
+                        setSettPage((p) =>
+                          Math.min(settPagination.totalPages, p + 1)
+                        )
+                      }
+                    >
+                      Next
+                    </button>
                   </div>
                 </div>
               )}
             </div>
           </div>
         ) : tab === 'payouts' ? (
-          <AdminPayoutsPanel refreshKey={payoutRequestKey} />
+          <div className="space-y-4">
+            {/* Status Filter Pills */}
+            <div className="card flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+              <div className="flex flex-wrap items-center gap-2">
+                {(
+                  [
+                    'ALL',
+                    PayoutRequestStatus.PENDING,
+                    PayoutRequestStatus.APPROVED,
+                    PayoutRequestStatus.PROCESSING,
+                    PayoutRequestStatus.PAID,
+                    PayoutRequestStatus.REJECTED,
+                    PayoutRequestStatus.CANCELLED,
+                  ] as const
+                ).map((statusOption) => (
+                  <button
+                    key={statusOption}
+                    type="button"
+                    onClick={() => {
+                      setPayoutStatusFilter(statusOption);
+                      setPayoutPage(1);
+                    }}
+                    className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-all border ${
+                      payoutStatusFilter === statusOption
+                        ? 'bg-primary-600 text-white border-primary-600'
+                        : 'bg-white text-gray-700 border-gray-200 hover:border-primary-300'
+                    }`}
+                  >
+                    {statusOption}
+                  </button>
+                ))}
+              </div>
+              <div className="flex items-center gap-2">
+                <label className="text-sm text-gray-600">Per page</label>
+                <select
+                  value={payoutLimit}
+                  onChange={(e) => {
+                    setPayoutPage(1);
+                    setPayoutLimit(Number.parseInt(e.target.value, 10));
+                  }}
+                  className="px-2 py-1 border rounded-lg text-sm"
+                  aria-label="Payouts per page"
+                >
+                  {pageSizes.map((s) => (
+                    <option key={s} value={s}>
+                      {s}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {/* Payouts Table */}
+            <div className="card overflow-x-auto">
+              <table className="w-full">
+                <thead className="bg-gradient-to-r from-gray-50 to-gray-100 border-b-2 border-gray-200">
+                  <tr>
+                    <th className="px-6 py-4 text-left font-bold text-gray-900">
+                      Requested
+                    </th>
+                    <th className="px-6 py-4 text-left font-bold text-gray-900">
+                      Teacher
+                    </th>
+                    <th className="px-6 py-4 text-left font-bold text-gray-900">
+                      Amount
+                    </th>
+                    <th className="px-6 py-4 text-left font-bold text-gray-900">
+                      Destination
+                    </th>
+                    <th className="px-6 py-4 text-left font-bold text-gray-900">
+                      Status
+                    </th>
+                    <th className="px-6 py-4 text-left font-bold text-gray-900">
+                      Notes / Reference
+                    </th>
+                    <th className="px-6 py-4 text-right font-bold text-gray-900">
+                      Actions
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {payoutLoading ? (
+                    <tr>
+                      <td colSpan={7} className="px-6 py-10 text-center">
+                        <div className="spinner mx-auto" />
+                      </td>
+                    </tr>
+                  ) : payoutRows.length === 0 ? (
+                    <tr>
+                      <td
+                        colSpan={7}
+                        className="px-6 py-8 text-center text-gray-500"
+                      >
+                        No teacher payout requests found for the selected filter.
+                      </td>
+                    </tr>
+                  ) : (
+                    payoutRows.map((payout) => {
+                      const teacherUser = payout.wallet?.user;
+                      const teacherName = teacherUser
+                        ? `${teacherUser.firstName} ${teacherUser.lastName}`.trim()
+                        : 'Teacher';
+
+                      return (
+                        <tr
+                          key={payout.id}
+                          className="hover:bg-gray-50 transition-colors"
+                        >
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
+                            <div>
+                              {new Date(payout.requestedAt).toLocaleDateString()}
+                            </div>
+                            <div className="text-xs text-gray-500">
+                              {new Date(payout.requestedAt).toLocaleTimeString()}
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 text-sm">
+                            <div className="font-semibold text-gray-900">
+                              {teacherName}
+                            </div>
+                            <div className="text-xs text-gray-500">
+                              {teacherUser?.email || '-'}
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-gray-900">
+                            {formatMoney(payout.amount)}
+                          </td>
+                          <td className="px-6 py-4 text-sm text-gray-700 max-w-xs">
+                            <div className="break-words">
+                              {formatPayoutDestinationSummary(payout)}
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm">
+                            <span
+                              className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold ${getPayoutStatusBadgeClass(
+                                payout.status
+                              )}`}
+                            >
+                              {payout.status}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 text-xs text-gray-600 max-w-xs space-y-1">
+                            {payout.note ? (
+                              <div>
+                                <span className="font-semibold text-gray-700">
+                                  Teacher:
+                                </span>{' '}
+                                {payout.note}
+                              </div>
+                            ) : null}
+                            {payout.adminNote ? (
+                              <div>
+                                <span className="font-semibold text-gray-700">
+                                  Admin:
+                                </span>{' '}
+                                {payout.adminNote}
+                              </div>
+                            ) : null}
+                            {payout.externalReference ? (
+                              <div>
+                                <span className="font-semibold text-emerald-700">
+                                  Ref:
+                                </span>{' '}
+                                {payout.externalReference}
+                              </div>
+                            ) : null}
+                            {!payout.note &&
+                            !payout.adminNote &&
+                            !payout.externalReference ? (
+                              <span className="text-gray-400">-</span>
+                            ) : null}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-right text-sm">
+                            <div className="inline-flex flex-wrap justify-end gap-1.5">
+                              {payout.status === PayoutRequestStatus.PENDING ? (
+                                <>
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      openPayoutReviewModal(payout, 'approve')
+                                    }
+                                    className="btn-primary btn-sm inline-flex items-center gap-1"
+                                  >
+                                    <CheckCircle2 className="w-3.5 h-3.5" />
+                                    Approve
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      openPayoutReviewModal(payout, 'reject')
+                                    }
+                                    className="btn-outline btn-sm text-red-600 border-red-200 hover:bg-red-50 inline-flex items-center gap-1"
+                                  >
+                                    <XCircle className="w-3.5 h-3.5" />
+                                    Reject
+                                  </button>
+                                </>
+                              ) : null}
+
+                              {payout.status === PayoutRequestStatus.APPROVED ? (
+                                <>
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      openPayoutReviewModal(
+                                        payout,
+                                        'processing'
+                                      )
+                                    }
+                                    className="btn-outline btn-sm inline-flex items-center gap-1"
+                                  >
+                                    <Clock3 className="w-3.5 h-3.5" />
+                                    Processing
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      openPayoutReviewModal(payout, 'paid')
+                                    }
+                                    className="btn-primary btn-sm bg-emerald-600 hover:bg-emerald-700 inline-flex items-center gap-1"
+                                  >
+                                    <CheckCircle2 className="w-3.5 h-3.5" />
+                                    Mark Paid
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      openPayoutReviewModal(payout, 'reject')
+                                    }
+                                    className="btn-outline btn-sm text-red-600 border-red-200 hover:bg-red-50 inline-flex items-center gap-1"
+                                  >
+                                    <XCircle className="w-3.5 h-3.5" />
+                                    Reject
+                                  </button>
+                                </>
+                              ) : null}
+
+                              {payout.status ===
+                              PayoutRequestStatus.PROCESSING ? (
+                                <>
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      openPayoutReviewModal(payout, 'paid')
+                                    }
+                                    className="btn-primary btn-sm bg-emerald-600 hover:bg-emerald-700 inline-flex items-center gap-1"
+                                  >
+                                    <CheckCircle2 className="w-3.5 h-3.5" />
+                                    Mark Paid
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      openPayoutReviewModal(payout, 'reject')
+                                    }
+                                    className="btn-outline btn-sm text-red-600 border-red-200 hover:bg-red-50 inline-flex items-center gap-1"
+                                  >
+                                    <XCircle className="w-3.5 h-3.5" />
+                                    Reject
+                                  </button>
+                                </>
+                              ) : null}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+
+              {payoutTotalPages > 1 && (
+                <div className="px-6 py-4 border-t flex items-center justify-between">
+                  <div className="text-sm text-gray-700">
+                    Page {payoutPage} of {payoutTotalPages} ({payoutTotal} total)
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      className="btn-outline btn-sm"
+                      disabled={payoutPage <= 1}
+                      onClick={() => setPayoutPage((p) => Math.max(1, p - 1))}
+                    >
+                      Previous
+                    </button>
+                    <button
+                      type="button"
+                      className="btn-primary btn-sm"
+                      disabled={payoutPage >= payoutTotalPages}
+                      onClick={() =>
+                        setPayoutPage((p) => Math.min(payoutTotalPages, p + 1))
+                      }
+                    >
+                      Next
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
         ) : tab === 'analytics' ? (
           <RevenueAnalytics />
         ) : (
@@ -913,7 +1825,9 @@ const FinancialsManagement = () => {
               <div className="flex items-center justify-center py-20">
                 <div className="flex flex-col items-center space-y-4">
                   <div className="spinner" />
-                  <p className="text-gray-600 font-medium">Generating automated reports...</p>
+                  <p className="text-gray-600 font-medium">
+                    Generating automated reports...
+                  </p>
                 </div>
               </div>
             ) : (
@@ -921,38 +1835,88 @@ const FinancialsManagement = () => {
                 {/* Summary Cards */}
                 {autoReportSummary && (
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                    {([
-                      { label: 'Today', data: autoReportSummary.daily, cardClass: 'bg-gradient-to-br from-blue-50 to-blue-100 border border-blue-200', iconClass: 'text-blue-600', labelClass: 'text-blue-700' },
-                      { label: 'This Week', data: autoReportSummary.weekly, cardClass: 'bg-gradient-to-br from-green-50 to-green-100 border border-green-200', iconClass: 'text-green-600', labelClass: 'text-green-700' },
-                      { label: 'This Month', data: autoReportSummary.monthly, cardClass: 'bg-gradient-to-br from-purple-50 to-purple-100 border border-purple-200', iconClass: 'text-purple-600', labelClass: 'text-purple-700' },
-                      { label: 'All Time', data: autoReportSummary.allTime, cardClass: 'bg-gradient-to-br from-amber-50 to-amber-100 border border-amber-200', iconClass: 'text-amber-600', labelClass: 'text-amber-700' },
-                    ] as const).map((period) => (
-                      <div key={period.label} className={`${period.cardClass} rounded-xl p-5`}>
+                    {(
+                      [
+                        {
+                          label: 'Today',
+                          data: autoReportSummary.daily,
+                          cardClass:
+                            'bg-gradient-to-br from-blue-50 to-blue-100 border border-blue-200',
+                          iconClass: 'text-blue-600',
+                          labelClass: 'text-blue-700',
+                        },
+                        {
+                          label: 'This Week',
+                          data: autoReportSummary.weekly,
+                          cardClass:
+                            'bg-gradient-to-br from-green-50 to-green-100 border border-green-200',
+                          iconClass: 'text-green-600',
+                          labelClass: 'text-green-700',
+                        },
+                        {
+                          label: 'This Month',
+                          data: autoReportSummary.monthly,
+                          cardClass:
+                            'bg-gradient-to-br from-purple-50 to-purple-100 border border-purple-200',
+                          iconClass: 'text-purple-600',
+                          labelClass: 'text-purple-700',
+                        },
+                        {
+                          label: 'All Time',
+                          data: autoReportSummary.allTime,
+                          cardClass:
+                            'bg-gradient-to-br from-amber-50 to-amber-100 border border-amber-200',
+                          iconClass: 'text-amber-600',
+                          labelClass: 'text-amber-700',
+                        },
+                      ] as const
+                    ).map((period) => (
+                      <div
+                        key={period.label}
+                        className={`${period.cardClass} rounded-xl p-5`}
+                      >
                         <div className="flex items-center gap-2 mb-3">
-                          <FileText className={`w-4 h-4 ${period.iconClass}`} />
-                          <span className={`text-xs font-semibold ${period.labelClass} uppercase`}>{period.label}</span>
+                          <FileText
+                            className={`w-4 h-4 ${period.iconClass}`}
+                          />
+                          <span
+                            className={`text-xs font-semibold ${period.labelClass} uppercase`}
+                          >
+                            {period.label}
+                          </span>
                         </div>
-                        <p className="text-xl font-bold text-gray-900">{formatMoney(period.data.totalRevenue)}</p>
+                        <p className="text-xl font-bold text-gray-900">
+                          {formatMoney(period.data.totalRevenue)}
+                        </p>
                         <div className="mt-2 grid grid-cols-2 gap-2 text-xs">
                           <div>
                             <p className="text-gray-500">Platform</p>
-                            <p className="font-semibold text-gray-700">{formatMoney(period.data.platformEarnings)}</p>
+                            <p className="font-semibold text-gray-700">
+                              {formatMoney(period.data.platformEarnings)}
+                            </p>
                           </div>
                           <div>
                             <p className="text-gray-500">Teachers</p>
-                            <p className="font-semibold text-gray-700">{formatMoney(period.data.teacherEarnings)}</p>
+                            <p className="font-semibold text-gray-700">
+                              {formatMoney(period.data.teacherEarnings)}
+                            </p>
                           </div>
                           <div>
                             <p className="text-gray-500">Refunds</p>
-                            <p className="font-semibold text-red-600">-{formatMoney(period.data.totalRefunds)}</p>
+                            <p className="font-semibold text-red-600">
+                              -{formatMoney(period.data.totalRefunds)}
+                            </p>
                           </div>
                           <div>
                             <p className="text-gray-500">Net Revenue</p>
-                            <p className="font-semibold text-green-700">{formatMoney(period.data.netRevenue)}</p>
+                            <p className="font-semibold text-green-700">
+                              {formatMoney(period.data.netRevenue)}
+                            </p>
                           </div>
                         </div>
                         <div className="mt-2 text-xs text-gray-500">
-                          {period.data.transactionCount} transactions, {period.data.refundCount} refunds
+                          {period.data.transactionCount} transactions,{' '}
+                          {period.data.refundCount} refunds
                         </div>
                       </div>
                     ))}
@@ -964,13 +1928,36 @@ const FinancialsManagement = () => {
                   <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       <Zap className="w-5 h-5 text-green-600" />
-                      <h3 className="text-lg font-bold text-gray-900">Auto-Computed Teacher Settlements</h3>
+                      <h3 className="text-lg font-bold text-gray-900">
+                        Auto-Computed Teacher Settlements
+                      </h3>
                     </div>
                     {autoReportSettlementsTotals && (
                       <div className="flex items-center gap-4 text-sm">
-                        <span className="text-gray-500">Total Earnings: <strong className="text-gray-900">{formatMoney(autoReportSettlementsTotals.totalEarnings)}</strong></span>
-                        <span className="text-gray-500">Deductions: <strong className="text-red-600">{formatMoney(autoReportSettlementsTotals.totalRefundDeductions)}</strong></span>
-                        <span className="text-gray-500">Net: <strong className="text-green-700">{formatMoney(autoReportSettlementsTotals.totalNetSettlement)}</strong></span>
+                        <span className="text-gray-500">
+                          Total Earnings:{' '}
+                          <strong className="text-gray-900">
+                            {formatMoney(
+                              autoReportSettlementsTotals.totalEarnings
+                            )}
+                          </strong>
+                        </span>
+                        <span className="text-gray-500">
+                          Deductions:{' '}
+                          <strong className="text-red-600">
+                            {formatMoney(
+                              autoReportSettlementsTotals.totalRefundDeductions
+                            )}
+                          </strong>
+                        </span>
+                        <span className="text-gray-500">
+                          Net:{' '}
+                          <strong className="text-green-700">
+                            {formatMoney(
+                              autoReportSettlementsTotals.totalNetSettlement
+                            )}
+                          </strong>
+                        </span>
                       </div>
                     )}
                   </div>
@@ -978,31 +1965,71 @@ const FinancialsManagement = () => {
                     <table className="w-full">
                       <thead>
                         <tr className="bg-gray-50 border-b border-gray-200">
-                          <th className="px-6 py-3 text-left text-xs font-bold text-gray-700 uppercase">Teacher</th>
-                          <th className="px-6 py-3 text-left text-xs font-bold text-gray-700 uppercase">Courses</th>
-                          <th className="px-6 py-3 text-left text-xs font-bold text-gray-700 uppercase">Students</th>
-                          <th className="px-6 py-3 text-left text-xs font-bold text-gray-700 uppercase">Earnings</th>
-                          <th className="px-6 py-3 text-left text-xs font-bold text-gray-700 uppercase">Deductions</th>
-                          <th className="px-6 py-3 text-left text-xs font-bold text-gray-700 uppercase">Pending Payouts</th>
-                          <th className="px-6 py-3 text-left text-xs font-bold text-gray-700 uppercase">Net Settlement</th>
+                          <th className="px-6 py-3 text-left text-xs font-bold text-gray-700 uppercase">
+                            Teacher
+                          </th>
+                          <th className="px-6 py-3 text-left text-xs font-bold text-gray-700 uppercase">
+                            Courses
+                          </th>
+                          <th className="px-6 py-3 text-left text-xs font-bold text-gray-700 uppercase">
+                            Students
+                          </th>
+                          <th className="px-6 py-3 text-left text-xs font-bold text-gray-700 uppercase">
+                            Earnings
+                          </th>
+                          <th className="px-6 py-3 text-left text-xs font-bold text-gray-700 uppercase">
+                            Deductions
+                          </th>
+                          <th className="px-6 py-3 text-left text-xs font-bold text-gray-700 uppercase">
+                            Pending Payouts
+                          </th>
+                          <th className="px-6 py-3 text-left text-xs font-bold text-gray-700 uppercase">
+                            Net Settlement
+                          </th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-100">
                         {autoReportSettlements.length === 0 ? (
-                          <tr><td colSpan={7} className="px-6 py-8 text-center text-gray-500">No settlement data available</td></tr>
+                          <tr>
+                            <td
+                              colSpan={7}
+                              className="px-6 py-8 text-center text-gray-500"
+                            >
+                              No settlement data available
+                            </td>
+                          </tr>
                         ) : (
                           autoReportSettlements.map((s) => (
-                            <tr key={s.teacherProfileId} className="hover:bg-gray-50 transition-colors">
+                            <tr
+                              key={s.teacherProfileId}
+                              className="hover:bg-gray-50 transition-colors"
+                            >
                               <td className="px-6 py-4">
-                                <p className="font-semibold text-gray-900 text-sm">{s.teacherName}</p>
-                                <p className="text-xs text-gray-500">{s.teacherEmail}</p>
+                                <p className="font-semibold text-gray-900 text-sm">
+                                  {s.teacherName}
+                                </p>
+                                <p className="text-xs text-gray-500">
+                                  {s.teacherEmail}
+                                </p>
                               </td>
-                              <td className="px-6 py-4 text-sm text-gray-700">{s.courseCount}</td>
-                              <td className="px-6 py-4 text-sm text-gray-700">{s.totalStudents}</td>
-                              <td className="px-6 py-4 text-sm font-medium text-gray-900">{formatMoney(s.totalEarnings)}</td>
-                              <td className="px-6 py-4 text-sm font-medium text-red-600">-{formatMoney(s.totalRefundDeductions)}</td>
-                              <td className="px-6 py-4 text-sm text-amber-700">{formatMoney(s.pendingPayouts)}</td>
-                              <td className="px-6 py-4 text-sm font-bold text-green-700">{formatMoney(s.netSettlement)}</td>
+                              <td className="px-6 py-4 text-sm text-gray-700">
+                                {s.courseCount}
+                              </td>
+                              <td className="px-6 py-4 text-sm text-gray-700">
+                                {s.totalStudents}
+                              </td>
+                              <td className="px-6 py-4 text-sm font-medium text-gray-900">
+                                {formatMoney(s.totalEarnings)}
+                              </td>
+                              <td className="px-6 py-4 text-sm font-medium text-red-600">
+                                -{formatMoney(s.totalRefundDeductions)}
+                              </td>
+                              <td className="px-6 py-4 text-sm text-amber-700">
+                                {formatMoney(s.pendingPayouts)}
+                              </td>
+                              <td className="px-6 py-4 text-sm font-bold text-green-700">
+                                {formatMoney(s.netSettlement)}
+                              </td>
                             </tr>
                           ))
                         )}
@@ -1015,6 +2042,140 @@ const FinancialsManagement = () => {
           </div>
         )}
       </div>
+
+      {/* Payout Review Modal */}
+      {reviewingPayout ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div
+            ref={payoutModalRef}
+            tabIndex={-1}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="payout-review-modal-title"
+            className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl"
+          >
+            <div className="flex items-center justify-between border-b border-gray-200 pb-4 mb-4">
+              <h3
+                id="payout-review-modal-title"
+                className="text-xl font-bold text-gray-900 capitalize"
+              >
+                {reviewingPayout.action === 'paid'
+                  ? 'Mark Payout as Paid'
+                  : reviewingPayout.action === 'processing'
+                  ? 'Mark Payout as Processing'
+                  : `${reviewingPayout.action} Payout Request`}
+              </h3>
+              <button
+                type="button"
+                onClick={closePayoutReviewModal}
+                disabled={isSubmittingPayoutReview}
+                className="rounded-lg p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+                aria-label="Close modal"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div className="rounded-xl bg-gray-50 p-4 text-sm space-y-1 border border-gray-200">
+                <div>
+                  <span className="text-gray-500">Teacher:</span>{' '}
+                  <strong className="text-gray-900">
+                    {reviewingPayout.payout.wallet?.user
+                      ? `${reviewingPayout.payout.wallet.user.firstName} ${reviewingPayout.payout.wallet.user.lastName}`
+                      : '-'}
+                  </strong>
+                </div>
+                <div>
+                  <span className="text-gray-500">Amount:</span>{' '}
+                  <strong className="text-primary-600">
+                    {formatMoney(reviewingPayout.payout.amount)}
+                  </strong>
+                </div>
+                <div>
+                  <span className="text-gray-500">Destination:</span>{' '}
+                  <span className="text-gray-800">
+                    {formatPayoutDestinationSummary(reviewingPayout.payout)}
+                  </span>
+                </div>
+              </div>
+
+              {reviewingPayout.action === 'paid' ? (
+                <div>
+                  <label
+                    htmlFor="payout-external-reference"
+                    className="block text-sm font-semibold text-gray-700 mb-1"
+                  >
+                    Transfer External Reference *
+                  </label>
+                  <input
+                    id="payout-external-reference"
+                    ref={(node) => {
+                      payoutModalPrimaryInputRef.current = node;
+                    }}
+                    type="text"
+                    value={payoutExternalRef}
+                    onChange={(e) => setPayoutExternalRef(e.target.value)}
+                    placeholder="e.g., TXN-20261123-00981"
+                    className="input"
+                    required
+                  />
+                </div>
+              ) : null}
+
+              <div>
+                <label
+                  htmlFor="payout-admin-note"
+                  className="block text-sm font-semibold text-gray-700 mb-1"
+                >
+                  Admin Note{' '}
+                  {reviewingPayout.action === 'reject' ? '*' : '(optional)'}
+                </label>
+                <textarea
+                  id="payout-admin-note"
+                  ref={(node) => {
+                    if (reviewingPayout.action !== 'paid') {
+                      payoutModalPrimaryInputRef.current = node;
+                    }
+                  }}
+                  rows={3}
+                  value={payoutAdminNote}
+                  onChange={(e) => setPayoutAdminNote(e.target.value)}
+                  placeholder={
+                    reviewingPayout.action === 'reject'
+                      ? 'Provide the reason for rejecting this payout...'
+                      : 'Optional review note visible to the teacher...'
+                  }
+                  className="input"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-3 border-t border-gray-200 pt-4">
+                <button
+                  type="button"
+                  onClick={closePayoutReviewModal}
+                  disabled={isSubmittingPayoutReview}
+                  className="btn-outline"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void handleConfirmPayoutReview()}
+                  disabled={isSubmittingPayoutReview}
+                  className={
+                    reviewingPayout.action === 'reject'
+                      ? 'btn-primary bg-red-600 hover:bg-red-700'
+                      : 'btn-primary'
+                  }
+                >
+                  {isSubmittingPayoutReview ? 'Saving...' : 'Confirm'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 };

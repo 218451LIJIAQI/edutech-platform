@@ -17,6 +17,7 @@ import {
   normalizeCourseAssets,
   normalizeLessonAssets,
   normalizeLessonPackage,
+  normalizeLiveSessionAssets,
   normalizeMaterialAssets,
 } from '@/utils/asset-normalizers';
 
@@ -40,23 +41,36 @@ export type LessonUpdatePayload = Omit<
 
 export type PackageUpdatePayload = Omit<
   Partial<LessonPackage>,
-  'description' | 'duration' | 'maxStudents'
+  'description' | 'duration' | 'maxStudents' | 'discount'
 > & {
   description?: string | null;
   duration?: number | null;
   maxStudents?: number | null;
+  discount?: number | null;
 };
 
 export type MaterialUpdatePayload = Omit<Partial<Material>, 'description'> & {
   description?: string | null;
 };
 
-export interface CreateLiveSessionPayload {
+export interface LiveSessionCreatePayload {
   title: string;
   description?: string;
   scheduledAt: string;
-  duration: number;
+  duration?: number;
   maxParticipants?: number;
+  meetingUrl?: string | null;
+}
+
+export interface LiveSessionUpdatePayload {
+  title?: string;
+  description?: string | null;
+  scheduledAt?: string;
+  duration?: number | null;
+  maxParticipants?: number | null;
+  meetingUrl?: string | null;
+  recordingUrl?: string | null;
+  status?: Extract<LiveSessionStatus, 'SCHEDULED' | 'CANCELLED'>;
 }
 
 const courseService = {
@@ -140,6 +154,64 @@ const courseService = {
     await api.delete(`/courses/lessons/${lessonId}`);
   },
 
+  getCourseLiveSessions: async (courseId: string): Promise<LiveSession[]> => {
+    const response = await api.get<ApiResponse<LiveSession[]>>(
+      `/courses/${courseId}/live-sessions`
+    );
+    return extractData(response).map(normalizeLiveSessionAssets);
+  },
+
+  getLiveSessionById: async (sessionId: string): Promise<LiveSession> => {
+    const response = await api.get<ApiResponse<LiveSession>>(
+      `/courses/live-sessions/${sessionId}`
+    );
+    return normalizeLiveSessionAssets(extractData(response));
+  },
+
+  createLiveSession: async (
+    lessonId: string,
+    data: LiveSessionCreatePayload
+  ): Promise<LiveSession> => {
+    const response = await api.post<ApiResponse<LiveSession>>(
+      `/courses/lessons/${lessonId}/live-sessions`,
+      data
+    );
+    return normalizeLiveSessionAssets(extractData(response));
+  },
+
+  updateLiveSession: async (
+    sessionId: string,
+    data: LiveSessionUpdatePayload
+  ): Promise<LiveSession> => {
+    const response = await api.put<ApiResponse<LiveSession>>(
+      `/courses/live-sessions/${sessionId}`,
+      data
+    );
+    return normalizeLiveSessionAssets(extractData(response));
+  },
+
+  startLiveSession: async (sessionId: string): Promise<LiveSession> => {
+    const response = await api.post<ApiResponse<LiveSession>>(
+      `/courses/live-sessions/${sessionId}/start`
+    );
+    return normalizeLiveSessionAssets(extractData(response));
+  },
+
+  endLiveSession: async (
+    sessionId: string,
+    recordingUrl?: string | null
+  ): Promise<LiveSession> => {
+    const response = await api.post<ApiResponse<LiveSession>>(
+      `/courses/live-sessions/${sessionId}/end`,
+      recordingUrl !== undefined ? { recordingUrl } : {}
+    );
+    return normalizeLiveSessionAssets(extractData(response));
+  },
+
+  deleteLiveSession: async (sessionId: string): Promise<void> => {
+    await api.delete(`/courses/live-sessions/${sessionId}`);
+  },
+
   submitLessonQuiz: async (
     lessonId: string,
     answers: number[]
@@ -161,39 +233,6 @@ const courseService = {
   getMyCourseQuizAttempts: async (courseId: string): Promise<QuizAttempt[]> => {
     const response = await api.get<ApiResponse<QuizAttempt[]>>(
       `/courses/${courseId}/my-quiz-attempts`
-    );
-    return extractData(response);
-  },
-
-  getCourseLiveSessions: async (courseId: string): Promise<LiveSession[]> => {
-    const response = await api.get<ApiResponse<LiveSession[]>>(
-      `/courses/${courseId}/live-sessions`
-    );
-    return extractData(response);
-  },
-
-  createLiveSession: async (
-    lessonId: string,
-    data: CreateLiveSessionPayload
-  ): Promise<LiveSession> => {
-    const response = await api.post<ApiResponse<LiveSession>>(
-      `/courses/lessons/${lessonId}/live-sessions`,
-      data
-    );
-    return extractData(response);
-  },
-
-  updateLiveSessionStatus: async (
-    sessionId: string,
-    status: Extract<LiveSessionStatus, 'ONGOING' | 'COMPLETED' | 'CANCELLED'>,
-    recordingUrl?: string
-  ): Promise<LiveSession> => {
-    const response = await api.patch<ApiResponse<LiveSession>>(
-      `/courses/live-sessions/${sessionId}/status`,
-      {
-        status,
-        ...(recordingUrl ? { recordingUrl } : {}),
-      }
     );
     return extractData(response);
   },

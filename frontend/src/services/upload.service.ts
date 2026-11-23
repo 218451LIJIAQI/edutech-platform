@@ -32,6 +32,36 @@ const IMAGE_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.webp'];
 const IMAGE_AND_PDF_MIME_TYPES = [...IMAGE_MIME_TYPES, 'application/pdf'];
 const IMAGE_AND_PDF_EXTENSIONS = [...IMAGE_EXTENSIONS, '.pdf'];
 
+const EXTENSION_MIME_PAIRS: Readonly<Record<string, readonly string[]>> = {
+  '.jpg': ['image/jpeg'],
+  '.jpeg': ['image/jpeg'],
+  '.png': ['image/png'],
+  '.webp': ['image/webp'],
+  '.gif': ['image/gif'],
+  '.avif': ['image/avif'],
+  '.pdf': ['application/pdf'],
+  '.doc': ['application/msword', 'application/octet-stream'],
+  '.docx': [
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'application/octet-stream',
+  ],
+  '.xls': ['application/vnd.ms-excel', 'application/octet-stream'],
+  '.xlsx': [
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    'application/octet-stream',
+  ],
+  '.ppt': ['application/vnd.ms-powerpoint', 'application/octet-stream'],
+  '.pptx': [
+    'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+    'application/octet-stream',
+  ],
+  '.zip': ['application/zip', 'application/x-zip-compressed', 'application/octet-stream'],
+  '.txt': ['text/plain'],
+  '.mp4': ['video/mp4'],
+  '.webm': ['video/webm'],
+  '.mov': ['video/quicktime'],
+};
+
 const FILE_SIZE_LIMITS = {
   thumbnails: 5 * MB,
   videos: 500 * MB,
@@ -93,7 +123,7 @@ function getFileExtension(fileName: string): string {
   return extensionStart >= 0 ? normalizedName.slice(extensionStart) : '';
 }
 
-function validateFile(file: File, folder: UploadFolder): void {
+export function validateUploadFileForFolder(file: Pick<File, 'name' | 'type' | 'size'>, folder: UploadFolder): void {
   const limit = FILE_SIZE_LIMITS[folder];
   const allowedTypes = ALLOWED_MIME_TYPES[folder];
   const allowedExtensions = ALLOWED_FILE_EXTENSIONS[folder];
@@ -106,14 +136,16 @@ function validateFile(file: File, folder: UploadFolder): void {
     throw new Error(`File size exceeds limit of ${limit / MB}MB`);
   }
 
-  const fileType = file.type.toLowerCase();
+  const fileType = (file.type || '').trim().toLowerCase();
   const fileExtension = getFileExtension(file.name);
-  const hasAllowedMimeType = Boolean(fileType && allowedTypes.includes(fileType));
   const hasAllowedExtension = allowedExtensions.includes(fileExtension);
+  const hasAllowedMimeType = !fileType || allowedTypes.includes(fileType);
+  const matchesExtensionMimePair =
+    !fileType || Boolean(EXTENSION_MIME_PAIRS[fileExtension]?.includes(fileType));
 
-  if (!hasAllowedMimeType && !hasAllowedExtension) {
+  if (!hasAllowedExtension || !hasAllowedMimeType || !matchesExtensionMimePair) {
     throw new Error(
-      `File type ${file.type || fileExtension || 'unknown'} is not allowed for ${folder}. Allowed formats: ${allowedExtensions.join(', ')}`
+      `File type ${file.type || fileExtension || 'unknown'} is not allowed or does not match extension for ${folder}. Allowed formats: ${allowedExtensions.join(', ')}`
     );
   }
 }
@@ -138,7 +170,7 @@ const uploadService = {
     folder: UploadFolder = UPLOAD_FOLDERS.GENERAL,
     onProgress?: (progress: number) => void
   ): Promise<UploadResponse> => {
-    validateFile(file, folder);
+    validateUploadFileForFolder(file, folder);
 
     const formData = new FormData();
     formData.append('folder', folder);

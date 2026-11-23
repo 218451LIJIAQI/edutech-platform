@@ -34,6 +34,8 @@ export interface SettlementTeacherRecord {
 export interface SettlementPaymentRecord {
   amount: unknown;
   teacherEarning: unknown;
+  status?: string;
+  orderId?: string | null;
   package?: {
     course?: {
       teacherProfileId: string;
@@ -53,19 +55,12 @@ export interface SettlementPaymentRecord {
 
 export interface SettlementRefundRecord {
   amount: unknown;
-  teacherEarning?: unknown;
-  package?: {
-    course?: {
-      teacherProfileId: string;
-    } | null;
-  } | null;
   order?: {
     items: Array<{
       finalPrice: unknown;
       package?: {
         course?: {
           teacherProfileId: string;
-          teacherProfile?: { commissionRate?: unknown } | null;
         } | null;
       } | null;
     }>;
@@ -115,63 +110,14 @@ export const resolvePaymentCommissionBreakdown = (
   };
 };
 
-export const resolveRefundCommissionBreakdown = (
-  refund: SettlementRefundRecord & { platformCommission?: unknown },
-  fallbackRate: number,
-): { amount: number; platformCommission: number; teacherEarning: number } => {
-  const refundAmount = roundCurrency(Math.max(0, toNumber(refund.amount)));
-  if (refundAmount <= 0) {
-    return { amount: 0, platformCommission: 0, teacherEarning: 0 };
-  }
-
-  const items = refund.order?.items ?? [];
-  if (items.length === 0) {
-    return resolvePaymentCommissionBreakdown(
-      {
-        amount: refundAmount,
-        platformCommission: refund.platformCommission ?? 0,
-        teacherEarning: refund.teacherEarning ?? 0,
-      },
-      fallbackRate,
-    );
-  }
-
-  const orderItemsTotal = roundCurrency(
-    items.reduce((sum, item) => sum + Math.max(0, toNumber(item.finalPrice)), 0),
-  );
-
-  let allocatedGross = 0;
-  let totalTeacherShare = 0;
-
-  items.forEach((item, index) => {
-    const isLastItem = index === items.length - 1;
-    const itemPrice = roundCurrency(Math.max(0, toNumber(item.finalPrice)));
-    const shareRatio =
-      orderItemsTotal > 0 ? itemPrice / orderItemsTotal : 1 / items.length;
-    const itemRefundGross = isLastItem
-      ? roundCurrency(refundAmount - allocatedGross)
-      : roundCurrency(refundAmount * shareRatio);
-    allocatedGross = roundCurrency(allocatedGross + itemRefundGross);
-
-    const teacherProfile = item.package?.course?.teacherProfile ?? null;
-    const itemTeacherShare = roundCurrency(
-      calculateTeacherNetEarning(itemRefundGross, teacherProfile, fallbackRate),
-    );
-    totalTeacherShare = roundCurrency(totalTeacherShare + itemTeacherShare);
-  });
-
-  const clampedTeacherShare = Math.min(refundAmount, totalTeacherShare);
-  return {
-    amount: refundAmount,
-    platformCommission: roundCurrency(refundAmount - clampedTeacherShare),
-    teacherEarning: clampedTeacherShare,
-  };
-};
-
 /**
  * Pure settlement aggregation across both direct package payments and
  * multi-item cart/order payments, with proportional item-share refund deductions
  * and full-dataset totals independent of pagination.
+ *
+ * Callers MUST pass all paid payments (`COMPLETED` and `REFUNDED`) so gross
+ * `totalEarnings` reflects original sales before `totalRefundDeductions` are
+ * subtracted once (avoiding double-deduction negative net settlements).
  */
 export const computeTeacherSettlementsSummary = (params: {
   teachers: SettlementTeacherRecord[];
@@ -241,67 +187,42 @@ export const computeTeacherSettlementsSummary = (params: {
       directProfileId,
       (earningsByProfileId.get(directProfileId) ?? 0) + effectiveNet,
     );
+
+    if (payment.status === "REFUNDED" && !payment.orderId) {
+      refundDeductionsByProfileId.set(
+        directProfileId,
+        (refundDeductionsByProfileId.get(directProfileId) ?? 0) + effectiveNet,
+      );
+    }
   }
 
   for (const refund of refunds) {
-    const refundAmount = roundCurrency(Math.max(0, toNumber(refund.amount)));
-    if (refundAmount <= 0) {
-      continue;
-    }
-
+    const refundAmount = toNumber(refund.amount);
     const items = refund.order?.items ?? [];
-    if (items.length === 0) {
-      const directProfileId = refund.package?.course?.teacherProfileId;
-      if (!directProfileId || !teacherById.has(directProfileId)) {
-        continue;
-      }
-      const profile = teacherById.get(directProfileId)!;
-      const storedNet = toNumber(refund.teacherEarning);
-      const effectiveDeduction =
-        storedNet > 0
-          ? storedNet
-          : calculateTeacherNetEarning(
-              refundAmount,
-              profile,
-              defaultCommissionRate,
-            );
-      refundDeductionsByProfileId.set(
-        directProfileId,
-        (refundDeductionsByProfileId.get(directProfileId) ?? 0) +
-          effectiveDeduction,
-      );
+    if (refundAmount <= 0 || items.length === 0) {
       continue;
     }
 
-    const orderItemsTotal = roundCurrency(
-      items.reduce((sum, item) => sum + Math.max(0, toNumber(item.finalPrice)), 0),
+    const orderItemsTotal = items.reduce(
+      (sum, item) => sum + Math.max(0, toNumber(item.finalPrice)),
+      0,
     );
 
-    let allocatedRefundAmount = 0;
-    items.forEach((item, index) => {
-      const isLastItem = index === items.length - 1;
-      const itemPrice = roundCurrency(Math.max(0, toNumber(item.finalPrice)));
-      const shareRatio =
-        orderItemsTotal > 0 ? itemPrice / orderItemsTotal : 1 / items.length;
-      const itemRefundGross = isLastItem
-        ? roundCurrency(refundAmount - allocatedRefundAmount)
-        : roundCurrency(refundAmount * shareRatio);
-      allocatedRefundAmount = roundCurrency(
-        allocatedRefundAmount + itemRefundGross,
-      );
-
+    for (const item of items) {
       const teacherProfileId = item.package?.course?.teacherProfileId;
       if (!teacherProfileId || !teacherById.has(teacherProfileId)) {
-        return;
+        continue;
       }
 
+      const itemPrice = Math.max(0, toNumber(item.finalPrice));
+      const shareRatio =
+        orderItemsTotal > 0 ? itemPrice / orderItemsTotal : 1 / items.length;
+      const itemRefundGross = refundAmount * shareRatio;
       const profile = teacherById.get(teacherProfileId)!;
-      const itemRefundTeacherShare = roundCurrency(
-        calculateTeacherNetEarning(
-          itemRefundGross,
-          profile,
-          defaultCommissionRate,
-        ),
+      const itemRefundTeacherShare = calculateTeacherNetEarning(
+        itemRefundGross,
+        profile,
+        defaultCommissionRate,
       );
 
       refundDeductionsByProfileId.set(
@@ -309,7 +230,7 @@ export const computeTeacherSettlementsSummary = (params: {
         (refundDeductionsByProfileId.get(teacherProfileId) ?? 0) +
           itemRefundTeacherShare,
       );
-    });
+    }
   }
 
   for (const payout of pendingPayouts) {

@@ -98,9 +98,6 @@ const SupportTicketsManagement = () => {
   }, [selectedTicket?.id]);
 
   const closeTicketModal = useCallback(() => {
-    if (working || isUploadingResponseAttachment) {
-      return;
-    }
     setIsTicketModalOpen(false);
     setSelectedTicket(null);
     setSelectedTicketId(null);
@@ -108,7 +105,7 @@ const SupportTicketsManagement = () => {
     setResponseMessage('');
     setResponseAttachment(null);
     setResolutionText('');
-  }, [isUploadingResponseAttachment, working]);
+  }, []);
 
   useOverlayAccessibility({
     isOpen: isTicketModalOpen,

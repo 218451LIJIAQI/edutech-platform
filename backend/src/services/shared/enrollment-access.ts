@@ -1,4 +1,5 @@
 import type { Prisma } from "@prisma/client";
+import { ValidationError } from "../../utils/errors";
 
 type EnrollmentReader = Pick<Prisma.TransactionClient, "enrollment">;
 
@@ -14,7 +15,6 @@ export const buildCurrentEnrollmentWhere = (
   AND: [
     scope,
     { isActive: true },
-    { user: { isActive: true } },
     {
       OR: [{ expiresAt: null }, { expiresAt: { gt: referenceDate } }],
     },
@@ -34,6 +34,68 @@ export const isEnrollmentCurrentlyActive = (
   }
 
   return enrollment.expiresAt.getTime() > referenceDate.getTime();
+};
+
+export const countActivePackageEnrollments = async (
+  client: EnrollmentReader,
+  packageId: string,
+  referenceDate: Date = new Date(),
+): Promise<number> => {
+  const normalizedPackageId = packageId.trim();
+  if (!normalizedPackageId) {
+    return 0;
+  }
+
+  return client.enrollment.count({
+    where: buildCurrentEnrollmentWhere(
+      { packageId: normalizedPackageId },
+      referenceDate,
+    ),
+  });
+};
+
+export const assertPackageHasCapacity = async (
+  client: EnrollmentReader,
+  pkg: { id: string; maxStudents: number | null },
+  referenceDate: Date = new Date(),
+): Promise<void> => {
+  if (pkg.maxStudents === null || pkg.maxStudents === undefined) {
+    return;
+  }
+
+  const activeCount = await countActivePackageEnrollments(
+    client,
+    pkg.id,
+    referenceDate,
+  );
+
+  if (activeCount >= pkg.maxStudents) {
+    throw new ValidationError(
+      "This package has reached its maximum student capacity",
+    );
+  }
+};
+
+export const parseCompletedLessonIdsJson = (value: unknown): string[] => {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  const seen = new Set<string>();
+  const normalized: string[] = [];
+
+  for (const item of value) {
+    if (typeof item !== "string") {
+      continue;
+    }
+    const trimmed = item.trim();
+    if (trimmed && !seen.has(trimmed)) {
+      seen.add(trimmed);
+      normalized.push(trimmed);
+    }
+  }
+
+  return normalized;
 };
 
 export const countDistinctActiveStudentsForTeacherProfile = async (

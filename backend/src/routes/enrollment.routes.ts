@@ -16,6 +16,10 @@ const isNonNegativeIntegerInput = (value: unknown): boolean => {
   return parsed !== undefined && Number.isInteger(parsed) && parsed >= 0;
 };
 
+const isLessonIdArray = (value: unknown): boolean =>
+  Array.isArray(value) &&
+  value.every((item) => typeof item === "string" && item.trim().length > 0);
+
 const updateProgressValidation = [
   enrollmentIdParam,
   body()
@@ -23,21 +27,22 @@ const updateProgressValidation = [
       (value) =>
         Boolean(value) &&
         typeof value === "object" &&
-        Object.prototype.hasOwnProperty.call(value, "completedLessons"),
+        (Object.prototype.hasOwnProperty.call(value, "completedLessons") ||
+          Object.prototype.hasOwnProperty.call(value, "completedLessonIds")),
     )
-    .withMessage("completedLessons is required"),
+    .withMessage("completedLessons or completedLessonIds is required"),
   body("completedLessons")
-    .custom((value) => {
-      if (Array.isArray(value)) {
-        return value.every(
-          (item) => typeof item === "string" && item.trim().length > 0,
-        );
-      }
-      return isNonNegativeIntegerInput(value);
-    })
+    .optional()
+    .custom(
+      (value) => isLessonIdArray(value) || isNonNegativeIntegerInput(value),
+    )
     .withMessage(
       "completedLessons must be an array of non-empty lesson IDs or a non-negative integer",
     ),
+  body("completedLessonIds")
+    .optional()
+    .custom(isLessonIdArray)
+    .withMessage("completedLessonIds must be an array of non-empty lesson IDs"),
   body("progress")
     .optional()
     .custom((value) => {

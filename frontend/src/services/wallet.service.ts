@@ -4,48 +4,84 @@ import {
   PayoutMethod,
   PayoutMethodType,
   PayoutRequest,
-  PayoutRequestStatus,
   WalletSummary,
   WalletTransaction,
   WalletTransactionSource,
   WalletTransactionType,
 } from '@/types';
 import { extractErrorMessage } from '@/utils/error-handler';
-import { toFiniteNumber, toOptionalFiniteNumber } from '@/utils/asset-normalizers';
+import {
+  toFiniteNumber,
+  toOptionalFiniteNumber,
+} from '@/utils/asset-normalizers';
 
+/**
+ * Wallet Service
+ * Manages wallet operations, transactions, and payouts
+ */
+
+/**
+ * Transaction list response interface
+ */
 export interface WalletTransactionListResponse {
+  /** Array of wallet transactions */
   items: WalletTransaction[];
+  /** Total number of transactions */
   total: number;
+  /** Number of items per page */
   limit: number;
+  /** Offset for pagination */
   offset: number;
 }
 
+/**
+ * Payout list response interface
+ */
 export interface WalletPayoutListResponse {
+  /** Array of payout requests */
   items: PayoutRequest[];
+  /** Total number of payout requests */
   total: number;
+  /** Number of items per page */
   limit: number;
+  /** Offset for pagination */
   offset: number;
 }
 
+/**
+ * Input interface for creating a new payout method
+ */
 export type PayoutMethodDetails = PayoutMethod['details'];
-export type AdminPayoutReviewAction = 'approve' | 'processing' | 'paid' | 'reject';
 
 interface PayoutMethodInput {
+  /** Type of payout method */
   type: PayoutMethodType;
+  /** Display label for the payout method */
   label: string;
+  /** Method-specific details (account number, etc.) */
   details: PayoutMethodDetails;
+  /** Whether this is the default payout method */
   isDefault?: boolean;
 }
 
 interface UpdatePayoutMethodInput {
+  /** Display label for the payout method */
   label?: string;
+  /** Method-specific details (account number, etc.) */
   details?: PayoutMethodDetails;
+  /** Whether this is the default payout method */
   isDefault?: boolean;
 }
 
+/**
+ * Input interface for requesting a payout
+ */
 interface PayoutRequestInput {
+  /** Amount to withdraw (must be positive) */
   amount: number;
+  /** ID of the payout method to use (optional, uses default if not specified) */
   methodId?: string;
+  /** Optional note for the payout request */
   note?: string;
 }
 
@@ -53,13 +89,22 @@ function wrapWalletError(action: string, error: unknown): never {
   throw new Error(`${action}: ${extractErrorMessage(error, 'Unknown error')}`);
 }
 
-const normalizeWalletSummary = (summary: WalletSummary): WalletSummary => ({
-  ...summary,
-  availableBalance: toFiniteNumber(summary.availableBalance),
-  pendingPayout: toFiniteNumber(summary.pendingPayout),
-  activeRefundHold: toOptionalFiniteNumber(summary.activeRefundHold),
-  withdrawableBalance: toOptionalFiniteNumber(summary.withdrawableBalance),
-});
+const normalizeWalletSummary = (summary: WalletSummary): WalletSummary => {
+  const availableBalance = toFiniteNumber(summary.availableBalance);
+  const pendingPayout = toFiniteNumber(summary.pendingPayout);
+  const reservedForRefunds = toFiniteNumber(summary.reservedForRefunds);
+  const withdrawableBalance =
+    toOptionalFiniteNumber(summary.withdrawableBalance) ??
+    Math.max(0, availableBalance - reservedForRefunds);
+
+  return {
+    ...summary,
+    availableBalance,
+    pendingPayout,
+    reservedForRefunds,
+    withdrawableBalance,
+  };
+};
 
 const normalizeWalletTransaction = (
   transaction: WalletTransaction
@@ -74,6 +119,9 @@ const normalizePayoutRequest = (request: PayoutRequest): PayoutRequest => ({
 });
 
 const walletService = {
+  /**
+   * Get wallet summary for current user
+   */
   async getMySummary(): Promise<WalletSummary> {
     try {
       const { data } = await api.get<ApiResponse<WalletSummary>>('/wallet/me');
@@ -86,6 +134,9 @@ const walletService = {
     }
   },
 
+  /**
+   * Get transaction history for current user
+   */
   async getMyTransactions(params?: {
     limit?: number;
     offset?: number;
@@ -109,9 +160,14 @@ const walletService = {
     }
   },
 
+  /**
+   * List all payout methods for current user
+   */
   async listPayoutMethods(): Promise<PayoutMethod[]> {
     try {
-      const { data } = await api.get<ApiResponse<PayoutMethod[]>>('/wallet/me/payout-methods');
+      const { data } = await api.get<ApiResponse<PayoutMethod[]>>(
+        '/wallet/me/payout-methods'
+      );
       if (!data.data) {
         throw new Error('No payout methods data received');
       }
@@ -121,6 +177,9 @@ const walletService = {
     }
   },
 
+  /**
+   * Add a new payout method
+   */
   async addPayoutMethod(input: PayoutMethodInput): Promise<PayoutMethod> {
     try {
       if (!input.type || !input.label || !input.details) {
@@ -139,7 +198,13 @@ const walletService = {
     }
   },
 
-  async updatePayoutMethod(methodId: string, input: UpdatePayoutMethodInput): Promise<PayoutMethod> {
+  /**
+   * Update an existing payout method
+   */
+  async updatePayoutMethod(
+    methodId: string,
+    input: UpdatePayoutMethodInput
+  ): Promise<PayoutMethod> {
     try {
       if (!methodId || methodId.trim() === '') {
         throw new Error('Payout method ID is required');
@@ -157,6 +222,9 @@ const walletService = {
     }
   },
 
+  /**
+   * Delete an existing payout method
+   */
   async deletePayoutMethod(methodId: string): Promise<void> {
     try {
       if (!methodId || methodId.trim() === '') {
@@ -168,12 +236,18 @@ const walletService = {
     }
   },
 
+  /**
+   * Request a payout
+   */
   async requestPayout(input: PayoutRequestInput): Promise<PayoutRequest> {
     try {
       if (!input.amount || input.amount <= 0) {
         throw new Error('Payout amount must be greater than 0');
       }
-      const { data } = await api.post<ApiResponse<PayoutRequest>>('/wallet/me/payouts', input);
+      const { data } = await api.post<ApiResponse<PayoutRequest>>(
+        '/wallet/me/payouts',
+        input
+      );
       if (!data.data) {
         throw new Error('No payout request data received');
       }
@@ -183,15 +257,18 @@ const walletService = {
     }
   },
 
+  /**
+   * List all payout requests for current user
+   */
   async listMyPayouts(params?: {
     limit?: number;
     offset?: number;
-    status?: PayoutRequestStatus;
   }): Promise<WalletPayoutListResponse> {
     try {
-      const { data } = await api.get<ApiResponse<WalletPayoutListResponse>>('/wallet/me/payouts', {
-        params,
-      });
+      const { data } = await api.get<ApiResponse<WalletPayoutListResponse>>(
+        '/wallet/me/payouts',
+        { params }
+      );
       if (!data.data) {
         throw new Error('No payout data received');
       }
@@ -201,53 +278,6 @@ const walletService = {
       };
     } catch (error) {
       wrapWalletError('Failed to fetch payouts', error);
-    }
-  },
-
-  async listAdminPayouts(params?: {
-    status?: PayoutRequestStatus | string;
-    limit?: number;
-    offset?: number;
-  }): Promise<WalletPayoutListResponse> {
-    try {
-      const { data } = await api.get<ApiResponse<WalletPayoutListResponse>>(
-        '/admin/wallet/payouts',
-        { params }
-      );
-      if (!data.data) {
-        throw new Error('No admin payout data received');
-      }
-      return {
-        ...data.data,
-        items: data.data.items.map(normalizePayoutRequest),
-      };
-    } catch (error) {
-      wrapWalletError('Failed to fetch payout requests', error);
-    }
-  },
-
-  async reviewAdminPayout(
-    payoutId: string,
-    payload: {
-      action: AdminPayoutReviewAction;
-      adminNote?: string;
-      externalReference?: string;
-    }
-  ): Promise<PayoutRequest> {
-    try {
-      if (!payoutId.trim()) {
-        throw new Error('Payout ID is required');
-      }
-      const { data } = await api.post<ApiResponse<PayoutRequest>>(
-        `/admin/wallet/payouts/${payoutId}/review`,
-        payload
-      );
-      if (!data.data) {
-        throw new Error('No payout review response received');
-      }
-      return normalizePayoutRequest(data.data);
-    } catch (error) {
-      wrapWalletError('Failed to review payout request', error);
     }
   },
 };

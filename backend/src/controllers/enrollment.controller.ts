@@ -5,27 +5,65 @@ import { BadRequestError } from "../utils/errors";
 import {
   parseNumber,
   parseRequiredParam,
-   parseStringArray,
+  parseStringArray,
   requireAuthUserId,
   sendSuccess,
 } from "../utils/http";
 
-const parseCompletedLessonsInput = (value: unknown): number | string[] => {
-  if (value === undefined || value === null || value === "") {
+const parseCompletedLessonsPayload = (
+  body: Record<string, unknown> | undefined,
+): {
+  completedLessons: number | string[];
+  completedLessonIds?: string[];
+} => {
+  const rawCompletedLessons = body?.completedLessons;
+  const rawCompletedLessonIds = body?.completedLessonIds;
+
+  const parsedIds = Array.isArray(rawCompletedLessonIds)
+    ? (parseStringArray(rawCompletedLessonIds, "completedLessonIds", {
+        dedupe: true,
+      }) ?? [])
+    : undefined;
+
+  if (Array.isArray(rawCompletedLessons)) {
+    const idsFromCompletedLessons =
+      parseStringArray(rawCompletedLessons, "completedLessons", {
+        dedupe: true,
+      }) ?? [];
+    return {
+      completedLessons: idsFromCompletedLessons,
+      completedLessonIds: parsedIds ?? idsFromCompletedLessons,
+    };
+  }
+
+  if (
+    rawCompletedLessons === undefined ||
+    rawCompletedLessons === null ||
+    rawCompletedLessons === ""
+  ) {
+    if (parsedIds !== undefined) {
+      return {
+        completedLessons: parsedIds,
+        completedLessonIds: parsedIds,
+      };
+    }
     throw new BadRequestError("completedLessons is required");
   }
 
-  if (Array.isArray(value)) {
-    return (
-      parseStringArray(value, "completedLessons", { dedupe: true }) ?? []
-    );
-  }
+  const numericCompleted = parseNumber(
+    rawCompletedLessons,
+    "completedLessons",
+    {
+      required: true,
+      min: 0,
+      integer: true,
+    },
+  ) as number;
 
-  return parseNumber(value, "completedLessons", {
-    required: true,
-    min: 0,
-    integer: true,
-  }) as number;
+  return {
+    completedLessons: parsedIds ?? numericCompleted,
+    completedLessonIds: parsedIds,
+  };
 };
 
 class EnrollmentController {
@@ -45,11 +83,15 @@ class EnrollmentController {
   });
 
   updateProgress = asyncHandler(async (req: Request, res: Response) => {
+    const parsed = parseCompletedLessonsPayload(
+      req.body as Record<string, unknown> | undefined,
+    );
     const enrollment = await enrollmentService.updateProgress(
       parseRequiredParam(req.params.id, "Enrollment ID"),
       requireAuthUserId(req),
-      parseCompletedLessonsInput(req.body?.completedLessons),
+      parsed.completedLessons,
       parseNumber(req.body?.progress, "progress", { min: 0, max: 100 }),
+      parsed.completedLessonIds,
     );
     sendSuccess(res, enrollment, "Progress updated successfully");
   });

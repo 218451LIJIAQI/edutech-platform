@@ -13,8 +13,10 @@ import {
   AuthorizationError,
 } from "../utils/errors";
 import { sanitizeUserPlainText } from "../utils/sanitize-user-content";
-import { assertPackageHasAvailableCapacity } from "./cart.service";
-import { buildCurrentEnrollmentWhere } from "./shared/enrollment-access";
+import {
+  assertPackageHasCapacity,
+  buildCurrentEnrollmentWhere,
+} from "./shared/enrollment-access";
 
 const ORDER_NO_RETRY_ATTEMPTS = 5;
 const MAX_REFUND_NOTE_LENGTH = 1000;
@@ -162,7 +164,7 @@ const getCompletedRefundAmount = (
     ),
   );
 
-export const normalizeOrderRefundState = <
+const normalizeOrderRefundState = <
   T extends {
     totalAmount: unknown;
     status: OrderStatus;
@@ -344,11 +346,7 @@ class OrdersService {
     }
 
     for (const item of cartItems) {
-      await assertPackageHasAvailableCapacity(
-        prisma,
-        item.package,
-        referenceDate,
-      );
+      await assertPackageHasCapacity(prisma, item.package, referenceDate);
     }
 
     const normalizedItems = cartItems.map((item) => {
@@ -393,11 +391,7 @@ class OrdersService {
     const order = await createOrderNoWithRetry((orderNo) =>
       prisma.$transaction(async (tx) => {
         for (const item of cartItems) {
-          await assertPackageHasAvailableCapacity(
-            tx,
-            item.package,
-            referenceDate,
-          );
+          await assertPackageHasCapacity(tx, item.package, referenceDate);
         }
 
         const createdOrder = await tx.order.create({
@@ -491,11 +485,7 @@ class OrdersService {
       throw new ValidationError("You are already enrolled in this package");
     }
 
-    await assertPackageHasAvailableCapacity(
-      prisma,
-      lessonPackage,
-      referenceDate,
-    );
+    await assertPackageHasCapacity(prisma, lessonPackage, referenceDate);
 
     const price = normalizeNonNegativeCurrency(
       lessonPackage.price,
@@ -552,7 +542,8 @@ class OrdersService {
     }
 
     const updated = await prisma.$transaction(async (tx) => {
-      const canceledAt = new Date();
+      const now = new Date();
+      const canceledAt = now < order.createdAt ? order.createdAt : now;
 
       const nextOrder = await tx.order.update({
         where: { id: order.id },
@@ -604,20 +595,20 @@ class OrdersService {
       throw new ValidationError("Only paid orders can be refunded");
     }
 
+    const orderTotal = roundCurrency(order.totalAmount);
+    if (orderTotal <= 0) {
+      throw new ValidationError("Free orders cannot be refunded");
+    }
+
     if (!order.payment || order.payment.status !== PaymentStatus.COMPLETED) {
       throw new ValidationError(
         "A completed payment is required before requesting a refund",
       );
     }
 
-    const orderTotal = roundCurrency(order.totalAmount);
-    if (orderTotal <= 0) {
-      throw new ValidationError("Free orders cannot be refunded");
-    }
-
     if (refundMethod === RefundMethod.WALLET) {
       throw new ValidationError(
-        "Platform wallet refunds are unavailable; please choose original payment or bank transfer",
+        "Platform wallet refunds are not available for student orders; choose ORIGINAL_PAYMENT or BANK_TRANSFER",
       );
     }
 
@@ -638,11 +629,12 @@ class OrdersService {
       0,
       roundCurrency(orderTotal - completedRefundAmount),
     );
-    const refundAmount = normalizePositiveCurrency(amount, "Refund amount");
 
     if (remainingRefundAmount <= 0) {
       throw new ValidationError("This order has already been fully refunded");
     }
+
+    const refundAmount = normalizePositiveCurrency(amount, "Refund amount");
 
     if (refundAmount > remainingRefundAmount) {
       throw new ValidationError(
@@ -724,9 +716,9 @@ class OrdersService {
   }
 
   /**
-   * Get all refund records across all orders owned by the current user.
+   * Get all refund records for the current user.
    */
-  async getMyRefunds(userId: string) {
+  async getUserRefunds(userId: string) {
     const normalizedUserId = normalizeRequiredId(userId, "User ID");
 
     return prisma.refund.findMany({
@@ -735,8 +727,8 @@ class OrdersService {
           userId: normalizedUserId,
         },
       },
-      orderBy: { createdAt: "desc" },
       include: refundDetailInclude,
+      orderBy: { createdAt: "desc" },
     });
   }
 }

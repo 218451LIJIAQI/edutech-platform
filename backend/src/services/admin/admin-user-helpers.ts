@@ -1,6 +1,5 @@
 import {
   Prisma,
-  RefundStatus,
   RegistrationStatus,
   UserRole,
   VerificationStatus,
@@ -149,10 +148,6 @@ export const adminFinancialPaymentsInclude = {
   },
   order: {
     include: {
-      refunds: {
-        where: { status: RefundStatus.COMPLETED },
-        select: { amount: true },
-      },
       items: {
         include: {
           package: {

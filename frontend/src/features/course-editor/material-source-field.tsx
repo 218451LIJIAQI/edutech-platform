@@ -1,6 +1,5 @@
 import { useId, type ChangeEvent } from 'react';
 import { CheckCircle, Link, UploadCloud } from 'lucide-react';
-import toast from 'react-hot-toast';
 import type { MaterialSourceType } from './types';
 
 interface MaterialSourceFieldProps {
@@ -77,16 +76,12 @@ export default function MaterialSourceField({
     );
 
     if (!isSupportedFileType) {
-      toast.error(
-        'Unsupported file format. Allowed formats: PDF, DOC, DOCX, XLS, XLSX, PPT, PPTX, ZIP, TXT.'
-      );
       event.target.value = '';
       onMaterialFileChange(null);
       return;
     }
 
     if (selectedFile.size > MAX_MATERIAL_FILE_SIZE_BYTES) {
-      toast.error('File exceeds the 50MB maximum size limit.');
       event.target.value = '';
       onMaterialFileChange(null);
       return;

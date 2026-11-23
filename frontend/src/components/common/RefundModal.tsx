@@ -111,11 +111,7 @@ const RefundModal = ({
     isOpen,
     containerRef: modalRef,
     initialFocusRef: amountInputRef,
-    onClose: () => {
-      if (!working) {
-        onClose();
-      }
-    },
+    onClose,
     trapFocus: true,
     lockBodyScroll: true,
   });

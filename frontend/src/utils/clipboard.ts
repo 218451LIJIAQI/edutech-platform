@@ -61,8 +61,8 @@ export async function shareLink(
   url: string,
   options?: { title?: string; text?: string }
 ): Promise<ShareLinkResult> {
-  const normalizedUrl = url.trim();
-  if (!normalizedUrl) {
+  const trimmedUrl = url.trim();
+  if (!trimmedUrl) {
     return 'unavailable';
   }
 
@@ -71,16 +71,24 @@ export async function shareLink(
       await navigator.share({
         title: options?.title,
         text: options?.text,
-        url: normalizedUrl,
+        url: trimmedUrl,
       });
       return 'shared';
     } catch (error) {
       if (error instanceof DOMException && error.name === 'AbortError') {
         return 'cancelled';
       }
+      if (
+        error &&
+        typeof error === 'object' &&
+        'name' in error &&
+        (error as { name?: string }).name === 'AbortError'
+      ) {
+        return 'cancelled';
+      }
     }
   }
 
-  const copied = await copyTextToClipboard(normalizedUrl);
+  const copied = await copyTextToClipboard(trimmedUrl);
   return copied ? 'copied' : 'unavailable';
 }

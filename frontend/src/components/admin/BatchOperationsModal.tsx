@@ -19,7 +19,7 @@ interface OperationDetails {
   title: string;
   description: string;
   confirmText: string;
-  actionPastTense: string;
+  successMessage: string;
   tone: 'primary' | 'warning' | 'danger';
 }
 
@@ -43,7 +43,7 @@ const BatchOperationsModal = ({
           title: 'Activate Users',
           description: `You are about to activate ${selectedCount} user(s).`,
           confirmText: 'ACTIVATE',
-          actionPastTense: 'activated',
+          successMessage: `${selectedCount} user(s) activated successfully`,
           tone: 'primary',
         };
       case 'deactivate':
@@ -51,7 +51,7 @@ const BatchOperationsModal = ({
           title: 'Deactivate Users',
           description: `You are about to deactivate ${selectedCount} user(s).`,
           confirmText: 'DEACTIVATE',
-          actionPastTense: 'deactivated',
+          successMessage: `${selectedCount} user(s) deactivated successfully`,
           tone: 'warning',
         };
       case 'delete':
@@ -59,7 +59,7 @@ const BatchOperationsModal = ({
           title: 'Safe Delete Users',
           description: `You are about to safely remove ${selectedCount} user(s) by deactivating their accounts while preserving audit, financial, support, and learning records.`,
           confirmText: 'SAFE DELETE',
-          actionPastTense: 'safely deactivated',
+          successMessage: `${selectedCount} user(s) safely deactivated`,
           tone: 'warning',
         };
       default:
@@ -98,37 +98,16 @@ const BatchOperationsModal = ({
 
     setIsLoading(true);
     try {
-      const result =
-        operation === 'delete'
-          ? await adminService.batchDeleteUsers(selectedUserIds)
-          : await adminService.batchUpdateUserStatus(
-              selectedUserIds,
-              operation === 'activate'
-            );
-
-      const succeededCount =
-        result?.succeeded?.length ??
-        result?.affected ??
-        result?.count ??
-        selectedCount;
-      const failedItems = result?.failed ?? [];
-
-      if (failedItems.length > 0 && succeededCount === 0) {
-        toast.error(
-          `No users were ${details.actionPastTense}: ${failedItems[0].reason}`
-        );
-        return;
-      }
-
-      if (failedItems.length > 0) {
-        toast(
-          `${succeededCount} user(s) ${details.actionPastTense}; ${failedItems.length} skipped (${failedItems[0].reason})`,
-          { duration: 5000 }
-        );
+      if (operation === 'delete') {
+        await adminService.batchDeleteUsers(selectedUserIds);
       } else {
-        toast.success(`${succeededCount} user(s) ${details.actionPastTense} successfully`);
+        await adminService.batchUpdateUserStatus(
+          selectedUserIds,
+          operation === 'activate'
+        );
       }
 
+      toast.success(details.successMessage);
       onSuccess();
       onClose();
     } catch (error: unknown) {

@@ -46,11 +46,6 @@ const ALLOWED_SORT_BY: readonly SortBy[] = [
   "PRICE_DESC",
 ] as const;
 const SORT_ORDERS: readonly SortOrder[] = ["asc", "desc"] as const;
-const MUTABLE_LIVE_SESSION_STATUSES = [
-  LiveSessionStatus.ONGOING,
-  LiveSessionStatus.COMPLETED,
-  LiveSessionStatus.CANCELLED,
-] as const;
 
 const MAX_PAGE_LIMIT = 100;
 const MAX_FEATURES = 30;
@@ -134,7 +129,10 @@ const parseQuizAnswers = (value: unknown): number[] => {
   );
 };
 
-const validateDiscount = (price?: number, discount?: number | null): void => {
+const validateDiscount = (
+  price?: number,
+  discount?: number | null,
+): void => {
   if (
     discount !== undefined &&
     discount !== null &&
@@ -354,6 +352,137 @@ class CourseController {
     sendSuccess(res, undefined, result.message || "Lesson deleted successfully");
   });
 
+  getCourseLiveSessions = asyncHandler(async (req: Request, res: Response) => {
+    const sessions = await courseService.getCourseLiveSessions(
+      parseRequiredParam(req.params.id, "Course ID"),
+      req.user?.id,
+    );
+    sendSuccess(res, sessions);
+  });
+
+  getLiveSessionById = asyncHandler(async (req: Request, res: Response) => {
+    const session = await courseService.getLiveSessionById(
+      parseRequiredParam(req.params.id, "Live session ID"),
+      requireAuthUserId(req),
+    );
+    sendSuccess(res, session);
+  });
+
+  createLiveSession = asyncHandler(async (req: Request, res: Response) => {
+    const session = await courseService.createLiveSession(
+      requireAuthUserId(req),
+      parseRequiredParam(req.params.id, "Lesson ID"),
+      {
+        title: parseRequiredString(req.body?.title, "title", {
+          maxLength: COURSE_FIELD_LIMITS.LESSON_TITLE_MAX,
+        }),
+        description: parseOptionalString(
+          req.body?.description,
+          "description",
+          COURSE_FIELD_LIMITS.LESSON_DESCRIPTION_MAX,
+        ),
+        scheduledAt: parseRequiredString(req.body?.scheduledAt, "scheduledAt"),
+        duration: parseNumber(req.body?.duration, "duration", {
+          min: 1,
+          integer: true,
+        }),
+        maxParticipants: parseNumber(
+          req.body?.maxParticipants,
+          "maxParticipants",
+          { min: 1, integer: true },
+        ),
+        meetingUrl: parseNullableString(
+          req.body?.meetingUrl,
+          "meetingUrl",
+          MAX_URL_OR_PATH_LENGTH,
+        ),
+      },
+    );
+
+    sendCreated(res, session, "Live session scheduled successfully");
+  });
+
+  updateLiveSession = asyncHandler(async (req: Request, res: Response) => {
+    const session = await courseService.updateLiveSession(
+      requireAuthUserId(req),
+      parseRequiredParam(req.params.id, "Live session ID"),
+      {
+        title: parseOptionalString(
+          req.body?.title,
+          "title",
+          COURSE_FIELD_LIMITS.LESSON_TITLE_MAX,
+        ),
+        description: parseNullableString(
+          req.body?.description,
+          "description",
+          COURSE_FIELD_LIMITS.LESSON_DESCRIPTION_MAX,
+        ),
+        scheduledAt: parseOptionalString(req.body?.scheduledAt, "scheduledAt"),
+        duration: parseNullableNumber(req.body?.duration, "duration", {
+          min: 1,
+          integer: true,
+        }),
+        maxParticipants: parseNullableNumber(
+          req.body?.maxParticipants,
+          "maxParticipants",
+          { min: 1, integer: true },
+        ),
+        meetingUrl: parseNullableString(
+          req.body?.meetingUrl,
+          "meetingUrl",
+          MAX_URL_OR_PATH_LENGTH,
+        ),
+        recordingUrl: parseNullableString(
+          req.body?.recordingUrl,
+          "recordingUrl",
+          MAX_URL_OR_PATH_LENGTH,
+        ),
+        status: parseOptionalEnum(
+          req.body?.status,
+          LiveSessionStatus,
+          "status",
+        ),
+      },
+    );
+
+    sendSuccess(res, session, "Live session updated successfully");
+  });
+
+  startLiveSession = asyncHandler(async (req: Request, res: Response) => {
+    const session = await courseService.startLiveSession(
+      requireAuthUserId(req),
+      parseRequiredParam(req.params.id, "Live session ID"),
+    );
+    sendSuccess(res, session, "Live session started successfully");
+  });
+
+  endLiveSession = asyncHandler(async (req: Request, res: Response) => {
+    const session = await courseService.endLiveSession(
+      requireAuthUserId(req),
+      parseRequiredParam(req.params.id, "Live session ID"),
+      {
+        recordingUrl: parseNullableString(
+          req.body?.recordingUrl,
+          "recordingUrl",
+          MAX_URL_OR_PATH_LENGTH,
+        ),
+      },
+    );
+    sendSuccess(res, session, "Live session ended successfully");
+  });
+
+  deleteLiveSession = asyncHandler(async (req: Request, res: Response) => {
+    const result = await courseService.deleteLiveSession(
+      requireAuthUserId(req),
+      parseRequiredParam(req.params.id, "Live session ID"),
+    );
+    sendSuccess(
+      res,
+      undefined,
+      result.message || "Live session deleted successfully",
+    );
+  });
+
   submitLessonQuiz = asyncHandler(async (req: Request, res: Response) => {
     const result = await courseService.submitLessonQuiz(
       requireAuthUserId(req),
@@ -378,62 +507,6 @@ class CourseController {
     );
     sendSuccess(res, attempts);
   });
-
-  getCourseLiveSessions = asyncHandler(async (req: Request, res: Response) => {
-    const sessions = await courseService.getCourseLiveSessions(
-      requireAuthUserId(req),
-      parseRequiredParam(req.params.id, "Course ID"),
-    );
-    sendSuccess(res, sessions);
-  });
-
-  createLiveSession = asyncHandler(async (req: Request, res: Response) => {
-    const session = await courseService.createLiveSession(
-      requireAuthUserId(req),
-      parseRequiredParam(req.params.id, "Lesson ID"),
-      {
-        title: parseRequiredString(req.body?.title, "title", {
-          maxLength: COURSE_FIELD_LIMITS.LIVE_SESSION_TITLE_MAX,
-        }),
-        description: parseOptionalString(
-          req.body?.description,
-          "description",
-          COURSE_FIELD_LIMITS.LIVE_SESSION_DESCRIPTION_MAX,
-        ),
-        scheduledAt: parseRequiredString(req.body?.scheduledAt, "scheduledAt"),
-        duration: parseNumber(req.body?.duration, "duration", {
-          min: 1,
-          integer: true,
-        }),
-        meetingUrl: parseOptionalString(
-          req.body?.meetingUrl,
-          "meetingUrl",
-          MAX_URL_OR_PATH_LENGTH,
-        ),
-        maxParticipants: parseNumber(
-          req.body?.maxParticipants,
-          "maxParticipants",
-          { min: 1, integer: true },
-        ),
-      },
-    );
-    sendCreated(res, session, "Live session scheduled successfully");
-  });
-
-  updateLiveSessionStatus = asyncHandler(
-    async (req: Request, res: Response) => {
-      const session = await courseService.updateLiveSessionStatus(
-        requireAuthUserId(req),
-        parseRequiredParam(req.params.id, "Session ID"),
-        parseRequiredEnum(
-          req.body?.status,
-          MUTABLE_LIVE_SESSION_STATUSES,
-          "status",
-        ),
-      );
-      sendSuccess(res, session, "Live session status updated successfully");
-    },
-  );
 
   createPackage = asyncHandler(async (req: Request, res: Response) => {
     const price = parseRequiredNumber(req.body?.price, "price", { min: 0 });

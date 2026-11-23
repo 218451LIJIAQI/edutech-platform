@@ -27,7 +27,6 @@ import {
 } from "../utils/url-or-path";
 import { sanitizeUserPlainText } from "../utils/sanitize-user-content";
 import autoVerificationService from "./auto-verification.service";
-import { buildCurrentEnrollmentWhere } from "./shared/enrollment-access";
 import { buildPaginationMeta, normalizePagination } from "./shared/pagination";
 import { toNumber } from "./shared/payment-utils";
 import { ensureActiveAdmin } from "./shared/service-helpers";
@@ -808,9 +807,9 @@ class TeacherService {
     const [totalCourses, totalEnrollments, totalStudents] = await Promise.all([
       prisma.course.count({ where: { teacherProfileId: teacherProfile.id } }),
       prisma.enrollment.count({
-        where: buildCurrentEnrollmentWhere({
+        where: {
           package: { course: { teacherProfileId: teacherProfile.id } },
-        }),
+        },
       }),
       calculateActualTeacherStudentCount(teacherProfile.id),
     ]);

@@ -11,7 +11,7 @@ export interface WalletSummary {
   readonly userId: string;
   readonly availableBalance: number;
   readonly pendingPayout: number;
-  readonly activeRefundHold?: number;
+  readonly reservedForRefunds?: number;
   readonly withdrawableBalance?: number;
   readonly currency: string;
   readonly createdAt: string;
@@ -51,7 +51,10 @@ export interface PayoutRequest {
   readonly externalReference?: string;
   readonly requestedAt: string;
   readonly processedAt?: string;
-  readonly method?: PayoutMethod;
+  readonly method?: PayoutMethod | null;
+}
+
+export interface AdminPayoutRequest extends PayoutRequest {
   readonly wallet?: {
     readonly id: string;
     readonly userId: string;

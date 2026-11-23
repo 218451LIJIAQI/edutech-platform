@@ -59,6 +59,7 @@ export interface Order {
   readonly cancelReason?: string;
   readonly refundedAt?: string;
   readonly refundAmount?: number;
+  readonly refundableAmount?: number;
   readonly refundReason?: string;
   readonly items?: OrderItem[];
 }

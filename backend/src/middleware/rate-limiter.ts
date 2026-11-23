@@ -45,10 +45,8 @@ export const apiLimiter = rateLimit({
 /**
  * Authentication rate limiter.
  *
- * This applies stricter limits to sensitive authentication endpoints such as
+ * This applies stricter limits to sensitive credential endpoints such as
  * login, registration, password reset, and verification requests.
- * Successful responses are counted because some endpoints intentionally return
- * generic 200 responses to avoid account enumeration.
  */
 export const authLimiter = rateLimit({
   windowMs: FIFTEEN_MINUTES_IN_MS,
@@ -63,19 +61,19 @@ export const authLimiter = rateLimit({
 });
 
 /**
- * Session refresh rate limiter.
+ * Token refresh rate limiter.
  *
- * Allows legitimate browser reloads and multi-tab access token renewals
- * without tripping the strict 5-attempt credential brute-force limiter.
+ * Kept separate from `authLimiter` so background access-token rotation across
+ * long study sessions does not consume the strict login brute-force budget.
  */
 export const refreshLimiter = rateLimit({
   windowMs: FIFTEEN_MINUTES_IN_MS,
-  max: isDev ? 300 : 60,
+  max: isDev ? 300 : 30,
   standardHeaders: true,
   legacyHeaders: false,
   statusCode: 429,
   message: createRateLimitMessage(
-    "Too many session refresh requests, please try again later.",
+    "Too many token refresh requests, please try again later.",
   ),
   skip: (req) => shouldSkipLocalDevRequest(req.ip),
 });
