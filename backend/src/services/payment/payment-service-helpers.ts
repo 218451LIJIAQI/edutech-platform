@@ -15,21 +15,23 @@ const paymentHistoryTeacherUserSelect = {
   email: true,
 } satisfies Prisma.UserSelect;
 
-export const cartCheckoutItemInclude = {
-  package: {
+const packageWithTeacherUserInclude = {
+  course: {
     include: {
-      course: {
+      teacherProfile: {
         include: {
-          teacherProfile: {
-            include: {
-              user: {
-                select: paymentHistoryTeacherUserSelect,
-              },
-            },
+          user: {
+            select: paymentHistoryTeacherUserSelect,
           },
         },
       },
     },
+  },
+} satisfies Prisma.LessonPackageInclude;
+
+export const cartCheckoutItemInclude = {
+  package: {
+    include: packageWithTeacherUserInclude,
   },
 } satisfies Prisma.CartItemInclude;
 
@@ -37,31 +39,11 @@ export const orderPaymentItemsInclude = {
   items: {
     include: {
       package: {
-        include: {
-          course: {
-            include: {
-              teacherProfile: {
-                include: {
-                  user: {
-                    select: paymentHistoryTeacherUserSelect,
-                  },
-                },
-              },
-            },
-          },
-        },
+        include: packageWithTeacherUserInclude,
       },
     },
   },
 } satisfies Prisma.OrderInclude;
-
-const packagePaymentIntentInclude = {
-  course: {
-    include: {
-      teacherProfile: true,
-    },
-  },
-} satisfies Prisma.LessonPackageInclude;
 
 export const paymentConfirmationInclude = {
   package: {
@@ -100,42 +82,10 @@ export const paymentConfirmationInclude = {
 
 export const paymentDetailsInclude = {
   package: {
-    include: {
-      course: {
-        include: {
-          teacherProfile: {
-            include: {
-              user: {
-                select: paymentHistoryTeacherUserSelect,
-              },
-            },
-          },
-        },
-      },
-    },
+    include: packageWithTeacherUserInclude,
   },
   order: {
-    include: {
-      items: {
-        include: {
-          package: {
-            include: {
-              course: {
-                include: {
-                  teacherProfile: {
-                    include: {
-                      user: {
-                        select: paymentHistoryTeacherUserSelect,
-                      },
-                    },
-                  },
-                },
-              },
-            },
-          },
-        },
-      },
-    },
+    include: orderPaymentItemsInclude,
   },
 } satisfies Prisma.PaymentInclude;
 
@@ -143,61 +93,14 @@ export type PaymentDetailsRecord = Prisma.PaymentGetPayload<{
   include: typeof paymentDetailsInclude;
 }>;
 
-export const userPaymentHistoryInclude = {
-  package: {
-    include: {
-      course: {
-        include: {
-          teacherProfile: {
-            include: {
-              user: {
-                select: paymentHistoryTeacherUserSelect,
-              },
-            },
-          },
-        },
-      },
-    },
-  },
-  order: {
-    include: {
-      items: {
-        include: {
-          package: {
-            include: {
-              course: {
-                include: {
-                  teacherProfile: {
-                    include: {
-                      user: {
-                        select: paymentHistoryTeacherUserSelect,
-                      },
-                    },
-                  },
-                },
-              },
-            },
-          },
-        },
-      },
-    },
-  },
-} satisfies Prisma.PaymentInclude;
-
-export type UserPaymentHistoryRecord = Prisma.PaymentGetPayload<{
-  include: typeof userPaymentHistoryInclude;
-}>;
-
 export const ensureRequiredPaymentField = (
   value: string | null | undefined,
   label: string,
 ) => {
   const normalizedValue = value?.trim();
-
   if (!normalizedValue) {
     throw new ValidationError(`${label} is required`);
   }
-
   return normalizedValue;
 };
 
@@ -211,10 +114,14 @@ export const requireAvailableLessonPackage = async (
   );
 
   const lessonPackage = await client.lessonPackage.findUnique({
-    where: {
-      id: normalizedPackageId,
+    where: { id: normalizedPackageId },
+    include: {
+      course: {
+        include: {
+          teacherProfile: true,
+        },
+      },
     },
-    include: packagePaymentIntentInclude,
   });
 
   if (!lessonPackage) {
@@ -238,18 +145,14 @@ export const requireTeacherProfileByUserId = async (
   const normalizedUserId = ensureRequiredPaymentField(userId, "User ID");
 
   const teacherProfile = await client.teacherProfile.findUnique({
-    where: {
-      userId: normalizedUserId,
-    },
+    where: { userId: normalizedUserId },
   });
 
   if (!teacherProfile) {
     throw new NotFoundError("Teacher profile not found");
   }
 
-  return {
-    teacherProfile,
-  };
+  return { teacherProfile };
 };
 
 export const findCompletedTeacherPayments = async (
@@ -264,15 +167,11 @@ export const findCompletedTeacherPayments = async (
   return client.payment.findMany({
     where: {
       status: PaymentStatus.COMPLETED,
-      paidAt: {
-        not: null,
-      },
+      paidAt: { not: null },
       OR: [
         {
           package: {
-            course: {
-              teacherProfileId: normalizedTeacherProfileId,
-            },
+            course: { teacherProfileId: normalizedTeacherProfileId },
           },
         },
         {
@@ -280,9 +179,7 @@ export const findCompletedTeacherPayments = async (
             items: {
               some: {
                 package: {
-                  course: {
-                    teacherProfileId: normalizedTeacherProfileId,
-                  },
+                  course: { teacherProfileId: normalizedTeacherProfileId },
                 },
               },
             },
@@ -291,8 +188,6 @@ export const findCompletedTeacherPayments = async (
       ],
     },
     include: teacherEarningsPaymentInclude,
-    orderBy: {
-      paidAt: "desc",
-    },
+    orderBy: { paidAt: "desc" },
   });
 };

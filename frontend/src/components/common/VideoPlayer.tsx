@@ -27,21 +27,6 @@ interface VideoPlayerProps {
   startTime?: number;
 }
 
-type FullscreenCapableElement = HTMLElement & {
-  webkitRequestFullscreen?: () => void;
-  mozRequestFullScreen?: () => void;
-  msRequestFullscreen?: () => void;
-};
-
-type FullscreenCapableDocument = Document & {
-  webkitFullscreenElement?: Element | null;
-  mozFullScreenElement?: Element | null;
-  msFullscreenElement?: Element | null;
-  webkitExitFullscreen?: () => void;
-  mozCancelFullScreen?: () => void;
-  msExitFullscreen?: () => void;
-};
-
 const SKIP_SECONDS = 10;
 const CONTROL_HIDE_DELAY = 2500;
 
@@ -224,32 +209,13 @@ const VideoPlayer = ({
   }, [src, autoPlay, startTime]);
 
   useEffect(() => {
-    const getFullscreenElement = () => {
-      const vendorDocument = document as FullscreenCapableDocument;
-
-      return (
-        document.fullscreenElement ||
-        vendorDocument.webkitFullscreenElement ||
-        vendorDocument.mozFullScreenElement ||
-        vendorDocument.msFullscreenElement ||
-        null
-      );
-    };
-
     const handleFullscreenChange = () => {
-      setIsFullscreen(Boolean(getFullscreenElement()));
+      setIsFullscreen(Boolean(document.fullscreenElement));
     };
 
     document.addEventListener('fullscreenchange', handleFullscreenChange);
-    document.addEventListener('webkitfullscreenchange', handleFullscreenChange);
-    document.addEventListener('mozfullscreenchange', handleFullscreenChange);
-    document.addEventListener('MSFullscreenChange', handleFullscreenChange);
-
     return () => {
       document.removeEventListener('fullscreenchange', handleFullscreenChange);
-      document.removeEventListener('webkitfullscreenchange', handleFullscreenChange);
-      document.removeEventListener('mozfullscreenchange', handleFullscreenChange);
-      document.removeEventListener('MSFullscreenChange', handleFullscreenChange);
     };
   }, []);
 
@@ -351,30 +317,12 @@ const VideoPlayer = ({
     const container = containerRef.current;
     if (!container) return;
 
-    if (!isFullscreen) {
-      if (container.requestFullscreen) {
-        container.requestFullscreen().catch(() => undefined);
-        return;
-      }
-
-      const vendorContainer = container as FullscreenCapableElement;
-
-      if (vendorContainer.webkitRequestFullscreen) vendorContainer.webkitRequestFullscreen();
-      else if (vendorContainer.mozRequestFullScreen) vendorContainer.mozRequestFullScreen();
-      else if (vendorContainer.msRequestFullscreen) vendorContainer.msRequestFullscreen();
+    if (!document.fullscreenElement) {
+      container.requestFullscreen?.().catch(() => undefined);
     } else {
-      if (document.exitFullscreen) {
-        document.exitFullscreen().catch(() => undefined);
-        return;
-      }
-
-      const vendorDocument = document as FullscreenCapableDocument;
-
-      if (vendorDocument.webkitExitFullscreen) vendorDocument.webkitExitFullscreen();
-      else if (vendorDocument.mozCancelFullScreen) vendorDocument.mozCancelFullScreen();
-      else if (vendorDocument.msExitFullscreen) vendorDocument.msExitFullscreen();
+      document.exitFullscreen?.().catch(() => undefined);
     }
-  }, [isFullscreen]);
+  }, []);
 
   const handleContainerKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     const target = event.target as HTMLElement;
@@ -434,7 +382,6 @@ const VideoPlayer = ({
         className="h-full w-full"
         onClick={togglePlay}
         preload="metadata"
-        playsInline
       >
         Your browser does not support the video tag.
       </video>

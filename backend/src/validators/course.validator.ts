@@ -1,7 +1,9 @@
-import { body, query, type Meta } from "express-validator";
+import { body, query, type Meta, type ValidationChain } from "express-validator";
 import { CourseType, LessonType } from "@prisma/client";
 import { validateUrlOrUploadPathForFolders } from "../utils/url-or-path";
+import { parseFiniteNumber } from "../utils/http";
 import { COURSE_FIELD_LIMITS } from "../services/course.service";
+import { paginationQueryValidators } from "./common.validator";
 
 const COURSE_TYPES = Object.values(CourseType);
 const LESSON_TYPES = Object.values(LessonType);
@@ -118,23 +120,7 @@ const ERROR_MESSAGES = {
 
   SORT_BY_INVALID: "Invalid sortBy value",
   SORT_ORDER_INVALID: "sortOrder must be asc or desc",
-
-  PAGE_INTEGER: "Page must be a positive integer",
-  LIMIT_RANGE: "Limit must be between 1 and 100",
 } as const;
-
-const parseNumber = (value: unknown): number | undefined => {
-  if (typeof value === "number") {
-    return Number.isFinite(value) ? value : undefined;
-  }
-
-  if (typeof value === "string" && value.trim() !== "") {
-    const parsed = Number(value);
-    return Number.isFinite(parsed) ? parsed : undefined;
-  }
-
-  return undefined;
-};
 
 const parseJsonIfString = (value: unknown): unknown => {
   if (typeof value !== "string") {
@@ -154,7 +140,7 @@ const parseJsonIfString = (value: unknown): unknown => {
 };
 
 const validateMoneyValue = (message: string) => (value: unknown) => {
-  const parsed = parseNumber(value);
+  const parsed = parseFiniteNumber(value);
   if (
     parsed === undefined ||
     parsed < 0 ||
@@ -166,8 +152,8 @@ const validateMoneyValue = (message: string) => (value: unknown) => {
 };
 
 const validateDiscountNotAbovePrice = (value: unknown, { req }: Meta) => {
-  const price = parseNumber(req.body?.price);
-  const discount = parseNumber(value);
+  const price = parseFiniteNumber(req.body?.price);
+  const discount = parseFiniteNumber(value);
 
   if (price !== undefined && discount !== undefined && discount > price) {
     throw new Error(ERROR_MESSAGES.DISCOUNT_NOT_ABOVE_PRICE);
@@ -177,8 +163,8 @@ const validateDiscountNotAbovePrice = (value: unknown, { req }: Meta) => {
 };
 
 const validateMaxPriceNotBelowMinPrice = (value: unknown, { req }: Meta) => {
-  const min = parseNumber(req.query?.minPrice);
-  const max = parseNumber(value);
+  const min = parseFiniteNumber(req.query?.minPrice);
+  const max = parseFiniteNumber(value);
 
   if (min !== undefined && max !== undefined && min > max) {
     throw new Error(ERROR_MESSAGES.MAX_PRICE_GREATER);
@@ -280,12 +266,74 @@ const validateQuiz = (value: unknown) => {
   return true;
 };
 
+const boundedStringField = (
+  field: string,
+  options: {
+    optional?: boolean;
+    stringMsg: string;
+    requiredMsg: string;
+    lengthMsg: string;
+    min?: number;
+    max: number;
+  },
+): ValidationChain => {
+  const base = options.optional
+    ? body(field).optional({ nullable: true })
+    : body(field);
+
+  return base
+    .isString()
+    .withMessage(options.stringMsg)
+    .bail()
+    .trim()
+    .notEmpty()
+    .withMessage(options.requiredMsg)
+    .bail()
+    .isLength({ min: options.min, max: options.max })
+    .withMessage(options.lengthMsg);
+};
+
+const optionalMaxStringField = (
+  field: string,
+  stringMsg: string,
+  lengthMsg: string,
+  max: number,
+): ValidationChain =>
+  body(field)
+    .optional({ nullable: true, checkFalsy: true })
+    .isString()
+    .withMessage(stringMsg)
+    .bail()
+    .trim()
+    .isLength({ max })
+    .withMessage(lengthMsg);
+
+const optionalPositiveIntField = (
+  field: string,
+  msg: string,
+  checkFalsy = true,
+): ValidationChain =>
+  body(field)
+    .optional({ nullable: true, checkFalsy })
+    .isInt({ min: 1 })
+    .withMessage(msg)
+    .bail()
+    .toInt();
+
+const optionalBoolField = (field: string, msg: string): ValidationChain =>
+  body(field)
+    .optional({ nullable: true })
+    .isBoolean()
+    .withMessage(msg)
+    .bail()
+    .toBoolean();
+
 const optionalAssetField = (
   field: string,
   stringMsg: string,
   invalidMsg: string,
   folders: string[],
-) =>
+): ValidationChain =>
   body(field)
     .optional({ nullable: true, checkFalsy: true })
     .isString()
@@ -294,49 +342,7 @@ const optionalAssetField = (
     .trim()
     .custom(validateUrlOrUploadPathForFolders(invalidMsg, folders));
 
-export const createCourseValidation = [
-  body("title")
-    .isString()
-    .withMessage(ERROR_MESSAGES.COURSE_TITLE_STRING)
-    .bail()
-    .trim()
-    .notEmpty()
-    .withMessage(ERROR_MESSAGES.COURSE_TITLE_REQUIRED)
-    .bail()
-    .isLength({
-      min: COURSE_FIELD_LIMITS.COURSE_TITLE_MIN,
-      max: COURSE_FIELD_LIMITS.COURSE_TITLE_MAX,
-    })
-    .withMessage(ERROR_MESSAGES.COURSE_TITLE_LENGTH),
-
-  body("description")
-    .isString()
-    .withMessage(ERROR_MESSAGES.COURSE_DESCRIPTION_STRING)
-    .bail()
-    .trim()
-    .notEmpty()
-    .withMessage(ERROR_MESSAGES.COURSE_DESCRIPTION_REQUIRED)
-    .bail()
-    .isLength({
-      min: COURSE_FIELD_LIMITS.COURSE_DESCRIPTION_MIN,
-      max: COURSE_FIELD_LIMITS.COURSE_DESCRIPTION_MAX,
-    })
-    .withMessage(ERROR_MESSAGES.COURSE_DESCRIPTION_LENGTH),
-
-  body("category")
-    .isString()
-    .withMessage(ERROR_MESSAGES.COURSE_CATEGORY_STRING)
-    .bail()
-    .trim()
-    .notEmpty()
-    .withMessage(ERROR_MESSAGES.COURSE_CATEGORY_REQUIRED)
-    .bail()
-    .isLength({
-      min: COURSE_FIELD_LIMITS.COURSE_CATEGORY_MIN,
-      max: COURSE_FIELD_LIMITS.COURSE_CATEGORY_MAX,
-    })
-    .withMessage(ERROR_MESSAGES.COURSE_CATEGORY_LENGTH),
-
+const courseSharedFields = [
   body("courseType")
     .optional({ nullable: true, checkFalsy: true })
     .isString()
@@ -345,123 +351,103 @@ export const createCourseValidation = [
     .trim()
     .isIn(COURSE_TYPES)
     .withMessage(ERROR_MESSAGES.COURSE_TYPE_INVALID),
-
   optionalAssetField(
     "thumbnail",
     ERROR_MESSAGES.THUMBNAIL_STRING,
     ERROR_MESSAGES.THUMBNAIL_INVALID,
     ["thumbnails"],
   ),
-
   optionalAssetField(
     "previewVideoUrl",
     ERROR_MESSAGES.PREVIEW_VIDEO_STRING,
     ERROR_MESSAGES.PREVIEW_VIDEO_INVALID,
     ["videos"],
   ),
+];
+
+export const createCourseValidation = [
+  boundedStringField("title", {
+    stringMsg: ERROR_MESSAGES.COURSE_TITLE_STRING,
+    requiredMsg: ERROR_MESSAGES.COURSE_TITLE_REQUIRED,
+    lengthMsg: ERROR_MESSAGES.COURSE_TITLE_LENGTH,
+    min: COURSE_FIELD_LIMITS.COURSE_TITLE_MIN,
+    max: COURSE_FIELD_LIMITS.COURSE_TITLE_MAX,
+  }),
+  boundedStringField("description", {
+    stringMsg: ERROR_MESSAGES.COURSE_DESCRIPTION_STRING,
+    requiredMsg: ERROR_MESSAGES.COURSE_DESCRIPTION_REQUIRED,
+    lengthMsg: ERROR_MESSAGES.COURSE_DESCRIPTION_LENGTH,
+    min: COURSE_FIELD_LIMITS.COURSE_DESCRIPTION_MIN,
+    max: COURSE_FIELD_LIMITS.COURSE_DESCRIPTION_MAX,
+  }),
+  boundedStringField("category", {
+    stringMsg: ERROR_MESSAGES.COURSE_CATEGORY_STRING,
+    requiredMsg: ERROR_MESSAGES.COURSE_CATEGORY_REQUIRED,
+    lengthMsg: ERROR_MESSAGES.COURSE_CATEGORY_LENGTH,
+    min: COURSE_FIELD_LIMITS.COURSE_CATEGORY_MIN,
+    max: COURSE_FIELD_LIMITS.COURSE_CATEGORY_MAX,
+  }),
+  ...courseSharedFields,
 ];
 
 export const updateCourseValidation = [
-  body("title")
-    .optional({ nullable: true })
-    .isString()
-    .withMessage(ERROR_MESSAGES.TITLE_STRING)
-    .bail()
-    .trim()
-    .notEmpty()
-    .withMessage(ERROR_MESSAGES.TITLE_REQUIRED)
-    .bail()
-    .isLength({
-      min: COURSE_FIELD_LIMITS.COURSE_TITLE_MIN,
-      max: COURSE_FIELD_LIMITS.COURSE_TITLE_MAX,
-    })
-    .withMessage(ERROR_MESSAGES.COURSE_TITLE_LENGTH),
+  boundedStringField("title", {
+    optional: true,
+    stringMsg: ERROR_MESSAGES.TITLE_STRING,
+    requiredMsg: ERROR_MESSAGES.TITLE_REQUIRED,
+    lengthMsg: ERROR_MESSAGES.COURSE_TITLE_LENGTH,
+    min: COURSE_FIELD_LIMITS.COURSE_TITLE_MIN,
+    max: COURSE_FIELD_LIMITS.COURSE_TITLE_MAX,
+  }),
+  boundedStringField("description", {
+    optional: true,
+    stringMsg: ERROR_MESSAGES.DESCRIPTION_STRING,
+    requiredMsg: ERROR_MESSAGES.COURSE_DESCRIPTION_REQUIRED,
+    lengthMsg: ERROR_MESSAGES.COURSE_DESCRIPTION_LENGTH,
+    min: COURSE_FIELD_LIMITS.COURSE_DESCRIPTION_MIN,
+    max: COURSE_FIELD_LIMITS.COURSE_DESCRIPTION_MAX,
+  }),
+  boundedStringField("category", {
+    optional: true,
+    stringMsg: ERROR_MESSAGES.COURSE_CATEGORY_STRING,
+    requiredMsg: ERROR_MESSAGES.COURSE_CATEGORY_EMPTY,
+    lengthMsg: ERROR_MESSAGES.COURSE_CATEGORY_LENGTH,
+    min: COURSE_FIELD_LIMITS.COURSE_CATEGORY_MIN,
+    max: COURSE_FIELD_LIMITS.COURSE_CATEGORY_MAX,
+  }),
+  ...courseSharedFields,
+  optionalBoolField("isPublished", ERROR_MESSAGES.IS_PUBLISHED_BOOLEAN),
+];
 
-  body("description")
-    .optional({ nullable: true })
-    .isString()
-    .withMessage(ERROR_MESSAGES.DESCRIPTION_STRING)
-    .bail()
-    .trim()
-    .notEmpty()
-    .withMessage(ERROR_MESSAGES.COURSE_DESCRIPTION_REQUIRED)
-    .bail()
-    .isLength({
-      min: COURSE_FIELD_LIMITS.COURSE_DESCRIPTION_MIN,
-      max: COURSE_FIELD_LIMITS.COURSE_DESCRIPTION_MAX,
-    })
-    .withMessage(ERROR_MESSAGES.COURSE_DESCRIPTION_LENGTH),
-
-  body("category")
-    .optional({ nullable: true })
-    .isString()
-    .withMessage(ERROR_MESSAGES.COURSE_CATEGORY_STRING)
-    .bail()
-    .trim()
-    .notEmpty()
-    .withMessage(ERROR_MESSAGES.COURSE_CATEGORY_EMPTY)
-    .bail()
-    .isLength({
-      min: COURSE_FIELD_LIMITS.COURSE_CATEGORY_MIN,
-      max: COURSE_FIELD_LIMITS.COURSE_CATEGORY_MAX,
-    })
-    .withMessage(ERROR_MESSAGES.COURSE_CATEGORY_LENGTH),
-
-  body("courseType")
-    .optional({ nullable: true, checkFalsy: true })
-    .isString()
-    .withMessage(ERROR_MESSAGES.COURSE_TYPE_STRING)
-    .bail()
-    .trim()
-    .isIn(COURSE_TYPES)
-    .withMessage(ERROR_MESSAGES.COURSE_TYPE_INVALID),
-
-  optionalAssetField(
-    "thumbnail",
-    ERROR_MESSAGES.THUMBNAIL_STRING,
-    ERROR_MESSAGES.THUMBNAIL_INVALID,
-    ["thumbnails"],
+const lessonSharedFields = [
+  optionalMaxStringField(
+    "description",
+    ERROR_MESSAGES.LESSON_DESCRIPTION_STRING,
+    ERROR_MESSAGES.LESSON_DESCRIPTION_LENGTH,
+    COURSE_FIELD_LIMITS.LESSON_DESCRIPTION_MAX,
   ),
-
+  optionalPositiveIntField("duration", ERROR_MESSAGES.DURATION_INTEGER),
   optionalAssetField(
-    "previewVideoUrl",
-    ERROR_MESSAGES.PREVIEW_VIDEO_STRING,
-    ERROR_MESSAGES.PREVIEW_VIDEO_INVALID,
+    "videoUrl",
+    ERROR_MESSAGES.VIDEO_URL_STRING,
+    ERROR_MESSAGES.VIDEO_URL_INVALID,
     ["videos"],
   ),
-
-  body("isPublished")
+  body("quiz")
     .optional({ nullable: true })
-    .isBoolean()
-    .withMessage(ERROR_MESSAGES.IS_PUBLISHED_BOOLEAN)
-    .bail()
-    .toBoolean(),
+    .customSanitizer(parseJsonIfString)
+    .custom(validateQuiz),
+  optionalBoolField("isFree", ERROR_MESSAGES.IS_FREE_BOOLEAN),
 ];
 
 export const createLessonValidation = [
-  body("title")
-    .isString()
-    .withMessage(ERROR_MESSAGES.LESSON_TITLE_STRING)
-    .bail()
-    .trim()
-    .notEmpty()
-    .withMessage(ERROR_MESSAGES.LESSON_TITLE_REQUIRED)
-    .bail()
-    .isLength({
-      min: COURSE_FIELD_LIMITS.LESSON_TITLE_MIN,
-      max: COURSE_FIELD_LIMITS.LESSON_TITLE_MAX,
-    })
-    .withMessage(ERROR_MESSAGES.LESSON_TITLE_LENGTH),
-
-  body("description")
-    .optional({ nullable: true, checkFalsy: true })
-    .isString()
-    .withMessage(ERROR_MESSAGES.LESSON_DESCRIPTION_STRING)
-    .bail()
-    .trim()
-    .isLength({ max: COURSE_FIELD_LIMITS.LESSON_DESCRIPTION_MAX })
-    .withMessage(ERROR_MESSAGES.LESSON_DESCRIPTION_LENGTH),
-
+  boundedStringField("title", {
+    stringMsg: ERROR_MESSAGES.LESSON_TITLE_STRING,
+    requiredMsg: ERROR_MESSAGES.LESSON_TITLE_REQUIRED,
+    lengthMsg: ERROR_MESSAGES.LESSON_TITLE_LENGTH,
+    min: COURSE_FIELD_LIMITS.LESSON_TITLE_MIN,
+    max: COURSE_FIELD_LIMITS.LESSON_TITLE_MAX,
+  }),
   body("type")
     .isString()
     .withMessage(ERROR_MESSAGES.LESSON_TYPE_STRING)
@@ -472,59 +458,18 @@ export const createLessonValidation = [
     .bail()
     .isIn(LESSON_TYPES)
     .withMessage(ERROR_MESSAGES.LESSON_TYPE_INVALID),
-
-  body("duration")
-    .optional({ nullable: true, checkFalsy: true })
-    .isInt({ min: 1 })
-    .withMessage(ERROR_MESSAGES.DURATION_INTEGER)
-    .bail()
-    .toInt(),
-
-  optionalAssetField(
-    "videoUrl",
-    ERROR_MESSAGES.VIDEO_URL_STRING,
-    ERROR_MESSAGES.VIDEO_URL_INVALID,
-    ["videos"],
-  ),
-
-  body("quiz")
-    .optional({ nullable: true })
-    .customSanitizer(parseJsonIfString)
-    .custom(validateQuiz),
-
-  body("isFree")
-    .optional({ nullable: true })
-    .isBoolean()
-    .withMessage(ERROR_MESSAGES.IS_FREE_BOOLEAN)
-    .bail()
-    .toBoolean(),
+  ...lessonSharedFields,
 ];
 
 export const updateLessonValidation = [
-  body("title")
-    .optional({ nullable: true })
-    .isString()
-    .withMessage(ERROR_MESSAGES.TITLE_STRING)
-    .bail()
-    .trim()
-    .notEmpty()
-    .withMessage(ERROR_MESSAGES.TITLE_REQUIRED)
-    .bail()
-    .isLength({
-      min: COURSE_FIELD_LIMITS.LESSON_TITLE_MIN,
-      max: COURSE_FIELD_LIMITS.LESSON_TITLE_MAX,
-    })
-    .withMessage(ERROR_MESSAGES.LESSON_TITLE_LENGTH),
-
-  body("description")
-    .optional({ nullable: true, checkFalsy: true })
-    .isString()
-    .withMessage(ERROR_MESSAGES.LESSON_DESCRIPTION_STRING)
-    .bail()
-    .trim()
-    .isLength({ max: COURSE_FIELD_LIMITS.LESSON_DESCRIPTION_MAX })
-    .withMessage(ERROR_MESSAGES.LESSON_DESCRIPTION_LENGTH),
-
+  boundedStringField("title", {
+    optional: true,
+    stringMsg: ERROR_MESSAGES.TITLE_STRING,
+    requiredMsg: ERROR_MESSAGES.TITLE_REQUIRED,
+    lengthMsg: ERROR_MESSAGES.LESSON_TITLE_LENGTH,
+    min: COURSE_FIELD_LIMITS.LESSON_TITLE_MIN,
+    max: COURSE_FIELD_LIMITS.LESSON_TITLE_MAX,
+  }),
   body("type")
     .optional({ nullable: true, checkFalsy: true })
     .isString()
@@ -533,65 +478,40 @@ export const updateLessonValidation = [
     .trim()
     .isIn(LESSON_TYPES)
     .withMessage(ERROR_MESSAGES.LESSON_TYPE_INVALID),
-
-  body("duration")
-    .optional({ nullable: true, checkFalsy: true })
-    .isInt({ min: 1 })
-    .withMessage(ERROR_MESSAGES.DURATION_INTEGER)
-    .bail()
-    .toInt(),
-
-  optionalAssetField(
-    "videoUrl",
-    ERROR_MESSAGES.VIDEO_URL_STRING,
-    ERROR_MESSAGES.VIDEO_URL_INVALID,
-    ["videos"],
+  ...lessonSharedFields,
+  optionalPositiveIntField(
+    "orderIndex",
+    ERROR_MESSAGES.ORDER_INDEX_INTEGER,
+    false,
   ),
+];
 
-  body("quiz")
+const packageSharedFields = [
+  optionalMaxStringField(
+    "description",
+    ERROR_MESSAGES.PACKAGE_DESCRIPTION_STRING,
+    ERROR_MESSAGES.PACKAGE_DESCRIPTION_LENGTH,
+    COURSE_FIELD_LIMITS.PACKAGE_DESCRIPTION_MAX,
+  ),
+  body("discount")
     .optional({ nullable: true })
-    .customSanitizer(parseJsonIfString)
-    .custom(validateQuiz),
-
-  body("isFree")
-    .optional({ nullable: true })
-    .isBoolean()
-    .withMessage(ERROR_MESSAGES.IS_FREE_BOOLEAN)
+    .custom(validateMoneyValue(ERROR_MESSAGES.DISCOUNT_RANGE))
     .bail()
-    .toBoolean(),
-
-  body("orderIndex")
-    .optional({ nullable: true })
-    .isInt({ min: 1 })
-    .withMessage(ERROR_MESSAGES.ORDER_INDEX_INTEGER)
+    .custom(validateDiscountNotAbovePrice)
     .bail()
-    .toInt(),
+    .toFloat(),
+  optionalPositiveIntField("duration", ERROR_MESSAGES.DURATION_INTEGER),
+  optionalPositiveIntField("maxStudents", ERROR_MESSAGES.MAX_STUDENTS_INTEGER),
 ];
 
 export const createPackageValidation = [
-  body("name")
-    .isString()
-    .withMessage(ERROR_MESSAGES.PACKAGE_NAME_STRING)
-    .bail()
-    .trim()
-    .notEmpty()
-    .withMessage(ERROR_MESSAGES.PACKAGE_NAME_REQUIRED)
-    .bail()
-    .isLength({
-      min: COURSE_FIELD_LIMITS.PACKAGE_NAME_MIN,
-      max: COURSE_FIELD_LIMITS.PACKAGE_NAME_MAX,
-    })
-    .withMessage(ERROR_MESSAGES.PACKAGE_NAME_LENGTH),
-
-  body("description")
-    .optional({ nullable: true, checkFalsy: true })
-    .isString()
-    .withMessage(ERROR_MESSAGES.PACKAGE_DESCRIPTION_STRING)
-    .bail()
-    .trim()
-    .isLength({ max: COURSE_FIELD_LIMITS.PACKAGE_DESCRIPTION_MAX })
-    .withMessage(ERROR_MESSAGES.PACKAGE_DESCRIPTION_LENGTH),
-
+  boundedStringField("name", {
+    stringMsg: ERROR_MESSAGES.PACKAGE_NAME_STRING,
+    requiredMsg: ERROR_MESSAGES.PACKAGE_NAME_REQUIRED,
+    lengthMsg: ERROR_MESSAGES.PACKAGE_NAME_LENGTH,
+    min: COURSE_FIELD_LIMITS.PACKAGE_NAME_MIN,
+    max: COURSE_FIELD_LIMITS.PACKAGE_NAME_MAX,
+  }),
   body("price")
     .notEmpty()
     .withMessage(ERROR_MESSAGES.PRICE_REQUIRED)
@@ -599,115 +519,45 @@ export const createPackageValidation = [
     .custom(validateMoneyValue(ERROR_MESSAGES.PRICE_RANGE))
     .bail()
     .toFloat(),
-
-  body("discount")
-    .optional({ nullable: true })
-    .custom(validateMoneyValue(ERROR_MESSAGES.DISCOUNT_RANGE))
-    .bail()
-    .custom(validateDiscountNotAbovePrice)
-    .bail()
-    .toFloat(),
-
-  body("duration")
-    .optional({ nullable: true, checkFalsy: true })
-    .isInt({ min: 1 })
-    .withMessage(ERROR_MESSAGES.DURATION_INTEGER)
-    .bail()
-    .toInt(),
-
-  body("maxStudents")
-    .optional({ nullable: true, checkFalsy: true })
-    .isInt({ min: 1 })
-    .withMessage(ERROR_MESSAGES.MAX_STUDENTS_INTEGER)
-    .bail()
-    .toInt(),
+  ...packageSharedFields,
 ];
 
 export const updatePackageValidation = [
-  body("name")
-    .optional({ nullable: true })
-    .isString()
-    .withMessage(ERROR_MESSAGES.PACKAGE_NAME_STRING)
-    .bail()
-    .trim()
-    .notEmpty()
-    .withMessage(ERROR_MESSAGES.PACKAGE_NAME_REQUIRED)
-    .bail()
-    .isLength({
-      min: COURSE_FIELD_LIMITS.PACKAGE_NAME_MIN,
-      max: COURSE_FIELD_LIMITS.PACKAGE_NAME_MAX,
-    })
-    .withMessage(ERROR_MESSAGES.PACKAGE_NAME_LENGTH),
-
-  body("description")
-    .optional({ nullable: true, checkFalsy: true })
-    .isString()
-    .withMessage(ERROR_MESSAGES.PACKAGE_DESCRIPTION_STRING)
-    .bail()
-    .trim()
-    .isLength({ max: COURSE_FIELD_LIMITS.PACKAGE_DESCRIPTION_MAX })
-    .withMessage(ERROR_MESSAGES.PACKAGE_DESCRIPTION_LENGTH),
-
+  boundedStringField("name", {
+    optional: true,
+    stringMsg: ERROR_MESSAGES.PACKAGE_NAME_STRING,
+    requiredMsg: ERROR_MESSAGES.PACKAGE_NAME_REQUIRED,
+    lengthMsg: ERROR_MESSAGES.PACKAGE_NAME_LENGTH,
+    min: COURSE_FIELD_LIMITS.PACKAGE_NAME_MIN,
+    max: COURSE_FIELD_LIMITS.PACKAGE_NAME_MAX,
+  }),
   body("price")
     .optional({ nullable: true })
     .custom(validateMoneyValue(ERROR_MESSAGES.PRICE_RANGE))
     .bail()
     .toFloat(),
+  ...packageSharedFields,
+  optionalBoolField("isActive", ERROR_MESSAGES.IS_ACTIVE_BOOLEAN),
+];
 
-  body("discount")
-    .optional({ nullable: true })
-    .custom(validateMoneyValue(ERROR_MESSAGES.DISCOUNT_RANGE))
-    .bail()
-    .custom(validateDiscountNotAbovePrice)
-    .bail()
-    .toFloat(),
-
-  body("duration")
-    .optional({ nullable: true, checkFalsy: true })
-    .isInt({ min: 1 })
-    .withMessage(ERROR_MESSAGES.DURATION_INTEGER)
-    .bail()
-    .toInt(),
-
-  body("maxStudents")
-    .optional({ nullable: true, checkFalsy: true })
-    .isInt({ min: 1 })
-    .withMessage(ERROR_MESSAGES.MAX_STUDENTS_INTEGER)
-    .bail()
-    .toInt(),
-
-  body("isActive")
-    .optional({ nullable: true })
-    .isBoolean()
-    .withMessage(ERROR_MESSAGES.IS_ACTIVE_BOOLEAN)
-    .bail()
-    .toBoolean(),
+const materialSharedFields = [
+  optionalMaxStringField(
+    "description",
+    ERROR_MESSAGES.MATERIAL_DESCRIPTION_STRING,
+    ERROR_MESSAGES.MATERIAL_DESCRIPTION_LENGTH,
+    COURSE_FIELD_LIMITS.MATERIAL_DESCRIPTION_MAX,
+  ),
+  optionalBoolField("isDownloadable", ERROR_MESSAGES.IS_DOWNLOADABLE_BOOLEAN),
 ];
 
 export const uploadMaterialValidation = [
-  body("title")
-    .isString()
-    .withMessage(ERROR_MESSAGES.MATERIAL_TITLE_STRING)
-    .bail()
-    .trim()
-    .notEmpty()
-    .withMessage(ERROR_MESSAGES.MATERIAL_TITLE_REQUIRED)
-    .bail()
-    .isLength({
-      min: COURSE_FIELD_LIMITS.MATERIAL_TITLE_MIN,
-      max: COURSE_FIELD_LIMITS.MATERIAL_TITLE_MAX,
-    })
-    .withMessage(ERROR_MESSAGES.MATERIAL_TITLE_LENGTH),
-
-  body("description")
-    .optional({ nullable: true, checkFalsy: true })
-    .isString()
-    .withMessage(ERROR_MESSAGES.MATERIAL_DESCRIPTION_STRING)
-    .bail()
-    .trim()
-    .isLength({ max: COURSE_FIELD_LIMITS.MATERIAL_DESCRIPTION_MAX })
-    .withMessage(ERROR_MESSAGES.MATERIAL_DESCRIPTION_LENGTH),
-
+  boundedStringField("title", {
+    stringMsg: ERROR_MESSAGES.MATERIAL_TITLE_STRING,
+    requiredMsg: ERROR_MESSAGES.MATERIAL_TITLE_REQUIRED,
+    lengthMsg: ERROR_MESSAGES.MATERIAL_TITLE_LENGTH,
+    min: COURSE_FIELD_LIMITS.MATERIAL_TITLE_MIN,
+    max: COURSE_FIELD_LIMITS.MATERIAL_TITLE_MAX,
+  }),
   body("fileUrl")
     .isString()
     .withMessage(ERROR_MESSAGES.FILE_URL_STRING)
@@ -721,18 +571,12 @@ export const uploadMaterialValidation = [
         "documents",
       ]),
     ),
-
-  body("fileType")
-    .isString()
-    .withMessage(ERROR_MESSAGES.FILE_TYPE_STRING)
-    .bail()
-    .trim()
-    .notEmpty()
-    .withMessage(ERROR_MESSAGES.FILE_TYPE_REQUIRED)
-    .bail()
-    .isLength({ max: COURSE_FIELD_LIMITS.MATERIAL_FILE_TYPE_MAX })
-    .withMessage(ERROR_MESSAGES.FILE_TYPE_LENGTH),
-
+  boundedStringField("fileType", {
+    stringMsg: ERROR_MESSAGES.FILE_TYPE_STRING,
+    requiredMsg: ERROR_MESSAGES.FILE_TYPE_REQUIRED,
+    lengthMsg: ERROR_MESSAGES.FILE_TYPE_LENGTH,
+    max: COURSE_FIELD_LIMITS.MATERIAL_FILE_TYPE_MAX,
+  }),
   body("fileSize")
     .notEmpty()
     .withMessage(ERROR_MESSAGES.FILE_SIZE_REQUIRED)
@@ -741,107 +585,59 @@ export const uploadMaterialValidation = [
     .withMessage(ERROR_MESSAGES.FILE_SIZE_INTEGER)
     .bail()
     .toInt(),
-
-  body("isDownloadable")
-    .optional({ nullable: true })
-    .isBoolean()
-    .withMessage(ERROR_MESSAGES.IS_DOWNLOADABLE_BOOLEAN)
-    .bail()
-    .toBoolean(),
+  ...materialSharedFields,
 ];
 
 export const updateMaterialValidation = [
-  body("title")
-    .optional({ nullable: true })
-    .isString()
-    .withMessage(ERROR_MESSAGES.TITLE_STRING)
-    .bail()
-    .trim()
-    .notEmpty()
-    .withMessage(ERROR_MESSAGES.TITLE_REQUIRED)
-    .bail()
-    .isLength({
-      min: COURSE_FIELD_LIMITS.MATERIAL_TITLE_MIN,
-      max: COURSE_FIELD_LIMITS.MATERIAL_TITLE_MAX,
-    })
-    .withMessage(ERROR_MESSAGES.MATERIAL_TITLE_LENGTH),
-
-  body("description")
-    .optional({ nullable: true, checkFalsy: true })
-    .isString()
-    .withMessage(ERROR_MESSAGES.MATERIAL_DESCRIPTION_STRING)
-    .bail()
-    .trim()
-    .isLength({ max: COURSE_FIELD_LIMITS.MATERIAL_DESCRIPTION_MAX })
-    .withMessage(ERROR_MESSAGES.MATERIAL_DESCRIPTION_LENGTH),
-
+  boundedStringField("title", {
+    optional: true,
+    stringMsg: ERROR_MESSAGES.TITLE_STRING,
+    requiredMsg: ERROR_MESSAGES.TITLE_REQUIRED,
+    lengthMsg: ERROR_MESSAGES.MATERIAL_TITLE_LENGTH,
+    min: COURSE_FIELD_LIMITS.MATERIAL_TITLE_MIN,
+    max: COURSE_FIELD_LIMITS.MATERIAL_TITLE_MAX,
+  }),
   optionalAssetField(
     "fileUrl",
     ERROR_MESSAGES.FILE_URL_STRING,
     ERROR_MESSAGES.FILE_URL_INVALID,
     ["documents"],
   ),
-
-  body("fileType")
-    .optional({ nullable: true })
-    .isString()
-    .withMessage(ERROR_MESSAGES.FILE_TYPE_STRING)
-    .bail()
-    .trim()
-    .notEmpty()
-    .withMessage(ERROR_MESSAGES.FILE_TYPE_EMPTY)
-    .bail()
-    .isLength({ max: COURSE_FIELD_LIMITS.MATERIAL_FILE_TYPE_MAX })
-    .withMessage(ERROR_MESSAGES.FILE_TYPE_LENGTH),
-
+  boundedStringField("fileType", {
+    optional: true,
+    stringMsg: ERROR_MESSAGES.FILE_TYPE_STRING,
+    requiredMsg: ERROR_MESSAGES.FILE_TYPE_EMPTY,
+    lengthMsg: ERROR_MESSAGES.FILE_TYPE_LENGTH,
+    max: COURSE_FIELD_LIMITS.MATERIAL_FILE_TYPE_MAX,
+  }),
   body("fileSize")
     .optional({ nullable: true })
     .isInt({ min: 0 })
     .withMessage(ERROR_MESSAGES.FILE_SIZE_INTEGER)
     .bail()
     .toInt(),
-
-  body("isDownloadable")
-    .optional({ nullable: true })
-    .isBoolean()
-    .withMessage(ERROR_MESSAGES.IS_DOWNLOADABLE_BOOLEAN)
-    .bail()
-    .toBoolean(),
+  ...materialSharedFields,
 ];
 
 export const sendCourseNotificationValidation = [
-  body("title")
-    .isString()
-    .withMessage("Notification title must be a string")
-    .bail()
-    .trim()
-    .notEmpty()
-    .withMessage("Notification title is required")
-    .bail()
-    .isLength({ max: COURSE_FIELD_LIMITS.NOTIFICATION_TITLE_MAX })
-    .withMessage(
-      `Notification title must not exceed ${COURSE_FIELD_LIMITS.NOTIFICATION_TITLE_MAX} characters`,
-    ),
-  body("message")
-    .isString()
-    .withMessage("Notification message must be a string")
-    .bail()
-    .trim()
-    .notEmpty()
-    .withMessage("Notification message is required")
-    .bail()
-    .isLength({ max: COURSE_FIELD_LIMITS.NOTIFICATION_MESSAGE_MAX })
-    .withMessage(
-      `Notification message must not exceed ${COURSE_FIELD_LIMITS.NOTIFICATION_MESSAGE_MAX} characters`,
-    ),
-  body("type")
-    .optional({ nullable: true, checkFalsy: true })
-    .isString()
-    .withMessage("Notification type must be a string")
-    .bail()
-    .trim()
-    .isLength({ max: 80 })
-    .withMessage("Notification type must not exceed 80 characters"),
+  boundedStringField("title", {
+    stringMsg: "Notification title must be a string",
+    requiredMsg: "Notification title is required",
+    lengthMsg: `Notification title must not exceed ${COURSE_FIELD_LIMITS.NOTIFICATION_TITLE_MAX} characters`,
+    max: COURSE_FIELD_LIMITS.NOTIFICATION_TITLE_MAX,
+  }),
+  boundedStringField("message", {
+    stringMsg: "Notification message must be a string",
+    requiredMsg: "Notification message is required",
+    lengthMsg: `Notification message must not exceed ${COURSE_FIELD_LIMITS.NOTIFICATION_MESSAGE_MAX} characters`,
+    max: COURSE_FIELD_LIMITS.NOTIFICATION_MESSAGE_MAX,
+  }),
+  optionalMaxStringField(
+    "type",
+    "Notification type must be a string",
+    "Notification type must not exceed 80 characters",
+    80,
+  ),
 ];
 
 export const getCoursesValidation = [
@@ -853,7 +649,6 @@ export const getCoursesValidation = [
     .trim()
     .isLength({ max: 100 })
     .withMessage(ERROR_MESSAGES.SEARCH_LENGTH),
-
   query("category")
     .optional({ nullable: true, checkFalsy: true })
     .isString()
@@ -862,12 +657,10 @@ export const getCoursesValidation = [
     .trim()
     .isLength({ max: COURSE_FIELD_LIMITS.COURSE_CATEGORY_MAX })
     .withMessage(ERROR_MESSAGES.COURSE_CATEGORY_LENGTH),
-
   query("teacherId")
     .optional({ nullable: true, checkFalsy: true })
     .isUUID()
     .withMessage(ERROR_MESSAGES.TEACHER_ID_UUID),
-
   query("courseType")
     .optional({ nullable: true, checkFalsy: true })
     .isString()
@@ -876,20 +669,17 @@ export const getCoursesValidation = [
     .trim()
     .isIn(COURSE_TYPES)
     .withMessage(ERROR_MESSAGES.COURSE_TYPE_INVALID),
-
   query("minRating")
     .optional({ nullable: true, checkFalsy: true })
     .isFloat({ min: 0, max: 5 })
     .withMessage(ERROR_MESSAGES.MIN_RATING_RANGE)
     .bail()
     .toFloat(),
-
   query("minPrice")
     .optional({ nullable: true, checkFalsy: true })
     .custom(validateMoneyValue(ERROR_MESSAGES.MIN_PRICE_VALID))
     .bail()
     .toFloat(),
-
   query("maxPrice")
     .optional({ nullable: true, checkFalsy: true })
     .custom(validateMoneyValue(ERROR_MESSAGES.MAX_PRICE_VALID))
@@ -897,7 +687,6 @@ export const getCoursesValidation = [
     .custom(validateMaxPriceNotBelowMinPrice)
     .bail()
     .toFloat(),
-
   query("sortBy")
     .optional({ nullable: true, checkFalsy: true })
     .isString()
@@ -906,7 +695,6 @@ export const getCoursesValidation = [
     .trim()
     .isIn([...SORT_BY_VALUES])
     .withMessage(ERROR_MESSAGES.SORT_BY_INVALID),
-
   query("sortOrder")
     .optional({ nullable: true, checkFalsy: true })
     .isString()
@@ -915,18 +703,5 @@ export const getCoursesValidation = [
     .trim()
     .isIn([...SORT_ORDER_VALUES])
     .withMessage(ERROR_MESSAGES.SORT_ORDER_INVALID),
-
-  query("page")
-    .optional({ nullable: true, checkFalsy: true })
-    .isInt({ min: 1 })
-    .withMessage(ERROR_MESSAGES.PAGE_INTEGER)
-    .bail()
-    .toInt(),
-
-  query("limit")
-    .optional({ nullable: true, checkFalsy: true })
-    .isInt({ min: 1, max: 100 })
-    .withMessage(ERROR_MESSAGES.LIMIT_RANGE)
-    .bail()
-    .toInt(),
+  ...paginationQueryValidators(100),
 ];

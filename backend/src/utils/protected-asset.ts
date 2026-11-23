@@ -2,25 +2,21 @@ import fs from "fs";
 import path from "path";
 import type { Response } from "express";
 import config from "../config/env";
-import { NotFoundError, ValidationError } from "./errors";
-import { extractUploadPathFromUrlOrPath } from "./url-or-path";
+import { BadRequestError, NotFoundError, ValidationError } from "./errors";
+import {
+  extractUploadPathFromUrlOrPath,
+  isHttpUrl,
+  normalizeAllowedFolders,
+  safeDecodeURIComponent,
+} from "./url-or-path";
 
 const DEFAULT_FILENAME = "file";
-const HTTP_URL_PATTERN = /^https?:\/\/.+/i;
 
 export interface ProtectedAssetDescriptor {
   filename: string;
   absolutePath?: string;
   redirectUrl?: string;
 }
-
-const safeDecodeURIComponent = (value: string): string => {
-  try {
-    return decodeURIComponent(value);
-  } catch {
-    return value;
-  }
-};
 
 const sanitizeFilename = (value: string): string => {
   return (
@@ -46,33 +42,20 @@ const encodeRFC5987Value = (value: string): string => {
   });
 };
 
-const isHttpUrl = (value: string): boolean => {
-  if (!HTTP_URL_PATTERN.test(value)) {
-    return false;
-  }
-
-  try {
-    const url = new URL(value);
-    return url.protocol === "http:" || url.protocol === "https:";
-  } catch {
-    return false;
-  }
-};
-
 const getSourceFilename = (value: string): string => {
   const trimmedValue = value.trim();
 
   if (isHttpUrl(trimmedValue)) {
     try {
       const pathname = new URL(trimmedValue).pathname;
-      const decodedPathname = safeDecodeURIComponent(pathname);
+      const decodedPathname = safeDecodeURIComponent(pathname) ?? pathname;
       return sanitizeFilename(path.posix.basename(decodedPathname));
     } catch {
       return DEFAULT_FILENAME;
     }
   }
 
-  const decodedPath = safeDecodeURIComponent(trimmedValue);
+  const decodedPath = safeDecodeURIComponent(trimmedValue) ?? trimmedValue;
   return sanitizeFilename(path.basename(decodedPath));
 };
 
@@ -97,17 +80,6 @@ const getFilenameFromSource = (
   return sourceExtension
     ? `${normalizedFallback}${sourceExtension}`
     : normalizedFallback;
-};
-
-const normalizeAllowedFolders = (allowedFolders: string[]): string[] => {
-  return allowedFolders
-    .map((folder) =>
-      folder
-        .replace(/\\/g, "/")
-        .replace(/^\/+|\/+$/g, "")
-        .trim(),
-    )
-    .filter(Boolean);
 };
 
 const getExistingFileStats = (absoluteFilePath: string): fs.Stats => {
@@ -146,6 +118,37 @@ export const applyProtectedAssetHeaders = (
       )}`,
     );
   }
+};
+
+export const sendProtectedAsset = (
+  res: Response,
+  asset: ProtectedAssetDescriptor,
+  options: {
+    disposition: "inline" | "attachment";
+    unavailableMessage: string;
+  },
+): void => {
+  if (asset.redirectUrl) {
+    applyProtectedAssetHeaders(res);
+    res.redirect(asset.redirectUrl);
+    return;
+  }
+
+  if (!asset.absolutePath) {
+    throw new BadRequestError(options.unavailableMessage);
+  }
+
+  applyProtectedAssetHeaders(res, {
+    disposition: options.disposition,
+    filename: asset.filename,
+  });
+
+  if (options.disposition === "attachment") {
+    res.download(asset.absolutePath, asset.filename);
+    return;
+  }
+
+  res.sendFile(asset.absolutePath);
 };
 
 export const buildProtectedAssetDescriptor = (

@@ -1,10 +1,14 @@
 import prisma from "../config/database";
 import { NotFoundError, ValidationError } from "../utils/errors";
 import { sanitizeUserPlainText } from "../utils/sanitize-user-content";
-import { toNumber } from "./shared/payment-utils";
+import { normalizeOffsetPagination } from "./shared/pagination";
+import { roundMoney } from "./shared/payment-utils";
+import {
+  isUniqueConstraintError,
+  normalizeOptionalSanitizedText,
+  normalizeRequiredSanitizedText,
+} from "./shared/service-helpers";
 
-// Note: raw string literal types are used to avoid depending on generated Prisma enum imports
-// during early setup. Values must stay aligned with schema.prisma enums.
 type TransactionType =
   | "CREDIT"
   | "DEBIT"
@@ -91,147 +95,81 @@ const MAX_NOTE_LENGTH = 1000;
 const MAX_EXTERNAL_REFERENCE_LENGTH = 150;
 const MAX_MONEY_AMOUNT = 99999999.99;
 
-function isUniqueConstraintError(error: unknown): boolean {
-  return (
-    !!error &&
-    typeof error === "object" &&
-    "code" in error &&
-    (error as { code?: string }).code === "P2002"
-  );
-}
+const parseOptionalUppercaseEnum = <T extends string>(
+  value: string | undefined,
+  allowed: Set<T>,
+  label: string,
+): T | undefined => {
+  const normalized = normalizeOptionalSanitizedText(value)?.toUpperCase() as
+    | T
+    | undefined;
+  if (!normalized) return undefined;
 
-function toInt(
-  value: unknown,
-  def: number,
-  opts: { min?: number; max?: number } = {},
-): number {
-  const { min, max } = opts;
-  let parsedValue: number;
-
-  if (typeof value === "number") {
-    parsedValue = Math.trunc(value);
-  } else if (typeof value === "string") {
-    parsedValue = parseInt(value, 10);
-  } else {
-    parsedValue = NaN;
-  }
-
-  if (!Number.isFinite(parsedValue)) {
-    parsedValue = def;
-  }
-
-  if (typeof min === "number" && parsedValue < min) {
-    parsedValue = min;
-  }
-
-  if (typeof max === "number" && parsedValue > max) {
-    parsedValue = max;
-  }
-
-  return parsedValue;
-}
-
-function cleanString(value: unknown): string | undefined {
-  if (typeof value !== "string") {
-    return undefined;
-  }
-
-  const trimmed = sanitizeUserPlainText(value);
-  return trimmed.length > 0 ? trimmed : undefined;
-}
-
-function requireCleanString(value: unknown, fieldName: string): string {
-  const cleaned = cleanString(value);
-
-  if (!cleaned) {
-    throw new ValidationError(`${fieldName} is required`);
-  }
-
-  return cleaned;
-}
-
-function cleanLimitedString(
-  value: unknown,
-  fieldName: string,
-  maxLength: number,
-): string | undefined {
-  const cleaned = cleanString(value);
-
-  if (!cleaned) {
-    return undefined;
-  }
-
-  if (cleaned.length > maxLength) {
+  if (!allowed.has(normalized)) {
     throw new ValidationError(
-      `${fieldName} must not exceed ${maxLength} characters`,
+      `Invalid ${label}. Allowed values: ${Array.from(allowed).join(", ")}`,
     );
   }
 
-  return cleaned;
-}
+  return normalized;
+};
 
-function roundCurrency(value: number): number {
-  return Math.round((Number.isFinite(value) ? value : 0) * 100) / 100;
-}
+const parsePayoutMethodType = (type: unknown): PayoutMethodTypeValue => {
+  const normalized = normalizeOptionalSanitizedText(type)?.toUpperCase();
+  if (!normalized) {
+    throw new ValidationError("Payout method type is required");
+  }
 
-function normalizeMoneyAmount(value: unknown, fieldName: string): number {
-  const amount = roundCurrency(toNumber(value));
+  if (!ALLOWED_PAYOUT_METHOD_TYPES.has(normalized as PayoutMethodTypeValue)) {
+    throw new ValidationError(
+      `Invalid payout method type. Allowed values: ${Array.from(ALLOWED_PAYOUT_METHOD_TYPES).join(", ")}`,
+    );
+  }
 
+  return normalized as PayoutMethodTypeValue;
+};
+
+const normalizeMoneyAmount = (value: unknown, fieldName: string): number => {
+  const amount = roundMoney(value);
   if (!Number.isFinite(amount) || amount <= 0) {
     throw new ValidationError(`${fieldName} must be greater than zero`);
   }
-
   if (amount > MAX_MONEY_AMOUNT) {
     throw new ValidationError(
       `${fieldName} exceeds the maximum supported amount`,
     );
   }
-
   return amount;
-}
+};
 
-function isPlainObject(value: unknown): value is Record<string, unknown> {
+const isPlainObject = (value: unknown): value is Record<string, unknown> => {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     return false;
   }
-
   const prototype = Object.getPrototypeOf(value);
   return prototype === Object.prototype || prototype === null;
-}
+};
 
-function isJsonValue(value: unknown): value is JsonValue {
-  if (value === null) {
+const isJsonValue = (value: unknown): value is JsonValue => {
+  if (value === null || typeof value === "string" || typeof value === "boolean") {
     return true;
   }
-
-  if (
-    typeof value === "string" ||
-    typeof value === "number" ||
-    typeof value === "boolean"
-  ) {
-    return Number.isFinite(value as number) || typeof value !== "number";
+  if (typeof value === "number") {
+    return Number.isFinite(value);
   }
-
   if (Array.isArray(value)) {
     return value.every(isJsonValue);
   }
+  return isPlainObject(value) && Object.values(value).every(isJsonValue);
+};
 
-  if (isPlainObject(value)) {
-    return Object.values(value).every(isJsonValue);
-  }
-
-  return false;
-}
-
-function sanitizeJsonValue(value: JsonValue): JsonValue {
+const sanitizeJsonValue = (value: JsonValue): JsonValue => {
   if (typeof value === "string") {
     return sanitizeUserPlainText(value);
   }
-
   if (Array.isArray(value)) {
     return value.map(sanitizeJsonValue);
   }
-
   if (isPlainObject(value)) {
     return Object.fromEntries(
       Object.entries(value)
@@ -242,141 +180,56 @@ function sanitizeJsonValue(value: JsonValue): JsonValue {
         ]),
     ) as JsonObject;
   }
-
   return value;
-}
+};
 
-function toJsonObject(value: unknown, fieldName: string): JsonObject {
+const toJsonObject = (value: unknown, fieldName: string): JsonObject => {
   if (!isPlainObject(value) || !isJsonValue(value)) {
     throw new ValidationError(`${fieldName} must be a valid JSON object`);
   }
-
   return sanitizeJsonValue(value as JsonObject) as JsonObject;
-}
+};
 
-function parseTransactionType(type?: string): TransactionType | undefined {
-  const normalizedType = cleanString(type)?.toUpperCase() as
-    | TransactionType
-    | undefined;
-
-  if (!normalizedType) {
-    return undefined;
-  }
-
-  if (!ALLOWED_TX_TYPES.has(normalizedType)) {
-    throw new ValidationError(
-      `Invalid transaction type. Allowed values: ${Array.from(ALLOWED_TX_TYPES).join(", ")}`,
-    );
-  }
-
-  return normalizedType;
-}
-
-function parseTransactionSource(
-  source?: string,
-): TransactionSource | undefined {
-  const normalizedSource = cleanString(source)?.toUpperCase() as
-    | TransactionSource
-    | undefined;
-
-  if (!normalizedSource) {
-    return undefined;
-  }
-
-  if (!ALLOWED_TX_SOURCES.has(normalizedSource)) {
-    throw new ValidationError(
-      `Invalid transaction source. Allowed values: ${Array.from(ALLOWED_TX_SOURCES).join(", ")}`,
-    );
-  }
-
-  return normalizedSource;
-}
-
-function parsePayoutStatus(status?: string): PayoutStatus | undefined {
-  const normalizedStatus = cleanString(status)?.toUpperCase() as
-    | PayoutStatus
-    | undefined;
-
-  if (!normalizedStatus) {
-    return undefined;
-  }
-
-  if (!ALLOWED_PAYOUT_STATUSES.has(normalizedStatus)) {
-    throw new ValidationError(
-      `Invalid payout status. Allowed values: ${Array.from(ALLOWED_PAYOUT_STATUSES).join(", ")}`,
-    );
-  }
-
-  return normalizedStatus;
-}
-
-function isPayoutMethodType(value: string): value is PayoutMethodTypeValue {
-  return ALLOWED_PAYOUT_METHOD_TYPES.has(value as PayoutMethodTypeValue);
-}
-
-function parsePayoutMethodType(type: unknown): PayoutMethodTypeValue {
-  const normalizedType = cleanString(type)?.toUpperCase();
-
-  if (!normalizedType) {
-    throw new ValidationError("Payout method type is required");
-  }
-
-  if (!isPayoutMethodType(normalizedType)) {
-    throw new ValidationError(
-      `Invalid payout method type. Allowed values: ${Array.from(ALLOWED_PAYOUT_METHOD_TYPES).join(", ")}`,
-    );
-  }
-
-  return normalizedType;
-}
-
-function normalizePayoutMethodDetails(
+const normalizePayoutMethodDetails = (
   type: PayoutMethodTypeValue,
   detailsInput: unknown,
-): JsonObject {
+): JsonObject => {
   const details = toJsonObject(detailsInput, "Payout method details");
 
   if (type === "BANK_TRANSFER") {
-    const bankName = requireCleanString(details.bankName, "Bank name");
-    const accountName = requireCleanString(details.accountName, "Account name");
-    const accountNo = requireCleanString(details.accountNo, "Account number");
-
     return {
-      bankName,
-      accountName,
-      accountNo,
+      bankName: normalizeRequiredSanitizedText(details.bankName, "Bank name"),
+      accountName: normalizeRequiredSanitizedText(
+        details.accountName,
+        "Account name",
+      ),
+      accountNo: normalizeRequiredSanitizedText(
+        details.accountNo,
+        "Account number",
+      ),
     };
   }
 
-  const walletId = requireCleanString(
+  const walletId = normalizeRequiredSanitizedText(
     details.walletId,
     `${type} wallet ID or destination handle`,
   );
+  const holder = normalizeOptionalSanitizedText(details.holder);
+  return holder ? { walletId, holder } : { walletId };
+};
 
-  const normalized: JsonObject = {
-    walletId,
-  };
-
-  const holder = cleanString(details.holder);
-  if (holder) {
-    normalized.holder = holder;
-  }
-
-  return normalized;
-}
-
-function getStringMetadataValue(
+const getStringMetadataValue = (
   metadata: JsonObject | undefined,
   key: string,
-): string | undefined {
+): string | undefined => {
   const value = metadata?.[key];
   return typeof value === "string" && value.trim() ? value.trim() : undefined;
-}
+};
 
-function buildWalletReferenceId(
+const buildWalletReferenceId = (
   source: TransactionSource,
   metadata?: JsonObject,
-): string | undefined {
+): string | undefined => {
   if (source === "COURSE_SALE") {
     return (
       getStringMetadataValue(metadata, "orderItemId") ??
@@ -397,11 +250,11 @@ function buildWalletReferenceId(
   }
 
   return undefined;
-}
+};
 
 class WalletService {
   async ensureWallet(userId: string) {
-    const normalizedUserId = requireCleanString(userId, "User ID");
+    const normalizedUserId = normalizeRequiredSanitizedText(userId, "User ID");
 
     const user = await prisma.user.findUnique({
       where: { id: normalizedUserId },
@@ -423,12 +276,8 @@ class WalletService {
         const existing = await prisma.wallet.findUnique({
           where: { userId: normalizedUserId },
         });
-
-        if (existing) {
-          return existing;
-        }
+        if (existing) return existing;
       }
-
       throw error;
     }
   }
@@ -447,16 +296,23 @@ class WalletService {
     } = {},
   ) {
     const wallet = await this.ensureWallet(userId);
-    const safeLimit = toInt(params.limit, 20, { min: 1, max: 100 });
-    const safeOffset = toInt(params.offset, 0, { min: 0 });
-    const parsedType = parseTransactionType(params.type);
-    const parsedSource = parseTransactionSource(params.source);
+    const { limit, offset } = normalizeOffsetPagination(
+      params.limit,
+      params.offset,
+      { defaultLimit: 20, maxLimit: 100 },
+    );
+    const parsedType = parseOptionalUppercaseEnum(
+      params.type,
+      ALLOWED_TX_TYPES,
+      "transaction type",
+    );
+    const parsedSource = parseOptionalUppercaseEnum(
+      params.source,
+      ALLOWED_TX_SOURCES,
+      "transaction source",
+    );
 
-    const where: {
-      walletId: string;
-      type?: TransactionType;
-      source?: TransactionSource;
-    } = {
+    const where = {
       walletId: wallet.id,
       ...(parsedType ? { type: parsedType } : {}),
       ...(parsedSource ? { source: parsedSource } : {}),
@@ -466,13 +322,13 @@ class WalletService {
       prisma.walletTransaction.findMany({
         where,
         orderBy: { createdAt: "desc" },
-        take: safeLimit,
-        skip: safeOffset,
+        take: limit,
+        skip: offset,
       }),
       prisma.walletTransaction.count({ where }),
     ]);
 
-    return { items, total, limit: safeLimit, offset: safeOffset };
+    return { items, total, limit, offset };
   }
 
   async addPayoutMethod(
@@ -486,12 +342,11 @@ class WalletService {
   ) {
     const wallet = await this.ensureWallet(userId);
     const type = parsePayoutMethodType(input.type);
-    const label = cleanLimitedString(input.label, "Label", MAX_LABEL_LENGTH);
-
-    if (!label) {
-      throw new ValidationError("Label is required");
-    }
-
+    const label = normalizeRequiredSanitizedText(
+      input.label,
+      "Label",
+      MAX_LABEL_LENGTH,
+    );
     const details = normalizePayoutMethodDetails(type, input.details);
 
     return prisma.$transaction(async (tx) => {
@@ -534,7 +389,10 @@ class WalletService {
     methodId: string,
     input: { label?: string; details?: unknown; isDefault?: boolean },
   ) {
-    const normalizedMethodId = requireCleanString(methodId, "Payout method ID");
+    const normalizedMethodId = normalizeRequiredSanitizedText(
+      methodId,
+      "Payout method ID",
+    );
     const wallet = await this.ensureWallet(userId);
 
     const existing = await prisma.payoutMethod.findUnique({
@@ -548,11 +406,7 @@ class WalletService {
     const label =
       input.label === undefined
         ? undefined
-        : cleanLimitedString(input.label, "Label", MAX_LABEL_LENGTH);
-
-    if (input.label !== undefined && !label) {
-      throw new ValidationError("Label is required");
-    }
+        : normalizeRequiredSanitizedText(input.label, "Label", MAX_LABEL_LENGTH);
 
     const details =
       input.details !== undefined
@@ -588,7 +442,6 @@ class WalletService {
           where: { walletId: wallet.id },
           data: { isDefault: false },
         });
-
         await tx.payoutMethod.update({
           where: { id: replacement.id },
           data: { isDefault: true },
@@ -612,7 +465,10 @@ class WalletService {
   }
 
   async deletePayoutMethod(userId: string, methodId: string) {
-    const normalizedMethodId = requireCleanString(methodId, "Payout method ID");
+    const normalizedMethodId = normalizeRequiredSanitizedText(
+      methodId,
+      "Payout method ID",
+    );
     const wallet = await this.ensureWallet(userId);
 
     const existing = await prisma.payoutMethod.findUnique({
@@ -638,33 +494,26 @@ class WalletService {
     }
 
     await prisma.$transaction(async (tx) => {
-      let replacementId: string | null = null;
+      const replacement = existing.isDefault
+        ? await tx.payoutMethod.findFirst({
+            where: {
+              walletId: wallet.id,
+              id: { not: normalizedMethodId },
+            },
+            orderBy: [{ isDefault: "desc" }, { createdAt: "asc" }],
+            select: { id: true },
+          })
+        : null;
 
-      if (existing.isDefault) {
-        const replacement = await tx.payoutMethod.findFirst({
-          where: {
-            walletId: wallet.id,
-            id: { not: normalizedMethodId },
-          },
-          orderBy: [{ isDefault: "desc" }, { createdAt: "asc" }],
-          select: { id: true },
-        });
+      await tx.payoutMethod.delete({ where: { id: normalizedMethodId } });
 
-        replacementId = replacement?.id ?? null;
-      }
-
-      await tx.payoutMethod.delete({
-        where: { id: normalizedMethodId },
-      });
-
-      if (replacementId) {
+      if (replacement) {
         await tx.payoutMethod.updateMany({
           where: { walletId: wallet.id },
           data: { isDefault: false },
         });
-
         await tx.payoutMethod.update({
-          where: { id: replacementId },
+          where: { id: replacement.id },
           data: { isDefault: true },
         });
       }
@@ -679,54 +528,35 @@ class WalletService {
   ) {
     const wallet = await this.ensureWallet(userId);
     const amount = normalizeMoneyAmount(input.amount, "Payout amount");
-    const note = cleanLimitedString(input.note, "Note", MAX_NOTE_LENGTH);
-    const payoutMetadata: JsonObject | undefined = note ? { note } : undefined;
+    const note = normalizeOptionalSanitizedText(
+      input.note,
+      "Note",
+      MAX_NOTE_LENGTH,
+    );
 
     return prisma.$transaction(async (tx) => {
-      let methodId: string | undefined = cleanString(input.methodId);
-      let selectedMethodType: PayoutMethodTypeValue | undefined;
-      let selectedMethodDetails: unknown;
+      const requestedMethodId = normalizeOptionalSanitizedText(input.methodId);
+      const selectedMethod = requestedMethodId
+        ? await tx.payoutMethod.findUnique({ where: { id: requestedMethodId } })
+        : await tx.payoutMethod.findFirst({
+            where: { walletId: wallet.id, isDefault: true },
+          });
 
-      if (methodId) {
-        const method = await tx.payoutMethod.findUnique({
-          where: { id: methodId },
-        });
-
-        if (!method || method.walletId !== wallet.id) {
-          throw new ValidationError("Invalid payout method");
-        }
-
-        selectedMethodType = method.type as PayoutMethodTypeValue;
-        selectedMethodDetails = method.details;
-      } else {
-        const defaultMethod = await tx.payoutMethod.findFirst({
-          where: { walletId: wallet.id, isDefault: true },
-        });
-
-        methodId = defaultMethod?.id;
-        selectedMethodType = defaultMethod?.type as
-          | PayoutMethodTypeValue
-          | undefined;
-        selectedMethodDetails = defaultMethod?.details;
+      if (requestedMethodId && (!selectedMethod || selectedMethod.walletId !== wallet.id)) {
+        throw new ValidationError("Invalid payout method");
       }
 
-      if (!methodId) {
+      if (!selectedMethod) {
         throw new ValidationError(
           "A payout method is required before requesting a payout",
         );
       }
 
-      if (!selectedMethodType || !isPayoutMethodType(selectedMethodType)) {
-        throw new ValidationError("Selected payout method has an invalid type");
-      }
-
-      normalizePayoutMethodDetails(selectedMethodType, selectedMethodDetails);
+      const methodType = parsePayoutMethodType(selectedMethod.type);
+      normalizePayoutMethodDetails(methodType, selectedMethod.details);
 
       const balanceUpdate = await tx.wallet.updateMany({
-        where: {
-          id: wallet.id,
-          availableBalance: { gte: amount },
-        },
+        where: { id: wallet.id, availableBalance: { gte: amount } },
         data: {
           availableBalance: { decrement: amount },
           pendingPayout: { increment: amount },
@@ -741,7 +571,7 @@ class WalletService {
         data: {
           walletId: wallet.id,
           amount,
-          methodId,
+          methodId: selectedMethod.id,
           status: "PENDING",
           note: note || null,
         },
@@ -754,7 +584,7 @@ class WalletService {
           type: "FREEZE",
           source: "PAYOUT",
           referenceId: `${payout.id}:freeze`,
-          metadata: payoutMetadata,
+          metadata: note ? { note } : undefined,
         },
       });
 
@@ -767,14 +597,18 @@ class WalletService {
     params: { limit?: number; offset?: number; status?: string } = {},
   ) {
     const wallet = await this.ensureWallet(userId);
-    const safeLimit = toInt(params.limit, 20, { min: 1, max: 100 });
-    const safeOffset = toInt(params.offset, 0, { min: 0 });
-    const parsedStatus = parsePayoutStatus(params.status);
+    const { limit, offset } = normalizeOffsetPagination(
+      params.limit,
+      params.offset,
+      { defaultLimit: 20, maxLimit: 100 },
+    );
+    const parsedStatus = parseOptionalUppercaseEnum(
+      params.status,
+      ALLOWED_PAYOUT_STATUSES,
+      "payout status",
+    );
 
-    const where: {
-      walletId: string;
-      status?: PayoutStatus;
-    } = {
+    const where = {
       walletId: wallet.id,
       ...(parsedStatus ? { status: parsedStatus } : {}),
     };
@@ -783,36 +617,34 @@ class WalletService {
       prisma.payoutRequest.findMany({
         where,
         orderBy: { requestedAt: "desc" },
-        take: safeLimit,
-        skip: safeOffset,
+        take: limit,
+        skip: offset,
         include: { method: true },
       }),
       prisma.payoutRequest.count({ where }),
     ]);
 
-    return { items, total, limit: safeLimit, offset: safeOffset };
+    return { items, total, limit, offset };
   }
 
-  // Admin actions
-  async listPayoutRequests(
-    status?: string,
-    limit: number = 50,
-    offset: number = 0,
-  ) {
-    const safeLimit = toInt(limit, 50, { min: 1, max: 100 });
-    const safeOffset = toInt(offset, 0, { min: 0 });
-    const parsedStatus = parsePayoutStatus(status);
-
-    const where: { status?: PayoutStatus } = {
-      ...(parsedStatus ? { status: parsedStatus } : {}),
-    };
+  async listPayoutRequests(status?: string, limit = 50, offset = 0) {
+    const pagination = normalizeOffsetPagination(limit, offset, {
+      defaultLimit: 50,
+      maxLimit: 100,
+    });
+    const parsedStatus = parseOptionalUppercaseEnum(
+      status,
+      ALLOWED_PAYOUT_STATUSES,
+      "payout status",
+    );
+    const where = parsedStatus ? { status: parsedStatus } : {};
 
     const [items, total] = await Promise.all([
       prisma.payoutRequest.findMany({
         where,
         orderBy: { requestedAt: "desc" },
-        take: safeLimit,
-        skip: safeOffset,
+        take: pagination.limit,
+        skip: pagination.offset,
         include: {
           wallet: {
             include: {
@@ -832,7 +664,12 @@ class WalletService {
       prisma.payoutRequest.count({ where }),
     ]);
 
-    return { items, total, limit: safeLimit, offset: safeOffset };
+    return {
+      items,
+      total,
+      limit: pagination.limit,
+      offset: pagination.offset,
+    };
   }
 
   async reviewPayout(
@@ -840,12 +677,15 @@ class WalletService {
     action: PayoutAction,
     opts?: { adminNote?: string; externalReference?: string },
   ) {
-    const payoutId = requireCleanString(id, "Payout ID");
+    const payoutId = normalizeRequiredSanitizedText(id, "Payout ID");
     const adminNote =
-      cleanLimitedString(opts?.adminNote, "Admin note", MAX_NOTE_LENGTH) ||
-      null;
+      normalizeOptionalSanitizedText(
+        opts?.adminNote,
+        "Admin note",
+        MAX_NOTE_LENGTH,
+      ) || null;
     const externalReference =
-      cleanLimitedString(
+      normalizeOptionalSanitizedText(
         opts?.externalReference,
         "External reference",
         MAX_EXTERNAL_REFERENCE_LENGTH,
@@ -861,69 +701,38 @@ class WalletService {
         throw new NotFoundError("Payout request not found");
       }
 
-      const amount = roundCurrency(toNumber(payout.amount));
+      const amount = roundMoney(payout.amount);
+      const processedAt = payout.processedAt ?? new Date();
 
-      if (action === "approve") {
+      const assertTransition = async (
+        fromStatus: PayoutStatus | { in: PayoutStatus[] },
+        nextStatus: PayoutStatus,
+        errorMessage: string,
+        extraData?: { processedAt?: Date; externalReference?: string | null },
+      ) => {
         const transition = await tx.payoutRequest.updateMany({
-          where: { id: payoutId, status: "PENDING" },
+          where: { id: payoutId, status: fromStatus },
           data: {
-            status: "APPROVED",
+            status: nextStatus,
             adminNote,
+            ...extraData,
           },
         });
-
         if (transition.count !== 1) {
-          throw new ValidationError("Only pending payouts can be approved");
+          throw new ValidationError(errorMessage);
         }
+      };
 
-        return tx.payoutRequest.findUniqueOrThrow({ where: { id: payoutId } });
-      }
-
-      if (action === "processing") {
-        const transition = await tx.payoutRequest.updateMany({
-          where: { id: payoutId, status: "APPROVED" },
-          data: {
-            status: "PROCESSING",
-            adminNote,
-            processedAt: payout.processedAt ?? new Date(),
-          },
-        });
-
-        if (transition.count !== 1) {
-          throw new ValidationError(
-            "Only approved payouts can be marked processing",
-          );
-        }
-
-        return tx.payoutRequest.findUniqueOrThrow({ where: { id: payoutId } });
-      }
-
-      if (action === "reject") {
-        const transition = await tx.payoutRequest.updateMany({
-          where: {
-            id: payoutId,
-            status: { in: ACTIVE_PAYOUT_STATUSES },
-          },
-          data: {
-            status: "REJECTED",
-            adminNote,
-            processedAt: payout.processedAt ?? new Date(),
-          },
-        });
-
-        if (transition.count !== 1) {
-          throw new ValidationError(
-            "Only pending, approved, or processing payouts can be rejected",
-          );
-        }
-
+      const settlePendingBalance = async (releaseToAvailable: boolean) => {
         const walletUpdate = await tx.wallet.updateMany({
           where: {
             id: payout.walletId,
             pendingPayout: { gte: amount },
           },
           data: {
-            availableBalance: { increment: amount },
+            ...(releaseToAvailable
+              ? { availableBalance: { increment: amount } }
+              : {}),
             pendingPayout: { decrement: amount },
           },
         });
@@ -933,7 +742,29 @@ class WalletService {
             "Wallet pending payout balance is insufficient",
           );
         }
+      };
 
+      if (action === "approve") {
+        await assertTransition(
+          "PENDING",
+          "APPROVED",
+          "Only pending payouts can be approved",
+        );
+      } else if (action === "processing") {
+        await assertTransition(
+          "APPROVED",
+          "PROCESSING",
+          "Only approved payouts can be marked processing",
+          { processedAt },
+        );
+      } else if (action === "reject") {
+        await assertTransition(
+          { in: ACTIVE_PAYOUT_STATUSES },
+          "REJECTED",
+          "Only pending, approved, or processing payouts can be rejected",
+          { processedAt },
+        );
+        await settlePendingBalance(true);
         await tx.walletTransaction.create({
           data: {
             walletId: payout.walletId,
@@ -944,43 +775,14 @@ class WalletService {
             metadata: { reason: "Payout rejected" },
           },
         });
-
-        return tx.payoutRequest.findUniqueOrThrow({ where: { id: payoutId } });
-      }
-
-      if (action === "paid") {
-        const transition = await tx.payoutRequest.updateMany({
-          where: { id: payoutId, status: "PROCESSING" },
-          data: {
-            status: "PAID",
-            adminNote,
-            externalReference,
-            processedAt: payout.processedAt ?? new Date(),
-          },
-        });
-
-        if (transition.count !== 1) {
-          throw new ValidationError(
-            "Only processing payouts can be marked paid",
-          );
-        }
-
-        const walletUpdate = await tx.wallet.updateMany({
-          where: {
-            id: payout.walletId,
-            pendingPayout: { gte: amount },
-          },
-          data: {
-            pendingPayout: { decrement: amount },
-          },
-        });
-
-        if (walletUpdate.count !== 1) {
-          throw new ValidationError(
-            "Wallet pending payout balance is insufficient",
-          );
-        }
-
+      } else if (action === "paid") {
+        await assertTransition(
+          "PROCESSING",
+          "PAID",
+          "Only processing payouts can be marked paid",
+          { processedAt, externalReference },
+        );
+        await settlePendingBalance(false);
         await tx.walletTransaction.create({
           data: {
             walletId: payout.walletId,
@@ -991,130 +793,106 @@ class WalletService {
             metadata: externalReference ? { externalReference } : undefined,
           },
         });
-
-        return tx.payoutRequest.findUniqueOrThrow({ where: { id: payoutId } });
+      } else {
+        throw new ValidationError("Invalid payout action");
       }
 
-      throw new ValidationError("Invalid payout action");
+      return tx.payoutRequest.findUniqueOrThrow({ where: { id: payoutId } });
     });
   }
 
-  // Credits and debits during commerce flows
+  private async recordCommerceWalletEntry(
+    userId: string,
+    amount: number,
+    options: {
+      type: "CREDIT" | "DEBIT";
+      source: "COURSE_SALE" | "REFUND";
+      metadata?: JsonObject;
+    },
+  ) {
+    const normalizedAmount = roundMoney(amount);
+    if (!Number.isFinite(normalizedAmount) || normalizedAmount <= 0) {
+      return;
+    }
+
+    const wallet = await this.ensureWallet(userId);
+    const referenceId = buildWalletReferenceId(
+      options.source,
+      options.metadata,
+    );
+
+    try {
+      await prisma.$transaction(async (tx) => {
+        if (referenceId) {
+          const existingTransaction = await tx.walletTransaction.findFirst({
+            where: {
+              walletId: wallet.id,
+              source: options.source,
+              referenceId,
+            },
+            select: { id: true },
+          });
+
+          if (existingTransaction) return;
+        }
+
+        if (options.type === "CREDIT") {
+          await tx.wallet.update({
+            where: { id: wallet.id },
+            data: { availableBalance: { increment: normalizedAmount } },
+          });
+        } else {
+          const walletUpdate = await tx.wallet.updateMany({
+            where: {
+              id: wallet.id,
+              availableBalance: { gte: normalizedAmount },
+            },
+            data: { availableBalance: { decrement: normalizedAmount } },
+          });
+
+          if (walletUpdate.count !== 1) {
+            throw new ValidationError(
+              "Teacher wallet balance is insufficient for refund debit",
+            );
+          }
+        }
+
+        await tx.walletTransaction.create({
+          data: {
+            walletId: wallet.id,
+            amount: normalizedAmount,
+            type: options.type,
+            source: options.source,
+            referenceId: referenceId || null,
+            metadata: options.metadata,
+          },
+        });
+      });
+    } catch (error) {
+      if (!(referenceId && isUniqueConstraintError(error))) {
+        throw error;
+      }
+    }
+  }
+
   async creditForTeacher(
     userId: string,
     amount: number,
     metadata?: JsonObject,
   ) {
-    const normalizedAmount = roundCurrency(Number(amount));
-
-    if (!Number.isFinite(normalizedAmount) || normalizedAmount <= 0) {
-      return;
-    }
-
-    const wallet = await this.ensureWallet(userId);
-    const referenceId = buildWalletReferenceId("COURSE_SALE", metadata);
-
-    try {
-      await prisma.$transaction(async (tx) => {
-        if (referenceId) {
-          const existingTransaction = await tx.walletTransaction.findFirst({
-            where: {
-              walletId: wallet.id,
-              source: "COURSE_SALE",
-              referenceId,
-            },
-            select: { id: true },
-          });
-
-          if (existingTransaction) {
-            return;
-          }
-        }
-
-        await tx.wallet.update({
-          where: { id: wallet.id },
-          data: {
-            availableBalance: { increment: normalizedAmount },
-          },
-        });
-
-        await tx.walletTransaction.create({
-          data: {
-            walletId: wallet.id,
-            amount: normalizedAmount,
-            type: "CREDIT",
-            source: "COURSE_SALE",
-            referenceId: referenceId || null,
-            metadata,
-          },
-        });
-      });
-    } catch (error) {
-      if (!(referenceId && isUniqueConstraintError(error))) {
-        throw error;
-      }
-    }
+    await this.recordCommerceWalletEntry(userId, amount, {
+      type: "CREDIT",
+      source: "COURSE_SALE",
+      metadata,
+    });
   }
 
   async debitForRefund(userId: string, amount: number, metadata?: JsonObject) {
-    const normalizedAmount = roundCurrency(Number(amount));
-
-    if (!Number.isFinite(normalizedAmount) || normalizedAmount <= 0) {
-      return;
-    }
-
-    const wallet = await this.ensureWallet(userId);
-    const referenceId = buildWalletReferenceId("REFUND", metadata);
-
-    try {
-      await prisma.$transaction(async (tx) => {
-        if (referenceId) {
-          const existingTransaction = await tx.walletTransaction.findFirst({
-            where: {
-              walletId: wallet.id,
-              source: "REFUND",
-              referenceId,
-            },
-            select: { id: true },
-          });
-
-          if (existingTransaction) {
-            return;
-          }
-        }
-
-        const walletUpdate = await tx.wallet.updateMany({
-          where: {
-            id: wallet.id,
-            availableBalance: { gte: normalizedAmount },
-          },
-          data: {
-            availableBalance: { decrement: normalizedAmount },
-          },
-        });
-
-        if (walletUpdate.count !== 1) {
-          throw new ValidationError(
-            "Teacher wallet balance is insufficient for refund debit",
-          );
-        }
-
-        await tx.walletTransaction.create({
-          data: {
-            walletId: wallet.id,
-            amount: normalizedAmount,
-            type: "DEBIT",
-            source: "REFUND",
-            referenceId: referenceId || null,
-            metadata,
-          },
-        });
-      });
-    } catch (error) {
-      if (!(referenceId && isUniqueConstraintError(error))) {
-        throw error;
-      }
-    }
+    await this.recordCommerceWalletEntry(userId, amount, {
+      type: "DEBIT",
+      source: "REFUND",
+      metadata,
+    });
   }
 }
 

@@ -11,9 +11,18 @@ import prisma from "../config/database";
 import config from "../config/env";
 import logger from "../utils/logger";
 import { NotFoundError, ValidationError } from "../utils/errors";
-import { sanitizeUserPlainText } from "../utils/sanitize-user-content";
-import { calculateTeacherNetEarning, toNumber } from "./shared/payment-utils";
+import walletService from "./wallet.service";
 import { countDistinctActiveStudentsForTeacherProfile } from "./shared/enrollment-access";
+import { normalizeOffsetPagination } from "./shared/pagination";
+import {
+  calculateTeacherNetEarning,
+  roundMoney,
+  toNumber,
+} from "./shared/payment-utils";
+import {
+  normalizeOptionalSanitizedText,
+  normalizeRequiredSanitizedText,
+} from "./shared/service-helpers";
 
 const refundOrderUserSelect = {
   id: true,
@@ -25,9 +34,7 @@ const refundOrderUserSelect = {
 const refundWithOrderUserInclude = {
   order: {
     include: {
-      user: {
-        select: refundOrderUserSelect,
-      },
+      user: { select: refundOrderUserSelect },
     },
   },
 } satisfies Prisma.RefundInclude;
@@ -35,15 +42,11 @@ const refundWithOrderUserInclude = {
 const refundWithOrderItemsInclude = {
   order: {
     include: {
-      user: {
-        select: refundOrderUserSelect,
-      },
+      user: { select: refundOrderUserSelect },
       items: {
         include: {
           package: {
-            include: {
-              course: true,
-            },
+            include: { course: true },
           },
         },
       },
@@ -67,38 +70,12 @@ type TeacherRefundAdjustment = {
 };
 
 const REFUND_STATUSES = Object.values(RefundStatus) as RefundStatus[];
-
-const roundCurrency = (value: number): number =>
-  Math.round((Number.isFinite(value) ? value : 0) * 100) / 100;
-
-const isFullyRefunded = (refundedAmount: number, orderTotal: number): boolean =>
-  roundCurrency(refundedAmount) >= roundCurrency(orderTotal);
-
 const CREDITED_TO_PLATFORM_WALLET_NOTE =
   "Refund amount was credited to the student's platform wallet.";
 
-const normalizeRefundId = (refundId: string): string => {
-  const normalizedRefundId = refundId?.trim();
-
-  if (!normalizedRefundId) {
-    throw new ValidationError("Refund ID is required");
-  }
-
-  return normalizedRefundId;
-};
-
-const normalizeOptionalNote = (note?: string): string | undefined => {
-  const normalizedNote =
-    note === undefined ? undefined : sanitizeUserPlainText(note);
-  return normalizedNote || undefined;
-};
-
 const parseRefundStatus = (status?: string): RefundStatus | undefined => {
   const normalizedStatus = status?.trim().toUpperCase();
-
-  if (!normalizedStatus) {
-    return undefined;
-  }
+  if (!normalizedStatus) return undefined;
 
   if (!REFUND_STATUSES.includes(normalizedStatus as RefundStatus)) {
     throw new ValidationError(
@@ -108,15 +85,6 @@ const parseRefundStatus = (status?: string): RefundStatus | undefined => {
 
   return normalizedStatus as RefundStatus;
 };
-
-const normalizePagination = (
-  limit: number = 50,
-  offset: number = 0,
-): { safeLimit: number; safeOffset: number } => ({
-  safeLimit:
-    Number.isFinite(limit) && limit > 0 ? Math.min(Math.floor(limit), 100) : 50,
-  safeOffset: Number.isFinite(offset) && offset >= 0 ? Math.floor(offset) : 0,
-});
 
 const fetchRefundWithOrderUser = async (
   refundId: string,
@@ -140,20 +108,14 @@ const transitionRefundStatus = async (
   data: Prisma.RefundUpdateManyMutationInput = {},
 ): Promise<RefundWithOrderUser> => {
   const updateResult = await prisma.refund.updateMany({
-    where: {
-      id: refundId,
-      status: fromStatus,
-    },
-    data: {
-      ...data,
-      status: toStatus,
-    },
+    where: { id: refundId, status: fromStatus },
+    data: { ...data, status: toStatus },
   });
 
   if (updateResult.count !== 1) {
     const existingRefund = await prisma.refund.findUnique({
       where: { id: refundId },
-      select: { id: true, status: true },
+      select: { id: true },
     });
 
     if (!existingRefund) {
@@ -168,18 +130,11 @@ const transitionRefundStatus = async (
   return fetchRefundWithOrderUser(refundId);
 };
 
-/**
- * Admin Refund Management Service
- * Handles refund approval, rejection, processing, completion, and statistics.
- */
 class RefundAdminService {
-  /**
-   * Get all refunds with optional status filter and safe pagination.
-   */
   async getAllRefunds(
     status?: string,
-    limit: number = 50,
-    offset: number = 0,
+    limit = 50,
+    offset = 0,
   ): Promise<{
     refunds: RefundWithOrderItems[];
     total: number;
@@ -187,8 +142,10 @@ class RefundAdminService {
     offset: number;
   }> {
     const parsedStatus = parseRefundStatus(status);
-    const { safeLimit, safeOffset } = normalizePagination(limit, offset);
-
+    const pagination = normalizeOffsetPagination(limit, offset, {
+      defaultLimit: 50,
+      maxLimit: 100,
+    });
     const where: Prisma.RefundWhereInput = parsedStatus
       ? { status: parsedStatus }
       : {};
@@ -198,8 +155,8 @@ class RefundAdminService {
         where,
         include: refundWithOrderItemsInclude,
         orderBy: { createdAt: "desc" },
-        take: safeLimit,
-        skip: safeOffset,
+        take: pagination.limit,
+        skip: pagination.offset,
       }),
       prisma.refund.count({ where }),
     ]);
@@ -207,16 +164,16 @@ class RefundAdminService {
     return {
       refunds,
       total,
-      limit: safeLimit,
-      offset: safeOffset,
+      limit: pagination.limit,
+      offset: pagination.offset,
     };
   }
 
-  /**
-   * Get refund by ID.
-   */
   async getRefundById(refundId: string): Promise<RefundWithOrderItems> {
-    const normalizedRefundId = normalizeRefundId(refundId);
+    const normalizedRefundId = normalizeRequiredSanitizedText(
+      refundId,
+      "Refund ID",
+    );
 
     const refund = await prisma.refund.findUnique({
       where: { id: normalizedRefundId },
@@ -230,18 +187,13 @@ class RefundAdminService {
     return refund;
   }
 
-  /**
-   * Approve a pending refund request.
-   */
   async approveRefund(
     refundId: string,
     adminNotes?: string,
   ): Promise<RefundWithOrderUser> {
-    const normalizedRefundId = normalizeRefundId(refundId);
-    const note = normalizeOptionalNote(adminNotes);
-
+    const note = normalizeOptionalSanitizedText(adminNotes);
     return transitionRefundStatus(
-      normalizedRefundId,
+      normalizeRequiredSanitizedText(refundId, "Refund ID"),
       RefundStatus.PENDING,
       RefundStatus.APPROVED,
       {
@@ -251,60 +203,46 @@ class RefundAdminService {
     );
   }
 
-  /**
-   * Reject a pending refund request.
-   */
   async rejectRefund(
     refundId: string,
     rejectionReason: string,
   ): Promise<RefundWithOrderUser> {
-    const normalizedRefundId = normalizeRefundId(refundId);
-    const reason = normalizeOptionalNote(rejectionReason);
-
-    if (!reason) {
-      throw new ValidationError("Rejection reason is required");
-    }
-
     return transitionRefundStatus(
-      normalizedRefundId,
+      normalizeRequiredSanitizedText(refundId, "Refund ID"),
       RefundStatus.PENDING,
       RefundStatus.REJECTED,
       {
-        notes: reason,
+        notes: normalizeRequiredSanitizedText(
+          rejectionReason,
+          "Rejection reason",
+        ),
         processedAt: new Date(),
       },
     );
   }
 
-  /**
-   * Mark an approved refund as processing.
-   */
   async markAsProcessing(
     refundId: string,
     adminNotes?: string,
   ): Promise<RefundWithOrderUser> {
-    const normalizedRefundId = normalizeRefundId(refundId);
-    const note = normalizeOptionalNote(adminNotes);
-
+    const note = normalizeOptionalSanitizedText(adminNotes);
     return transitionRefundStatus(
-      normalizedRefundId,
+      normalizeRequiredSanitizedText(refundId, "Refund ID"),
       RefundStatus.APPROVED,
       RefundStatus.PROCESSING,
-      {
-        ...(note ? { notes: note } : {}),
-      },
+      note ? { notes: note } : {},
     );
   }
 
-  /**
-   * Complete a processing refund.
-   */
   async completeRefund(
     refundId: string,
     adminNotes?: string,
   ): Promise<RefundWithOrderUser> {
-    const normalizedRefundId = normalizeRefundId(refundId);
-    const note = normalizeOptionalNote(adminNotes);
+    const normalizedRefundId = normalizeRequiredSanitizedText(
+      refundId,
+      "Refund ID",
+    );
+    const note = normalizeOptionalSanitizedText(adminNotes);
 
     const teacherAdjustments = await prisma.$transaction(async (tx) => {
       const completionTime = new Date();
@@ -319,11 +257,7 @@ class RefundAdminService {
                 include: {
                   package: {
                     include: {
-                      course: {
-                        include: {
-                          teacherProfile: true,
-                        },
-                      },
+                      course: { include: { teacherProfile: true } },
                     },
                   },
                 },
@@ -341,21 +275,19 @@ class RefundAdminService {
         throw new ValidationError("Only processing refunds can be completed");
       }
 
-      const refundableOrderStatuses: OrderStatus[] = [
-        OrderStatus.PAID,
-        OrderStatus.REFUNDED,
-      ];
-
-      if (!refundableOrderStatuses.includes(refund.order.status)) {
+      if (
+        refund.order.status !== OrderStatus.PAID &&
+        refund.order.status !== OrderStatus.REFUNDED
+      ) {
         throw new ValidationError("Only paid orders can be refunded");
       }
 
-      const refundAmount = roundCurrency(toNumber(refund.amount));
+      const refundAmount = roundMoney(refund.amount);
       if (refundAmount <= 0) {
         throw new ValidationError("Refund amount must be greater than zero");
       }
 
-      const orderTotal = roundCurrency(toNumber(refund.order.totalAmount));
+      const orderTotal = roundMoney(refund.order.totalAmount);
       if (orderTotal <= 0) {
         throw new ValidationError(
           "Order total amount must be greater than zero",
@@ -366,19 +298,15 @@ class RefundAdminService {
         where: {
           orderId: refund.orderId,
           status: RefundStatus.COMPLETED,
-          id: {
-            not: refund.id,
-          },
+          id: { not: refund.id },
         },
-        _sum: {
-          amount: true,
-        },
+        _sum: { amount: true },
       });
 
-      const completedBeforeAmount = roundCurrency(
-        toNumber(completedBeforeAggregate._sum.amount),
+      const completedBeforeAmount = roundMoney(
+        completedBeforeAggregate._sum.amount,
       );
-      const remainingRefundableAmount = roundCurrency(
+      const remainingRefundableAmount = roundMoney(
         orderTotal - completedBeforeAmount,
       );
 
@@ -388,16 +316,13 @@ class RefundAdminService {
         );
       }
 
-      const cumulativeRefundAmount = roundCurrency(
+      const cumulativeRefundAmount = roundMoney(
         completedBeforeAmount + refundAmount,
       );
-      const fullyRefunded = isFullyRefunded(cumulativeRefundAmount, orderTotal);
+      const fullyRefunded = cumulativeRefundAmount >= orderTotal;
 
       const transitionResult = await tx.refund.updateMany({
-        where: {
-          id: normalizedRefundId,
-          status: RefundStatus.PROCESSING,
-        },
+        where: { id: normalizedRefundId, status: RefundStatus.PROCESSING },
         data: {
           status: RefundStatus.COMPLETED,
           processedAt: refund.processedAt ?? completionTime,
@@ -453,9 +378,7 @@ class RefundAdminService {
         if (!existingWalletCredit) {
           await tx.wallet.update({
             where: { id: wallet.id },
-            data: {
-              availableBalance: { increment: refundAmount },
-            },
+            data: { availableBalance: { increment: refundAmount } },
           });
 
           await tx.walletTransaction.create({
@@ -482,7 +405,7 @@ class RefundAdminService {
         }
       }
 
-      const totalItemsAmount = roundCurrency(
+      const totalItemsAmount = roundMoney(
         refund.order.items.reduce(
           (sum, item) => sum + toNumber(item.finalPrice),
           0,
@@ -497,21 +420,17 @@ class RefundAdminService {
 
       refund.order.items.forEach((item, index) => {
         const teacherProfile = item.package?.course?.teacherProfile;
-        if (!teacherProfile) {
-          return;
-        }
+        if (!teacherProfile) return;
 
         const isLastItem = index === refund.order.items.length - 1;
-        const itemPrice = roundCurrency(toNumber(item.finalPrice));
+        const itemPrice = roundMoney(item.finalPrice);
         const itemPortion = isLastItem
-          ? roundCurrency(refundAmount - allocatedRefundAmount)
-          : roundCurrency((itemPrice / proportionalBase) * refundAmount);
+          ? roundMoney(refundAmount - allocatedRefundAmount)
+          : roundMoney((itemPrice / proportionalBase) * refundAmount);
 
-        allocatedRefundAmount = roundCurrency(
-          allocatedRefundAmount + itemPortion,
-        );
+        allocatedRefundAmount = roundMoney(allocatedRefundAmount + itemPortion);
 
-        const teacherNet = roundCurrency(
+        const teacherNet = roundMoney(
           calculateTeacherNetEarning(
             itemPortion,
             teacherProfile,
@@ -519,9 +438,7 @@ class RefundAdminService {
           ),
         );
 
-        if (teacherNet <= 0) {
-          return;
-        }
+        if (teacherNet <= 0) return;
 
         adjustments.push({
           teacherProfileId: teacherProfile.id,
@@ -532,7 +449,7 @@ class RefundAdminService {
 
         teacherEarningsAdjustments.set(
           teacherProfile.id,
-          roundCurrency(
+          roundMoney(
             (teacherEarningsAdjustments.get(teacherProfile.id) || 0) +
               teacherNet,
           ),
@@ -545,37 +462,26 @@ class RefundAdminService {
       ] of teacherEarningsAdjustments.entries()) {
         await tx.teacherProfile.update({
           where: { id: teacherProfileId },
-          data: {
-            totalEarnings: {
-              decrement: amount,
-            },
-          },
+          data: { totalEarnings: { decrement: amount } },
         });
       }
 
       if (fullyRefunded) {
         const packageIds = refund.order.items.map((item) => item.packageId);
-
         if (packageIds.length > 0) {
           await tx.enrollment.updateMany({
             where: {
               userId: refund.order.userId,
-              packageId: {
-                in: packageIds,
-              },
+              packageId: { in: packageIds },
               isActive: true,
             },
-            data: {
-              isActive: false,
-            },
+            data: { isActive: false },
           });
         }
 
-        const impactedTeacherProfileIds = Array.from(
-          new Set(adjustments.map((adjustment) => adjustment.teacherProfileId)),
-        );
-
-        for (const teacherProfileId of impactedTeacherProfileIds) {
+        for (const teacherProfileId of new Set(
+          adjustments.map((adjustment) => adjustment.teacherProfileId),
+        )) {
           const activeStudentCount =
             await countDistinctActiveStudentsForTeacherProfile(
               tx,
@@ -585,9 +491,7 @@ class RefundAdminService {
 
           await tx.teacherProfile.update({
             where: { id: teacherProfileId },
-            data: {
-              totalStudents: activeStudentCount,
-            },
+            data: { totalStudents: activeStudentCount },
           });
         }
       }
@@ -597,12 +501,8 @@ class RefundAdminService {
 
     const updated = await fetchRefundWithOrderUser(normalizedRefundId);
 
-    // Wallet adjustment is kept outside the DB transaction to avoid holding the transaction
-    // open while external wallet logic runs. It should be idempotent in wallet.service.
     if (teacherAdjustments.length > 0) {
       try {
-        const walletService = (await import("./wallet.service")).default;
-
         for (const adjustment of teacherAdjustments) {
           await walletService.debitForRefund(
             adjustment.teacherUserId,
@@ -616,10 +516,7 @@ class RefundAdminService {
       } catch (error) {
         logger.error(
           "Non-blocking wallet adjustment failed for completed refund",
-          {
-            refundId: updated.id,
-            error,
-          },
+          { refundId: updated.id, error },
         );
       }
     }
@@ -627,9 +524,6 @@ class RefundAdminService {
     return updated;
   }
 
-  /**
-   * Get refund statistics.
-   */
   async getRefundStats(): Promise<{
     pending: number;
     approved: number;
@@ -639,45 +533,30 @@ class RefundAdminService {
     totalRefundAmount: number;
     completedRefundAmount: number;
   }> {
-    const [
-      pending,
-      approved,
-      processing,
-      completed,
-      rejected,
-      totalAmount,
-      completedAmount,
-    ] = await Promise.all([
-      prisma.refund.count({ where: { status: RefundStatus.PENDING } }),
-      prisma.refund.count({ where: { status: RefundStatus.APPROVED } }),
-      prisma.refund.count({ where: { status: RefundStatus.PROCESSING } }),
-      prisma.refund.count({ where: { status: RefundStatus.COMPLETED } }),
-      prisma.refund.count({ where: { status: RefundStatus.REJECTED } }),
-      prisma.refund.aggregate({
-        _sum: {
-          amount: true,
-        },
+    const [groupedCounts, totalAmount, completedAmount] = await Promise.all([
+      prisma.refund.groupBy({
+        by: ["status"],
+        _count: { _all: true },
       }),
+      prisma.refund.aggregate({ _sum: { amount: true } }),
       prisma.refund.aggregate({
-        where: {
-          status: RefundStatus.COMPLETED,
-        },
-        _sum: {
-          amount: true,
-        },
+        where: { status: RefundStatus.COMPLETED },
+        _sum: { amount: true },
       }),
     ]);
 
+    const counts = new Map(
+      groupedCounts.map((entry) => [entry.status, entry._count._all]),
+    );
+
     return {
-      pending,
-      approved,
-      processing,
-      completed,
-      rejected,
-      totalRefundAmount: roundCurrency(toNumber(totalAmount._sum.amount)),
-      completedRefundAmount: roundCurrency(
-        toNumber(completedAmount._sum.amount),
-      ),
+      pending: counts.get(RefundStatus.PENDING) ?? 0,
+      approved: counts.get(RefundStatus.APPROVED) ?? 0,
+      processing: counts.get(RefundStatus.PROCESSING) ?? 0,
+      completed: counts.get(RefundStatus.COMPLETED) ?? 0,
+      rejected: counts.get(RefundStatus.REJECTED) ?? 0,
+      totalRefundAmount: roundMoney(totalAmount._sum.amount),
+      completedRefundAmount: roundMoney(completedAmount._sum.amount),
     };
   }
 }

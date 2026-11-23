@@ -44,11 +44,6 @@ export default defineConfig(({ mode }) => {
         output: {
           manualChunks: {
             charts: ['recharts'],
-            i18n: [
-              'i18next',
-              'i18next-browser-languagedetector',
-              'react-i18next',
-            ],
             react: ['react', 'react-dom', 'react-router-dom'],
             ui: ['clsx', 'lucide-react', 'react-hot-toast', 'zustand'],
           },

@@ -1,8 +1,6 @@
 import {
   Prisma,
   RegistrationStatus,
-  ReportStatus,
-  ReportType,
   UserRole,
   VerificationStatus,
   type TeacherProfile,
@@ -11,7 +9,11 @@ import {
 import prisma from "../../config/database";
 import { NotFoundError, ValidationError } from "../../utils/errors";
 import { normalizeCanonicalEmail } from "../../utils/sanitize-user-content";
-import { buildCurrentEnrollmentWhere } from "../shared/enrollment-access";
+import {
+  buildCurrentEnrollmentWhere,
+  countDistinctActiveStudentsForTeacherProfile,
+} from "../shared/enrollment-access";
+import { validateDateRange } from "../shared/service-helpers";
 
 type PrismaClientLike = Prisma.TransactionClient | typeof prisma;
 
@@ -89,25 +91,6 @@ export const adminVerificationListInclude = {
   },
 } satisfies Prisma.TeacherVerificationInclude;
 
-export const adminReportListInclude = {
-  reporter: {
-    select: {
-      id: true,
-      firstName: true,
-      lastName: true,
-      email: true,
-    },
-  },
-  reported: {
-    select: {
-      id: true,
-      firstName: true,
-      lastName: true,
-      email: true,
-    },
-  },
-} satisfies Prisma.ReportInclude;
-
 export const adminAuditLogInclude = {
   admin: {
     select: {
@@ -184,26 +167,8 @@ export const adminFinancialPaymentsInclude = {
   },
 } satisfies Prisma.PaymentInclude;
 
-export const adminInvoicesInclude = adminFinancialPaymentsInclude;
-
-const validateDateRange = (startDate?: Date, endDate?: Date) => {
-  if (startDate && Number.isNaN(startDate.getTime())) {
-    throw new ValidationError("Invalid start date");
-  }
-
-  if (endDate && Number.isNaN(endDate.getTime())) {
-    throw new ValidationError("Invalid end date");
-  }
-
-  if (startDate && endDate && startDate > endDate) {
-    throw new ValidationError("Start date cannot be later than end date");
-  }
-};
-
-const normalizeSearchKeyword = (value?: string): string | undefined => {
-  const keyword = value?.trim();
-  return keyword || undefined;
-};
+const normalizeSearchKeyword = (value?: string): string | undefined =>
+  value?.trim() || undefined;
 
 export const buildAdminUserWhere = (
   filters: {
@@ -220,17 +185,9 @@ export const buildAdminUserWhere = (
   const where: Prisma.UserWhereInput = {};
   const search = normalizeSearchKeyword(filters.search);
 
-  if (filters.role) {
-    where.role = filters.role;
-  }
-
-  if (filters.isActive !== undefined) {
-    where.isActive = filters.isActive;
-  }
-
-  if (filters.isLocked !== undefined) {
-    where.isLocked = filters.isLocked;
-  }
+  if (filters.role) where.role = filters.role;
+  if (filters.isActive !== undefined) where.isActive = filters.isActive;
+  if (filters.isLocked !== undefined) where.isLocked = filters.isLocked;
 
   if (search) {
     where.OR = [
@@ -243,17 +200,10 @@ export const buildAdminUserWhere = (
   }
 
   if (filters.createdAfter || filters.createdBefore) {
-    const createdAt: Prisma.DateTimeFilter = {};
-
-    if (filters.createdAfter) {
-      createdAt.gte = filters.createdAfter;
-    }
-
-    if (filters.createdBefore) {
-      createdAt.lte = filters.createdBefore;
-    }
-
-    where.createdAt = createdAt;
+    where.createdAt = {
+      ...(filters.createdAfter ? { gte: filters.createdAfter } : {}),
+      ...(filters.createdBefore ? { lte: filters.createdBefore } : {}),
+    };
   }
 
   return where;
@@ -326,16 +276,7 @@ export const buildAdminCourseWhere = (
 
 export const buildAdminVerificationWhere = (
   status?: VerificationStatus,
-): Prisma.TeacherVerificationWhereInput =>
-  status ? { status } : {};
-
-export const buildAdminReportWhere = (
-  status?: ReportStatus,
-  type?: ReportType,
-): Prisma.ReportWhereInput => ({
-  ...(status ? { status } : {}),
-  ...(type ? { type } : {}),
-});
+): Prisma.TeacherVerificationWhereInput => (status ? { status } : {});
 
 export const buildTeacherCommissionWhere = (
   search?: string,
@@ -375,14 +316,10 @@ export const requireUser = async (
   userId: string,
   client: PrismaClientLike = prisma,
 ): Promise<User> => {
-  const user = await client.user.findUnique({
-    where: { id: userId },
-  });
-
+  const user = await client.user.findUnique({ where: { id: userId } });
   if (!user) {
     throw new NotFoundError("User not found");
   }
-
   return user;
 };
 
@@ -391,11 +328,9 @@ export const requireTeacherUser = async (
   client: PrismaClientLike = prisma,
 ): Promise<User> => {
   const user = await requireUser(userId, client);
-
   if (user.role !== UserRole.TEACHER) {
     throw new NotFoundError("Teacher not found");
   }
-
   return user;
 };
 
@@ -403,14 +338,10 @@ export const requireTeacherProfile = async (
   userId: string,
   client: PrismaClientLike = prisma,
 ): Promise<TeacherProfile> => {
-  const profile = await client.teacherProfile.findUnique({
-    where: { userId },
-  });
-
+  const profile = await client.teacherProfile.findUnique({ where: { userId } });
   if (!profile) {
     throw new NotFoundError("Teacher profile not found");
   }
-
   return profile;
 };
 
@@ -442,14 +373,11 @@ export const ensureAdminManageableRole = (role: unknown): UserRole => {
       "This form can only manage student or teacher accounts",
     );
   }
-
   return role;
 };
 
 export const ensureCommissionRateInRange = (commissionRate: number | null) => {
-  if (commissionRate === null) {
-    return;
-  }
+  if (commissionRate === null) return;
 
   if (
     typeof commissionRate !== "number" ||
@@ -518,15 +446,9 @@ export const createUserAuditLog = async (
     userId: params.userId,
     action: params.action,
     reason: params.reason,
+    ...(params.oldValues !== undefined ? { oldValues: params.oldValues } : {}),
+    ...(params.newValues !== undefined ? { newValues: params.newValues } : {}),
   };
-
-  if (params.oldValues !== undefined) {
-    data.oldValues = params.oldValues;
-  }
-
-  if (params.newValues !== undefined) {
-    data.newValues = params.newValues;
-  }
 
   return client.userAuditLog.create({ data });
 };
@@ -534,16 +456,13 @@ export const createUserAuditLog = async (
 export const collectImpactedTeacherUserIdsForStudent = async (
   userId: string,
   client: PrismaClientLike = prisma,
-): Promise<Set<string>> => {
-  return collectImpactedTeacherUserIdsForStudents([userId], client);
-};
+): Promise<Set<string>> => collectImpactedTeacherUserIdsForStudents([userId], client);
 
 export const collectImpactedTeacherUserIdsForStudents = async (
   userIds: string[],
   client: PrismaClientLike = prisma,
 ): Promise<Set<string>> => {
   const impactedTeacherUserIds = new Set<string>();
-
   if (userIds.length === 0) {
     return impactedTeacherUserIds;
   }
@@ -555,9 +474,7 @@ export const collectImpactedTeacherUserIdsForStudents = async (
         select: {
           course: {
             select: {
-              teacherProfile: {
-                select: { userId: true },
-              },
+              teacherProfile: { select: { userId: true } },
             },
           },
         },
@@ -611,26 +528,16 @@ const recalculateTeacherStudentCount = async (
     select: { id: true },
   });
 
-  if (!teacherProfile) {
-    return;
-  }
+  if (!teacherProfile) return;
 
-  const enrollments = await client.enrollment.findMany({
-    where: buildCurrentEnrollmentWhere(
-      {
-        package: {
-          course: { teacherProfileId: teacherProfile.id },
-        },
-      },
-      new Date(),
-    ),
-    select: { userId: true },
-    distinct: ["userId"],
-  });
+  const totalStudents = await countDistinctActiveStudentsForTeacherProfile(
+    client,
+    teacherProfile.id,
+  );
 
   await client.teacherProfile.update({
     where: { id: teacherProfile.id },
-    data: { totalStudents: enrollments.length },
+    data: { totalStudents },
   });
 };
 
@@ -671,9 +578,7 @@ export const assertTeacherProfileCanBeRemoved = async (
     },
   });
 
-  if (!profile) {
-    return;
-  }
+  if (!profile) return;
 
   const teacherArtifacts =
     profile._count.courses +

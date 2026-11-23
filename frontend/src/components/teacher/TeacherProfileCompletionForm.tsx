@@ -47,12 +47,9 @@ const normalizeStringArray = (value: unknown): string[] => {
   if (typeof value === 'string' && value.trim()) {
     try {
       const parsedValue = JSON.parse(value);
-
-      if (Array.isArray(parsedValue)) {
-        return normalizeStringArray(parsedValue);
-      }
-
-      return [value.trim()];
+      return Array.isArray(parsedValue)
+        ? normalizeStringArray(parsedValue)
+        : [value.trim()];
     } catch {
       return [value.trim()];
     }
@@ -79,11 +76,9 @@ const getCertificateDisplayName = (url: string, index: number): string => {
 
 const clampYearsOfExperience = (value: string): number => {
   const parsedValue = Number.parseInt(value, 10);
-
   if (!Number.isFinite(parsedValue)) {
     return 0;
   }
-
   return Math.min(Math.max(parsedValue, 0), MAX_YEARS_OF_EXPERIENCE);
 };
 
@@ -91,13 +86,9 @@ const validateImageFile = (file: File): string | null => {
   if (!ACCEPTED_IMAGE_TYPES.includes(file.type)) {
     return 'Only JPG, PNG, and WEBP image files are allowed.';
   }
-
-  const fileSizeInMb = file.size / (1024 * 1024);
-
-  if (fileSizeInMb > MAX_IMAGE_SIZE_MB) {
+  if (file.size / (1024 * 1024) > MAX_IMAGE_SIZE_MB) {
     return `Image size must not exceed ${MAX_IMAGE_SIZE_MB}MB.`;
   }
-
   return null;
 };
 
@@ -116,12 +107,185 @@ const createInitialFormState = (
   certificatePhotos: normalizeStringArray(initialData?.certificatePhotos),
 });
 
-/**
- * TeacherProfileCompletionForm
- *
- * Allows teachers to complete or update their extended profile information
- * before admin review and verification.
- */
+interface TextareaCardSectionProps {
+  id: keyof Pick<
+    TeacherProfileFormState,
+    'selfIntroduction' | 'educationBackground' | 'teachingExperience' | 'teachingStyle'
+  >;
+  title: string;
+  label: string;
+  value: string;
+  placeholder: string;
+  disabled: boolean;
+  minHeightClass?: string;
+  required?: boolean;
+  maxLength?: number;
+  helpText?: string;
+  onChange: (event: ChangeEvent<HTMLTextAreaElement>) => void;
+}
+
+const TextareaCardSection = ({
+  id,
+  title,
+  label,
+  value,
+  placeholder,
+  disabled,
+  minHeightClass = 'min-h-24',
+  required = false,
+  maxLength,
+  helpText,
+  onChange,
+}: TextareaCardSectionProps) => {
+  const titleId = `${id}-title`;
+  const helpId = `${id}-help`;
+
+  return (
+    <section className="card shadow-lg" aria-labelledby={titleId}>
+      <h3 id={titleId} className="mb-4 text-xl font-bold text-gray-900">
+        {title}
+      </h3>
+      <label htmlFor={id} className="sr-only">
+        {label}
+      </label>
+      <textarea
+        id={id}
+        name={id}
+        value={value}
+        onChange={onChange}
+        placeholder={placeholder}
+        className={`input ${minHeightClass}`}
+        required={required}
+        maxLength={maxLength}
+        disabled={disabled}
+        aria-describedby={helpText ? helpId : undefined}
+      />
+      {helpText ? (
+        <p id={helpId} className="mt-2 text-sm text-gray-500">
+          {helpText}
+        </p>
+      ) : null}
+    </section>
+  );
+};
+
+interface EditableStringListSectionProps {
+  sectionId: string;
+  inputId: string;
+  title: string;
+  inputLabel: string;
+  placeholder: string;
+  items: string[];
+  disabled: boolean;
+  variant?: 'badge' | 'row';
+  onAdd: (value: string) => void;
+  onRemove: (index: number) => void;
+}
+
+const EditableStringListSection = ({
+  sectionId,
+  inputId,
+  title,
+  inputLabel,
+  placeholder,
+  items,
+  disabled,
+  variant = 'badge',
+  onAdd,
+  onRemove,
+}: EditableStringListSectionProps) => {
+  const [draft, setDraft] = useState('');
+
+  const commitItem = () => {
+    const trimmed = draft.trim();
+    if (!trimmed) {
+      return;
+    }
+    onAdd(trimmed);
+    setDraft('');
+  };
+
+  return (
+    <section className="card shadow-lg" aria-labelledby={sectionId}>
+      <h3 id={sectionId} className="mb-4 text-xl font-bold text-gray-900">
+        {title}
+      </h3>
+
+      <div className="mb-4 flex gap-2">
+        <label htmlFor={inputId} className="sr-only">
+          {inputLabel}
+        </label>
+        <input
+          id={inputId}
+          type="text"
+          value={draft}
+          onChange={(event) => setDraft(event.target.value)}
+          placeholder={placeholder}
+          className="input flex-1"
+          disabled={disabled}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter') {
+              event.preventDefault();
+              commitItem();
+            }
+          }}
+        />
+        <button
+          type="button"
+          onClick={commitItem}
+          disabled={disabled || !draft.trim()}
+          className="btn-primary flex items-center gap-2"
+        >
+          <Plus className="h-4 w-4" aria-hidden="true" />
+          Add
+        </button>
+      </div>
+
+      {variant === 'badge' ? (
+        <div className="flex flex-wrap gap-2">
+          {items.map((item, index) => (
+            <div
+              key={`${item}-${index}`}
+              className="badge-primary flex items-center gap-2"
+            >
+              <span>{item}</span>
+              <button
+                type="button"
+                onClick={() => onRemove(index)}
+                className="hover:text-red-600"
+                aria-label={`Remove ${item}`}
+                disabled={disabled}
+              >
+                <X className="h-4 w-4" aria-hidden="true" />
+              </button>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {items.map((item, index) => (
+            <div
+              key={`${item}-${index}`}
+              className="flex items-center justify-between rounded-lg border border-gray-200 bg-gray-50 p-3"
+            >
+              <span className="text-gray-700">{item}</span>
+              <button
+                type="button"
+                onClick={() => onRemove(index)}
+                className="text-red-600 hover:text-red-700"
+                aria-label={`Remove ${item}`}
+                disabled={disabled}
+              >
+                <X className="h-4 w-4" aria-hidden="true" />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+};
+
 const TeacherProfileCompletionForm = ({
   onSuccess,
   onError,
@@ -131,11 +295,7 @@ const TeacherProfileCompletionForm = ({
   const [formData, setFormData] = useState<TeacherProfileFormState>(() =>
     createInitialFormState(initialData)
   );
-
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [newAward, setNewAward] = useState('');
-  const [newSpecialty, setNewSpecialty] = useState('');
-  const [newLanguage, setNewLanguage] = useState('');
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [uploadingCerts, setUploadingCerts] = useState(false);
 
@@ -145,10 +305,9 @@ const TeacherProfileCompletionForm = ({
   const isBusy = isSubmitting || uploadingPhoto || uploadingCerts;
 
   const handleInputChange = (
-    event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>
+    event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
   ) => {
     const { name, value } = event.target;
-
     setFormData((prev) => ({
       ...prev,
       [name]:
@@ -158,13 +317,8 @@ const TeacherProfileCompletionForm = ({
     }));
   };
 
-  const addListItem = (
-    field: ListField,
-    value: string,
-    clearValue: () => void
-  ) => {
-    const trimmedValue = value.trim();
-
+  const addListItem = (field: ListField, rawValue: string) => {
+    const trimmedValue = rawValue.trim();
     if (!trimmedValue) {
       return;
     }
@@ -173,18 +327,10 @@ const TeacherProfileCompletionForm = ({
       const alreadyExists = prev[field].some(
         (item) => item.toLowerCase() === trimmedValue.toLowerCase()
       );
-
-      if (alreadyExists) {
-        return prev;
-      }
-
-      return {
-        ...prev,
-        [field]: [...prev[field], trimmedValue],
-      };
+      return alreadyExists
+        ? prev
+        : { ...prev, [field]: [...prev[field], trimmedValue] };
     });
-
-    clearValue();
   };
 
   const removeListItem = (field: ListField, index: number) => {
@@ -198,13 +344,11 @@ const TeacherProfileCompletionForm = ({
     event: ChangeEvent<HTMLInputElement>
   ) => {
     const file = event.target.files?.[0];
-
     if (!file) {
       return;
     }
 
     const validationError = validateImageFile(file);
-
     if (validationError) {
       onError(validationError);
       event.target.value = '';
@@ -212,10 +356,8 @@ const TeacherProfileCompletionForm = ({
     }
 
     setUploadingPhoto(true);
-
     try {
       const uploadUrl = await uploadService.uploadTeacherProfilePhoto(file);
-
       setFormData((prev) => ({
         ...prev,
         profilePhoto: toStorableBackendAssetPath(uploadUrl),
@@ -225,7 +367,6 @@ const TeacherProfileCompletionForm = ({
       clientLogger.error('Profile photo upload error:', error);
     } finally {
       setUploadingPhoto(false);
-
       if (profilePhotoInputRef.current) {
         profilePhotoInputRef.current.value = '';
       }
@@ -236,7 +377,6 @@ const TeacherProfileCompletionForm = ({
     event: ChangeEvent<HTMLInputElement>
   ) => {
     const selectedFiles = Array.from(event.target.files ?? []);
-
     if (selectedFiles.length === 0) {
       return;
     }
@@ -267,7 +407,6 @@ const TeacherProfileCompletionForm = ({
     }
 
     setUploadingCerts(true);
-
     try {
       const uploadedUrls = await Promise.all(
         selectedFiles.map((file) =>
@@ -287,27 +426,10 @@ const TeacherProfileCompletionForm = ({
       clientLogger.error('Certificate photos upload error:', error);
     } finally {
       setUploadingCerts(false);
-
       if (certificatePhotosInputRef.current) {
         certificatePhotosInputRef.current.value = '';
       }
     }
-  };
-
-  const removeCertificatePhoto = (index: number) => {
-    setFormData((prev) => ({
-      ...prev,
-      certificatePhotos: prev.certificatePhotos.filter(
-        (_, itemIndex) => itemIndex !== index
-      ),
-    }));
-  };
-
-  const removeProfilePhoto = () => {
-    setFormData((prev) => ({
-      ...prev,
-      profilePhoto: '',
-    }));
   };
 
   const buildSubmitPayload = (): TeacherProfileFormState => ({
@@ -315,9 +437,7 @@ const TeacherProfileCompletionForm = ({
     educationBackground: formData.educationBackground.trim(),
     teachingExperience: formData.teachingExperience.trim(),
     awards: formData.awards.map((award) => award.trim()).filter(Boolean),
-    specialties: formData.specialties
-      .map((specialty) => specialty.trim())
-      .filter(Boolean),
+    specialties: formData.specialties.map((specialty) => specialty.trim()).filter(Boolean),
     teachingStyle: formData.teachingStyle.trim(),
     languages: formData.languages.map((language) => language.trim()).filter(Boolean),
     yearsOfExperience: formData.yearsOfExperience,
@@ -341,24 +461,20 @@ const TeacherProfileCompletionForm = ({
       onError('Self introduction is required.');
       return;
     }
-
     if (payload.specialties.length === 0) {
       onError('Please add at least one specialty.');
       return;
     }
-
     if (payload.languages.length === 0) {
       onError('Please add at least one language.');
       return;
     }
 
     setIsSubmitting(true);
-
     try {
       const profile = isEditingApproved
         ? await teacherService.updateExtendedProfile(payload)
         : await teacherService.submitExtendedProfile(payload);
-
       onSuccess(profile);
     } catch (error) {
       onError(extractErrorMessage(error, 'Failed to submit profile'));
@@ -372,65 +488,39 @@ const TeacherProfileCompletionForm = ({
 
   return (
     <form onSubmit={handleSubmit} className="space-y-8" noValidate>
-      <section className="card shadow-lg" aria-labelledby="self-introduction-title">
-        <h3 id="self-introduction-title" className="mb-4 text-xl font-bold text-gray-900">
-          Self Introduction
-        </h3>
-        <label htmlFor="selfIntroduction" className="sr-only">
-          Self introduction
-        </label>
-        <textarea
-          id="selfIntroduction"
-          name="selfIntroduction"
-          value={formData.selfIntroduction}
-          onChange={handleInputChange}
-          placeholder="Tell students about yourself, your teaching philosophy, and what makes you a great teacher..."
-          className="input min-h-32"
-          required
-          maxLength={MAX_SELF_INTRODUCTION_LENGTH}
-          disabled={isBusy}
-          aria-describedby="self-introduction-help"
-        />
-        <p id="self-introduction-help" className="mt-2 text-sm text-gray-500">
-          {formData.selfIntroduction.length}/{MAX_SELF_INTRODUCTION_LENGTH} characters
-        </p>
-      </section>
+      <TextareaCardSection
+        id="selfIntroduction"
+        title="Self Introduction"
+        label="Self introduction"
+        value={formData.selfIntroduction}
+        placeholder="Tell students about yourself, your teaching philosophy, and what makes you a great teacher..."
+        minHeightClass="min-h-32"
+        required
+        maxLength={MAX_SELF_INTRODUCTION_LENGTH}
+        helpText={`${formData.selfIntroduction.length}/${MAX_SELF_INTRODUCTION_LENGTH} characters`}
+        disabled={isBusy}
+        onChange={handleInputChange}
+      />
 
-      <section className="card shadow-lg" aria-labelledby="education-background-title">
-        <h3 id="education-background-title" className="mb-4 text-xl font-bold text-gray-900">
-          Education Background
-        </h3>
-        <label htmlFor="educationBackground" className="sr-only">
-          Education background
-        </label>
-        <textarea
-          id="educationBackground"
-          name="educationBackground"
-          value={formData.educationBackground}
-          onChange={handleInputChange}
-          placeholder="Describe your educational qualifications, degrees, and institutions..."
-          className="input min-h-24"
-          disabled={isBusy}
-        />
-      </section>
+      <TextareaCardSection
+        id="educationBackground"
+        title="Education Background"
+        label="Education background"
+        value={formData.educationBackground}
+        placeholder="Describe your educational qualifications, degrees, and institutions..."
+        disabled={isBusy}
+        onChange={handleInputChange}
+      />
 
-      <section className="card shadow-lg" aria-labelledby="teaching-experience-title">
-        <h3 id="teaching-experience-title" className="mb-4 text-xl font-bold text-gray-900">
-          Teaching Experience
-        </h3>
-        <label htmlFor="teachingExperience" className="sr-only">
-          Teaching experience
-        </label>
-        <textarea
-          id="teachingExperience"
-          name="teachingExperience"
-          value={formData.teachingExperience}
-          onChange={handleInputChange}
-          placeholder="Describe your teaching experience, previous positions, and achievements..."
-          className="input min-h-24"
-          disabled={isBusy}
-        />
-      </section>
+      <TextareaCardSection
+        id="teachingExperience"
+        title="Teaching Experience"
+        label="Teaching experience"
+        value={formData.teachingExperience}
+        placeholder="Describe your teaching experience, previous positions, and achievements..."
+        disabled={isBusy}
+        onChange={handleInputChange}
+      />
 
       <section className="card shadow-lg" aria-labelledby="years-of-experience-title">
         <h3 id="years-of-experience-title" className="mb-4 text-xl font-bold text-gray-900">
@@ -454,195 +544,52 @@ const TeacherProfileCompletionForm = ({
         />
       </section>
 
-      <section className="card shadow-lg" aria-labelledby="teaching-style-title">
-        <h3 id="teaching-style-title" className="mb-4 text-xl font-bold text-gray-900">
-          Teaching Style
-        </h3>
-        <label htmlFor="teachingStyle" className="sr-only">
-          Teaching style
-        </label>
-        <textarea
-          id="teachingStyle"
-          name="teachingStyle"
-          value={formData.teachingStyle}
-          onChange={handleInputChange}
-          placeholder="Describe your teaching approach, methods, and how you engage students..."
-          className="input min-h-24"
-          disabled={isBusy}
-        />
-      </section>
+      <TextareaCardSection
+        id="teachingStyle"
+        title="Teaching Style"
+        label="Teaching style"
+        value={formData.teachingStyle}
+        placeholder="Describe your teaching approach, methods, and how you engage students..."
+        disabled={isBusy}
+        onChange={handleInputChange}
+      />
 
-      <section className="card shadow-lg" aria-labelledby="specialties-title">
-        <h3 id="specialties-title" className="mb-4 text-xl font-bold text-gray-900">
-          Specialties
-        </h3>
+      <EditableStringListSection
+        sectionId="specialties-title"
+        inputId="newSpecialty"
+        title="Specialties"
+        inputLabel="Add a specialty"
+        placeholder="Add a specialty, e.g., Mathematics or Web Development"
+        items={formData.specialties}
+        disabled={isBusy}
+        onAdd={(value) => addListItem('specialties', value)}
+        onRemove={(index) => removeListItem('specialties', index)}
+      />
 
-        <div className="mb-4 flex gap-2">
-          <label htmlFor="newSpecialty" className="sr-only">
-            Add a specialty
-          </label>
-          <input
-            id="newSpecialty"
-            type="text"
-            value={newSpecialty}
-            onChange={(event) => setNewSpecialty(event.target.value)}
-            placeholder="Add a specialty, e.g., Mathematics or Web Development"
-            className="input flex-1"
-            disabled={isBusy}
-            onKeyDown={(event) => {
-              if (event.key === 'Enter') {
-                event.preventDefault();
-                addListItem('specialties', newSpecialty, () => setNewSpecialty(''));
-              }
-            }}
-          />
-          <button
-            type="button"
-            onClick={() =>
-              addListItem('specialties', newSpecialty, () => setNewSpecialty(''))
-            }
-            disabled={isBusy || !newSpecialty.trim()}
-            className="btn-primary flex items-center gap-2"
-          >
-            <Plus className="h-4 w-4" aria-hidden="true" />
-            Add
-          </button>
-        </div>
+      <EditableStringListSection
+        sectionId="languages-title"
+        inputId="newLanguage"
+        title="Languages"
+        inputLabel="Add a language"
+        placeholder="Add a language, e.g., English or Malay"
+        items={formData.languages}
+        disabled={isBusy}
+        onAdd={(value) => addListItem('languages', value)}
+        onRemove={(index) => removeListItem('languages', index)}
+      />
 
-        <div className="flex flex-wrap gap-2">
-          {formData.specialties.map((specialty, index) => (
-            <div
-              key={`${specialty}-${index}`}
-              className="badge-primary flex items-center gap-2"
-            >
-              <span>{specialty}</span>
-              <button
-                type="button"
-                onClick={() => removeListItem('specialties', index)}
-                className="hover:text-red-600"
-                aria-label={`Remove ${specialty}`}
-                disabled={isBusy}
-              >
-                <X className="h-4 w-4" aria-hidden="true" />
-              </button>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      <section className="card shadow-lg" aria-labelledby="languages-title">
-        <h3 id="languages-title" className="mb-4 text-xl font-bold text-gray-900">
-          Languages
-        </h3>
-
-        <div className="mb-4 flex gap-2">
-          <label htmlFor="newLanguage" className="sr-only">
-            Add a language
-          </label>
-          <input
-            id="newLanguage"
-            type="text"
-            value={newLanguage}
-            onChange={(event) => setNewLanguage(event.target.value)}
-            placeholder="Add a language, e.g., English or Malay"
-            className="input flex-1"
-            disabled={isBusy}
-            onKeyDown={(event) => {
-              if (event.key === 'Enter') {
-                event.preventDefault();
-                addListItem('languages', newLanguage, () => setNewLanguage(''));
-              }
-            }}
-          />
-          <button
-            type="button"
-            onClick={() =>
-              addListItem('languages', newLanguage, () => setNewLanguage(''))
-            }
-            disabled={isBusy || !newLanguage.trim()}
-            className="btn-primary flex items-center gap-2"
-          >
-            <Plus className="h-4 w-4" aria-hidden="true" />
-            Add
-          </button>
-        </div>
-
-        <div className="flex flex-wrap gap-2">
-          {formData.languages.map((language, index) => (
-            <div
-              key={`${language}-${index}`}
-              className="badge-primary flex items-center gap-2"
-            >
-              <span>{language}</span>
-              <button
-                type="button"
-                onClick={() => removeListItem('languages', index)}
-                className="hover:text-red-600"
-                aria-label={`Remove ${language}`}
-                disabled={isBusy}
-              >
-                <X className="h-4 w-4" aria-hidden="true" />
-              </button>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      <section className="card shadow-lg" aria-labelledby="awards-title">
-        <h3 id="awards-title" className="mb-4 text-xl font-bold text-gray-900">
-          Awards & Honors
-        </h3>
-
-        <div className="mb-4 flex gap-2">
-          <label htmlFor="newAward" className="sr-only">
-            Add an award or honor
-          </label>
-          <input
-            id="newAward"
-            type="text"
-            value={newAward}
-            onChange={(event) => setNewAward(event.target.value)}
-            placeholder="Add an award or honor"
-            className="input flex-1"
-            disabled={isBusy}
-            onKeyDown={(event) => {
-              if (event.key === 'Enter') {
-                event.preventDefault();
-                addListItem('awards', newAward, () => setNewAward(''));
-              }
-            }}
-          />
-          <button
-            type="button"
-            onClick={() => addListItem('awards', newAward, () => setNewAward(''))}
-            disabled={isBusy || !newAward.trim()}
-            className="btn-primary flex items-center gap-2"
-          >
-            <Plus className="h-4 w-4" aria-hidden="true" />
-            Add
-          </button>
-        </div>
-
-        <div className="space-y-2">
-          {formData.awards.map((award, index) => (
-            <div
-              key={`${award}-${index}`}
-              className="flex items-center justify-between rounded-lg border border-gray-200 bg-gray-50 p-3"
-            >
-              <span className="text-gray-700">{award}</span>
-              <button
-                type="button"
-                onClick={() => removeListItem('awards', index)}
-                className="text-red-600 hover:text-red-700"
-                aria-label={`Remove ${award}`}
-                disabled={isBusy}
-              >
-                <X className="h-4 w-4" aria-hidden="true" />
-              </button>
-            </div>
-          ))}
-        </div>
-      </section>
+      <EditableStringListSection
+        sectionId="awards-title"
+        inputId="newAward"
+        title="Awards & Honors"
+        inputLabel="Add an award or honor"
+        placeholder="Add an award or honor"
+        items={formData.awards}
+        variant="row"
+        disabled={isBusy}
+        onAdd={(value) => addListItem('awards', value)}
+        onRemove={(index) => removeListItem('awards', index)}
+      />
 
       <section className="card shadow-lg" aria-labelledby="profile-photo-title">
         <h3 id="profile-photo-title" className="mb-4 text-xl font-bold text-gray-900">
@@ -659,7 +606,7 @@ const TeacherProfileCompletionForm = ({
               />
               <button
                 type="button"
-                onClick={removeProfilePhoto}
+                onClick={() => setFormData((prev) => ({ ...prev, profilePhoto: '' }))}
                 className="absolute right-2 top-2 rounded-full bg-red-600 p-1 text-white hover:bg-red-700"
                 aria-label="Remove profile photo"
                 disabled={isBusy}
@@ -721,7 +668,14 @@ const TeacherProfileCompletionForm = ({
                   </div>
                   <button
                     type="button"
-                    onClick={() => removeCertificatePhoto(index)}
+                    onClick={() =>
+                      setFormData((prev) => ({
+                        ...prev,
+                        certificatePhotos: prev.certificatePhotos.filter(
+                          (_, itemIndex) => itemIndex !== index
+                        ),
+                      }))
+                    }
                     className="flex-shrink-0 rounded-full bg-red-600 p-1 text-white hover:bg-red-700"
                     aria-label={`Remove certificate ${index + 1}`}
                     disabled={isBusy}

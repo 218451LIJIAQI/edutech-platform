@@ -2,19 +2,15 @@ import {
   Prisma,
   SupportTicketPriority,
   SupportTicketStatus,
-  UserRole,
 } from "@prisma/client";
 import prisma from "../config/database";
+import { NotFoundError, ValidationError } from "../utils/errors";
+import { normalizeOffsetPagination } from "./shared/pagination";
 import {
-  NotFoundError,
-  ValidationError,
-  AuthorizationError,
-} from "../utils/errors";
-import {
-  ensureUrlOrUploadPathForFolders,
-  normalizeOptionalUrlOrPath,
-} from "../utils/url-or-path";
-import { sanitizeUserPlainText } from "../utils/sanitize-user-content";
+  ensureActiveAdmin,
+  normalizeRequiredSanitizedText,
+  normalizeSupportAttachment,
+} from "./shared/service-helpers";
 
 const ticketUserSelect = {
   id: true,
@@ -24,25 +20,17 @@ const ticketUserSelect = {
 } satisfies Prisma.UserSelect;
 
 const ticketWithDetailsInclude = {
-  user: {
-    select: ticketUserSelect,
-  },
+  user: { select: ticketUserSelect },
   messages: {
     include: {
-      sender: {
-        select: ticketUserSelect,
-      },
+      sender: { select: ticketUserSelect },
     },
-    orderBy: {
-      createdAt: "asc",
-    },
+    orderBy: { createdAt: "asc" },
   },
 } satisfies Prisma.SupportTicketInclude;
 
 const messageWithSenderInclude = {
-  sender: {
-    select: ticketUserSelect,
-  },
+  sender: { select: ticketUserSelect },
 } satisfies Prisma.SupportTicketMessageInclude;
 
 type SupportTicketWithDetails = Prisma.SupportTicketGetPayload<{
@@ -63,108 +51,27 @@ const SUPPORT_TICKET_PRIORITIES = Object.values(
 const MAX_MESSAGE_LENGTH = 5000;
 const MAX_RESOLUTION_LENGTH = 5000;
 
-const normalizeRequiredText = (
-  value: string | undefined,
-  fieldName: string,
-): string => {
-  const normalizedValue =
-    value === undefined ? undefined : sanitizeUserPlainText(value);
+const parseOptionalTicketEnum = <T extends string>(
+  raw: string | undefined,
+  allowed: T[],
+  label: string,
+): T | undefined => {
+  const normalized = raw?.trim().toUpperCase();
+  if (!normalized) return undefined;
 
-  if (!normalizedValue) {
-    throw new ValidationError(`${fieldName} is required`);
-  }
-
-  return normalizedValue;
-};
-
-const normalizeLongText = (
-  value: string | undefined,
-  fieldName: string,
-  maxLength: number,
-): string => {
-  const normalizedValue = normalizeRequiredText(value, fieldName);
-
-  if (normalizedValue.length > maxLength) {
+  if (!allowed.includes(normalized as T)) {
     throw new ValidationError(
-      `${fieldName} must not exceed ${maxLength} characters`,
+      `Invalid ${label}. Allowed values: ${allowed.join(", ")}`,
     );
   }
-
-  return normalizedValue;
+  return normalized as T;
 };
-
-const parseOptionalTicketStatus = (
-  status?: string,
-): SupportTicketStatus | undefined => {
-  const normalizedStatus = status?.trim().toUpperCase();
-
-  if (!normalizedStatus) {
-    return undefined;
-  }
-
-  if (
-    !SUPPORT_TICKET_STATUSES.includes(normalizedStatus as SupportTicketStatus)
-  ) {
-    throw new ValidationError(
-      `Invalid support ticket status. Allowed values: ${SUPPORT_TICKET_STATUSES.join(", ")}`,
-    );
-  }
-
-  return normalizedStatus as SupportTicketStatus;
-};
-
-const parseOptionalTicketPriority = (
-  priority?: string,
-): SupportTicketPriority | undefined => {
-  const normalizedPriority = priority?.trim().toUpperCase();
-
-  if (!normalizedPriority) {
-    return undefined;
-  }
-
-  if (
-    !SUPPORT_TICKET_PRIORITIES.includes(
-      normalizedPriority as SupportTicketPriority,
-    )
-  ) {
-    throw new ValidationError(
-      `Invalid support ticket priority. Allowed values: ${SUPPORT_TICKET_PRIORITIES.join(", ")}`,
-    );
-  }
-
-  return normalizedPriority as SupportTicketPriority;
-};
-
-const normalizePagination = (
-  limit: number = 50,
-  offset: number = 0,
-): { safeLimit: number; safeOffset: number } => ({
-  safeLimit: Number.isFinite(limit)
-    ? Math.min(Math.max(Math.floor(limit), 1), 100)
-    : 50,
-  safeOffset: Number.isFinite(offset) && offset >= 0 ? Math.floor(offset) : 0,
-});
-
-const normalizeSupportAttachment = (
-  attachment?: string,
-): string | null | undefined =>
-  normalizeOptionalUrlOrPath(
-    attachment
-      ? ensureUrlOrUploadPathForFolders(
-          attachment,
-          ["support-attachments"],
-          "Support attachments must be an external URL or use the /uploads/support-attachments/ folder",
-        )
-      : attachment,
-  );
 
 const fetchTicketWithDetails = async (
   ticketId: string,
 ): Promise<SupportTicketWithDetails> => {
   const ticket = await prisma.supportTicket.findUnique({
-    where: {
-      id: ticketId,
-    },
+    where: { id: ticketId },
     include: ticketWithDetailsInclude,
   });
 
@@ -175,57 +82,32 @@ const fetchTicketWithDetails = async (
   return ticket;
 };
 
-const ensureActiveAdmin = async (adminId: string): Promise<void> => {
-  const normalizedAdminId = normalizeRequiredText(adminId, "Admin ID");
-
-  const admin = await prisma.user.findUnique({
-    where: {
-      id: normalizedAdminId,
-    },
-    select: {
-      id: true,
-      role: true,
-      isActive: true,
-    },
-  });
-
-  if (!admin) {
-    throw new NotFoundError("Admin user not found");
-  }
-
-  if (admin.role !== UserRole.ADMIN) {
-    throw new AuthorizationError("Only admins can manage support tickets");
-  }
-
-  if (!admin.isActive) {
-    throw new AuthorizationError(
-      "Inactive admins cannot manage support tickets",
-    );
-  }
-};
-
-/**
- * Admin Support Ticket Management Service
- * Handles support ticket management by admins.
- */
 class SupportAdminService {
-  /**
-   * Get all support tickets with optional filters.
-   */
   async getAllTickets(
     status?: string,
     priority?: string,
-    limit: number = 50,
-    offset: number = 0,
+    limit = 50,
+    offset = 0,
   ): Promise<{
     tickets: SupportTicketWithDetails[];
     total: number;
     limit: number;
     offset: number;
   }> {
-    const parsedStatus = parseOptionalTicketStatus(status);
-    const parsedPriority = parseOptionalTicketPriority(priority);
-    const { safeLimit, safeOffset } = normalizePagination(limit, offset);
+    const parsedStatus = parseOptionalTicketEnum(
+      status,
+      SUPPORT_TICKET_STATUSES,
+      "support ticket status",
+    );
+    const parsedPriority = parseOptionalTicketEnum(
+      priority,
+      SUPPORT_TICKET_PRIORITIES,
+      "support ticket priority",
+    );
+    const pagination = normalizeOffsetPagination(limit, offset, {
+      defaultLimit: 50,
+      maxLimit: 100,
+    });
 
     const where: Prisma.SupportTicketWhereInput = {
       ...(parsedStatus ? { status: parsedStatus } : {}),
@@ -236,57 +118,44 @@ class SupportAdminService {
       prisma.supportTicket.findMany({
         where,
         include: ticketWithDetailsInclude,
-        orderBy: {
-          updatedAt: "desc",
-        },
-        take: safeLimit,
-        skip: safeOffset,
+        orderBy: { updatedAt: "desc" },
+        take: pagination.limit,
+        skip: pagination.offset,
       }),
-      prisma.supportTicket.count({
-        where,
-      }),
+      prisma.supportTicket.count({ where }),
     ]);
 
     return {
       tickets,
       total,
-      limit: safeLimit,
-      offset: safeOffset,
+      limit: pagination.limit,
+      offset: pagination.offset,
     };
   }
 
-  /**
-   * Get support ticket by ID.
-   */
   async getTicketById(ticketId: string): Promise<SupportTicketWithDetails> {
-    const normalizedTicketId = normalizeRequiredText(
-      ticketId,
-      "Support ticket ID",
+    return fetchTicketWithDetails(
+      normalizeRequiredSanitizedText(ticketId, "Support ticket ID"),
     );
-    return fetchTicketWithDetails(normalizedTicketId);
   }
 
-  /**
-   * Assign a support ticket to an admin.
-   */
   async assignTicket(
     ticketId: string,
     adminId: string,
   ): Promise<SupportTicketWithDetails> {
-    const normalizedTicketId = normalizeRequiredText(
+    const normalizedTicketId = normalizeRequiredSanitizedText(
       ticketId,
       "Support ticket ID",
     );
-    const normalizedAdminId = normalizeRequiredText(adminId, "Admin ID");
-
-    await ensureActiveAdmin(normalizedAdminId);
+    const normalizedAdminId = await ensureActiveAdmin(
+      adminId,
+      "manage support tickets",
+    );
 
     const updatedCount = await prisma.supportTicket.updateMany({
       where: {
         id: normalizedTicketId,
-        status: {
-          not: SupportTicketStatus.CLOSED,
-        },
+        status: { not: SupportTicketStatus.CLOSED },
       },
       data: {
         assignedTo: normalizedAdminId,
@@ -298,13 +167,8 @@ class SupportAdminService {
 
     if (updatedCount.count !== 1) {
       const existingTicket = await prisma.supportTicket.findUnique({
-        where: {
-          id: normalizedTicketId,
-        },
-        select: {
-          id: true,
-          status: true,
-        },
+        where: { id: normalizedTicketId },
+        select: { id: true },
       });
 
       if (!existingTicket) {
@@ -317,39 +181,31 @@ class SupportAdminService {
     return fetchTicketWithDetails(normalizedTicketId);
   }
 
-  /**
-   * Add an admin response to a support ticket.
-   */
   async addAdminResponse(
     ticketId: string,
     adminId: string,
     message: string,
     attachment?: string,
   ): Promise<SupportTicketMessageWithSender> {
-    const normalizedTicketId = normalizeRequiredText(
+    const normalizedTicketId = normalizeRequiredSanitizedText(
       ticketId,
       "Support ticket ID",
     );
-    const normalizedAdminId = normalizeRequiredText(adminId, "Admin ID");
-    const normalizedMessage = normalizeLongText(
+    const normalizedAdminId = await ensureActiveAdmin(
+      adminId,
+      "manage support tickets",
+    );
+    const normalizedMessage = normalizeRequiredSanitizedText(
       message,
       "Message",
       MAX_MESSAGE_LENGTH,
     );
     const normalizedAttachment = normalizeSupportAttachment(attachment);
 
-    await ensureActiveAdmin(normalizedAdminId);
-
     return prisma.$transaction(async (tx) => {
       const ticket = await tx.supportTicket.findUnique({
-        where: {
-          id: normalizedTicketId,
-        },
-        select: {
-          id: true,
-          status: true,
-          assignedTo: true,
-        },
+        where: { id: normalizedTicketId },
+        select: { id: true, status: true, assignedTo: true },
       });
 
       if (!ticket) {
@@ -373,17 +229,12 @@ class SupportAdminService {
       });
 
       await tx.supportTicket.update({
-        where: {
-          id: normalizedTicketId,
-        },
+        where: { id: normalizedTicketId },
         data: {
           assignedTo: ticket.assignedTo ?? normalizedAdminId,
           status: SupportTicketStatus.IN_PROGRESS,
           ...(ticket.status === SupportTicketStatus.RESOLVED
-            ? {
-                resolution: null,
-                resolvedAt: null,
-              }
+            ? { resolution: null, resolvedAt: null }
             : {}),
         },
       });
@@ -392,18 +243,15 @@ class SupportAdminService {
     });
   }
 
-  /**
-   * Resolve a support ticket.
-   */
   async resolveTicket(
     ticketId: string,
     resolution: string,
   ): Promise<SupportTicketWithDetails> {
-    const normalizedTicketId = normalizeRequiredText(
+    const normalizedTicketId = normalizeRequiredSanitizedText(
       ticketId,
       "Support ticket ID",
     );
-    const normalizedResolution = normalizeLongText(
+    const normalizedResolution = normalizeRequiredSanitizedText(
       resolution,
       "Resolution",
       MAX_RESOLUTION_LENGTH,
@@ -425,13 +273,8 @@ class SupportAdminService {
 
     if (updatedCount.count !== 1) {
       const existingTicket = await prisma.supportTicket.findUnique({
-        where: {
-          id: normalizedTicketId,
-        },
-        select: {
-          id: true,
-          status: true,
-        },
+        where: { id: normalizedTicketId },
+        select: { id: true, status: true },
       });
 
       if (!existingTicket) {
@@ -448,24 +291,15 @@ class SupportAdminService {
     return fetchTicketWithDetails(normalizedTicketId);
   }
 
-  /**
-   * Close a support ticket.
-   */
   async closeTicket(ticketId: string): Promise<SupportTicketWithDetails> {
-    const normalizedTicketId = normalizeRequiredText(
+    const normalizedTicketId = normalizeRequiredSanitizedText(
       ticketId,
       "Support ticket ID",
     );
 
     const ticket = await prisma.supportTicket.findUnique({
-      where: {
-        id: normalizedTicketId,
-      },
-      select: {
-        id: true,
-        status: true,
-        resolvedAt: true,
-      },
+      where: { id: normalizedTicketId },
+      select: { id: true, status: true, resolvedAt: true },
     });
 
     if (!ticket) {
@@ -477,9 +311,7 @@ class SupportAdminService {
     }
 
     await prisma.supportTicket.update({
-      where: {
-        id: normalizedTicketId,
-      },
+      where: { id: normalizedTicketId },
       data: {
         status: SupportTicketStatus.CLOSED,
         resolvedAt: ticket.resolvedAt ?? new Date(),
@@ -489,9 +321,6 @@ class SupportAdminService {
     return fetchTicketWithDetails(normalizedTicketId);
   }
 
-  /**
-   * Get support ticket statistics.
-   */
   async getTicketStats(): Promise<{
     open: number;
     inProgress: number;
@@ -501,9 +330,7 @@ class SupportAdminService {
   }> {
     const groupedTickets = await prisma.supportTicket.groupBy({
       by: ["status"],
-      _count: {
-        _all: true,
-      },
+      _count: { _all: true },
     });
 
     const stats = {
@@ -517,7 +344,6 @@ class SupportAdminService {
     for (const item of groupedTickets) {
       const count = item._count._all;
       stats.total += count;
-
       if (item.status === SupportTicketStatus.OPEN) stats.open = count;
       if (item.status === SupportTicketStatus.IN_PROGRESS)
         stats.inProgress = count;

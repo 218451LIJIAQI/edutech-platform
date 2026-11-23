@@ -32,6 +32,7 @@ import {
   SUPPORT_ATTACHMENT_ACCEPT,
   buildSupportConversationEntries,
   getSupportAttachmentLabel,
+  getSupportConversationPreview,
   validateSupportAttachmentFile,
 } from '@/utils/support-thread';
 
@@ -43,10 +44,21 @@ interface CustomerServiceModalProps {
 
 type ActiveTab = 'create' | 'tickets';
 
-type PendingAttachment = {
+interface PendingAttachment {
   readonly name: string;
   readonly url: string;
-};
+}
+
+const SUPPORT_CATEGORY_OPTIONS: ReadonlyArray<{ value: string; label: string }> = [
+  { value: 'GENERAL', label: 'General Inquiry' },
+  { value: 'REFUND', label: 'Refund Request' },
+  { value: 'PAYMENT', label: 'Payment & Billing' },
+  { value: 'COURSE_CONTENT', label: 'Course Content' },
+  { value: 'QUALITY', label: 'Quality Issue' },
+  { value: 'TECHNICAL', label: 'Technical Issue' },
+  { value: 'ACCOUNT', label: 'Account & Profile' },
+  { value: 'OTHER', label: 'Other' },
+];
 
 const getTicketStatusClass = (status: SupportTicketStatus) => {
   switch (status) {
@@ -62,20 +74,92 @@ const getTicketStatusClass = (status: SupportTicketStatus) => {
   }
 };
 
-const formatDateTime = (value: string | Date) => {
-  return new Date(value).toLocaleString();
+const formatDateTime = (value: string | Date) =>
+  new Date(value).toLocaleString();
+
+interface AttachmentFieldProps {
+  attachment: PendingAttachment | null;
+  isUploading: boolean;
+  disabled: boolean;
+  onSelectFile: (file: File) => void;
+  onClear: () => void;
+}
+
+const AttachmentField = ({
+  attachment,
+  isUploading,
+  disabled,
+  onSelectFile,
+  onClear,
+}: AttachmentFieldProps) => {
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  const handleChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      onSelectFile(file);
+    }
+    event.target.value = '';
+  };
+
+  return (
+    <>
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept={SUPPORT_ATTACHMENT_ACCEPT}
+        className="hidden"
+        onChange={handleChange}
+      />
+
+      <button
+        type="button"
+        onClick={() => fileInputRef.current?.click()}
+        disabled={disabled}
+        className="btn-outline disabled:cursor-not-allowed disabled:opacity-50"
+      >
+        {isUploading ? (
+          <>
+            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            Uploading...
+          </>
+        ) : (
+          <>
+            <Paperclip className="mr-2 h-4 w-4" />
+            Attach file
+          </>
+        )}
+      </button>
+
+      {attachment ? (
+        <div className="inline-flex max-w-full items-center gap-2 rounded-lg border border-primary-100 bg-primary-50 px-3 py-2 text-xs text-primary-700">
+          <Paperclip className="h-3.5 w-3.5 flex-shrink-0" />
+          <span className="truncate">{attachment.name}</span>
+          <button
+            type="button"
+            onClick={onClear}
+            disabled={disabled}
+            className="font-semibold text-primary-500 hover:text-primary-700 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            Remove
+          </button>
+        </div>
+      ) : null}
+    </>
+  );
 };
 
 /**
- * CustomerServiceModal allows users to create support tickets,
- * review existing tickets, reply to conversations, upload attachments,
- * and close tickets safely.
+ * Unified Customer Support Modal for creating tickets, reviewing conversations,
+ * replying with optional protected attachments, and closing tickets safely.
  */
 const CustomerServiceModal = ({
   isOpen,
   onClose,
   orderId,
 }: CustomerServiceModalProps) => {
+  const defaultCategory = orderId ? 'REFUND' : 'GENERAL';
+
   const titleId = useId();
   const descriptionId = useId();
   const subjectInputId = useId();
@@ -86,8 +170,6 @@ const CustomerServiceModal = ({
   const modalRef = useRef<HTMLDivElement | null>(null);
   const closeButtonRef = useRef<HTMLButtonElement | null>(null);
   const subjectInputRef = useRef<HTMLInputElement | null>(null);
-  const createAttachmentInputRef = useRef<HTMLInputElement | null>(null);
-  const messageAttachmentInputRef = useRef<HTMLInputElement | null>(null);
 
   const [activeTab, setActiveTab] = useState<ActiveTab>('tickets');
   const [tickets, setTickets] = useState<SupportTicket[]>([]);
@@ -101,7 +183,7 @@ const CustomerServiceModal = ({
 
   const [subject, setSubject] = useState('');
   const [description, setDescription] = useState('');
-  const [category, setCategory] = useState('OTHER');
+  const [category, setCategory] = useState(defaultCategory);
   const [priority, setPriority] = useState<SupportTicketPriority>(
     SupportTicketPriority.MEDIUM
   );
@@ -122,10 +204,10 @@ const CustomerServiceModal = ({
   const resetCreateForm = useCallback(() => {
     setSubject('');
     setDescription('');
-    setCategory('OTHER');
+    setCategory(defaultCategory);
     setPriority(SupportTicketPriority.MEDIUM);
     setNewTicketAttachment(null);
-  }, []);
+  }, [defaultCategory]);
 
   const handleClose = useCallback(() => {
     if (!isBusy && !showCloseTicketModal) {
@@ -144,10 +226,14 @@ const CustomerServiceModal = ({
 
   const loadTickets = useCallback(async () => {
     setLoading(true);
-
     try {
       const data = await supportService.getUserTickets();
-      setTickets(data);
+      setTickets(
+        [...data].sort(
+          (left, right) =>
+            new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime()
+        )
+      );
     } catch (error) {
       toast.error(extractErrorMessage(error, 'Failed to load tickets'));
     } finally {
@@ -157,7 +243,6 @@ const CustomerServiceModal = ({
 
   const loadTicketDetails = useCallback(async (ticketId: string) => {
     setLoading(true);
-
     try {
       const data = await supportService.getTicketById(ticketId);
       setSelectedTicket(data);
@@ -173,9 +258,10 @@ const CustomerServiceModal = ({
       setActiveTab('tickets');
       setSelectedTicket(null);
       setMessageAttachment(null);
+      setCategory(defaultCategory);
       void loadTickets();
     }
-  }, [isOpen, loadTickets]);
+  }, [defaultCategory, isOpen, loadTickets]);
 
   useEffect(() => {
     setMessageAttachment(null);
@@ -195,15 +281,12 @@ const CustomerServiceModal = ({
       }
 
       setUploading(true);
-
       try {
         const result = await uploadService.uploadFile(file, 'support-attachments');
-
         setAttachment({
           name: result.filename || file.name,
           url: toStorableBackendAssetPath(result.url),
         });
-
         toast.success('Attachment uploaded');
       } catch (error) {
         toast.error(extractErrorMessage(error, 'Failed to upload attachment'));
@@ -213,42 +296,6 @@ const CustomerServiceModal = ({
     },
     []
   );
-
-  const handleCreateAttachmentChange = async (
-    event: ChangeEvent<HTMLInputElement>
-  ) => {
-    const file = event.target.files?.[0];
-
-    if (!file) {
-      return;
-    }
-
-    await uploadAttachment(
-      file,
-      setIsUploadingCreateAttachment,
-      setNewTicketAttachment
-    );
-
-    event.target.value = '';
-  };
-
-  const handleMessageAttachmentChange = async (
-    event: ChangeEvent<HTMLInputElement>
-  ) => {
-    const file = event.target.files?.[0];
-
-    if (!file) {
-      return;
-    }
-
-    await uploadAttachment(
-      file,
-      setIsUploadingMessageAttachment,
-      setMessageAttachment
-    );
-
-    event.target.value = '';
-  };
 
   const handleCreateTicket = async () => {
     const trimmedSubject = subject.trim();
@@ -264,9 +311,8 @@ const CustomerServiceModal = ({
     }
 
     setWorking(true);
-
     try {
-      await supportService.createTicket(
+      const createdTicket = await supportService.createTicket(
         trimmedSubject,
         trimmedDescription,
         category,
@@ -279,6 +325,7 @@ const CustomerServiceModal = ({
       resetCreateForm();
       setActiveTab('tickets');
       await loadTickets();
+      setSelectedTicket(createdTicket);
     } catch (error) {
       toast.error(extractErrorMessage(error, 'Failed to create ticket'));
     } finally {
@@ -304,7 +351,6 @@ const CustomerServiceModal = ({
     }
 
     setWorking(true);
-
     try {
       await supportService.addMessage(
         selectedTicket.id,
@@ -315,7 +361,7 @@ const CustomerServiceModal = ({
       toast.success('Message sent');
       setNewMessage('');
       setMessageAttachment(null);
-      await loadTicketDetails(selectedTicket.id);
+      await Promise.all([loadTicketDetails(selectedTicket.id), loadTickets()]);
     } catch (error) {
       toast.error(extractErrorMessage(error, 'Failed to send message'));
     } finally {
@@ -329,7 +375,6 @@ const CustomerServiceModal = ({
     }
 
     setWorking(true);
-
     try {
       await supportService.closeTicket(selectedTicket.id);
       toast.success('Ticket closed');
@@ -355,9 +400,7 @@ const CustomerServiceModal = ({
     if (isBusy) {
       return;
     }
-
     setActiveTab(tab);
-
     if (tab === 'create') {
       setSelectedTicket(null);
       setMessageAttachment(null);
@@ -385,9 +428,13 @@ const CustomerServiceModal = ({
             <Headphones className="h-7 w-7 text-primary-100" aria-hidden="true" />
             <div>
               <h2 id={titleId} className="text-2xl font-bold">
-                Customer Service
+                Customer Support
               </h2>
-              <p className="text-sm text-primary-100">Get help with your orders</p>
+              <p className="text-sm text-primary-100">
+                {orderId
+                  ? 'Get help with your order'
+                  : 'Review your tickets or submit a new request'}
+              </p>
             </div>
           </div>
 
@@ -397,7 +444,7 @@ const CustomerServiceModal = ({
             onClick={handleClose}
             disabled={isBusy}
             className="rounded-full p-2 text-white transition-colors hover:bg-primary-600 disabled:cursor-not-allowed disabled:opacity-50"
-            aria-label="Close customer service modal"
+            aria-label="Close customer support modal"
           >
             <X className="h-5 w-5" />
           </button>
@@ -409,35 +456,23 @@ const CustomerServiceModal = ({
         </p>
 
         <div className="flex border-b bg-gray-50" role="tablist">
-          <button
-            type="button"
-            role="tab"
-            aria-selected={activeTab === 'tickets'}
-            onClick={() => handleChangeTab('tickets')}
-            disabled={isBusy}
-            className={`flex-1 px-6 py-4 font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
-              activeTab === 'tickets'
-                ? 'border-b-2 border-primary-600 bg-white text-primary-600'
-                : 'text-gray-600 hover:text-gray-900'
-            }`}
-          >
-            My Tickets ({tickets.length})
-          </button>
-
-          <button
-            type="button"
-            role="tab"
-            aria-selected={activeTab === 'create'}
-            onClick={() => handleChangeTab('create')}
-            disabled={isBusy}
-            className={`flex-1 px-6 py-4 font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
-              activeTab === 'create'
-                ? 'border-b-2 border-primary-600 bg-white text-primary-600'
-                : 'text-gray-600 hover:text-gray-900'
-            }`}
-          >
-            Create Ticket
-          </button>
+          {(['tickets', 'create'] as const).map((tab) => (
+            <button
+              key={tab}
+              type="button"
+              role="tab"
+              aria-selected={activeTab === tab}
+              onClick={() => handleChangeTab(tab)}
+              disabled={isBusy}
+              className={`flex-1 px-6 py-4 font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
+                activeTab === tab
+                  ? 'border-b-2 border-primary-600 bg-white text-primary-600'
+                  : 'text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              {tab === 'tickets' ? `My Tickets (${tickets.length})` : 'Create Ticket'}
+            </button>
+          ))}
         </div>
 
         <div className="flex-1 overflow-y-auto">
@@ -469,7 +504,7 @@ const CustomerServiceModal = ({
                           selectedTicket.status
                         )}`}
                       >
-                        {selectedTicket.status}
+                        {selectedTicket.status.replace(/_/g, ' ')}
                       </span>
                     </div>
 
@@ -503,8 +538,7 @@ const CustomerServiceModal = ({
                                 <span className="text-sm font-semibold text-gray-900">
                                   {isCustomerMessage
                                     ? 'You'
-                                    : entry.sender?.firstName &&
-                                        entry.sender?.lastName
+                                    : entry.sender?.firstName && entry.sender?.lastName
                                       ? `${entry.sender.firstName} ${entry.sender.lastName}`
                                       : 'Support'}
                                 </span>
@@ -549,80 +583,52 @@ const CustomerServiceModal = ({
                   </div>
 
                   {selectedTicket.status !== SupportTicketStatus.CLOSED ? (
-                    <div className="space-y-3">
-                      <textarea
-                        value={newMessage}
-                        onChange={(event) => setNewMessage(event.target.value)}
-                        placeholder="Type your message..."
-                        className="input min-h-[60px] w-full resize-none"
-                        disabled={isBusy}
-                        rows={3}
-                      />
-
-                      <input
-                        ref={messageAttachmentInputRef}
-                        type="file"
-                        accept={SUPPORT_ATTACHMENT_ACCEPT}
-                        className="hidden"
-                        onChange={(event) => void handleMessageAttachmentChange(event)}
-                      />
-
-                      <div className="flex flex-wrap items-center gap-2">
-                        <button
-                          type="button"
-                          onClick={() => messageAttachmentInputRef.current?.click()}
+                    <>
+                      <div className="space-y-3">
+                        <textarea
+                          value={newMessage}
+                          onChange={(event) => setNewMessage(event.target.value)}
+                          placeholder="Type your message..."
+                          className="input min-h-[60px] w-full resize-none"
                           disabled={isBusy}
-                          className="btn-outline disabled:cursor-not-allowed disabled:opacity-50"
-                        >
-                          {isUploadingMessageAttachment ? (
-                            <>
-                              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                              Uploading...
-                            </>
-                          ) : (
-                            <>
-                              <Paperclip className="mr-2 h-4 w-4" />
-                              Attach file
-                            </>
-                          )}
-                        </button>
+                          rows={3}
+                        />
 
-                        {messageAttachment ? (
-                          <div className="inline-flex max-w-full items-center gap-2 rounded-lg border border-primary-100 bg-primary-50 px-3 py-2 text-xs text-primary-700">
-                            <Paperclip className="h-3.5 w-3.5 flex-shrink-0" />
-                            <span className="truncate">{messageAttachment.name}</span>
-                            <button
-                              type="button"
-                              onClick={() => setMessageAttachment(null)}
-                              disabled={isBusy}
-                              className="font-semibold text-primary-500 hover:text-primary-700 disabled:cursor-not-allowed disabled:opacity-50"
-                            >
-                              Remove
-                            </button>
-                          </div>
-                        ) : null}
+                        <div className="flex flex-wrap items-center gap-2">
+                          <AttachmentField
+                            attachment={messageAttachment}
+                            isUploading={isUploadingMessageAttachment}
+                            disabled={isBusy}
+                            onSelectFile={(file) =>
+                              void uploadAttachment(
+                                file,
+                                setIsUploadingMessageAttachment,
+                                setMessageAttachment
+                              )
+                            }
+                            onClear={() => setMessageAttachment(null)}
+                          />
 
-                        <button
-                          type="button"
-                          onClick={() => void handleSendMessage()}
-                          disabled={isBusy || !newMessage.trim()}
-                          className="btn-primary disabled:cursor-not-allowed disabled:opacity-50"
-                        >
-                          {working ? 'Sending...' : 'Send'}
-                        </button>
+                          <button
+                            type="button"
+                            onClick={() => void handleSendMessage()}
+                            disabled={isBusy || !newMessage.trim()}
+                            className="btn-primary disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            {working ? 'Sending...' : 'Send'}
+                          </button>
+                        </div>
                       </div>
-                    </div>
-                  ) : null}
 
-                  {selectedTicket.status !== SupportTicketStatus.CLOSED ? (
-                    <button
-                      type="button"
-                      onClick={() => setShowCloseTicketModal(true)}
-                      disabled={isBusy}
-                      className="btn-outline w-full disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                      Close Ticket
-                    </button>
+                      <button
+                        type="button"
+                        onClick={() => setShowCloseTicketModal(true)}
+                        disabled={isBusy}
+                        className="btn-outline w-full disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        Close Ticket
+                      </button>
+                    </>
                   ) : null}
                 </div>
               ) : tickets.length === 0 ? (
@@ -655,12 +661,15 @@ const CustomerServiceModal = ({
                             ticket.status
                           )}`}
                         >
-                          {ticket.status}
+                          {ticket.status.replace(/_/g, ' ')}
                         </span>
                       </div>
 
                       <p className="mb-1 text-sm font-semibold text-gray-700">
                         {ticket.subject}
+                      </p>
+                      <p className="mb-1 truncate text-xs text-gray-600">
+                        {getSupportConversationPreview(ticket, 72) || ticket.category}
                       </p>
                       <p className="text-xs text-gray-500">
                         Last updated: {formatDateTime(ticket.updatedAt)}
@@ -706,12 +715,11 @@ const CustomerServiceModal = ({
                   className="input w-full"
                   disabled={isBusy}
                 >
-                  <option value="REFUND">Refund Request</option>
-                  <option value="QUALITY">Quality Issue</option>
-                  <option value="TECHNICAL">Technical Issue</option>
-                  <option value="COURSE_CONTENT">Course Content</option>
-                  <option value="PAYMENT">Payment Issue</option>
-                  <option value="OTHER">Other</option>
+                  {SUPPORT_CATEGORY_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
                 </select>
               </div>
 
@@ -757,52 +765,24 @@ const CustomerServiceModal = ({
               </div>
 
               <div>
-                <label className="mb-2 block text-sm font-semibold text-gray-900">
+                <span className="mb-2 block text-sm font-semibold text-gray-900">
                   Attachment
-                </label>
-
-                <input
-                  ref={createAttachmentInputRef}
-                  type="file"
-                  accept={SUPPORT_ATTACHMENT_ACCEPT}
-                  className="hidden"
-                  onChange={(event) => void handleCreateAttachmentChange(event)}
-                />
+                </span>
 
                 <div className="flex flex-wrap items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => createAttachmentInputRef.current?.click()}
+                  <AttachmentField
+                    attachment={newTicketAttachment}
+                    isUploading={isUploadingCreateAttachment}
                     disabled={isBusy}
-                    className="btn-outline disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    {isUploadingCreateAttachment ? (
-                      <>
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        Uploading...
-                      </>
-                    ) : (
-                      <>
-                        <Paperclip className="mr-2 h-4 w-4" />
-                        Attach file
-                      </>
-                    )}
-                  </button>
-
-                  {newTicketAttachment ? (
-                    <div className="inline-flex max-w-full items-center gap-2 rounded-lg border border-primary-100 bg-primary-50 px-3 py-2 text-xs text-primary-700">
-                      <Paperclip className="h-3.5 w-3.5 flex-shrink-0" />
-                      <span className="truncate">{newTicketAttachment.name}</span>
-                      <button
-                        type="button"
-                        onClick={() => setNewTicketAttachment(null)}
-                        disabled={isBusy}
-                        className="font-semibold text-primary-500 hover:text-primary-700 disabled:cursor-not-allowed disabled:opacity-50"
-                      >
-                        Remove
-                      </button>
-                    </div>
-                  ) : null}
+                    onSelectFile={(file) =>
+                      void uploadAttachment(
+                        file,
+                        setIsUploadingCreateAttachment,
+                        setNewTicketAttachment
+                      )
+                    }
+                    onClear={() => setNewTicketAttachment(null)}
+                  />
                 </div>
 
                 <p className="mt-2 text-xs text-gray-500">

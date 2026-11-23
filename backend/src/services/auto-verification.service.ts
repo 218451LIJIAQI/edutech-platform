@@ -45,7 +45,7 @@ interface VerificationCheckResult {
   reason?: string;
 }
 
-export const checkDocumentTypeAccepted = (
+const checkDocumentTypeAccepted = (
   documentType: string,
 ): VerificationCheckResult => {
   const normalizedType = documentType
@@ -80,10 +80,7 @@ const checkDocumentUrlValid = (documentUrl: string): VerificationCheckResult => 
     return { passed: false, reason: "Document URL is empty" };
   }
 
-  const isExternalUrl =
-    trimmedUrl.startsWith("http://") || trimmedUrl.startsWith("https://");
-
-  if (isExternalUrl) {
+  if (trimmedUrl.startsWith("http://") || trimmedUrl.startsWith("https://")) {
     try {
       new URL(trimmedUrl);
       return { passed: true };
@@ -96,15 +93,13 @@ const checkDocumentUrlValid = (documentUrl: string): VerificationCheckResult => 
     trimmedUrl.toLowerCase().endsWith(ext),
   );
 
-  if (!hasValidExtension) {
-    return {
-      passed: false,
-      reason:
-        "Document file does not have a recognized extension. Manual review required.",
-    };
-  }
-
-  return { passed: true };
+  return hasValidExtension
+    ? { passed: true }
+    : {
+        passed: false,
+        reason:
+          "Document file does not have a recognized extension. Manual review required.",
+      };
 };
 
 const checkNoDuplicateSubmission = async (
@@ -124,15 +119,13 @@ const checkNoDuplicateSubmission = async (
     select: { id: true },
   });
 
-  if (duplicate) {
-    return {
-      passed: false,
-      reason:
-        "A similar document has already been approved. Manual review required for duplicates.",
-    };
-  }
-
-  return { passed: true };
+  return duplicate
+    ? {
+        passed: false,
+        reason:
+          "A similar document has already been approved. Manual review required for duplicates.",
+      }
+    : { passed: true };
 };
 
 const checkTeacherProfileComplete = async (
@@ -161,15 +154,13 @@ const checkTeacherProfileComplete = async (
     Boolean(profile.user.lastName?.trim());
   const hasEmail = Boolean(profile.user.email?.trim());
 
-  if (!hasName || !hasEmail) {
-    return {
-      passed: false,
-      reason:
-        "Teacher profile is incomplete (missing name or email). Manual review required.",
-    };
-  }
-
-  return { passed: true };
+  return hasName && hasEmail
+    ? { passed: true }
+    : {
+        passed: false,
+        reason:
+          "Teacher profile is incomplete (missing name or email). Manual review required.",
+      };
 };
 
 interface AutoVerificationResult {
@@ -182,35 +173,21 @@ interface AutoVerificationResult {
 const runAutoVerificationChecks = async (
   verification: TeacherVerification,
 ): Promise<AutoVerificationResult> => {
-  const failedChecks: string[] = [];
+  const checks = await Promise.all([
+    Promise.resolve(checkDocumentTypeAccepted(verification.documentType)),
+    Promise.resolve(checkDocumentUrlValid(verification.documentUrl)),
+    checkNoDuplicateSubmission(
+      verification.teacherProfileId,
+      verification.documentType,
+      verification.documentUrl,
+      verification.id,
+    ),
+    checkTeacherProfileComplete(verification.teacherProfileId),
+  ]);
 
-  const typeCheck = checkDocumentTypeAccepted(verification.documentType);
-  if (!typeCheck.passed && typeCheck.reason) {
-    failedChecks.push(typeCheck.reason);
-  }
-
-  const urlCheck = checkDocumentUrlValid(verification.documentUrl);
-  if (!urlCheck.passed && urlCheck.reason) {
-    failedChecks.push(urlCheck.reason);
-  }
-
-  const duplicateCheck = await checkNoDuplicateSubmission(
-    verification.teacherProfileId,
-    verification.documentType,
-    verification.documentUrl,
-    verification.id,
-  );
-  if (!duplicateCheck.passed && duplicateCheck.reason) {
-    failedChecks.push(duplicateCheck.reason);
-  }
-
-  const profileCheck = await checkTeacherProfileComplete(
-    verification.teacherProfileId,
-  );
-  if (!profileCheck.passed && profileCheck.reason) {
-    failedChecks.push(profileCheck.reason);
-  }
-
+  const failedChecks = checks
+    .filter((check) => !check.passed && Boolean(check.reason))
+    .map((check) => check.reason!);
   const autoApproved = failedChecks.length === 0;
 
   return {
@@ -317,17 +294,13 @@ class AutoVerificationService {
       return updated!;
     }
 
-    await prisma.teacherVerification.update({
+    return prisma.teacherVerification.update({
       where: { id: verificationId },
       data: {
         verificationMethod: VerificationMethod.AUTO,
         reviewNotes: result.reviewNotes,
       },
     });
-
-    return (await prisma.teacherVerification.findUnique({
-      where: { id: verificationId },
-    }))!;
   }
 
   async getAutoVerificationStats(): Promise<{

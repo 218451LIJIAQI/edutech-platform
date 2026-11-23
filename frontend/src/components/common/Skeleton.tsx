@@ -58,28 +58,6 @@ const Skeleton = ({
 export default Skeleton;
 
 /**
- * Text Block Skeleton
- * For loading paragraph-like text content.
- */
-export const SkeletonTextBlock = ({
-  lines = 3,
-  className,
-}: {
-  lines?: number;
-  className?: string;
-}) => (
-  <div className={clsx('space-y-2', className)} aria-hidden="true">
-    {Array.from({ length: lines }).map((_, index) => (
-      <Skeleton
-        key={index}
-        variant="text"
-        className={clsx('h-4', index === lines - 1 ? 'w-2/3' : 'w-full')}
-      />
-    ))}
-  </div>
-);
-
-/**
  * Card Skeleton
  * For course or content cards.
  */

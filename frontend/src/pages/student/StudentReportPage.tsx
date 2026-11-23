@@ -5,15 +5,68 @@ import { Report, ReportStatus, ReportType } from '@/types';
 import reportService from '@/services/report.service';
 import toast from 'react-hot-toast';
 import CustomerSupportWidget from '@/components/common/CustomerSupportWidget';
-import CustomerSupportChat from '@/components/common/CustomerSupportChat';
+import CustomerServiceModal from '@/components/common/CustomerServiceModal';
 import { extractErrorMessage } from '@/utils/error-handler';
 import { useOverlayAccessibility, usePageTitle } from '@/hooks';
 
-/**
- * Student Report Page
- * Displays student's submitted reports and their status
- * Includes customer support chat widget for direct communication with support team
- */
+const REPORT_TYPE_LABELS: Record<ReportType, string> = {
+  [ReportType.QUALITY_ISSUE]: 'Quality Issue',
+  [ReportType.INAPPROPRIATE_CONTENT]: 'Inappropriate Content',
+  [ReportType.FRAUD]: 'Fraud',
+  [ReportType.TECHNICAL_ISSUE]: 'Technical Issue',
+  [ReportType.OTHER]: 'Other',
+};
+
+const REPORT_STATUS_DESCRIPTIONS: Record<ReportStatus, string> = {
+  [ReportStatus.OPEN]: 'Your report has been received and is awaiting review.',
+  [ReportStatus.UNDER_REVIEW]: 'Our team is currently reviewing your report.',
+  [ReportStatus.RESOLVED]: 'Your report has been reviewed and action has been taken.',
+  [ReportStatus.DISMISSED]: 'Your report was reviewed but no action was necessary.',
+};
+
+const getStatusIcon = (status: ReportStatus) => {
+  switch (status) {
+    case ReportStatus.OPEN:
+      return <AlertCircle className="w-5 h-5 text-yellow-600" />;
+    case ReportStatus.UNDER_REVIEW:
+      return <Clock className="w-5 h-5 text-blue-600" />;
+    case ReportStatus.RESOLVED:
+      return <CheckCircle className="w-5 h-5 text-green-600" />;
+    case ReportStatus.DISMISSED:
+      return <XCircle className="w-5 h-5 text-gray-600" />;
+    default:
+      return null;
+  }
+};
+
+const getStatusColor = (status: ReportStatus) => {
+  switch (status) {
+    case ReportStatus.OPEN:
+      return 'bg-yellow-50 border-yellow-200 text-yellow-900';
+    case ReportStatus.UNDER_REVIEW:
+      return 'bg-blue-50 border-blue-200 text-blue-900';
+    case ReportStatus.RESOLVED:
+      return 'bg-green-50 border-green-200 text-green-900';
+    case ReportStatus.DISMISSED:
+    default:
+      return 'bg-gray-50 border-gray-200 text-gray-900';
+  }
+};
+
+const getStatusBorderClass = (status: ReportStatus) => {
+  switch (status) {
+    case ReportStatus.OPEN:
+      return 'border-l-yellow-600 hover:border-l-yellow-700';
+    case ReportStatus.UNDER_REVIEW:
+      return 'border-l-blue-600 hover:border-l-blue-700';
+    case ReportStatus.RESOLVED:
+      return 'border-l-green-600 hover:border-l-green-700';
+    case ReportStatus.DISMISSED:
+    default:
+      return 'border-l-gray-600 hover:border-l-gray-700';
+  }
+};
+
 const StudentReportPage = () => {
   usePageTitle('My Reports');
   const [reports, setReports] = useState<Report[]>([]);
@@ -21,7 +74,7 @@ const StudentReportPage = () => {
   const [error, setError] = useState<string | null>(null);
   const [selectedReport, setSelectedReport] = useState<Report | null>(null);
   const [filterStatus, setFilterStatus] = useState<ReportStatus | 'ALL'>('ALL');
-  const [showChat, setShowChat] = useState(false);
+  const [showSupportModal, setShowSupportModal] = useState(false);
   const reportModalRef = useRef<HTMLDivElement | null>(null);
   const reportModalCloseButtonRef = useRef<HTMLButtonElement | null>(null);
 
@@ -31,9 +84,9 @@ const StudentReportPage = () => {
     try {
       const data = await reportService.getMyReports();
       setReports(data);
-    } catch (error) {
-      const errorMessage = extractErrorMessage(error, 'Failed to load reports');
-      clientLogger.error('Failed to fetch reports:', error);
+    } catch (err) {
+      const errorMessage = extractErrorMessage(err, 'Failed to load reports');
+      clientLogger.error('Failed to fetch reports:', err);
       setError(errorMessage);
       toast.error(errorMessage);
     } finally {
@@ -42,7 +95,7 @@ const StudentReportPage = () => {
   }, []);
 
   useEffect(() => {
-    fetchReports();
+    void fetchReports();
   }, [fetchReports]);
 
   const closeReportModal = useCallback(() => {
@@ -58,58 +111,25 @@ const StudentReportPage = () => {
     lockBodyScroll: true,
   });
 
-  const getStatusIcon = (status: ReportStatus) => {
-    switch (status) {
-      case ReportStatus.OPEN:
-        return <AlertCircle className="w-5 h-5 text-yellow-600" />;
-      case ReportStatus.UNDER_REVIEW:
-        return <Clock className="w-5 h-5 text-blue-600" />;
-      case ReportStatus.RESOLVED:
-        return <CheckCircle className="w-5 h-5 text-green-600" />;
-      case ReportStatus.DISMISSED:
-        return <XCircle className="w-5 h-5 text-gray-600" />;
-      default:
-        return null;
-    }
-  };
-
-  const getStatusColor = (status: ReportStatus) => {
-    switch (status) {
-      case ReportStatus.OPEN:
-        return 'bg-yellow-50 border-yellow-200 text-yellow-900';
-      case ReportStatus.UNDER_REVIEW:
-        return 'bg-blue-50 border-blue-200 text-blue-900';
-      case ReportStatus.RESOLVED:
-        return 'bg-green-50 border-green-200 text-green-900';
-      case ReportStatus.DISMISSED:
-        return 'bg-gray-50 border-gray-200 text-gray-900';
-      default:
-        return 'bg-gray-50 border-gray-200 text-gray-900';
-    }
-  };
-
-  const getReportTypeLabel = (type: ReportType) => {
-    const labels: Record<ReportType, string> = {
-      [ReportType.QUALITY_ISSUE]: 'Quality Issue',
-      [ReportType.INAPPROPRIATE_CONTENT]: 'Inappropriate Content',
-      [ReportType.FRAUD]: 'Fraud',
-      [ReportType.TECHNICAL_ISSUE]: 'Technical Issue',
-      [ReportType.OTHER]: 'Other',
-    };
-    return labels[type];
-  };
-
-  const filteredReports = useMemo(() => {
-    return filterStatus === 'ALL'
-      ? reports
-      : reports.filter((r) => r.status === filterStatus);
-  }, [reports, filterStatus]);
+  const filteredReports = useMemo(
+    () =>
+      filterStatus === 'ALL'
+        ? reports
+        : reports.filter((report) => report.status === filterStatus),
+    [reports, filterStatus]
+  );
 
   if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-primary-50/10 to-indigo-50/20">
         <div className="flex flex-col items-center space-y-4">
-          <div className="relative"><div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-primary-500 to-indigo-600 animate-pulse flex items-center justify-center"><AlertCircle className="w-8 h-8 text-white" /></div><div className="absolute inset-0 rounded-2xl bg-primary-500/20 animate-ping"></div></div><p className="text-gray-600 font-medium">Loading your reports...</p>
+          <div className="relative">
+            <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-primary-500 to-indigo-600 animate-pulse flex items-center justify-center">
+              <AlertCircle className="w-8 h-8 text-white" />
+            </div>
+            <div className="absolute inset-0 rounded-2xl bg-primary-500/20 animate-ping" />
+          </div>
+          <p className="text-gray-600 font-medium">Loading your reports...</p>
         </div>
       </div>
     );
@@ -117,9 +137,8 @@ const StudentReportPage = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-primary-50/10 to-indigo-50/20 relative">
-      <div className="absolute inset-0 bg-[linear-gradient(rgba(0,0,0,0.015)_1px,transparent_1px),linear-gradient(90deg,rgba(0,0,0,0.015)_1px,transparent_1px)] bg-[size:32px_32px] pointer-events-none"></div>
+      <div className="absolute inset-0 bg-[linear-gradient(rgba(0,0,0,0.015)_1px,transparent_1px),linear-gradient(90deg,rgba(0,0,0,0.015)_1px,transparent_1px)] bg-[size:32px_32px] pointer-events-none" />
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 relative">
-        {/* Header */}
         <div className="mb-8">
           <div className="flex items-center gap-3 mb-4">
             <div className="w-12 h-12 bg-gradient-to-br from-red-500 to-orange-600 rounded-2xl flex items-center justify-center shadow-lg shadow-red-500/25">
@@ -134,7 +153,6 @@ const StudentReportPage = () => {
           </div>
         </div>
 
-        {/* Error State */}
         {error && (
           <div className="card p-6 mb-8 bg-red-50 border border-red-200 rounded-2xl">
             <div className="flex items-center gap-3">
@@ -144,7 +162,7 @@ const StudentReportPage = () => {
                 <p className="text-red-700 text-sm">{error}</p>
                 <button
                   type="button"
-                  onClick={fetchReports}
+                  onClick={() => void fetchReports()}
                   className="mt-3 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors text-sm font-semibold"
                 >
                   Retry
@@ -154,53 +172,42 @@ const StudentReportPage = () => {
           </div>
         )}
 
-        {/* Main Content Grid */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-8">
-          {/* Reports Section */}
           <div className="lg:col-span-2">
-
-            {/* Filter Tabs */}
             <div className="mb-6 flex flex-wrap gap-2">
-          {(['ALL', ReportStatus.OPEN, ReportStatus.UNDER_REVIEW, ReportStatus.RESOLVED, ReportStatus.DISMISSED] as const).map(
-            (status) => (
-              <button
-                type="button"
-                key={status}
-                onClick={() => setFilterStatus(status)}
-                className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-                  filterStatus === status
-                    ? 'bg-primary-600 text-white'
-                    : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
-                }`}
-              >
-                {status === 'ALL' ? 'All Reports' : status.replace(/_/g, ' ')}
-                <span className="ml-2 text-sm">
-                  ({reports.filter((r) => status === 'ALL' || r.status === status).length})
-                </span>
-              </button>
-            )
-          )}
-        </div>
+              {(['ALL', ReportStatus.OPEN, ReportStatus.UNDER_REVIEW, ReportStatus.RESOLVED, ReportStatus.DISMISSED] as const).map(
+                (status) => (
+                  <button
+                    type="button"
+                    key={status}
+                    onClick={() => setFilterStatus(status)}
+                    className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                      filterStatus === status
+                        ? 'bg-primary-600 text-white'
+                        : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
+                    }`}
+                  >
+                    {status === 'ALL' ? 'All Reports' : status.replace(/_/g, ' ')}
+                    <span className="ml-2 text-sm">
+                      ({reports.filter((report) => status === 'ALL' || report.status === status).length})
+                    </span>
+                  </button>
+                )
+              )}
+            </div>
 
-            {/* Reports List */}
             {filteredReports.length > 0 ? (
               <div className="space-y-4">
                 {filteredReports.map((report) => (
                   <div
                     key={report.id}
-                    className={`card cursor-pointer hover:shadow-2xl transition-all duration-300 transform hover:scale-102 border-l-4 rounded-2xl shadow-lg ${
-                      report.status === ReportStatus.OPEN
-                        ? 'border-l-yellow-600 hover:border-l-yellow-700'
-                        : report.status === ReportStatus.UNDER_REVIEW
-                        ? 'border-l-blue-600 hover:border-l-blue-700'
-                        : report.status === ReportStatus.RESOLVED
-                        ? 'border-l-green-600 hover:border-l-green-700'
-                        : 'border-l-gray-600 hover:border-l-gray-700'
-                    }`}
+                    className={`card cursor-pointer hover:shadow-2xl transition-all duration-300 transform hover:scale-102 border-l-4 rounded-2xl shadow-lg ${getStatusBorderClass(
+                      report.status
+                    )}`}
                     onClick={() => setSelectedReport(report)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' || e.key === ' ') {
-                        e.preventDefault();
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault();
                         setSelectedReport(report);
                       }
                     }}
@@ -209,36 +216,31 @@ const StudentReportPage = () => {
                   >
                     <div className="flex items-start justify-between">
                       <div className="flex-1">
-                        {/* Status and Type */}
                         <div className="flex items-center gap-3 mb-3">
                           {getStatusIcon(report.status)}
                           <span className="text-sm font-semibold text-gray-700">
                             {report.status.replace(/_/g, ' ')}
                           </span>
                           <span className="text-xs bg-gray-200 text-gray-800 px-2 py-1 rounded">
-                            {getReportTypeLabel(report.type)}
+                            {REPORT_TYPE_LABELS[report.type]}
                           </span>
                         </div>
 
-                        {/* Description Preview */}
                         <p className="text-gray-700 mb-3 line-clamp-2">
                           {report.description}
                         </p>
 
-                        {/* Reported User */}
                         {report.reported && (
                           <p className="text-sm text-gray-600 mb-2">
                             <strong>Against:</strong> {report.reported.firstName} {report.reported.lastName}
                           </p>
                         )}
 
-                        {/* Date */}
                         <p className="text-xs text-gray-500">
                           Submitted on {new Date(report.createdAt).toLocaleDateString()}
                         </p>
                       </div>
 
-                      {/* Arrow */}
                       <ChevronRight className="w-5 h-5 text-gray-400 ml-4 flex-shrink-0" />
                     </div>
                   </div>
@@ -257,13 +259,11 @@ const StudentReportPage = () => {
             )}
           </div>
 
-          {/* Sidebar - Customer Support Widget */}
           <div className="lg:col-span-1">
-            <CustomerSupportWidget onOpenChat={() => setShowChat(true)} />
+            <CustomerSupportWidget onOpenChat={() => setShowSupportModal(true)} />
           </div>
         </div>
 
-        {/* Report Detail Modal */}
         {selectedReport && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
             <div
@@ -275,7 +275,6 @@ const StudentReportPage = () => {
               aria-describedby="student-report-modal-description"
               className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto"
             >
-              {/* Header */}
               <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
                 <h2 id="student-report-modal-title" className="text-2xl font-bold text-gray-900">Report Details</h2>
                 <button
@@ -289,17 +288,12 @@ const StudentReportPage = () => {
                 </button>
               </div>
 
-              {/* Content */}
               <div className="p-6 space-y-6">
                 <p id="student-report-modal-description" className="sr-only">
                   Review the status, details, and resolution of your submitted report.
                 </p>
-                {/* Status Badge */}
-                <div
-                  className={`p-4 rounded-lg border ${getStatusColor(
-                    selectedReport.status
-                  )}`}
-                >
+
+                <div className={`p-4 rounded-lg border ${getStatusColor(selectedReport.status)}`}>
                   <div className="flex items-center gap-2 mb-2">
                     {getStatusIcon(selectedReport.status)}
                     <span className="font-semibold">
@@ -307,32 +301,18 @@ const StudentReportPage = () => {
                     </span>
                   </div>
                   <p className="text-sm">
-                    {selectedReport.status === ReportStatus.OPEN &&
-                      'Your report has been received and is awaiting review.'}
-                    {selectedReport.status === ReportStatus.UNDER_REVIEW &&
-                      'Our team is currently reviewing your report.'}
-                    {selectedReport.status === ReportStatus.RESOLVED &&
-                      'Your report has been reviewed and action has been taken.'}
-                    {selectedReport.status === ReportStatus.DISMISSED &&
-                      'Your report was reviewed but no action was necessary.'}
+                    {REPORT_STATUS_DESCRIPTIONS[selectedReport.status]}
                   </p>
                 </div>
 
-                {/* Report Information */}
                 <div className="space-y-4">
                   <div>
-                    <label className="text-sm font-semibold text-gray-900">
-                      Report Type
-                    </label>
-                    <p className="text-gray-700 mt-1">
-                      {getReportTypeLabel(selectedReport.type)}
-                    </p>
+                    <span className="text-sm font-semibold text-gray-900">Report Type</span>
+                    <p className="text-gray-700 mt-1">{REPORT_TYPE_LABELS[selectedReport.type]}</p>
                   </div>
 
                   <div>
-                    <label className="text-sm font-semibold text-gray-900">
-                      Reported User
-                    </label>
+                    <span className="text-sm font-semibold text-gray-900">Reported User</span>
                     <p className="text-gray-700 mt-1">
                       {selectedReport.reported
                         ? `${selectedReport.reported.firstName} ${selectedReport.reported.lastName}`
@@ -341,9 +321,7 @@ const StudentReportPage = () => {
                   </div>
 
                   <div>
-                    <label className="text-sm font-semibold text-gray-900">
-                      Description
-                    </label>
+                    <span className="text-sm font-semibold text-gray-900">Description</span>
                     <p className="text-gray-700 mt-1 whitespace-pre-wrap">
                       {selectedReport.description}
                     </p>
@@ -351,9 +329,7 @@ const StudentReportPage = () => {
 
                   {selectedReport.resolution && (
                     <div>
-                      <label className="text-sm font-semibold text-gray-900">
-                        Resolution
-                      </label>
+                      <span className="text-sm font-semibold text-gray-900">Resolution</span>
                       <p className="text-gray-700 mt-1 whitespace-pre-wrap">
                         {selectedReport.resolution}
                       </p>
@@ -361,9 +337,7 @@ const StudentReportPage = () => {
                   )}
 
                   <div>
-                    <label className="text-sm font-semibold text-gray-900">
-                      Submitted Date
-                    </label>
+                    <span className="text-sm font-semibold text-gray-900">Submitted Date</span>
                     <p className="text-gray-700 mt-1">
                       {new Date(selectedReport.createdAt).toLocaleString()}
                     </p>
@@ -371,9 +345,7 @@ const StudentReportPage = () => {
 
                   {selectedReport.resolvedAt && (
                     <div>
-                      <label className="text-sm font-semibold text-gray-900">
-                        Resolved Date
-                      </label>
+                      <span className="text-sm font-semibold text-gray-900">Resolved Date</span>
                       <p className="text-gray-700 mt-1">
                         {new Date(selectedReport.resolvedAt).toLocaleString()}
                       </p>
@@ -381,7 +353,6 @@ const StudentReportPage = () => {
                   )}
                 </div>
 
-                {/* Close Button */}
                 <div className="pt-4 border-t border-gray-200">
                   <button
                     type="button"
@@ -395,14 +366,11 @@ const StudentReportPage = () => {
             </div>
           </div>
         )}
-
       </div>
 
-      {/* Customer Support Chat Component */}
-      <CustomerSupportChat
-        open={showChat}
-        onClose={() => setShowChat(false)}
-        showFloatingLauncher={false}
+      <CustomerServiceModal
+        isOpen={showSupportModal}
+        onClose={() => setShowSupportModal(false)}
       />
     </div>
   );

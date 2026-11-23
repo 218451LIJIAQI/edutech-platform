@@ -9,13 +9,10 @@ export const LEGACY_PROFILE_STATUS_COMPLETE = "COMPLETE";
 
 export const normalizeTeacherProfileCompletionStatus = (
   status: string | null | undefined,
-): string => {
-  if (status === LEGACY_PROFILE_STATUS_COMPLETE) {
-    return PROFILE_STATUS_APPROVED;
-  }
-
-  return status ?? PROFILE_STATUS_INCOMPLETE;
-};
+): string =>
+  status === LEGACY_PROFILE_STATUS_COMPLETE
+    ? PROFILE_STATUS_APPROVED
+    : (status ?? PROFILE_STATUS_INCOMPLETE);
 
 export const isApprovedTeacherProfileCompletionStatus = (
   status: string | null | undefined,
@@ -37,9 +34,7 @@ export const teacherByIdInclude = {
   courses: {
     where: { isPublished: true },
     include: {
-      _count: {
-        select: { lessons: true },
-      },
+      _count: { select: { lessons: true } },
     },
     orderBy: { createdAt: "desc" },
   },
@@ -55,37 +50,27 @@ export const teacherByIdInclude = {
   },
 } satisfies Prisma.TeacherProfileInclude;
 
+const profileVerificationUserSelect = {
+  id: true,
+  firstName: true,
+  lastName: true,
+  email: true,
+  avatar: true,
+} satisfies Prisma.UserSelect;
+
 export const extendedProfileInclude = {
-  user: {
-    select: {
-      id: true,
-      firstName: true,
-      lastName: true,
-      email: true,
-      avatar: true,
-    },
-  },
+  user: { select: profileVerificationUserSelect },
   certifications: true,
   profileSubmissions: {
     where: { status: VerificationStatus.PENDING },
     orderBy: { submittedAt: "desc" },
     take: 1,
-    select: {
-      submittedAt: true,
-    },
+    select: { submittedAt: true },
   },
 } satisfies Prisma.TeacherProfileInclude;
 
 export const pendingProfileVerificationInclude = {
-  user: {
-    select: {
-      id: true,
-      firstName: true,
-      lastName: true,
-      email: true,
-      avatar: true,
-    },
-  },
+  user: { select: profileVerificationUserSelect },
   profileSubmissions: {
     where: { status: VerificationStatus.PENDING },
     orderBy: { submittedAt: "desc" },
@@ -196,60 +181,35 @@ interface TeacherProfileSubmissionDraft {
   certificatePhotos?: string[];
 }
 
-const clampRating = (value: number): number => Math.min(Math.max(value, 0), 5);
-
 const sanitizeOptionalString = (value: unknown): string | undefined => {
-  if (typeof value !== "string") {
-    return undefined;
-  }
-
+  if (typeof value !== "string") return undefined;
   const trimmed = sanitizeUserPlainText(value);
   return trimmed.length > 0 ? trimmed : undefined;
 };
 
 const sanitizeNullableString = (value: unknown): string | null | undefined => {
-  if (value === null) {
-    return null;
-  }
-
-  if (typeof value !== "string") {
-    return undefined;
-  }
-
+  if (value === null) return null;
+  if (typeof value !== "string") return undefined;
   const trimmed = sanitizeUserPlainText(value);
   return trimmed.length > 0 ? trimmed : null;
 };
 
-const sanitizeStringArray = (value: unknown): string[] => {
-  if (!Array.isArray(value)) {
-    return [];
-  }
+const sanitizeStringArray = (value: unknown): string[] =>
+  Array.isArray(value)
+    ? value
+        .filter((item): item is string => typeof item === "string")
+        .map((item) => sanitizeUserPlainText(item))
+        .filter(Boolean)
+    : [];
 
-  return value
-    .filter((item): item is string => typeof item === "string")
-    .map((item) => sanitizeUserPlainText(item))
-    .filter((item) => item.length > 0);
-};
-
-const sanitizeOptionalStringArray = (value: unknown): string[] | undefined => {
-  if (!Array.isArray(value)) {
-    return undefined;
-  }
-
-  return sanitizeStringArray(value);
-};
+const sanitizeOptionalStringArray = (value: unknown): string[] | undefined =>
+  Array.isArray(value) ? sanitizeStringArray(value) : undefined;
 
 const sanitizeNullableNonNegativeInteger = (
   value: unknown,
 ): number | null | undefined => {
-  if (value === null) {
-    return null;
-  }
-
-  if (typeof value !== "number" || !Number.isFinite(value)) {
-    return undefined;
-  }
-
+  if (value === null) return null;
+  if (typeof value !== "number" || !Number.isFinite(value)) return undefined;
   const integerValue = Math.floor(value);
   return integerValue >= 0 ? integerValue : undefined;
 };
@@ -257,10 +217,7 @@ const sanitizeNullableNonNegativeInteger = (
 export const parseJsonArray = (
   jsonString: string | null | undefined,
 ): unknown[] => {
-  if (!jsonString) {
-    return [];
-  }
-
+  if (!jsonString) return [];
   try {
     const parsed = JSON.parse(jsonString);
     return Array.isArray(parsed) ? parsed : [];
@@ -268,6 +225,18 @@ export const parseJsonArray = (
     return [];
   }
 };
+
+export const parseProfileJsonLists = (profile: {
+  awards: string | null;
+  specialties: string | null;
+  languages: string | null;
+  certificatePhotos: string | null;
+}) => ({
+  awards: parseJsonArray(profile.awards),
+  specialties: parseJsonArray(profile.specialties),
+  languages: parseJsonArray(profile.languages),
+  certificatePhotos: parseJsonArray(profile.certificatePhotos),
+});
 
 export const buildPublicTeacherWhere = (filters: {
   isVerified?: boolean;
@@ -283,11 +252,7 @@ export const buildPublicTeacherWhere = (filters: {
     profileCompletionStatus: {
       in: [PROFILE_STATUS_APPROVED, LEGACY_PROFILE_STATUS_COMPLETE],
     },
-    user: {
-      is: {
-        isActive: true,
-      },
-    },
+    user: { is: { isActive: true } },
   };
 
   if (typeof filters.isVerified === "boolean") {
@@ -299,15 +264,13 @@ export const buildPublicTeacherWhere = (filters: {
     Number.isFinite(filters.minRating)
   ) {
     where.averageRating = {
-      gte: clampRating(filters.minRating),
+      gte: Math.min(Math.max(filters.minRating, 0), 5),
     };
   }
 
   if (search) {
     where.OR = [
-      {
-        user: { is: { firstName: { contains: search, mode: "insensitive" } } },
-      },
+      { user: { is: { firstName: { contains: search, mode: "insensitive" } } } },
       { user: { is: { lastName: { contains: search, mode: "insensitive" } } } },
       { headline: { contains: search, mode: "insensitive" } },
       { bio: { contains: search, mode: "insensitive" } },
@@ -319,10 +282,7 @@ export const buildPublicTeacherWhere = (filters: {
     where.courses = {
       some: {
         isPublished: true,
-        category: {
-          equals: category,
-          mode: "insensitive",
-        },
+        category: { equals: category, mode: "insensitive" },
       },
     };
   }
@@ -338,7 +298,6 @@ const normalizeSubmissionDraft = (
   }
 
   const value = payload as Record<string, unknown>;
-
   return {
     selfIntroduction: sanitizeNullableString(value.selfIntroduction),
     educationBackground: sanitizeNullableString(value.educationBackground),
@@ -382,6 +341,14 @@ export const mapTeacherByIdResponse = (
   const approved = isApprovedTeacherProfileCompletionStatus(
     teacher.profileCompletionStatus,
   );
+  const parsedLists = approved
+    ? parseProfileJsonLists(teacher)
+    : {
+        awards: [],
+        specialties: [],
+        languages: [],
+        certificatePhotos: [],
+      };
 
   return {
     ...teacher,
@@ -389,12 +356,7 @@ export const mapTeacherByIdResponse = (
       teacher.profileCompletionStatus,
     ),
     totalStudents: Math.max(0, Math.floor(actualStudentCount)),
-    awards: approved ? parseJsonArray(teacher.awards) : [],
-    specialties: approved ? parseJsonArray(teacher.specialties) : [],
-    languages: approved ? parseJsonArray(teacher.languages) : [],
-    certificatePhotos: approved
-      ? parseJsonArray(teacher.certificatePhotos)
-      : [],
+    ...parsedLists,
     selfIntroduction: approved ? teacher.selfIntroduction : undefined,
     educationBackground: approved ? teacher.educationBackground : undefined,
     teachingExperience: approved ? teacher.teachingExperience : undefined,
@@ -413,10 +375,7 @@ export const mapExtendedProfileResponse = (
   profileCompletionStatus: normalizeTeacherProfileCompletionStatus(
     teacherProfile.profileCompletionStatus,
   ),
-  awards: parseJsonArray(teacherProfile.awards),
-  specialties: parseJsonArray(teacherProfile.specialties),
-  languages: parseJsonArray(teacherProfile.languages),
-  certificatePhotos: parseJsonArray(teacherProfile.certificatePhotos),
+  ...parseProfileJsonLists(teacherProfile),
   hasPendingProfileSubmission: teacherProfile.profileSubmissions.length > 0,
   pendingProfileSubmittedAt: teacherProfile.profileSubmissions[0]?.submittedAt,
 });
@@ -427,70 +386,52 @@ export const overlayPendingProfileSubmission = (
   const draft = normalizeSubmissionDraft(
     teacher.profileSubmissions[0]?.payload,
   );
+  const parsedLists = parseProfileJsonLists(teacher);
 
-  const response: PendingProfileVerificationResponse = {
+  return {
     ...teacher,
-    awards: parseJsonArray(teacher.awards),
-    specialties: parseJsonArray(teacher.specialties),
-    languages: parseJsonArray(teacher.languages),
-    certificatePhotos: parseJsonArray(teacher.certificatePhotos),
-    selfIntroduction: teacher.selfIntroduction,
-    educationBackground: teacher.educationBackground,
-    teachingExperience: teacher.teachingExperience,
-    teachingStyle: teacher.teachingStyle,
-    yearsOfExperience: teacher.yearsOfExperience,
-    profilePhoto: teacher.profilePhoto,
+    awards: draft.awards ?? parsedLists.awards,
+    specialties: draft.specialties ?? parsedLists.specialties,
+    languages: draft.languages ?? parsedLists.languages,
+    certificatePhotos: draft.certificatePhotos ?? parsedLists.certificatePhotos,
+    selfIntroduction:
+      draft.selfIntroduction !== undefined
+        ? draft.selfIntroduction
+        : teacher.selfIntroduction,
+    educationBackground:
+      draft.educationBackground !== undefined
+        ? draft.educationBackground
+        : teacher.educationBackground,
+    teachingExperience:
+      draft.teachingExperience !== undefined
+        ? draft.teachingExperience
+        : teacher.teachingExperience,
+    teachingStyle:
+      draft.teachingStyle !== undefined
+        ? draft.teachingStyle
+        : teacher.teachingStyle,
+    yearsOfExperience:
+      draft.yearsOfExperience !== undefined
+        ? draft.yearsOfExperience
+        : teacher.yearsOfExperience,
+    profilePhoto:
+      draft.profilePhoto !== undefined
+        ? draft.profilePhoto
+        : teacher.profilePhoto,
   };
-
-  if (draft.selfIntroduction !== undefined) {
-    response.selfIntroduction = draft.selfIntroduction;
-  }
-
-  if (draft.educationBackground !== undefined) {
-    response.educationBackground = draft.educationBackground;
-  }
-
-  if (draft.teachingExperience !== undefined) {
-    response.teachingExperience = draft.teachingExperience;
-  }
-
-  if (draft.awards !== undefined) {
-    response.awards = draft.awards;
-  }
-
-  if (draft.specialties !== undefined) {
-    response.specialties = draft.specialties;
-  }
-
-  if (draft.teachingStyle !== undefined) {
-    response.teachingStyle = draft.teachingStyle;
-  }
-
-  if (draft.languages !== undefined) {
-    response.languages = draft.languages;
-  }
-
-  if (draft.yearsOfExperience !== undefined) {
-    response.yearsOfExperience = draft.yearsOfExperience;
-  }
-
-  if (draft.profilePhoto !== undefined) {
-    response.profilePhoto = draft.profilePhoto;
-  }
-
-  if (draft.certificatePhotos !== undefined) {
-    response.certificatePhotos = draft.certificatePhotos;
-  }
-
-  return response;
 };
 
 export const buildApprovedTeacherProfileUpdateData = (
   teacherProfile: TeacherProfile,
   payload: Prisma.JsonValue | null | undefined,
   reviewNotes?: string,
+  reviewedAt: Date = new Date(),
 ): Prisma.TeacherProfileUpdateInput => {
   const draft = normalizeSubmissionDraft(payload);
+  const serializeListOrFallback = (
+    draftList: string[] | undefined,
+    existing: string | null,
+  ) => (draftList !== undefined ? JSON.stringify(draftList) : existing);
 
   return {
     selfIntroduction:
@@ -505,22 +446,19 @@ export const buildApprovedTeacherProfileUpdateData = (
       draft.teachingExperience !== undefined
         ? draft.teachingExperience
         : teacherProfile.teachingExperience,
-    awards:
-      draft.awards !== undefined
-        ? JSON.stringify(draft.awards)
-        : teacherProfile.awards,
-    specialties:
-      draft.specialties !== undefined
-        ? JSON.stringify(draft.specialties)
-        : teacherProfile.specialties,
+    awards: serializeListOrFallback(draft.awards, teacherProfile.awards),
+    specialties: serializeListOrFallback(
+      draft.specialties,
+      teacherProfile.specialties,
+    ),
     teachingStyle:
       draft.teachingStyle !== undefined
         ? draft.teachingStyle
         : teacherProfile.teachingStyle,
-    languages:
-      draft.languages !== undefined
-        ? JSON.stringify(draft.languages)
-        : teacherProfile.languages,
+    languages: serializeListOrFallback(
+      draft.languages,
+      teacherProfile.languages,
+    ),
     yearsOfExperience:
       draft.yearsOfExperience !== undefined
         ? draft.yearsOfExperience
@@ -529,12 +467,12 @@ export const buildApprovedTeacherProfileUpdateData = (
       draft.profilePhoto !== undefined
         ? draft.profilePhoto
         : teacherProfile.profilePhoto,
-    certificatePhotos:
-      draft.certificatePhotos !== undefined
-        ? JSON.stringify(draft.certificatePhotos)
-        : teacherProfile.certificatePhotos,
+    certificatePhotos: serializeListOrFallback(
+      draft.certificatePhotos,
+      teacherProfile.certificatePhotos,
+    ),
     profileCompletionStatus: PROFILE_STATUS_APPROVED,
-    profileReviewedAt: new Date(),
+    profileReviewedAt: reviewedAt,
     profileReviewNotes: sanitizeOptionalString(reviewNotes) ?? null,
   };
 };

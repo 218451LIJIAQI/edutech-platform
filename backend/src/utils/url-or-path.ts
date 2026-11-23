@@ -1,6 +1,6 @@
 const UPLOADS_SEGMENT = "/uploads/";
 
-const safeDecodeURIComponent = (value: string): string | null => {
+export const safeDecodeURIComponent = (value: string): string | null => {
   try {
     return decodeURIComponent(value);
   } catch {
@@ -15,7 +15,7 @@ const normalizePathSeparators = (value: string): string => {
     .trim();
 };
 
-const normalizeAllowedFolders = (allowedFolders: string[]): string[] => {
+export const normalizeAllowedFolders = (allowedFolders: string[]): string[] => {
   return allowedFolders
     .map((folder) => normalizePathSeparators(folder))
     .filter(Boolean);
@@ -28,7 +28,7 @@ const hasUnsafePathSegment = (value: string): boolean => {
     .some((segment) => segment === "." || segment === "..");
 };
 
-const isHttpUrl = (value: string): boolean => {
+export const isHttpUrl = (value: string): boolean => {
   try {
     const url = new URL(value);
     return url.protocol === "http:" || url.protocol === "https:";

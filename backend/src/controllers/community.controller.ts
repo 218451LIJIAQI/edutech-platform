@@ -1,132 +1,42 @@
 import { Request, Response } from "express";
 import communityService from "../services/community.service";
 import asyncHandler from "../utils/async-handler";
-import { AuthenticationError, BadRequestError } from "../utils/errors";
+import { BadRequestError } from "../utils/errors";
+import {
+  parseOptionalEnum,
+  parseOptionalString,
+  parseQueryPositiveInt,
+  parseRequiredParam,
+  parseRequiredString,
+  requireAuthUserId,
+  sendCreated,
+  sendSuccess,
+} from "../utils/http";
 
 type FeedTab = "hot" | "new" | "weekly";
 type CommunityTagInput = { id?: string; name?: string };
 type CommunityMediaInput = { type: "image" | "video"; url: string };
 
-const FEED_TABS: FeedTab[] = ["hot", "new", "weekly"];
+const FEED_TABS: readonly FeedTab[] = ["hot", "new", "weekly"] as const;
 const MAX_TITLE_LENGTH = 200;
 const MIN_POST_CONTENT_LENGTH = 10;
 const MAX_COMMENT_LENGTH = 1000;
 const MAX_MEDIA_ITEMS = 10;
 const MAX_TAGS = 5;
 
-const sendSuccess = (
-  res: Response,
-  data?: unknown,
-  message?: string,
-  statusCode = 200,
-) => {
-  res.status(statusCode).json({
-    status: "success",
-    ...(message ? { message } : {}),
-    ...(data !== undefined ? { data } : {}),
-  });
-};
-
-const getAuthenticatedUserId = (req: Request): string => {
-  if (!req.user) {
-    throw new AuthenticationError("Authentication required");
-  }
-
-  return req.user.id;
-};
-
-const getStringValue = (value: unknown): string | undefined => {
-  if (typeof value !== "string") return undefined;
-
-  const trimmed = value.trim();
-
-  return trimmed.length > 0 ? trimmed : undefined;
-};
-
-const parseRequiredString = (value: unknown, fieldName: string): string => {
-  const parsed = getStringValue(value);
-
-  if (!parsed) {
-    throw new BadRequestError(`${fieldName} is required`);
-  }
-
-  return parsed;
-};
-
-const parseOptionalString = (
-  value: unknown,
-  fieldName: string,
-): string | undefined => {
-  if (value === undefined || value === null || value === "") return undefined;
-
-  const parsed = getStringValue(value);
-
-  if (!parsed) {
-    throw new BadRequestError(`${fieldName} must be a non-empty string`);
-  }
-
-  return parsed;
-};
-
-const parsePositiveInteger = (
-  value: unknown,
-  fallback: number,
-  fieldName: string,
-  max = 100,
-): number => {
-  if (value === undefined || value === null || value === "") return fallback;
-
-  const parsed = Number(value);
-
-  if (!Number.isInteger(parsed) || parsed < 1) {
-    throw new BadRequestError(`${fieldName} must be a positive integer`);
-  }
-
-  return Math.min(parsed, max);
-};
-
 const parsePagination = (query: Request["query"]) => ({
-  page: parsePositiveInteger(query.page, 1, "page"),
-  limit: parsePositiveInteger(query.limit, 10, "limit", 100),
+  page: parseQueryPositiveInt(query.page, "page", {
+    fallback: 1,
+    max: 100,
+  }) as number,
+  limit: parseQueryPositiveInt(query.limit, "limit", {
+    fallback: 10,
+    max: 100,
+  }) as number,
 });
 
-const parseFeedTab = (value: unknown): FeedTab => {
-  if (value === undefined || value === null || value === "") return "hot";
-
-  const parsed = getStringValue(value);
-
-  if (parsed && FEED_TABS.includes(parsed as FeedTab)) {
-    return parsed as FeedTab;
-  }
-
-  throw new BadRequestError(`tab must be one of: ${FEED_TABS.join(", ")}`);
-};
-
-const isPlainObject = (value: unknown): value is Record<string, unknown> => {
-  return !!value && typeof value === "object" && !Array.isArray(value);
-};
-
-const isCommunityTagInput = (value: unknown): value is CommunityTagInput => {
-  if (!isPlainObject(value)) return false;
-
-  const hasId = typeof value.id === "string" && value.id.trim().length > 0;
-  const hasName =
-    typeof value.name === "string" && value.name.trim().length > 0;
-
-  return hasId || hasName;
-};
-
-const isCommunityMediaInput = (
-  value: unknown,
-): value is CommunityMediaInput => {
-  if (!isPlainObject(value)) return false;
-
-  return (
-    (value.type === "image" || value.type === "video") &&
-    typeof value.url === "string" &&
-    value.url.trim().length > 0
-  );
-};
+const isPlainObject = (value: unknown): value is Record<string, unknown> =>
+  Boolean(value) && typeof value === "object" && !Array.isArray(value);
 
 const parseTags = (value: unknown): CommunityTagInput[] | undefined => {
   if (value === undefined || value === null || value === "") return undefined;
@@ -141,26 +51,29 @@ const parseTags = (value: unknown): CommunityTagInput[] | undefined => {
     );
   }
 
-  if (!value.every(isCommunityTagInput)) {
-    throw new BadRequestError(
-      "tags must contain valid tag objects with non-empty id or name",
-    );
-  }
-
   const seen = new Set<string>();
   const normalizedTags: CommunityTagInput[] = [];
 
   for (const tag of value) {
-    const id = getStringValue(tag.id);
-    const name = getStringValue(tag.name);
-    const dedupeKey = id ? `id:${id}` : `name:${name?.toLowerCase()}`;
-
-    if (!dedupeKey || seen.has(dedupeKey)) {
-      continue;
+    if (!isPlainObject(tag)) {
+      throw new BadRequestError(
+        "tags must contain valid tag objects with non-empty id or name",
+      );
     }
 
-    seen.add(dedupeKey);
-    normalizedTags.push(id ? { id } : { name });
+    const id = parseOptionalString(tag.id);
+    const name = parseOptionalString(tag.name);
+    if (!id && !name) {
+      throw new BadRequestError(
+        "tags must contain valid tag objects with non-empty id or name",
+      );
+    }
+
+    const dedupeKey = id ? `id:${id}` : `name:${name?.toLowerCase()}`;
+    if (!seen.has(dedupeKey)) {
+      seen.add(dedupeKey);
+      normalizedTags.push(id ? { id } : { name });
+    }
   }
 
   return normalizedTags;
@@ -179,199 +92,147 @@ const parseMedia = (value: unknown): CommunityMediaInput[] | undefined => {
     );
   }
 
-  if (!value.every(isCommunityMediaInput)) {
-    throw new BadRequestError(
-      'media must contain valid media objects with type "image" or "video" and non-empty url',
-    );
-  }
+  return value.map((item) => {
+    if (
+      !isPlainObject(item) ||
+      (item.type !== "image" && item.type !== "video") ||
+      typeof item.url !== "string" ||
+      !item.url.trim()
+    ) {
+      throw new BadRequestError(
+        'media must contain valid media objects with type "image" or "video" and non-empty url',
+      );
+    }
 
-  return value.map((item) => ({
-    type: item.type,
-    url: item.url.trim(),
-  }));
-};
-
-const validatePostContent = (content: string): string => {
-  const parsed = content.trim();
-
-  if (parsed.length < MIN_POST_CONTENT_LENGTH) {
-    throw new BadRequestError(
-      `content must be at least ${MIN_POST_CONTENT_LENGTH} characters`,
-    );
-  }
-
-  return parsed;
-};
-
-const validatePostTitle = (title?: string): string | undefined => {
-  if (!title) return undefined;
-
-  if (title.length > MAX_TITLE_LENGTH) {
-    throw new BadRequestError(
-      `title must not exceed ${MAX_TITLE_LENGTH} characters`,
-    );
-  }
-
-  return title;
-};
-
-const validateCommentContent = (content: string): string => {
-  const parsed = content.trim();
-
-  if (parsed.length === 0) {
-    throw new BadRequestError("comment content is required");
-  }
-
-  if (parsed.length > MAX_COMMENT_LENGTH) {
-    throw new BadRequestError(
-      `comment content must not exceed ${MAX_COMMENT_LENGTH} characters`,
-    );
-  }
-
-  return parsed;
+    return {
+      type: item.type,
+      url: item.url.trim(),
+    };
+  });
 };
 
 const communityController = {
-  // ==================== TAGS ====================
-
   getTags: asyncHandler(async (_req: Request, res: Response) => {
     const tags = await communityService.getTags();
-
     sendSuccess(res, tags);
   }),
 
   addTag: asyncHandler(async (req: Request, res: Response) => {
-    getAuthenticatedUserId(req);
-
-    const name = parseRequiredString(req.body?.name, "tag name");
-
-    const tag = await communityService.addTag(name);
-
-    sendSuccess(res, tag, "Tag created successfully", 201);
+    requireAuthUserId(req);
+    const tag = await communityService.addTag(
+      parseRequiredString(req.body?.name, "tag name"),
+    );
+    sendCreated(res, tag, "Tag created successfully");
   }),
-
-  // ==================== POSTS ====================
 
   getFeed: asyncHandler(async (req: Request, res: Response) => {
     const { page, limit } = parsePagination(req.query);
-
     const result = await communityService.getFeed(
       {
-        tab: parseFeedTab(req.query.tab),
-        tag: parseOptionalString(req.query.tag, "tag"),
+        tab:
+          parseOptionalEnum(req.query.tab, FEED_TABS, "tab") ?? "hot",
+        tag: parseOptionalString(req.query.tag, "tag", { rejectBlank: false }),
         page,
         limit,
       },
       req.user?.id,
     );
-
     sendSuccess(res, result);
   }),
 
   createPost: asyncHandler(async (req: Request, res: Response) => {
-    const userId = getAuthenticatedUserId(req);
-
-    const title = validatePostTitle(
-      parseOptionalString(req.body?.title, "title"),
-    );
-
-    const content = validatePostContent(
-      parseRequiredString(req.body?.content, "content"),
-    );
-
+    const userId = requireAuthUserId(req);
     const post = await communityService.createPost(
       {
         authorId: userId,
-        title,
-        content,
+        title: parseOptionalString(req.body?.title, "title", {
+          maxLength: MAX_TITLE_LENGTH,
+          rejectBlank: true,
+        }),
+        content: parseRequiredString(req.body?.content, "content", {
+          minLength: MIN_POST_CONTENT_LENGTH,
+        }),
         tags: parseTags(req.body?.tags),
         media: parseMedia(req.body?.media),
-        courseId: parseOptionalString(req.body?.courseId, "courseId"),
-        courseTitle: parseOptionalString(req.body?.courseTitle, "courseTitle"),
+        courseId: parseOptionalString(req.body?.courseId, "courseId", {
+          rejectBlank: true,
+        }),
+        courseTitle: parseOptionalString(req.body?.courseTitle, "courseTitle", {
+          rejectBlank: true,
+        }),
       },
       userId,
     );
-
-    sendSuccess(res, post, "Post created successfully", 201);
+    sendCreated(res, post, "Post created successfully");
   }),
 
   getPostById: asyncHandler(async (req: Request, res: Response) => {
-    const postId = parseRequiredString(req.params.id, "postId");
-
-    const post = await communityService.getPostById(postId, req.user?.id);
-
+    const post = await communityService.getPostById(
+      parseRequiredParam(req.params.id, "postId"),
+      req.user?.id,
+    );
     sendSuccess(res, post);
   }),
 
   likePost: asyncHandler(async (req: Request, res: Response) => {
-    const userId = getAuthenticatedUserId(req);
-    const postId = parseRequiredString(req.params.id, "postId");
-
-    const result = await communityService.likePost(postId, userId);
-
+    const result = await communityService.likePost(
+      parseRequiredParam(req.params.id, "postId"),
+      requireAuthUserId(req),
+    );
     sendSuccess(res, result);
   }),
 
   bookmarkPost: asyncHandler(async (req: Request, res: Response) => {
-    const userId = getAuthenticatedUserId(req);
-    const postId = parseRequiredString(req.params.id, "postId");
-
-    const result = await communityService.bookmarkPost(postId, userId);
-
+    const result = await communityService.bookmarkPost(
+      parseRequiredParam(req.params.id, "postId"),
+      requireAuthUserId(req),
+    );
     sendSuccess(res, result);
   }),
 
-  // ==================== COMMENTS ====================
-
   getComments: asyncHandler(async (req: Request, res: Response) => {
-    const postId = parseRequiredString(req.params.postId, "postId");
     const { page, limit } = parsePagination(req.query);
-
-    const comments = await communityService.getComments(postId, page, limit);
-
+    const comments = await communityService.getComments(
+      parseRequiredParam(req.params.postId, "postId"),
+      page,
+      limit,
+    );
     sendSuccess(res, comments);
   }),
 
   addComment: asyncHandler(async (req: Request, res: Response) => {
-    const userId = getAuthenticatedUserId(req);
-    const postId = parseRequiredString(req.params.postId, "postId");
-
-    const content = validateCommentContent(
-      parseRequiredString(req.body?.content, "comment content"),
+    const comment = await communityService.addComment(
+      parseRequiredParam(req.params.postId, "postId"),
+      requireAuthUserId(req),
+      parseRequiredString(req.body?.content, "comment content", {
+        maxLength: MAX_COMMENT_LENGTH,
+      }),
     );
-
-    const comment = await communityService.addComment(postId, userId, content);
-
-    sendSuccess(res, comment, "Comment added successfully", 201);
+    sendCreated(res, comment, "Comment added successfully");
   }),
 
-  // ==================== USERS ====================
-
   getUserProfile: asyncHandler(async (req: Request, res: Response) => {
-    const userId = parseRequiredString(req.params.userId, "userId");
-
-    const profile = await communityService.getUserProfile(userId, req.user?.id);
-
+    const profile = await communityService.getUserProfile(
+      parseRequiredParam(req.params.userId, "userId"),
+      req.user?.id,
+    );
     sendSuccess(res, profile);
   }),
 
   getUserPosts: asyncHandler(async (req: Request, res: Response) => {
-    const userId = parseRequiredString(req.params.userId, "userId");
     const { page, limit } = parsePagination(req.query);
-
     const result = await communityService.getUserPosts(
-      userId,
+      parseRequiredParam(req.params.userId, "userId"),
       page,
       limit,
       req.user?.id,
     );
-
     sendSuccess(res, result);
   }),
 
   followUser: asyncHandler(async (req: Request, res: Response) => {
-    const userId = getAuthenticatedUserId(req);
-    const targetUserId = parseRequiredString(
+    const userId = requireAuthUserId(req);
+    const targetUserId = parseRequiredParam(
       req.params.targetUserId,
       "targetUserId",
     );
@@ -381,7 +242,6 @@ const communityController = {
     }
 
     const result = await communityService.followUser(targetUserId, userId);
-
     sendSuccess(res, result);
   }),
 };

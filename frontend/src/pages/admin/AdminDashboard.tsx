@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState } from 'react';
 import clientLogger from '@/utils/logger';
 import { Link } from 'react-router-dom';
 import toast from 'react-hot-toast';
@@ -17,11 +17,7 @@ import adminService, { PlatformStats } from '@/services/admin.service';
 import { extractErrorMessage } from '@/utils/error-handler';
 import { formatCurrency } from '@/utils/helpers';
 import { usePageTitle } from '@/hooks';
-import styles from './AdminDashboard.module.css';
 
-/**
- * Progress Bar Component
- */
 interface ProgressBarProps {
   percentage: number;
   containerClassName: string;
@@ -35,24 +31,14 @@ interface RecentActivity {
   createdAt: string;
 }
 
-const ProgressBar = ({ percentage, containerClassName, barClassName }: ProgressBarProps) => {
-  const progressRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (progressRef.current) {
-      progressRef.current.style.setProperty('--progress-width', `${percentage}%`);
-    }
-  }, [percentage]);
-
-  return (
-    <div className={containerClassName}>
-      <div
-        ref={progressRef}
-        className={`${styles.progressBar} ${barClassName}`}
-      ></div>
-    </div>
-  );
-};
+const ProgressBar = ({ percentage, containerClassName, barClassName }: ProgressBarProps) => (
+  <div className={containerClassName}>
+    <div
+      className={barClassName}
+      style={{ width: `${Math.min(100, Math.max(0, percentage))}%` }}
+    />
+  </div>
+);
 
 /**
  * Admin Dashboard
@@ -114,7 +100,6 @@ const AdminDashboard = () => {
       return;
     }
 
-    // lightweight polling for recent activities to keep the feed in sync on current page
     const interval = setInterval(async () => {
       try {
         const latest = await adminService.getRecentActivities({ limit: activitiesLimit, page: activitiesPage });
@@ -232,7 +217,6 @@ const AdminDashboard = () => {
     }
   };
 
-  // Helper function to calculate percentage safely
   const calculatePercentage = (numerator: number, denominator: number): number => {
     if (denominator === 0) return 0;
     return Math.round((numerator / denominator) * 100);
@@ -240,15 +224,11 @@ const AdminDashboard = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-primary-50/10 to-indigo-50/20 relative">
-      {/* Background Pattern */}
       <div className="absolute inset-0 bg-[linear-gradient(rgba(0,0,0,0.015)_1px,transparent_1px),linear-gradient(90deg,rgba(0,0,0,0.015)_1px,transparent_1px)] bg-[size:32px_32px] pointer-events-none"></div>
-
-      {/* Decorative Elements */}
       <div className="absolute top-20 right-[10%] w-72 h-72 bg-primary-400/10 rounded-full blur-3xl pointer-events-none"></div>
       <div className="absolute bottom-40 left-[5%] w-80 h-80 bg-indigo-400/10 rounded-full blur-3xl pointer-events-none"></div>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 relative">
-        {/* Header */}
         <div className="mb-10">
           <div className="flex flex-col sm:flex-row sm:items-center gap-4 mb-3">
             <div className="w-14 h-14 bg-gradient-to-br from-primary-500 via-primary-600 to-indigo-600 rounded-2xl flex items-center justify-center shadow-xl shadow-primary-500/25 ring-4 ring-white">
@@ -263,7 +243,6 @@ const AdminDashboard = () => {
           </div>
         </div>
 
-        {/* Stats Grid */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 mb-10">
           {statCards.map((stat, index) => (
             <div key={index} className="group bg-white/95 backdrop-blur-sm rounded-2xl p-6 shadow-card hover:shadow-card-hover transition-all duration-300 hover:-translate-y-1 border border-gray-100/60 relative overflow-hidden">
@@ -280,7 +259,6 @@ const AdminDashboard = () => {
           ))}
         </div>
 
-        {/* Alert Cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mb-10">
           {alertCards.map((alert, index) => (
             <Link
@@ -305,84 +283,29 @@ const AdminDashboard = () => {
           ))}
         </div>
 
-        {/* Quick Actions */}
         <div className="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-6 gap-6 mb-8">
-          <Link
-            to="/admin/users"
-            className="card bg-gradient-to-br from-blue-50 to-blue-100 border-2 border-blue-200 hover:shadow-xl hover:-translate-y-1 transition-all duration-300 group"
-          >
-            <div className="p-3 bg-blue-200 rounded-lg w-fit mb-4 group-hover:bg-blue-300 transition-colors">
-              <Users className="w-8 h-8 text-blue-600" />
-            </div>
-            <h3 className="text-lg font-bold mb-2 text-gray-900">Manage Users</h3>
-            <p className="text-sm text-gray-700">
-              View and manage all platform users
-            </p>
-          </Link>
-
-          <Link
-            to="/admin/courses"
-            className="card bg-gradient-to-br from-purple-50 to-purple-100 border-2 border-purple-200 hover:shadow-xl hover:-translate-y-1 transition-all duration-300 group"
-          >
-            <div className="p-3 bg-purple-200 rounded-lg w-fit mb-4 group-hover:bg-purple-300 transition-colors">
-              <BookOpen className="w-8 h-8 text-purple-600" />
-            </div>
-            <h3 className="text-lg font-bold mb-2 text-gray-900">Manage Courses</h3>
-            <p className="text-sm text-gray-700">
-              Review and approve courses
-            </p>
-          </Link>
-
-          <Link
-            to="/admin/ads"
-            className="card bg-gradient-to-br from-violet-50 to-fuchsia-100 border-2 border-violet-200 hover:shadow-xl hover:-translate-y-1 transition-all duration-300 group"
-          >
-            <div className="p-3 bg-violet-200 rounded-lg w-fit mb-4 group-hover:bg-violet-300 transition-colors">
-              <Megaphone className="w-8 h-8 text-violet-700" />
-            </div>
-            <h3 className="text-lg font-bold mb-2 text-gray-900">Ads</h3>
-            <p className="text-sm text-gray-700">
-              Manage login popup campaigns
-            </p>
-          </Link>
-
-          <Link
-            to="/admin/financials"
-            className="card bg-gradient-to-br from-green-50 to-green-100 border-2 border-green-200 hover:shadow-xl hover:-translate-y-1 transition-all duration-300 group"
-          >
-            <div className="p-3 bg-green-200 rounded-lg w-fit mb-4 group-hover:bg-green-300 transition-colors">
-              <DollarSign className="w-8 h-8 text-green-600" />
-            </div>
-            <h3 className="text-lg font-bold mb-2 text-gray-900">Financials</h3>
-            <p className="text-sm text-gray-700">
-              View revenue and transactions
-            </p>
-          </Link>
-
-          <Link
-            to="/admin/refunds"
-            className="card bg-gradient-to-br from-yellow-50 to-yellow-100 border-2 border-yellow-200 hover:shadow-xl hover:-translate-y-1 transition-all duration-300 group"
-          >
-            <div className="p-3 bg-yellow-200 rounded-lg w-fit mb-4 group-hover:bg-yellow-300 transition-colors">
-              <DollarSign className="w-8 h-8 text-yellow-700" />
-            </div>
-            <h3 className="text-lg font-bold mb-2 text-gray-900">Refunds</h3>
-            <p className="text-sm text-gray-700">Review and process refunds</p>
-          </Link>
-
-          <Link
-            to="/admin/support"
-            className="card bg-gradient-to-br from-indigo-50 to-indigo-100 border-2 border-indigo-200 hover:shadow-xl hover:-translate-y-1 transition-all duration-300 group"
-          >
-            <div className="p-3 bg-indigo-200 rounded-lg w-fit mb-4 group-hover:bg-indigo-300 transition-colors">
-              <Activity className="w-8 h-8 text-indigo-700" />
-            </div>
-            <h3 className="text-lg font-bold mb-2 text-gray-900">Support</h3>
-            <p className="text-sm text-gray-700">Manage support tickets</p>
-          </Link>
+          {[
+            { to: '/admin/users', title: 'Manage Users', desc: 'View and manage all platform users', Icon: Users, card: 'from-blue-50 to-blue-100 border-blue-200', badge: 'bg-blue-200 group-hover:bg-blue-300', icon: 'text-blue-600' },
+            { to: '/admin/courses', title: 'Manage Courses', desc: 'Review and approve courses', Icon: BookOpen, card: 'from-purple-50 to-purple-100 border-purple-200', badge: 'bg-purple-200 group-hover:bg-purple-300', icon: 'text-purple-600' },
+            { to: '/admin/ads', title: 'Ads', desc: 'Manage login popup campaigns', Icon: Megaphone, card: 'from-violet-50 to-fuchsia-100 border-violet-200', badge: 'bg-violet-200 group-hover:bg-violet-300', icon: 'text-violet-700' },
+            { to: '/admin/financials', title: 'Financials', desc: 'View revenue and transactions', Icon: DollarSign, card: 'from-green-50 to-green-100 border-green-200', badge: 'bg-green-200 group-hover:bg-green-300', icon: 'text-green-600' },
+            { to: '/admin/refunds', title: 'Refunds', desc: 'Review and process refunds', Icon: DollarSign, card: 'from-yellow-50 to-yellow-100 border-yellow-200', badge: 'bg-yellow-200 group-hover:bg-yellow-300', icon: 'text-yellow-700' },
+            { to: '/admin/support', title: 'Support', desc: 'Manage support tickets', Icon: Activity, card: 'from-indigo-50 to-indigo-100 border-indigo-200', badge: 'bg-indigo-200 group-hover:bg-indigo-300', icon: 'text-indigo-700' },
+          ].map((action) => (
+            <Link
+              key={action.to}
+              to={action.to}
+              className={`card bg-gradient-to-br ${action.card} border-2 hover:shadow-xl hover:-translate-y-1 transition-all duration-300 group`}
+            >
+              <div className={`p-3 ${action.badge} rounded-lg w-fit mb-4 transition-colors`}>
+                <action.Icon className={`w-8 h-8 ${action.icon}`} />
+              </div>
+              <h3 className="text-lg font-bold mb-2 text-gray-900">{action.title}</h3>
+              <p className="text-sm text-gray-700">{action.desc}</p>
+            </Link>
+          ))}
         </div>
 
-        {/* Recent Activities */}
         <div className="card mb-8">
           <div className="flex items-center justify-between mb-6">
             <div className="flex items-center space-x-3">
@@ -391,7 +314,6 @@ const AdminDashboard = () => {
               </div>
               <h2 className="text-2xl font-bold text-gray-900">Recent Activities</h2>
             </div>
-            {/* Page size selector */}
             <div className="flex items-center gap-2 text-sm">
               <label htmlFor="activities-per-page" className="text-gray-600">Per page:</label>
               <select
@@ -443,7 +365,6 @@ const AdminDashboard = () => {
             </div>
           )}
 
-          {/* Pagination controls */}
           {activitiesPagination && activitiesPagination.totalPages > 1 && (
             <div className="mt-6 pt-4 border-t flex items-center justify-between">
               <div className="text-sm text-gray-700">
@@ -471,59 +392,61 @@ const AdminDashboard = () => {
           )}
         </div>
 
-      {/* User Distribution */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="card bg-gradient-to-br from-primary-50 to-primary-100 border-primary-200">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-sm font-bold text-primary-700 uppercase">Teachers</h3>
-            <Users className="w-5 h-5 text-primary-600" />
-          </div>
-          <p className="text-4xl font-bold text-primary-600 mb-2">
-            {stats.overview.totalTeachers}
-          </p>
-          <ProgressBar
-            percentage={calculatePercentage(stats.overview.totalTeachers, stats.overview.totalUsers)}
-            containerClassName="w-full bg-primary-200 rounded-full h-2 overflow-hidden"
-            barClassName="bg-gradient-to-r from-primary-600 to-primary-700 h-2 rounded-full transition-all duration-500"
-          />
-          <p className="text-sm text-primary-700 mt-3 font-medium">
-            {calculatePercentage(stats.overview.totalTeachers, stats.overview.totalUsers)}% of users
-          </p>
-        </div>
-        <div className="card bg-gradient-to-br from-green-50 to-green-100 border-green-200">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-sm font-bold text-green-700 uppercase">Students</h3>
-            <Users className="w-5 h-5 text-green-600" />
-          </div>
-          <p className="text-4xl font-bold text-green-600 mb-2">
-            {stats.overview.totalStudents}
-          </p>
-          <ProgressBar
-            percentage={calculatePercentage(stats.overview.totalStudents, stats.overview.totalUsers)}
-            containerClassName="w-full bg-green-200 rounded-full h-2 overflow-hidden"
-            barClassName="bg-gradient-to-r from-green-600 to-green-700 h-2 rounded-full transition-all duration-500"
-          />
-          <p className="text-sm text-green-700 mt-3 font-medium">
-            {calculatePercentage(stats.overview.totalStudents, stats.overview.totalUsers)}% of users
-          </p>
-        </div>
-        <div className="card bg-gradient-to-br from-purple-50 to-purple-100 border-purple-200">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-sm font-bold text-purple-700 uppercase">Published Courses</h3>
-            <BookOpen className="w-5 h-5 text-purple-600" />
-          </div>
-          <p className="text-4xl font-bold text-purple-600 mb-2">
-            {stats.overview.publishedCourses}
-          </p>
-          <ProgressBar
-            percentage={calculatePercentage(stats.overview.publishedCourses, stats.overview.totalCourses)}
-            containerClassName="w-full bg-purple-200 rounded-full h-2 overflow-hidden"
-            barClassName="bg-gradient-to-r from-purple-600 to-purple-700 h-2 rounded-full transition-all duration-500"
-          />
-          <p className="text-sm text-purple-700 mt-3 font-medium">
-            {calculatePercentage(stats.overview.publishedCourses, stats.overview.totalCourses)}% of total
-          </p>
-        </div>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          {[
+            {
+              label: 'Teachers',
+              count: stats.overview.totalTeachers,
+              pct: calculatePercentage(stats.overview.totalTeachers, stats.overview.totalUsers),
+              suffix: 'of users',
+              Icon: Users,
+              card: 'from-primary-50 to-primary-100 border-primary-200',
+              text: 'text-primary-700',
+              value: 'text-primary-600',
+              track: 'bg-primary-200',
+              bar: 'from-primary-600 to-primary-700',
+            },
+            {
+              label: 'Students',
+              count: stats.overview.totalStudents,
+              pct: calculatePercentage(stats.overview.totalStudents, stats.overview.totalUsers),
+              suffix: 'of users',
+              Icon: Users,
+              card: 'from-green-50 to-green-100 border-green-200',
+              text: 'text-green-700',
+              value: 'text-green-600',
+              track: 'bg-green-200',
+              bar: 'from-green-600 to-green-700',
+            },
+            {
+              label: 'Published Courses',
+              count: stats.overview.publishedCourses,
+              pct: calculatePercentage(stats.overview.publishedCourses, stats.overview.totalCourses),
+              suffix: 'of total',
+              Icon: BookOpen,
+              card: 'from-purple-50 to-purple-100 border-purple-200',
+              text: 'text-purple-700',
+              value: 'text-purple-600',
+              track: 'bg-purple-200',
+              bar: 'from-purple-600 to-purple-700',
+            },
+          ].map((dist) => (
+            <div key={dist.label} className={`card bg-gradient-to-br ${dist.card}`}>
+              <div className="flex items-center justify-between mb-4">
+                <h3 className={`text-sm font-bold ${dist.text} uppercase`}>{dist.label}</h3>
+                <dist.Icon className={`w-5 h-5 ${dist.value}`} />
+              </div>
+              <p className={`text-4xl font-bold ${dist.value} mb-2`}>{dist.count}</p>
+              <ProgressBar
+                percentage={dist.pct}
+                containerClassName={`w-full ${dist.track} rounded-full h-2 overflow-hidden`}
+                barClassName={`bg-gradient-to-r ${dist.bar} h-2 rounded-full transition-all duration-500`}
+              />
+              <p className={`text-sm ${dist.text} mt-3 font-medium`}>
+                {dist.pct}% {dist.suffix}
+              </p>
+            </div>
+          ))}
         </div>
       </div>
     </div>

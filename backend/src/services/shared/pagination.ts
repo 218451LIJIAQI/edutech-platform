@@ -4,6 +4,11 @@ export interface PaginationWindow {
   skip: number;
 }
 
+export interface OffsetPaginationWindow {
+  limit: number;
+  offset: number;
+}
+
 export interface PaginationMeta {
   total: number;
   page: number;
@@ -47,6 +52,31 @@ export const normalizePagination = (
     page: safePage,
     limit: safeLimit,
     skip: (safePage - 1) * safeLimit,
+  };
+};
+
+export const normalizeOffsetPagination = (
+  limit: unknown,
+  offset: unknown,
+  options: PaginationOptions = {},
+): OffsetPaginationWindow => {
+  const safeMaxLimit = toPositiveInteger(options.maxLimit, 100);
+  const safeDefaultLimit = Math.min(
+    toPositiveInteger(options.defaultLimit, 50),
+    safeMaxLimit,
+  );
+  const parsedLimit = Number(limit);
+  const parsedOffset = Number(offset);
+
+  return {
+    limit:
+      Number.isFinite(parsedLimit) && Math.floor(parsedLimit) >= 1
+        ? Math.min(Math.floor(parsedLimit), safeMaxLimit)
+        : safeDefaultLimit,
+    offset:
+      Number.isFinite(parsedOffset) && Math.floor(parsedOffset) >= 0
+        ? Math.floor(parsedOffset)
+        : 0,
   };
 };
 

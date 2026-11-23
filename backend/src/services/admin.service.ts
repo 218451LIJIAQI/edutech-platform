@@ -1,34 +1,7 @@
-import {
-  PaymentStatus,
-  ReportStatus,
-  ReportType,
-  UserRole,
-  VerificationStatus,
-} from "@prisma/client";
+import { PaymentStatus, UserRole } from "@prisma/client";
 import bcrypt from "bcryptjs";
 import prisma from "../config/database";
 import { NotFoundError, ValidationError } from "../utils/errors";
-import {
-  deleteAdminCourse,
-  getAllAdminCourses,
-  getAllAdminReports,
-  getAllAdminVerifications,
-  reviewAdminVerification,
-  updateAdminCourseStatus,
-  updateAdminReportStatus,
-} from "./admin/admin-content-management";
-import {
-  getAdminFinancials,
-  getAdminInvoices,
-  getAdminRevenueAnalytics,
-  getAdminSettlements,
-  getAdminTeacherCommissions,
-  updateAdminTeacherCommission,
-} from "./admin/admin-financials";
-import {
-  getAdminPlatformStats,
-  getAdminRecentActivities,
-} from "./admin/admin-insights";
 import {
   adminAuditLogInclude,
   adminUserListSelect,
@@ -40,6 +13,7 @@ import {
   collectImpactedTeacherUserIdsForStudent,
   collectImpactedTeacherUserIdsForStudents,
   createApprovedTeacherProfileData,
+  createUserAuditLog,
   ensureAdminManageableRole,
   ensureEmailAvailable,
   ensureNotAdminUser,
@@ -201,10 +175,6 @@ class AdminService {
     );
   }
 
-  private hasProtectedDependencies(counts: ProtectedUserDependencyCounts) {
-    return Object.values(counts).some((count) => count > 0);
-  }
-
   private async deactivateUserForDeletion(
     user: { id: string; role: UserRole; isActive: boolean; isLocked: boolean },
     adminId?: string,
@@ -228,8 +198,8 @@ class AdminService {
       });
 
       if (adminId) {
-        await tx.userAuditLog.create({
-          data: {
+        await createUserAuditLog(
+          {
             adminId,
             userId: user.id,
             action: "SOFT_DELETE",
@@ -242,7 +212,8 @@ class AdminService {
               isLocked: true,
             },
           },
-        });
+          tx,
+        );
       }
 
       await tx.notification.create({
@@ -259,10 +230,6 @@ class AdminService {
 
     await recalculateTeacherStudentCounts(impactedTeacherUserIds);
     return this.withoutPassword(updatedUser);
-  }
-
-  async getPlatformStats() {
-    return getAdminPlatformStats();
   }
 
   async getAllUsers(filters: UserFilters = {}) {
@@ -387,15 +354,16 @@ class AdminService {
       });
 
       if (adminId) {
-        await tx.userAuditLog.create({
-          data: {
+        await createUserAuditLog(
+          {
             adminId,
             userId,
             action: isActive ? "ACTIVATE" : "DEACTIVATE",
             oldValues: { isActive: user.isActive },
             newValues: { isActive },
           },
-        });
+          tx,
+        );
       }
 
       return nextUser;
@@ -416,7 +384,7 @@ class AdminService {
     }
 
     const protectedCounts = await this.getProtectedUserDependencyCounts(userId);
-    if (this.hasProtectedDependencies(protectedCounts)) {
+    if (Object.values(protectedCounts).some((count) => count > 0)) {
       throw new ValidationError(
         this.buildProtectedDependencyMessage(protectedCounts),
       );
@@ -435,67 +403,6 @@ class AdminService {
     await recalculateTeacherStudentCounts(impactedTeacherUserIds);
 
     return { deleted: true };
-  }
-
-  async getAllCourses(filters: {
-    isPublished?: boolean;
-    category?: string;
-    search?: string;
-    page?: number;
-    limit?: number;
-  }) {
-    return getAllAdminCourses(filters);
-  }
-
-  async updateCourseStatus(courseId: string, isPublished: boolean) {
-    return updateAdminCourseStatus(courseId, isPublished);
-  }
-
-  async deleteCourse(courseId: string) {
-    return deleteAdminCourse(courseId);
-  }
-
-  async getAllVerifications(filters: {
-    status?: VerificationStatus;
-    page?: number;
-    limit?: number;
-  }) {
-    return getAllAdminVerifications(filters);
-  }
-
-  async reviewVerification(
-    verificationId: string,
-    adminId: string,
-    status: VerificationStatus,
-    reviewNotes?: string,
-  ) {
-    return reviewAdminVerification({
-      verificationId,
-      adminId,
-      status,
-      reviewNotes,
-    });
-  }
-
-  async getAllReports(filters: {
-    status?: ReportStatus;
-    type?: ReportType;
-    page?: number;
-    limit?: number;
-  }) {
-    return getAllAdminReports(filters);
-  }
-
-  async updateReportStatus(
-    reportId: string,
-    status: ReportStatus,
-    resolution?: string,
-  ) {
-    return updateAdminReportStatus(reportId, status, resolution);
-  }
-
-  async getFinancials(startDate?: Date, endDate?: Date) {
-    return getAdminFinancials(startDate, endDate);
   }
 
   async createUser(data: {
@@ -543,8 +450,8 @@ class AdminService {
         });
       }
 
-      await tx.userAuditLog.create({
-        data: {
+      await createUserAuditLog(
+        {
           adminId: data.createdBy,
           userId: createdUser.id,
           action: "CREATE",
@@ -555,7 +462,8 @@ class AdminService {
             role: createdUser.role,
           },
         },
-      });
+        tx,
+      );
 
       return this.withoutPassword(createdUser);
     });
@@ -615,24 +523,9 @@ class AdminService {
       throw new ValidationError("First name and last name cannot be empty");
     }
 
-    const nextPhone =
-      data.phone === undefined
-        ? undefined
-        : data.phone === null
-          ? null
-          : normalizeNullableInlineAdminText(data.phone);
-    const nextAddress =
-      data.address === undefined
-        ? undefined
-        : data.address === null
-          ? null
-          : normalizeNullableInlineAdminText(data.address);
-    const nextDepartment =
-      data.department === undefined
-        ? undefined
-        : data.department === null
-          ? null
-          : normalizeNullableInlineAdminText(data.department);
+    const nextPhone = normalizeNullableInlineAdminText(data.phone);
+    const nextAddress = normalizeNullableInlineAdminText(data.address);
+    const nextDepartment = normalizeNullableInlineAdminText(data.department);
     const nextAvatar =
       data.avatar === undefined
         ? undefined
@@ -690,8 +583,8 @@ class AdminService {
         },
       });
 
-      await tx.userAuditLog.create({
-        data: {
+      await createUserAuditLog(
+        {
           adminId,
           userId,
           action: "UPDATE",
@@ -709,7 +602,8 @@ class AdminService {
             isLocked: nextUser.isLocked,
           },
         },
-      });
+        tx,
+      );
 
       return this.withoutPassword(nextUser);
     });
@@ -748,14 +642,15 @@ class AdminService {
         },
       });
 
-      await tx.userAuditLog.create({
-        data: {
+      await createUserAuditLog(
+        {
           adminId,
           userId,
           action: "RESET_PASSWORD",
           newValues: { password: "***" },
         },
-      });
+        tx,
+      );
 
       await tx.notification.create({
         data: {
@@ -791,8 +686,8 @@ class AdminService {
         },
       });
 
-      await tx.userAuditLog.create({
-        data: {
+      await createUserAuditLog(
+        {
           adminId,
           userId,
           action: lock ? "LOCK" : "UNLOCK",
@@ -806,7 +701,8 @@ class AdminService {
             lockedUntil: nextUser.lockedUntil,
           },
         },
-      });
+        tx,
+      );
 
       await tx.notification.create({
         data: {
@@ -945,53 +841,6 @@ class AdminService {
       items: logs,
       pagination: buildPaginationMeta(total, pagination.page, pagination.limit),
     };
-  }
-
-  async getRecentActivities(params?: { limit?: number; page?: number }) {
-    return getAdminRecentActivities(params);
-  }
-
-  async getTeacherCommissions(filters: {
-    search?: string;
-    page?: number;
-    limit?: number;
-  }) {
-    return getAdminTeacherCommissions(filters);
-  }
-
-  async updateTeacherCommission(
-    userId: string,
-    adminId: string,
-    commissionRate: number | null,
-  ) {
-    return updateAdminTeacherCommission(userId, adminId, commissionRate);
-  }
-
-  async getSettlements(params?: {
-    startDate?: Date;
-    endDate?: Date;
-    page?: number;
-    limit?: number;
-  }) {
-    return getAdminSettlements(params);
-  }
-
-  async getInvoices(params?: {
-    startDate?: Date;
-    endDate?: Date;
-    page?: number;
-    limit?: number;
-    search?: string;
-  }) {
-    return getAdminInvoices(params);
-  }
-
-  async getRevenueAnalytics(params?: {
-    startDate?: Date;
-    endDate?: Date;
-    groupBy?: "day" | "week" | "month";
-  }) {
-    return getAdminRevenueAnalytics(params);
   }
 }
 

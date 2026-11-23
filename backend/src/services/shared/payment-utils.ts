@@ -18,14 +18,27 @@ const isDecimalLike = (value: unknown): value is DecimalLike =>
   );
 
 export const toNumber = (value: unknown, fallback = 0): number => {
-  const numericValue = isDecimalLike(value) ? value.toNumber() : Number(value);
+  if (value === null || value === undefined) {
+    return fallback;
+  }
 
+  const numericValue = isDecimalLike(value) ? value.toNumber() : Number(value);
   return Number.isFinite(numericValue) ? numericValue : fallback;
 };
 
-const roundMoney = (value: number): number => {
+export const toNullableNumber = (value: unknown): number | null => {
+  if (value === null || value === undefined) {
+    return null;
+  }
+
+  const numericValue = isDecimalLike(value) ? value.toNumber() : Number(value);
+  return Number.isFinite(numericValue) ? numericValue : null;
+};
+
+export const roundMoney = (value: unknown): number => {
   const factor = 10 ** MONEY_DECIMAL_PLACES;
-  return Math.round(value * factor) / factor;
+  const numericValue = toNumber(value, 0);
+  return Math.round((numericValue + Number.EPSILON) * factor) / factor;
 };
 
 const normalizeMoneyAmount = (value: unknown): number => {
@@ -40,14 +53,8 @@ const resolveCommissionRate = (
   const rawRate = teacherProfile?.commissionRate ?? fallbackRate ?? 0;
   const rate = toNumber(rawRate);
 
-  if (rate < 0) {
-    return 0;
-  }
-
-  if (rate > 100) {
-    return 100;
-  }
-
+  if (rate < 0) return 0;
+  if (rate > 100) return 100;
   return rate;
 };
 
@@ -58,7 +65,6 @@ export const calculatePlatformCommission = (
 ): number => {
   const grossAmount = normalizeMoneyAmount(amount);
   const commissionRate = resolveCommissionRate(teacherProfile, fallbackRate);
-
   return roundMoney((grossAmount * commissionRate) / 100);
 };
 
@@ -73,7 +79,6 @@ export const calculateTeacherNetEarning = (
     teacherProfile,
     fallbackRate,
   );
-
   return roundMoney(grossAmount - platformCommission);
 };
 
@@ -82,7 +87,6 @@ export const calculateExpirationDate = (
   referenceDate: Date = new Date(),
 ): Date | null => {
   const durationDays = Math.floor(toNumber(durationInDays));
-
   if (durationDays <= 0) {
     return null;
   }

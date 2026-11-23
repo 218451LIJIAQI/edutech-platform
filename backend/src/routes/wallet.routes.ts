@@ -4,44 +4,26 @@ import {
   PayoutRequestStatus,
   UserRole,
 } from "@prisma/client";
-import { body, param, query } from "express-validator";
-
+import { body, query } from "express-validator";
 import walletController from "../controllers/wallet.controller";
 import { authenticate, authorize } from "../middleware/auth";
 import { ensureTeacherApproved } from "../middleware/teacher-access";
 import { validate } from "../middleware/validate";
+import {
+  offsetPaginationQueryValidators,
+  uuidParam,
+} from "../validators/common.validator";
 
 const router = Router();
-
-const payoutMethodIdParam = param("id")
-  .notEmpty()
-  .withMessage("id is required")
-  .bail()
-  .isUUID()
-  .withMessage("Invalid id");
-
-const approvedTeacherOnly = [authorize(UserRole.TEACHER), ensureTeacherApproved];
-
-const paginationValidation = [
-  query("offset")
-    .optional({ values: "falsy" })
-    .isInt({ min: 0 })
-    .withMessage("offset must be >= 0"),
-
-  query("limit")
-    .optional({ values: "falsy" })
-    .isInt({ min: 1, max: 100 })
-    .withMessage("limit must be 1-100"),
-];
+const payoutMethodIdParam = uuidParam("id");
+const paginationValidation = offsetPaginationQueryValidators(100);
 
 const transactionQueryValidation = [
   ...paginationValidation,
-
   query("type")
     .optional({ values: "falsy" })
     .isString()
     .withMessage("type must be a string"),
-
   query("source")
     .optional({ values: "falsy" })
     .isString()
@@ -50,7 +32,6 @@ const transactionQueryValidation = [
 
 const payoutQueryValidation = [
   ...paginationValidation,
-
   query("status")
     .optional({ values: "falsy" })
     .isIn(Object.values(PayoutRequestStatus))
@@ -64,7 +45,6 @@ const addPayoutMethodValidation = [
     .bail()
     .isIn(Object.values(PayoutMethodType))
     .withMessage("Invalid payout method type"),
-
   body("label")
     .trim()
     .notEmpty()
@@ -72,14 +52,12 @@ const addPayoutMethodValidation = [
     .bail()
     .isLength({ max: 100 })
     .withMessage("label too long"),
-
   body("details")
     .notEmpty()
     .withMessage("details is required")
     .bail()
     .isObject()
     .withMessage("details must be an object"),
-
   body("isDefault")
     .optional()
     .isBoolean()
@@ -88,33 +66,27 @@ const addPayoutMethodValidation = [
 
 const updatePayoutMethodValidation = [
   payoutMethodIdParam,
-
   body()
-    .custom((value) => {
-      return (
-        value &&
+    .custom(
+      (value) =>
+        Boolean(value) &&
         typeof value === "object" &&
-        ("label" in value || "details" in value || "isDefault" in value)
-      );
-    })
+        ("label" in value || "details" in value || "isDefault" in value),
+    )
     .withMessage("At least one payout method field is required"),
-
   body("type")
     .not()
     .exists()
     .withMessage("Payout method type cannot be changed"),
-
   body("label")
     .optional({ values: "falsy" })
     .trim()
     .isLength({ max: 100 })
     .withMessage("label too long"),
-
   body("details")
     .optional()
     .isObject()
     .withMessage("details must be an object"),
-
   body("isDefault")
     .optional()
     .isBoolean()
@@ -128,12 +100,10 @@ const requestPayoutValidation = [
     .bail()
     .isFloat({ gt: 0 })
     .withMessage("amount must be greater than 0"),
-
   body("methodId")
     .optional({ values: "falsy" })
     .isUUID()
     .withMessage("Invalid methodId"),
-
   body("note")
     .optional({ values: "falsy" })
     .trim()
@@ -141,18 +111,7 @@ const requestPayoutValidation = [
     .withMessage("note too long"),
 ];
 
-/**
- * Wallet routes.
- *
- * Authenticated users can view their wallet summaries and transactions.
- * Payout methods and payout requests are restricted to approved teachers.
- */
-
 router.use(authenticate);
-
-// ================================
-// WALLET SUMMARY & TRANSACTIONS
-// ================================
 
 router.get("/me", walletController.getMySummary);
 
@@ -162,11 +121,7 @@ router.get(
   walletController.getMyTransactions,
 );
 
-// ================================
-// PAYOUT METHODS
-// ================================
-
-router.use(approvedTeacherOnly);
+router.use(authorize(UserRole.TEACHER), ensureTeacherApproved);
 
 router.get("/me/payout-methods", walletController.listMyPayoutMethods);
 
@@ -187,10 +142,6 @@ router.delete(
   validate(payoutMethodIdParam),
   walletController.deletePayoutMethod,
 );
-
-// ================================
-// PAYOUT REQUESTS
-// ================================
 
 router.post(
   "/me/payouts",

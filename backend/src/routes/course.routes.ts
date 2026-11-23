@@ -1,10 +1,9 @@
 import { Router } from "express";
-import { UserRole } from "@prisma/client";
 import { body } from "express-validator";
 import courseController from "../controllers/course.controller";
-import { authenticate, authorize, optionalAuth } from "../middleware/auth";
+import { authenticate, optionalAuth } from "../middleware/auth";
+import { approvedTeacherOnly, studentOnly } from "../middleware/teacher-access";
 import { validate } from "../middleware/validate";
-import { ensureTeacherApproved } from "../middleware/teacher-access";
 import { uuidParam } from "../validators/common.validator";
 import {
   createCourseValidation,
@@ -26,14 +25,6 @@ const lessonIdParam = uuidParam("id", "lesson ID");
 const packageIdParam = uuidParam("id", "package ID");
 const materialIdParam = uuidParam("id", "material ID");
 
-const approvedTeacherOnly = [
-  authenticate,
-  authorize(UserRole.TEACHER),
-  ensureTeacherApproved,
-];
-
-const studentOnly = [authenticate, authorize(UserRole.STUDENT)];
-
 const submitQuizValidation = [
   lessonIdParam,
   body("answers")
@@ -47,7 +38,6 @@ const submitQuizValidation = [
 
 router.get("/", validate(getCoursesValidation), courseController.getAllCourses);
 router.get("/categories/all", courseController.getCategories);
-
 router.get("/my-courses", approvedTeacherOnly, courseController.getMyCourses);
 
 router.get(

@@ -1,5 +1,3 @@
-type ShareLinkResult = 'shared' | 'copied' | 'unavailable' | 'cancelled';
-
 function fallbackCopyTextToClipboard(text: string): boolean {
   if (typeof document === 'undefined') {
     return false;
@@ -55,30 +53,4 @@ export async function copyTextToClipboard(text: string): Promise<boolean> {
   }
 
   return fallbackCopyTextToClipboard(text);
-}
-
-export async function shareLink(
-  url: string,
-  data?: { title?: string; text?: string }
-): Promise<ShareLinkResult> {
-  if (!url.trim()) {
-    return 'unavailable';
-  }
-
-  if (typeof navigator !== 'undefined' && typeof navigator.share === 'function') {
-    try {
-      await navigator.share({
-        url,
-        title: data?.title,
-        text: data?.text,
-      });
-      return 'shared';
-    } catch (error) {
-      if (error instanceof DOMException && error.name === 'AbortError') {
-        return 'cancelled';
-      }
-    }
-  }
-
-  return (await copyTextToClipboard(url)) ? 'copied' : 'unavailable';
 }

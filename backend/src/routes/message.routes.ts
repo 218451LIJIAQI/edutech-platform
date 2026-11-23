@@ -2,7 +2,7 @@ import { Router } from "express";
 import { body, query } from "express-validator";
 import { authenticate } from "../middleware/auth";
 import { validate } from "../middleware/validate";
-import { uuidParam } from "../validators/common.validator";
+import { uuidBodyField, uuidParam } from "../validators/common.validator";
 import {
   MAX_MESSAGE_LENGTH,
   MAX_MESSAGE_LIMIT,
@@ -21,15 +21,8 @@ import {
 
 const router = Router();
 
-const contactIdParam = uuidParam("contactId", "contactId");
-const threadIdParam = uuidParam("threadId", "threadId");
-
-const contactIdBodyValidation = body("contactId")
-  .notEmpty()
-  .withMessage("contactId is required")
-  .bail()
-  .isUUID()
-  .withMessage("Invalid contactId");
+const contactIdParam = uuidParam("contactId");
+const threadIdParam = uuidParam("threadId");
 
 const messageListQueryValidation = [
   query("cursor")
@@ -82,7 +75,11 @@ router.post(
   sendMessageToContact,
 );
 
-router.post("/threads", validate(contactIdBodyValidation), getOrCreateThread);
+router.post(
+  "/threads",
+  validate(uuidBodyField("contactId")),
+  getOrCreateThread,
+);
 
 router.get(
   "/threads/:threadId/messages",

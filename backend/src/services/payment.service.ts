@@ -10,6 +10,7 @@ import {
   InternalServerError,
 } from "../utils/errors";
 import ordersService from "./orders.service";
+import walletService from "./wallet.service";
 import {
   buildTeacherCourseEarningsSummary,
   buildTeacherEarningsTimeline,
@@ -25,15 +26,13 @@ import {
   paymentDetailsInclude,
   requireAvailableLessonPackage,
   requireTeacherProfileByUserId,
-  userPaymentHistoryInclude,
   type PaymentDetailsRecord,
-  type UserPaymentHistoryRecord,
 } from "./payment/payment-service-helpers";
 import {
   calculateExpirationDate,
   calculatePlatformCommission,
   calculateTeacherNetEarning,
-  toNumber,
+  roundMoney,
 } from "./shared/payment-utils";
 import {
   buildCurrentEnrollmentWhere,
@@ -45,9 +44,7 @@ const pendingCartPaymentInclude = {
   order: {
     include: {
       items: {
-        select: {
-          packageId: true,
-        },
+        select: { packageId: true },
       },
     },
   },
@@ -83,26 +80,14 @@ type PaymentSplit = {
   teacherEarning: number;
 };
 
-const normalizePackageIds = (packageIds: string[]): string[] =>
-  [...packageIds].sort((left, right) => left.localeCompare(right));
-
 const haveSamePackages = (left: string[], right: string[]): boolean => {
-  const normalizedLeft = normalizePackageIds(left);
-  const normalizedRight = normalizePackageIds(right);
+  const sortedLeft = [...left].sort((a, b) => a.localeCompare(b));
+  const sortedRight = [...right].sort((a, b) => a.localeCompare(b));
 
   return (
-    normalizedLeft.length === normalizedRight.length &&
-    normalizedLeft.every(
-      (packageId, index) => packageId === normalizedRight[index],
-    )
+    sortedLeft.length === sortedRight.length &&
+    sortedLeft.every((id, index) => id === sortedRight[index])
   );
-};
-
-const roundMoney = (
-  value: Prisma.Decimal | number | string | null | undefined,
-): number => {
-  const numericValue = toNumber(value ?? 0);
-  return Math.round((numericValue + Number.EPSILON) * 100) / 100;
 };
 
 const buildPaymentSplit = (
@@ -113,40 +98,91 @@ const buildPaymentSplit = (
   const platformCommission = roundMoney(
     Math.min(Math.max(rawPlatformCommission, 0), amount),
   );
-  const teacherEarning = roundMoney(amount - platformCommission);
-
   return {
     amount,
     platformCommission,
-    teacherEarning,
+    teacherEarning: roundMoney(amount - platformCommission),
   };
 };
 
-/**
- * Payment Service
- * Handles payment processing, order checkout, enrollment creation, teacher earnings,
- * wallet synchronization, and direct-payment refunds.
- */
-class PaymentService {
-  private async syncTeacherWalletCredits(payment: PaymentModel): Promise<void> {
-    const walletService = (await import("./wallet.service")).default;
+const markPendingPaymentFailed = async (
+  tx: Prisma.TransactionClient | typeof prisma,
+  paymentId: string,
+) =>
+  tx.payment.updateMany({
+    where: { id: paymentId, status: PaymentStatus.PENDING },
+    data: { status: PaymentStatus.FAILED },
+  });
 
+const failOrderCheckout = async (
+  tx: Prisma.TransactionClient,
+  paymentId: string,
+  orderId: string,
+) => {
+  const failedUpdate = await markPendingPaymentFailed(tx, paymentId);
+  await tx.order.update({
+    where: { id: orderId },
+    data: { status: OrderStatus.FAILED },
+  });
+  return failedUpdate;
+};
+
+class PaymentService {
+  private async createPendingOrderPayment(
+    userId: string,
+    orderId: string,
+    totalAmount: Prisma.Decimal | number | string,
+  ): Promise<{ payment: PaymentModel; split: PaymentSplit }> {
+    const orderWithItems = await prisma.order.findUnique({
+      where: { id: orderId },
+      include: orderPaymentItemsInclude,
+    });
+
+    if (!orderWithItems) {
+      throw new InternalServerError(
+        "Failed to load order items for commission calculation",
+      );
+    }
+
+    const rawPlatformCommission = orderWithItems.items.reduce(
+      (sum, item) =>
+        sum +
+        calculatePlatformCommission(
+          item.finalPrice,
+          item.package?.course?.teacherProfile,
+          config.PLATFORM_COMMISSION_RATE,
+        ),
+      0,
+    );
+
+    const split = buildPaymentSplit(totalAmount, rawPlatformCommission);
+    const payment = await prisma.payment.create({
+      data: {
+        userId,
+        orderId,
+        amount: split.amount,
+        platformCommission: split.platformCommission,
+        teacherEarning: split.teacherEarning,
+        status: PaymentStatus.PENDING,
+      },
+    });
+
+    return { payment, split };
+  }
+
+  private async syncTeacherWalletCredits(payment: PaymentModel): Promise<void> {
     if (payment.packageId) {
       const lessonPackage = await prisma.lessonPackage.findUnique({
         where: { id: payment.packageId },
         include: {
           course: {
-            include: {
-              teacherProfile: true,
-            },
+            include: { teacherProfile: true },
           },
         },
       });
 
       const teacherUserId = lessonPackage?.course?.teacherProfile?.userId;
-      if (!teacherUserId) {
-        return;
-      }
+      if (!teacherUserId) return;
 
       await walletService.creditForTeacher(
         teacherUserId,
@@ -159,24 +195,18 @@ class PaymentService {
       return;
     }
 
-    if (!payment.orderId) {
-      return;
-    }
+    if (!payment.orderId) return;
 
     const order = await prisma.order.findUnique({
       where: { id: payment.orderId },
       include: orderPaymentItemsInclude,
     });
 
-    if (!order) {
-      return;
-    }
+    if (!order) return;
 
     for (const item of order.items) {
       const teacherProfile = item.package?.course?.teacherProfile;
-      if (!teacherProfile) {
-        continue;
-      }
+      if (!teacherProfile) continue;
 
       const teacherNet = roundMoney(
         calculateTeacherNetEarning(
@@ -259,17 +289,13 @@ class PaymentService {
     userId: string,
     packageIds: string[],
   ): Promise<PendingCartPaymentRecord | null> {
-    if (packageIds.length === 0) {
-      return null;
-    }
+    if (packageIds.length === 0) return null;
 
     const pendingPayments = await prisma.payment.findMany({
       where: {
         userId,
         status: PaymentStatus.PENDING,
-        order: {
-          status: OrderStatus.PENDING,
-        },
+        order: { status: OrderStatus.PENDING },
       },
       include: pendingCartPaymentInclude,
       orderBy: { createdAt: "desc" },
@@ -288,16 +314,62 @@ class PaymentService {
     );
   }
 
-  /**
-   * Create cart payment intent for multi-course checkout.
-   */
+  private async upsertActiveEnrollmentAndIncrementTeacher(
+    tx: Prisma.TransactionClient,
+    params: {
+      userId: string;
+      packageId: string;
+      duration: number | null | undefined;
+      teacherProfileId: string;
+      teacherEarning: number;
+      confirmationTime: Date;
+    },
+  ): Promise<Enrollment> {
+    const existed = await tx.enrollment.findUnique({
+      where: {
+        userId_packageId: {
+          userId: params.userId,
+          packageId: params.packageId,
+        },
+      },
+      select: { isActive: true, expiresAt: true },
+    });
+
+    const hadCurrentEnrollment = isEnrollmentCurrentlyActive(
+      existed,
+      params.confirmationTime,
+    );
+    const expiresAt = calculateExpirationDate(params.duration);
+
+    const enrollment = await tx.enrollment.upsert({
+      where: {
+        userId_packageId: {
+          userId: params.userId,
+          packageId: params.packageId,
+        },
+      },
+      update: { isActive: true, expiresAt },
+      create: {
+        userId: params.userId,
+        packageId: params.packageId,
+        expiresAt,
+      },
+    });
+
+    await tx.teacherProfile.update({
+      where: { id: params.teacherProfileId },
+      data: {
+        ...(hadCurrentEnrollment ? {} : { totalStudents: { increment: 1 } }),
+        totalEarnings: { increment: params.teacherEarning },
+      },
+    });
+
+    return enrollment;
+  }
+
   async createCartPaymentIntent(userId: string): Promise<{
     payment: PaymentModel;
-    order: {
-      id: string;
-      orderNo: string;
-      amount: number;
-    };
+    order: { id: string; orderNo: string; amount: number };
   }> {
     const normalizedUserId = ensureRequiredPaymentField(userId, "User ID");
     const referenceDate = new Date();
@@ -324,9 +396,7 @@ class PaymentService {
       where: buildCurrentEnrollmentWhere(
         {
           userId: normalizedUserId,
-          package: {
-            courseId: { in: cartCourseIds },
-          },
+          package: { courseId: { in: cartCourseIds } },
         },
         referenceDate,
       ),
@@ -369,39 +439,11 @@ class PaymentService {
     }
 
     const order = await ordersService.createOrderFromCart(normalizedUserId);
-
-    const orderWithItems = await prisma.order.findUnique({
-      where: { id: order.id },
-      include: orderPaymentItemsInclude,
-    });
-
-    if (!orderWithItems) {
-      throw new InternalServerError(
-        "Failed to load order items for commission calculation",
-      );
-    }
-
-    let rawPlatformCommission = 0;
-    for (const item of orderWithItems.items) {
-      rawPlatformCommission += calculatePlatformCommission(
-        item.finalPrice,
-        item.package?.course?.teacherProfile,
-        config.PLATFORM_COMMISSION_RATE,
-      );
-    }
-
-    const split = buildPaymentSplit(order.totalAmount, rawPlatformCommission);
-
-    const payment = await prisma.payment.create({
-      data: {
-        userId: normalizedUserId,
-        orderId: order.id,
-        amount: split.amount,
-        platformCommission: split.platformCommission,
-        teacherEarning: split.teacherEarning,
-        status: PaymentStatus.PENDING,
-      },
-    });
+    const { payment, split } = await this.createPendingOrderPayment(
+      normalizedUserId,
+      order.id,
+      order.totalAmount,
+    );
 
     return {
       payment,
@@ -413,19 +455,12 @@ class PaymentService {
     };
   }
 
-  /**
-   * Create payment intent for a single package purchase.
-   */
   async createPaymentIntent(
     userId: string,
     packageId: string,
   ): Promise<{
     payment: PaymentModel;
-    package: {
-      id: string;
-      name: string;
-      price: number;
-    };
+    package: { id: string; name: string; price: number };
   }> {
     const normalizedUserId = ensureRequiredPaymentField(userId, "User ID");
     const { lessonPackage, normalizedPackageId } =
@@ -436,9 +471,7 @@ class PaymentService {
       where: buildCurrentEnrollmentWhere(
         {
           userId: normalizedUserId,
-          package: {
-            courseId: lessonPackage.courseId,
-          },
+          package: { courseId: lessonPackage.courseId },
         },
         referenceDate,
       ),
@@ -484,39 +517,11 @@ class PaymentService {
       normalizedUserId,
       normalizedPackageId,
     );
-
-    const orderWithItems = await prisma.order.findUnique({
-      where: { id: order.id },
-      include: orderPaymentItemsInclude,
-    });
-
-    if (!orderWithItems) {
-      throw new InternalServerError(
-        "Failed to load order items for commission calculation",
-      );
-    }
-
-    let rawPlatformCommission = 0;
-    for (const item of orderWithItems.items) {
-      rawPlatformCommission += calculatePlatformCommission(
-        item.finalPrice,
-        item.package?.course?.teacherProfile,
-        config.PLATFORM_COMMISSION_RATE,
-      );
-    }
-
-    const split = buildPaymentSplit(order.totalAmount, rawPlatformCommission);
-
-    const payment = await prisma.payment.create({
-      data: {
-        userId: normalizedUserId,
-        orderId: order.id,
-        amount: split.amount,
-        platformCommission: split.platformCommission,
-        teacherEarning: split.teacherEarning,
-        status: PaymentStatus.PENDING,
-      },
-    });
+    const { payment, split } = await this.createPendingOrderPayment(
+      normalizedUserId,
+      order.id,
+      order.totalAmount,
+    );
 
     return {
       payment,
@@ -528,10 +533,6 @@ class PaymentService {
     };
   }
 
-  /**
-   * Confirm payment and create enrollment.
-   * This method is designed to be idempotent for completed payments and safer for repeated requests.
-   */
   async confirmPayment(
     paymentId: string,
     userId: string,
@@ -573,15 +574,7 @@ class PaymentService {
         payment.order.status === OrderStatus.CANCELLED ||
         payment.order.status === OrderStatus.FAILED
       ) {
-        await prisma.payment.updateMany({
-          where: {
-            id: payment.id,
-            status: PaymentStatus.PENDING,
-          },
-          data: {
-            status: PaymentStatus.FAILED,
-          },
-        });
+        await markPendingPaymentFailed(prisma, payment.id);
       }
 
       throw new ValidationError("This checkout is no longer payable");
@@ -611,28 +604,15 @@ class PaymentService {
             !currentPackage.isActive ||
             !currentPackage.course?.isPublished
           ) {
-            await tx.payment.updateMany({
-              where: {
-                id: normalizedPaymentId,
-                status: PaymentStatus.PENDING,
-              },
-              data: {
-                status: PaymentStatus.FAILED,
-              },
-            });
-
-            return {
-              kind: "unavailable-package" as const,
-            };
+            await markPendingPaymentFailed(tx, normalizedPaymentId);
+            return { kind: "unavailable-package" as const };
           }
 
           const activeEnrollment = await tx.enrollment.findFirst({
             where: buildCurrentEnrollmentWhere(
               {
                 userId: payment.userId,
-                package: {
-                  courseId: pkg.courseId,
-                },
+                package: { courseId: pkg.courseId },
               },
               confirmationTime,
             ),
@@ -640,16 +620,10 @@ class PaymentService {
           });
 
           if (activeEnrollment) {
-            const failedUpdate = await tx.payment.updateMany({
-              where: {
-                id: normalizedPaymentId,
-                status: PaymentStatus.PENDING,
-              },
-              data: {
-                status: PaymentStatus.FAILED,
-              },
-            });
-
+            const failedUpdate = await markPendingPaymentFailed(
+              tx,
+              normalizedPaymentId,
+            );
             return {
               kind:
                 failedUpdate.count === 1
@@ -659,10 +633,7 @@ class PaymentService {
           }
 
           const paymentUpdate = await tx.payment.updateMany({
-            where: {
-              id: normalizedPaymentId,
-              status: PaymentStatus.PENDING,
-            },
+            where: { id: normalizedPaymentId, status: PaymentStatus.PENDING },
             data: {
               status: PaymentStatus.COMPLETED,
               paidAt: confirmationTime,
@@ -670,56 +641,22 @@ class PaymentService {
           });
 
           if (paymentUpdate.count !== 1) {
-            return {
-              kind: "already-processed" as const,
-            };
+            return { kind: "already-processed" as const };
           }
 
           const updatedPayment = await tx.payment.findUniqueOrThrow({
             where: { id: normalizedPaymentId },
           });
 
-          const existed = await tx.enrollment.findUnique({
-            where: {
-              userId_packageId: { userId: payment.userId, packageId: pkg.id },
-            },
-            select: {
-              isActive: true,
-              expiresAt: true,
-            },
-          });
-          const hadCurrentEnrollment = isEnrollmentCurrentlyActive(
-            existed,
-            confirmationTime,
-          );
-          const expiresAt = calculateExpirationDate(pkg.duration);
-
-          const enrollment = await tx.enrollment.upsert({
-            where: {
-              userId_packageId: { userId: payment.userId, packageId: pkg.id },
-            },
-            update: {
-              isActive: true,
-              expiresAt,
-            },
-            create: {
+          const enrollment =
+            await this.upsertActiveEnrollmentAndIncrementTeacher(tx, {
               userId: payment.userId,
               packageId: pkg.id,
-              expiresAt,
-            },
-          });
-
-          await tx.teacherProfile.update({
-            where: { id: currentPackage.course.teacherProfileId },
-            data: {
-              ...(hadCurrentEnrollment
-                ? {}
-                : { totalStudents: { increment: 1 } }),
-              totalEarnings: {
-                increment: roundMoney(updatedPayment.teacherEarning),
-              },
-            },
-          });
+              duration: pkg.duration,
+              teacherProfileId: currentPackage.course.teacherProfileId,
+              teacherEarning: roundMoney(updatedPayment.teacherEarning),
+              confirmationTime,
+            });
 
           return {
             kind: "single-complete" as const,
@@ -765,10 +702,7 @@ class PaymentService {
         throw new InternalServerError("Enrollment not found after creation");
       }
 
-      return {
-        payment: result.payment,
-        enrollment,
-      };
+      return { payment: result.payment, enrollment };
     }
 
     if (payment.orderId) {
@@ -782,9 +716,7 @@ class PaymentService {
           });
 
           if (!order) {
-            return {
-              kind: "order-not-found" as const,
-            };
+            return { kind: "order-not-found" as const };
           }
 
           if (order.status !== OrderStatus.PENDING) {
@@ -792,77 +724,32 @@ class PaymentService {
               order.status === OrderStatus.CANCELLED ||
               order.status === OrderStatus.FAILED
             ) {
-              await tx.payment.updateMany({
-                where: {
-                  id: normalizedPaymentId,
-                  status: PaymentStatus.PENDING,
-                },
-                data: {
-                  status: PaymentStatus.FAILED,
-                },
-              });
+              await markPendingPaymentFailed(tx, normalizedPaymentId);
             }
-
-            return {
-              kind: "order-not-payable" as const,
-            };
+            return { kind: "order-not-payable" as const };
           }
 
-          const unavailableOrderItem = order.items.find(
-            (item) =>
-              !item.package?.isActive || !item.package.course?.isPublished,
-          );
-
-          if (unavailableOrderItem) {
-            await tx.payment.updateMany({
-              where: {
-                id: normalizedPaymentId,
-                status: PaymentStatus.PENDING,
-              },
-              data: {
-                status: PaymentStatus.FAILED,
-              },
-            });
-
-            await tx.order.update({
-              where: { id: order.id },
-              data: { status: OrderStatus.FAILED },
-            });
-
-            return {
-              kind: "unavailable-order" as const,
-            };
+          if (
+            order.items.some(
+              (item) =>
+                !item.package?.isActive || !item.package.course?.isPublished,
+            )
+          ) {
+            await failOrderCheckout(tx, normalizedPaymentId, order.id);
+            return { kind: "unavailable-order" as const };
           }
 
           const courseIds = order.items.map((item) => item.package.course.id);
           if (new Set(courseIds).size !== courseIds.length) {
-            await tx.payment.updateMany({
-              where: {
-                id: normalizedPaymentId,
-                status: PaymentStatus.PENDING,
-              },
-              data: {
-                status: PaymentStatus.FAILED,
-              },
-            });
-
-            await tx.order.update({
-              where: { id: order.id },
-              data: { status: OrderStatus.FAILED },
-            });
-
-            return {
-              kind: "duplicate-course-order" as const,
-            };
+            await failOrderCheckout(tx, normalizedPaymentId, order.id);
+            return { kind: "duplicate-course-order" as const };
           }
 
           const activeEnrollments = await tx.enrollment.findMany({
             where: buildCurrentEnrollmentWhere(
               {
                 userId: payment.userId,
-                package: {
-                  courseId: { in: courseIds },
-                },
+                package: { courseId: { in: courseIds } },
               },
               confirmationTime,
             ),
@@ -870,21 +757,11 @@ class PaymentService {
           });
 
           if (activeEnrollments.length > 0) {
-            const failedUpdate = await tx.payment.updateMany({
-              where: {
-                id: normalizedPaymentId,
-                status: PaymentStatus.PENDING,
-              },
-              data: {
-                status: PaymentStatus.FAILED,
-              },
-            });
-
-            await tx.order.update({
-              where: { id: order.id },
-              data: { status: OrderStatus.FAILED },
-            });
-
+            const failedUpdate = await failOrderCheckout(
+              tx,
+              normalizedPaymentId,
+              order.id,
+            );
             return {
               kind:
                 failedUpdate.count === 1
@@ -894,10 +771,7 @@ class PaymentService {
           }
 
           const paymentUpdate = await tx.payment.updateMany({
-            where: {
-              id: normalizedPaymentId,
-              status: PaymentStatus.PENDING,
-            },
+            where: { id: normalizedPaymentId, status: PaymentStatus.PENDING },
             data: {
               status: PaymentStatus.COMPLETED,
               paidAt: confirmationTime,
@@ -905,9 +779,7 @@ class PaymentService {
           });
 
           if (paymentUpdate.count !== 1) {
-            return {
-              kind: "already-processed" as const,
-            };
+            return { kind: "already-processed" as const };
           }
 
           const updatedPayment = await tx.payment.findUniqueOrThrow({
@@ -916,60 +788,24 @@ class PaymentService {
 
           for (const item of order.items) {
             const pkg = item.package;
-            const expiresAt = calculateExpirationDate(pkg?.duration);
-
-            const existed = await tx.enrollment.findUnique({
-              where: {
-                userId_packageId: {
-                  userId: payment.userId,
-                  packageId: item.packageId,
-                },
-              },
-              select: {
-                isActive: true,
-                expiresAt: true,
-              },
-            });
-            const hadCurrentEnrollment = isEnrollmentCurrentlyActive(
-              existed,
-              confirmationTime,
-            );
-
-            await tx.enrollment.upsert({
-              where: {
-                userId_packageId: {
-                  userId: payment.userId,
-                  packageId: item.packageId,
-                },
-              },
-              update: {
-                isActive: true,
-                expiresAt,
-              },
-              create: {
-                userId: payment.userId,
-                packageId: item.packageId,
-                expiresAt,
-              },
-            });
+            const netTeacherEarning = pkg?.course
+              ? roundMoney(
+                  calculateTeacherNetEarning(
+                    item.finalPrice,
+                    pkg.course.teacherProfile,
+                    config.PLATFORM_COMMISSION_RATE,
+                  ),
+                )
+              : 0;
 
             if (pkg?.course) {
-              const netTeacherEarning = roundMoney(
-                calculateTeacherNetEarning(
-                  item.finalPrice,
-                  pkg.course.teacherProfile,
-                  config.PLATFORM_COMMISSION_RATE,
-                ),
-              );
-
-              await tx.teacherProfile.update({
-                where: { id: pkg.course.teacherProfileId },
-                data: {
-                  ...(hadCurrentEnrollment
-                    ? {}
-                    : { totalStudents: { increment: 1 } }),
-                  totalEarnings: { increment: netTeacherEarning },
-                },
+              await this.upsertActiveEnrollmentAndIncrementTeacher(tx, {
+                userId: payment.userId,
+                packageId: item.packageId,
+                duration: pkg.duration,
+                teacherProfileId: pkg.course.teacherProfileId,
+                teacherEarning: netTeacherEarning,
+                confirmationTime,
               });
             }
           }
@@ -1012,30 +848,38 @@ class PaymentService {
         throw new ValidationError("This payment has already been processed");
       }
 
-      if (result.kind === "order-not-found") {
-        throw new NotFoundError("Order not found");
-      }
+      const errorByKind: Record<
+        Exclude<
+          CartPaymentConfirmationTransactionResult["kind"],
+          "order-complete" | "already-processed"
+        >,
+        () => never
+      > = {
+        "order-not-found": () => {
+          throw new NotFoundError("Order not found");
+        },
+        "order-not-payable": () => {
+          throw new ValidationError("This checkout is no longer payable");
+        },
+        "stale-order": () => {
+          throw new ValidationError(
+            "This checkout is stale because one or more packages are already active in your account",
+          );
+        },
+        "duplicate-course-order": () => {
+          throw new ValidationError(
+            "This checkout is invalid because it contains multiple packages for the same course",
+          );
+        },
+        "unavailable-order": () => {
+          throw new ValidationError(
+            "This checkout is stale because one or more packages are no longer available",
+          );
+        },
+      };
 
-      if (result.kind === "order-not-payable") {
-        throw new ValidationError("This checkout is no longer payable");
-      }
-
-      if (result.kind === "stale-order") {
-        throw new ValidationError(
-          "This checkout is stale because one or more packages are already active in your account",
-        );
-      }
-
-      if (result.kind === "duplicate-course-order") {
-        throw new ValidationError(
-          "This checkout is invalid because it contains multiple packages for the same course",
-        );
-      }
-
-      if (result.kind === "unavailable-order") {
-        throw new ValidationError(
-          "This checkout is stale because one or more packages are no longer available",
-        );
+      if (result.kind !== "order-complete") {
+        return errorByKind[result.kind]();
       }
 
       await this.trySyncTeacherWalletCredits(result.payment, {
@@ -1044,31 +888,22 @@ class PaymentService {
         flow: "cart-confirmation",
       });
 
-      return {
-        payment: result.payment,
-        orderId: result.orderId,
-      };
+      return { payment: result.payment, orderId: result.orderId };
     }
 
     throw new ValidationError("Invalid payment state");
   }
 
-  /**
-   * Get user's payment history.
-   */
-  async getUserPayments(userId: string): Promise<UserPaymentHistoryRecord[]> {
+  async getUserPayments(userId: string): Promise<PaymentDetailsRecord[]> {
     const normalizedUserId = ensureRequiredPaymentField(userId, "User ID");
 
     return prisma.payment.findMany({
       where: { userId: normalizedUserId },
-      include: userPaymentHistoryInclude,
+      include: paymentDetailsInclude,
       orderBy: { createdAt: "desc" },
     });
   }
 
-  /**
-   * Get payment by ID.
-   */
   async getPaymentById(
     paymentId: string,
     userId: string,
@@ -1095,9 +930,6 @@ class PaymentService {
     return payment;
   }
 
-  /**
-   * Get teacher's earnings.
-   */
   async getTeacherEarnings(userId: string): Promise<{
     totalEarnings: number;
     payments: TeacherEarningsPayment[];
@@ -1121,9 +953,6 @@ class PaymentService {
     };
   }
 
-  /**
-   * Get teacher's earnings grouped by course.
-   */
   async getTeacherEarningsByCourse(userId: string): Promise<{
     totalEarnings: number;
     totalCourses: number;
@@ -1157,10 +986,6 @@ class PaymentService {
     };
   }
 
-  /**
-   * Request refund for a direct single-package payment.
-   * Order-based payments should use the order refund workflow.
-   */
   async requestRefund(paymentId: string): Promise<PaymentModel> {
     const normalizedPaymentId = ensureRequiredPaymentField(
       paymentId,
@@ -1195,19 +1020,14 @@ class PaymentService {
       where: { id: normalizedPackageId },
       include: {
         course: {
-          include: {
-            teacherProfile: true,
-          },
+          include: { teacherProfile: true },
         },
       },
     });
 
     const updatedPayment = await prisma.$transaction(async (tx) => {
       const refundUpdate = await tx.payment.updateMany({
-        where: {
-          id: normalizedPaymentId,
-          status: PaymentStatus.COMPLETED,
-        },
+        where: { id: normalizedPaymentId, status: PaymentStatus.COMPLETED },
         data: { status: PaymentStatus.REFUNDED },
       });
 
@@ -1229,15 +1049,6 @@ class PaymentService {
 
       const teacherProfile = lessonPackage?.course?.teacherProfile;
       if (teacherProfile) {
-        await tx.teacherProfile.update({
-          where: { id: teacherProfile.id },
-          data: {
-            totalEarnings: {
-              decrement: roundMoney(payment.teacherEarning),
-            },
-          },
-        });
-
         const activeStudentCount =
           await countDistinctActiveStudentsForTeacherProfile(
             tx,
@@ -1246,7 +1057,10 @@ class PaymentService {
 
         await tx.teacherProfile.update({
           where: { id: teacherProfile.id },
-          data: { totalStudents: activeStudentCount },
+          data: {
+            totalEarnings: { decrement: roundMoney(payment.teacherEarning) },
+            totalStudents: activeStudentCount,
+          },
         });
       }
 
@@ -1256,7 +1070,6 @@ class PaymentService {
     const teacherUserId = lessonPackage?.course?.teacherProfile?.userId;
     if (teacherUserId) {
       try {
-        const walletService = (await import("./wallet.service")).default;
         await walletService.debitForRefund(
           teacherUserId,
           roundMoney(payment.teacherEarning),
@@ -1268,10 +1081,7 @@ class PaymentService {
       } catch (error) {
         logger.error(
           "Failed to synchronize teacher wallet debit for direct payment refund",
-          {
-            paymentId: payment.id,
-            error,
-          },
+          { paymentId: payment.id, error },
         );
       }
     }

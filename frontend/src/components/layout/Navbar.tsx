@@ -6,12 +6,9 @@ import {
   LayoutDashboard,
   ShoppingCart,
   Receipt,
-  Menu,
-  X,
   Sparkles,
   MessageSquare,
   Users,
-  GraduationCap,
   Wallet,
   BarChart3,
   Shield,
@@ -20,7 +17,6 @@ import {
   Settings,
   Compass,
   HelpCircle,
-  User,
   Megaphone,
   type LucideIcon,
 } from 'lucide-react';
@@ -44,9 +40,8 @@ type NavItem = {
 /**
  * Navbar
  *
- * Provides the main application navigation with role-based menu items,
- * authentication actions, unread message indicator, language switching,
- * responsive mobile navigation, and accessibility support.
+ * Desktop web navigation bar with role-based menu items, unread message indicator,
+ * window-resize/zoom wrapping elasticity, and keyboard accessibility.
  */
 const Navbar = () => {
   const { user, isAuthenticated, logout } = useAuthStore();
@@ -54,7 +49,6 @@ const Navbar = () => {
   const location = useLocation();
 
   const [unreadMessageCount, setUnreadMessageCount] = useState(0);
-  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isScrolled, setIsScrolled] = useState(false);
 
   const hasAccessToken = Boolean(getAccessToken());
@@ -71,9 +65,7 @@ const Navbar = () => {
           hoverShadow: 'hover:shadow-emerald-500/30',
           bg: 'bg-emerald-50',
           text: 'text-emerald-600',
-          border: 'border-emerald-200',
           badge: 'Teacher',
-          icon: GraduationCap,
         };
 
       case UserRole.ADMIN:
@@ -83,9 +75,7 @@ const Navbar = () => {
           hoverShadow: 'hover:shadow-violet-500/30',
           bg: 'bg-violet-50',
           text: 'text-violet-600',
-          border: 'border-violet-200',
           badge: 'Admin',
-          icon: Shield,
         };
 
       default:
@@ -95,22 +85,15 @@ const Navbar = () => {
           hoverShadow: 'hover:shadow-primary-500/30',
           bg: 'bg-primary-50',
           text: 'text-primary-600',
-          border: 'border-primary-200',
           badge: 'Student',
-          icon: User,
         };
     }
   }, [user?.role]);
-
-  const RoleIcon = theme.icon;
 
   const userInitial =
     user?.firstName?.trim()?.charAt(0)?.toUpperCase() ||
     user?.email?.trim()?.charAt(0)?.toUpperCase() ||
     'U';
-
-  const userFullName =
-    [user?.firstName, user?.lastName].filter(Boolean).join(' ') || 'User';
 
   const teacherRegistrationStatus = user?.teacherProfile?.registrationStatus;
   const teacherProfileCompletionStatus = normalizeTeacherProfileCompletionStatus(
@@ -174,7 +157,7 @@ const Navbar = () => {
       { to: '/teachers', label: 'Teachers', icon: Users },
       { to: '/help', label: 'Help', icon: HelpCircle },
     ];
-  }, [isApprovedTeacher, shouldShowSessionRestoreState, user?.role]);
+  }, [isApprovedTeacher, shouldShowSessionRestoreState, teacherRegistrationStatus, user?.role]);
 
   const getDashboardLink = useCallback(() => {
     switch (user?.role) {
@@ -193,7 +176,7 @@ const Navbar = () => {
       default:
         return '/';
     }
-  }, [isApprovedTeacher, user?.role]);
+  }, [isApprovedTeacher, teacherRegistrationStatus, user?.role]);
 
   const isActive = useCallback(
     (path: string) => location.pathname === path || location.pathname.startsWith(`${path}/`),
@@ -221,10 +204,6 @@ const Navbar = () => {
       window.removeEventListener('scroll', handleScroll);
     };
   }, []);
-
-  useEffect(() => {
-    setIsMobileMenuOpen(false);
-  }, [location.pathname]);
 
   useEffect(() => {
     if (!isSessionReady) {
@@ -258,7 +237,6 @@ const Navbar = () => {
 
   const handleLogout = useCallback(async () => {
     try {
-      setIsMobileMenuOpen(false);
       await logout();
     } catch (error) {
       clientLogger.error('Logout failed:', error);
@@ -278,9 +256,9 @@ const Navbar = () => {
       )}
     >
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex h-16 items-center justify-between">
+        <div className="flex min-h-16 flex-wrap items-center justify-between gap-3 py-2">
           {/* Logo */}
-          <Link to="/" aria-label="Go to home page" className="flex items-center gap-3 group">
+          <Link to="/" aria-label="Go to home page" className="flex items-center gap-3 group shrink-0">
             <div
               className={clsx(
                 'relative p-2.5 rounded-xl shadow-lg transition-all duration-300 group-hover:scale-105',
@@ -303,47 +281,49 @@ const Navbar = () => {
             </div>
           </Link>
 
-          {/* Desktop Navigation */}
-          <div className={clsx('hidden items-center', isSessionReady ? 'xl:flex' : 'md:flex')}>
-            <div
-              className={clsx(
-                'flex items-center gap-1 rounded-2xl p-1',
-                isSessionReady ? 'bg-gray-100/80' : ''
-              )}
-            >
-              {navItems.map((item) => {
-                const Icon = item.icon;
-                const active = isActive(item.to);
+          {/* Desktop Navigation (wraps cleanly under narrower desktop windows or browser zoom) */}
+          {navItems.length > 0 && (
+            <div className="flex items-center">
+              <div
+                className={clsx(
+                  'flex flex-wrap items-center gap-1 rounded-2xl p-1',
+                  isSessionReady ? 'bg-gray-100/80' : ''
+                )}
+              >
+                {navItems.map((item) => {
+                  const Icon = item.icon;
+                  const active = isActive(item.to);
 
-                return (
-                  <Link
-                    key={item.to}
-                    to={item.to}
-                    aria-current={active ? 'page' : undefined}
-                    className={clsx(
-                      'flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-medium transition-all duration-200',
-                      active
-                        ? `bg-white shadow-sm ${theme.text}`
-                        : 'text-gray-600 hover:bg-white/60 hover:text-gray-900',
-                      item.highlight && !active && `${theme.text} font-semibold`
-                    )}
-                  >
-                    <Icon className={clsx('h-4 w-4', item.highlight && 'animate-pulse')} aria-hidden="true" />
-                    {item.label}
-                  </Link>
-                );
-              })}
+                  return (
+                    <Link
+                      key={item.to}
+                      to={item.to}
+                      aria-current={active ? 'page' : undefined}
+                      className={clsx(
+                        'flex items-center gap-2 rounded-xl px-3.5 py-2 text-sm font-medium transition-all duration-200 whitespace-nowrap',
+                        active
+                          ? `bg-white shadow-sm ${theme.text}`
+                          : 'text-gray-600 hover:bg-white/60 hover:text-gray-900',
+                        item.highlight && !active && `${theme.text} font-semibold`
+                      )}
+                    >
+                      <Icon className={clsx('h-4 w-4', item.highlight && 'animate-pulse')} aria-hidden="true" />
+                      {item.label}
+                    </Link>
+                  );
+                })}
+              </div>
             </div>
-          </div>
+          )}
 
           {/* Right Section */}
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-1 shrink-0">
             {shouldShowSessionRestoreState ? (
               <div className="flex items-center gap-3 pl-3">
                 <div
                   role="status"
                   aria-live="polite"
-                  className="hidden items-center gap-2 rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-600 sm:flex"
+                  className="flex items-center gap-2 rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-600"
                 >
                   <span className="h-2.5 w-2.5 animate-pulse rounded-full bg-primary-500" />
                   <span>Restoring session...</span>
@@ -351,7 +331,6 @@ const Navbar = () => {
               </div>
             ) : isSessionReady ? (
               <>
-                {/* Messages */}
                 <Link
                   to="/messages"
                   aria-label={
@@ -377,9 +356,8 @@ const Navbar = () => {
 
                 <NotificationCenter />
 
-                {/* Student Quick Actions */}
                 {user?.role === UserRole.STUDENT && (
-                  <div className="ml-1 hidden items-center gap-1 border-l border-gray-200 pl-2 sm:flex">
+                  <div className="ml-1 flex items-center gap-1 border-l border-gray-200 pl-2">
                     <Link
                       to="/cart"
                       aria-label="Cart"
@@ -408,12 +386,11 @@ const Navbar = () => {
                   </div>
                 )}
 
-                {/* User Actions */}
                 <div className="ml-2 flex items-center gap-1 border-l border-gray-200 pl-2">
                   <Link
                     to={getDashboardLink()}
                     aria-label="Dashboard"
-                    className="hidden rounded-xl p-2 text-gray-500 transition-all duration-200 hover:bg-gray-100 hover:text-gray-700 sm:flex"
+                    className="flex rounded-xl p-2 text-gray-500 transition-all duration-200 hover:bg-gray-100 hover:text-gray-700"
                     title="Dashboard"
                   >
                     <LayoutDashboard className="h-5 w-5" aria-hidden="true" />
@@ -449,22 +426,6 @@ const Navbar = () => {
                     <LogOut className="h-5 w-5" aria-hidden="true" />
                   </button>
                 </div>
-
-                {/* Mobile Menu Button */}
-                <button
-                  type="button"
-                  onClick={() => setIsMobileMenuOpen((open) => !open)}
-                  aria-label={isMobileMenuOpen ? 'Close mobile navigation menu' : 'Open mobile navigation menu'}
-                  aria-expanded={isMobileMenuOpen}
-                  aria-controls="mobile-navigation-menu"
-                  className="ml-1 rounded-xl p-2 text-gray-600 transition-colors hover:bg-gray-100 xl:hidden"
-                >
-                  {isMobileMenuOpen ? (
-                    <X className="h-5 w-5" aria-hidden="true" />
-                  ) : (
-                    <Menu className="h-5 w-5" aria-hidden="true" />
-                  )}
-                </button>
               </>
             ) : (
               <div className="flex items-center gap-2">
@@ -485,112 +446,6 @@ const Navbar = () => {
             )}
           </div>
         </div>
-
-        {/* Mobile Menu */}
-        {isMobileMenuOpen && isSessionReady && (
-          <div
-            id="mobile-navigation-menu"
-            className="animate-slide-down border-t border-gray-100 py-4 xl:hidden"
-          >
-            <div className={clsx('mx-4 mb-4 flex items-center gap-3 rounded-xl p-3', theme.bg)}>
-              <div
-                className={clsx(
-                  'flex h-10 w-10 items-center justify-center rounded-lg font-bold text-white',
-                  `bg-gradient-to-br ${theme.gradient}`
-                )}
-                aria-hidden="true"
-              >
-                {userInitial}
-              </div>
-
-              <div>
-                <p className="font-semibold text-gray-900">{userFullName}</p>
-                <p className={clsx('flex items-center gap-1 text-sm font-medium', theme.text)}>
-                  <RoleIcon className="h-4 w-4" aria-hidden="true" />
-                  {theme.badge}
-                </p>
-              </div>
-            </div>
-
-            <div className="space-y-1 px-2">
-              {navItems.map((item) => {
-                const Icon = item.icon;
-                const active = isActive(item.to);
-
-                return (
-                  <Link
-                    key={item.to}
-                    to={item.to}
-                    aria-current={active ? 'page' : undefined}
-                    className={clsx(
-                      'flex items-center gap-3 rounded-xl px-4 py-3 font-medium transition-all',
-                      active ? `${theme.bg} ${theme.text}` : 'text-gray-700 hover:bg-gray-100'
-                    )}
-                  >
-                    <Icon className="h-5 w-5" aria-hidden="true" />
-                    {item.label}
-                  </Link>
-                );
-              })}
-
-              <Link
-                to="/messages"
-                className={clsx(
-                  'flex items-center justify-between rounded-xl px-4 py-3 font-medium transition-all',
-                  isActive('/messages') ? `${theme.bg} ${theme.text}` : 'text-gray-700 hover:bg-gray-100'
-                )}
-              >
-                <span className="flex items-center gap-3">
-                  <MessageSquare className="h-5 w-5" aria-hidden="true" />
-                  Messages
-                </span>
-
-                {unreadMessageCount > 0 && (
-                  <span className="flex h-6 min-w-[24px] items-center justify-center rounded-full bg-red-500 px-2 text-xs font-bold text-white">
-                    {unreadMessageCount > 99 ? '99+' : unreadMessageCount}
-                  </span>
-                )}
-              </Link>
-
-              {user?.role === UserRole.STUDENT && (
-                <>
-                  <Link className="flex items-center gap-3 rounded-xl px-4 py-3 font-medium text-gray-700 hover:bg-gray-100" to="/cart">
-                    <ShoppingCart className="h-5 w-5" aria-hidden="true" />
-                    Cart
-                  </Link>
-
-                  <Link className="flex items-center gap-3 rounded-xl px-4 py-3 font-medium text-gray-700 hover:bg-gray-100" to="/orders">
-                    <Receipt className="h-5 w-5" aria-hidden="true" />
-                    Orders
-                  </Link>
-                </>
-              )}
-
-              <div className="my-2 border-t border-gray-100" />
-
-              <Link className="flex items-center gap-3 rounded-xl px-4 py-3 font-medium text-gray-700 hover:bg-gray-100" to={getDashboardLink()}>
-                <LayoutDashboard className="h-5 w-5" aria-hidden="true" />
-                Dashboard
-              </Link>
-
-              <Link className="flex items-center gap-3 rounded-xl px-4 py-3 font-medium text-gray-700 hover:bg-gray-100" to="/profile">
-                <Settings className="h-5 w-5" aria-hidden="true" />
-                Profile Settings
-              </Link>
-
-              <div className="my-2 border-t border-gray-100" />
-
-              <button
-                type="button"
-                onClick={handleLogout}
-                className="flex w-full items-center gap-3 rounded-xl px-4 py-3 font-medium text-red-600 transition-all hover:bg-red-50"
-              >
-                <LogOut className="h-5 w-5" aria-hidden="true" />
-                Logout
-              </button>
-            </div>
-          </div>
-        )}
       </div>
     </nav>
   );

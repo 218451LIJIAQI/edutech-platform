@@ -4,7 +4,6 @@ import prisma from "../../config/database";
 import { ValidationError } from "../../utils/errors";
 import {
   adminFinancialPaymentsInclude,
-  adminInvoicesInclude,
   buildTeacherCommissionWhere,
   createUserAuditLog,
   ensureCommissionRateInRange,
@@ -20,62 +19,23 @@ import {
   settlementPaymentInclude,
 } from "./admin-metrics";
 import { buildPaginationMeta, normalizePagination } from "../shared/pagination";
+import { toNullableNumber, toNumber } from "../shared/payment-utils";
+import { validateDateRange } from "../shared/service-helpers";
 
 type RevenueGroupBy = "day" | "week" | "month";
 
-const decimalToNumber = (
-  value: Prisma.Decimal | number | null | undefined,
-): number => {
-  if (value === null || value === undefined) {
-    return 0;
-  }
-
-  return typeof value === "number" ? value : value.toNumber();
-};
-
-const decimalToNullableNumber = (
-  value: Prisma.Decimal | number | null | undefined,
-): number | null => {
-  if (value === null || value === undefined) {
-    return null;
-  }
-
-  return typeof value === "number" ? value : value.toNumber();
-};
-
-const validateDateRange = (startDate?: Date, endDate?: Date) => {
-  if (startDate && Number.isNaN(startDate.getTime())) {
-    throw new ValidationError("Invalid start date");
-  }
-
-  if (endDate && Number.isNaN(endDate.getTime())) {
-    throw new ValidationError("Invalid end date");
-  }
-
-  if (startDate && endDate && startDate > endDate) {
-    throw new ValidationError("Start date cannot be later than end date");
-  }
-};
-
 const normalizeRevenueGroupBy = (groupBy?: RevenueGroupBy): RevenueGroupBy => {
-  const allowedValues: RevenueGroupBy[] = ["day", "week", "month"];
-
-  if (!groupBy) {
-    return "day";
+  if (!groupBy) return "day";
+  if (groupBy === "day" || groupBy === "week" || groupBy === "month") {
+    return groupBy;
   }
-
-  if (!allowedValues.includes(groupBy)) {
-    throw new ValidationError(
-      "Revenue analytics groupBy must be day, week, or month",
-    );
-  }
-
-  return groupBy;
+  throw new ValidationError(
+    "Revenue analytics groupBy must be day, week, or month",
+  );
 };
 
 export const getAdminFinancials = async (startDate?: Date, endDate?: Date) => {
   validateDateRange(startDate, endDate);
-
   const where = createCompletedPaymentWhere(startDate, endDate);
 
   const [payments, totals] = await Promise.all([
@@ -98,9 +58,9 @@ export const getAdminFinancials = async (startDate?: Date, endDate?: Date) => {
 
   return {
     totals: {
-      totalRevenue: decimalToNumber(totals._sum.amount),
-      platformEarnings: decimalToNumber(totals._sum.platformCommission),
-      teacherEarnings: decimalToNumber(totals._sum.teacherEarning),
+      totalRevenue: toNumber(totals._sum.amount),
+      platformEarnings: toNumber(totals._sum.platformCommission),
+      teacherEarnings: toNumber(totals._sum.teacherEarning),
       transactionCount: totals._count,
     },
     recentPayments: payments,
@@ -116,7 +76,6 @@ export const getAdminSettlements = async (
   } = {},
 ) => {
   const { startDate, endDate, page = 1, limit = 20 } = params;
-
   validateDateRange(startDate, endDate);
 
   const pagination = normalizePagination(page, limit, {
@@ -124,10 +83,8 @@ export const getAdminSettlements = async (
     maxLimit: 100,
   });
 
-  const where = createCompletedPaymentWhere(startDate, endDate);
-
   const payments = await prisma.payment.findMany({
-    where,
+    where: createCompletedPaymentWhere(startDate, endDate),
     include: settlementPaymentInclude,
     orderBy: { paidAt: "desc" },
   });
@@ -156,12 +113,8 @@ export const getAdminInvoices = async (
 
   const baseWhere = createCompletedPaymentWhere(startDate, endDate);
   const userRelationFilter = createPaymentUserRelationFilter(search);
-
   const where: Prisma.PaymentWhereInput = userRelationFilter
-    ? {
-        ...baseWhere,
-        user: userRelationFilter,
-      }
+    ? { ...baseWhere, user: userRelationFilter }
     : baseWhere;
 
   const pagination = normalizePagination(page, limit, {
@@ -172,7 +125,7 @@ export const getAdminInvoices = async (
   const [payments, total] = await Promise.all([
     prisma.payment.findMany({
       where,
-      include: adminInvoicesInclude,
+      include: adminFinancialPaymentsInclude,
       orderBy: { paidAt: "desc" },
       skip: pagination.skip,
       take: pagination.limit,
@@ -198,10 +151,8 @@ export const getAdminRevenueAnalytics = async (
 
   validateDateRange(startDate, endDate);
 
-  const where = createCompletedPaymentWhere(startDate, endDate);
-
   const payments = await prisma.payment.findMany({
-    where,
+    where: createCompletedPaymentWhere(startDate, endDate),
     include: settlementPaymentInclude,
     orderBy: { paidAt: "asc" },
   });
@@ -221,14 +172,11 @@ export const getAdminTeacherCommissions = async (
   } = {},
 ) => {
   const { page = 1, limit = 20 } = filters;
-  const search = filters.search?.trim();
-
   const pagination = normalizePagination(page, limit, {
     defaultLimit: 20,
     maxLimit: 100,
   });
-
-  const where = buildTeacherCommissionWhere(search);
+  const where = buildTeacherCommissionWhere(filters.search);
 
   const [rows, total] = await Promise.all([
     prisma.user.findMany({
@@ -256,7 +204,7 @@ export const updateAdminTeacherCommission = async (
   ensureCommissionRateInRange(commissionRate);
 
   const profile = await requireTeacherProfile(userId);
-  const oldCommissionRate = decimalToNullableNumber(profile.commissionRate);
+  const oldCommissionRate = toNullableNumber(profile.commissionRate);
 
   return prisma.$transaction(async (tx) => {
     const updatedProfile = await tx.teacherProfile.update({
@@ -272,12 +220,8 @@ export const updateAdminTeacherCommission = async (
         adminId,
         userId,
         action: "UPDATE_COMMISSION",
-        oldValues: {
-          commissionRate: oldCommissionRate,
-        },
-        newValues: {
-          commissionRate,
-        },
+        oldValues: { commissionRate: oldCommissionRate },
+        newValues: { commissionRate },
       },
       tx,
     );

@@ -1,29 +1,13 @@
 import { Router } from "express";
-import { body, param, query } from "express-validator";
-
+import { body, query } from "express-validator";
 import communityController from "../controllers/community.controller";
 import { authenticate, optionalAuth } from "../middleware/auth";
 import { validate } from "../middleware/validate";
 import { validateUrlOrUploadPathForFolders } from "../utils/url-or-path";
+import { paginationQueryValidators, uuidParam } from "../validators/common.validator";
 
 const router = Router();
-
-const uuidParam = (name = "id") =>
-  param(name)
-    .notEmpty()
-    .withMessage(`${name} is required`)
-    .bail()
-    .isUUID()
-    .withMessage(`Invalid ${name}`);
-
-const paginationValidation = [
-  query("page").optional().isInt({ min: 1 }).withMessage("page must be >= 1"),
-
-  query("limit")
-    .optional()
-    .isInt({ min: 1, max: 50 })
-    .withMessage("limit must be 1-50"),
-];
+const paginationValidation = paginationQueryValidators(50);
 
 const tagNameValidation = body("name")
   .trim()
@@ -41,67 +25,54 @@ const postValidation = [
     .bail()
     .isLength({ max: 2000 })
     .withMessage("Content too long"),
-
   body("title")
     .optional({ values: "falsy" })
     .trim()
     .isLength({ max: 200 })
     .withMessage("Title too long"),
-
   body("tags")
     .optional()
     .isArray({ max: 5 })
     .withMessage("Maximum 5 tags allowed"),
-
   body("tags.*")
     .optional()
     .custom((tag) => {
       if (!tag || typeof tag !== "object") {
         throw new Error("Invalid tag format");
       }
-
       if (!tag.id && !tag.name) {
         throw new Error("Each tag must include either id or name");
       }
-
       return true;
     }),
-
   body("tags.*.id")
     .optional({ values: "falsy" })
     .isUUID()
     .withMessage("Invalid tag id"),
-
   body("tags.*.name")
     .optional({ values: "falsy" })
     .trim()
     .isLength({ min: 1, max: 50 })
     .withMessage("Invalid tag name"),
-
   body("media")
     .optional()
     .isArray({ max: 10 })
     .withMessage("Maximum 10 media items allowed"),
-
   body("media.*")
     .optional()
     .custom((media) => {
       if (!media || typeof media !== "object") {
         throw new Error("Invalid media format");
       }
-
       if (!media.type || !media.url) {
         throw new Error("Each media item must include type and url");
       }
-
       return true;
     }),
-
   body("media.*.type")
     .optional()
     .isIn(["image", "video"])
     .withMessage("Invalid media type"),
-
   body("media.*.url")
     .optional()
     .isString()
@@ -116,12 +87,10 @@ const postValidation = [
         ["community-images", "videos"],
       ),
     ),
-
   body("courseId")
     .optional({ values: "falsy" })
     .isUUID()
     .withMessage("Invalid course ID"),
-
   body("courseTitle")
     .optional({ values: "falsy" })
     .trim()
@@ -131,7 +100,6 @@ const postValidation = [
 
 const commentValidation = [
   uuidParam("postId"),
-
   body("content")
     .trim()
     .notEmpty()
@@ -141,17 +109,6 @@ const commentValidation = [
     .withMessage("Content too long"),
 ];
 
-/**
- * Community routes.
- *
- * Public users can view tags, feed, posts, comments, and user profiles.
- * Authenticated users can create posts, like, bookmark, comment, follow users, and create tags.
- */
-
-// ================================
-// TAGS
-// ================================
-
 router.get("/tags", communityController.getTags);
 
 router.post(
@@ -160,10 +117,6 @@ router.post(
   validate(tagNameValidation),
   communityController.addTag,
 );
-
-// ================================
-// POSTS
-// ================================
 
 router.get(
   "/feed",
@@ -207,10 +160,6 @@ router.post(
   communityController.bookmarkPost,
 );
 
-// ================================
-// COMMENTS
-// ================================
-
 router.get(
   "/posts/:postId/comments",
   optionalAuth,
@@ -224,10 +173,6 @@ router.post(
   validate(commentValidation),
   communityController.addComment,
 );
-
-// ================================
-// USERS
-// ================================
 
 router.get(
   "/users/:userId/profile",

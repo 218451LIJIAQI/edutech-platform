@@ -18,17 +18,19 @@ import type {
   User,
 } from '@/types';
 import { getApiBaseUrl, resolveBackendAssetUrl } from './runtime';
+import {
+  LEGACY_PROFILE_STATUS_COMPLETE,
+  PROFILE_STATUS_APPROVED,
+} from './teacher-profile';
 
 const NON_HTTP_SCHEME_PATTERN = /^[a-z][a-z0-9+.-]*:/i;
 const SUPPORT_ATTACHMENT_UPLOAD_PATH = '/uploads/support-attachments/';
-const LEGACY_TEACHER_PROFILE_STATUS_COMPLETE = 'COMPLETE';
-const APPROVED_TEACHER_PROFILE_STATUS = 'APPROVED';
 
-const normalizeTeacherProfileCompletionStatus = (
+const normalizeOptionalTeacherProfileStatus = (
   status?: string
 ): string | undefined =>
-  status === LEGACY_TEACHER_PROFILE_STATUS_COMPLETE
-    ? APPROVED_TEACHER_PROFILE_STATUS
+  status === LEGACY_PROFILE_STATUS_COMPLETE
+    ? PROFILE_STATUS_APPROVED
     : status;
 
 export const toFiniteNumber = (value: unknown, fallback = 0): number => {
@@ -60,11 +62,7 @@ export const normalizeAssetUrl = (value?: string): string | undefined => {
   }
 
   const trimmed = value.trim();
-  if (!trimmed) {
-    return undefined;
-  }
-
-  if (/^[\[{]/.test(trimmed)) {
+  if (!trimmed || /^[\[{]/.test(trimmed)) {
     return undefined;
   }
 
@@ -78,17 +76,15 @@ export const normalizeAssetUrl = (value?: string): string | undefined => {
 export const normalizeAssetUrlList = (
   value?: string[] | string
 ): string[] | undefined => {
-  let values: string[];
-
   if (!value) {
     return undefined;
   }
 
+  let values: string[];
   if (Array.isArray(value)) {
     values = value;
   } else {
     const trimmed = value.trim();
-
     if (!trimmed) {
       return undefined;
     }
@@ -123,11 +119,7 @@ const normalizeUserAvatarOnly = (user?: User): User | undefined =>
     : user;
 
 const isSupportAttachmentUploadPath = (value?: string): boolean => {
-  if (!value) {
-    return false;
-  }
-
-  const trimmed = value.trim();
+  const trimmed = value?.trim();
   if (!trimmed) {
     return false;
   }
@@ -154,9 +146,7 @@ const getAttachmentFileName = (value: string): string | undefined => {
   }
 
   const withoutQuery = trimmed.split(/[?#]/, 1)[0] ?? trimmed;
-  const lastSegment = withoutQuery.split('/').filter(Boolean).at(-1);
-
-  return lastSegment || undefined;
+  return withoutQuery.split('/').filter(Boolean).at(-1) || undefined;
 };
 
 const buildSupportAttachmentAccessUrl = (
@@ -176,15 +166,14 @@ const buildSupportAttachmentAccessUrl = (
 export const normalizeSupportMessageAssets = (
   message: SupportTicketMessage
 ): SupportTicketMessage => {
-  const attachment = message.attachment;
-  const normalizedAttachment = attachment?.trim();
+  const normalizedAttachment = message.attachment?.trim();
 
   return {
     ...message,
     attachment:
       normalizedAttachment && isSupportAttachmentUploadPath(normalizedAttachment)
         ? buildSupportAttachmentAccessUrl(message.id, normalizedAttachment)
-        : normalizeAssetUrl(attachment),
+        : normalizeAssetUrl(message.attachment),
     sender: normalizeUserAvatarOnly(message.sender),
   };
 };
@@ -203,7 +192,7 @@ export const normalizeTeacherProfileAssets = (
   profile
     ? {
         ...profile,
-        profileCompletionStatus: normalizeTeacherProfileCompletionStatus(
+        profileCompletionStatus: normalizeOptionalTeacherProfileStatus(
           profile.profileCompletionStatus
         ),
         hourlyRate: toOptionalFiniteNumber(profile.hourlyRate),

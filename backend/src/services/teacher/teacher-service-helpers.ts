@@ -5,6 +5,7 @@ import type {
   TeacherVerification,
 } from "@prisma/client";
 import { NotFoundError, ValidationError } from "../../utils/errors";
+import { buildCurrentEnrollmentWhere } from "../shared/enrollment-access";
 
 const publicTeacherUserSelect = {
   id: true,
@@ -18,16 +19,17 @@ const teacherUserSummarySelect = {
   email: true,
 } satisfies Prisma.UserSelect;
 
+const basicUserContactSelect = {
+  id: true,
+  firstName: true,
+  lastName: true,
+  email: true,
+} satisfies Prisma.UserSelect;
+
 export const teacherListInclude = {
-  user: {
-    select: publicTeacherUserSelect,
-  },
+  user: { select: publicTeacherUserSelect },
   certifications: true,
-  _count: {
-    select: {
-      courses: true,
-    },
-  },
+  _count: { select: { courses: true } },
 } satisfies Prisma.TeacherProfileInclude;
 
 export const teacherOwnProfileInclude = {
@@ -39,67 +41,38 @@ export const teacherOwnProfileInclude = {
   },
   certifications: true,
   courses: {
-    orderBy: {
-      createdAt: "desc",
-    },
-    include: {
-      _count: {
-        select: { lessons: true },
-      },
-    },
+    orderBy: { createdAt: "desc" },
+    include: { _count: { select: { lessons: true } } },
   },
   verifications: {
-    orderBy: {
-      submittedAt: "desc",
-    },
+    orderBy: { submittedAt: "desc" },
   },
 } satisfies Prisma.TeacherProfileInclude;
 
 export const teacherProfileUpdateInclude = {
-  user: {
-    select: teacherUserSummarySelect,
-  },
+  user: { select: teacherUserSummarySelect },
 } satisfies Prisma.TeacherProfileInclude;
 
 export const teacherProfileSubmissionInclude = {
-  user: {
-    select: {
-      id: true,
-      firstName: true,
-      lastName: true,
-      email: true,
-    },
-  },
+  user: { select: basicUserContactSelect },
 } satisfies Prisma.TeacherProfileInclude;
 
 export const pendingTeacherVerificationInclude = {
   teacherProfile: {
     include: {
-      user: {
-        select: {
-          id: true,
-          firstName: true,
-          lastName: true,
-          email: true,
-        },
-      },
+      user: { select: basicUserContactSelect },
     },
   },
 } satisfies Prisma.TeacherVerificationInclude;
 
 export const pendingTeacherRegistrationInclude = {
-  user: {
-    select: teacherUserSummarySelect,
-  },
+  user: { select: teacherUserSummarySelect },
 } satisfies Prisma.TeacherProfileInclude;
 
 export const reviewedTeacherRegistrationInclude = {
   user: {
     select: {
-      id: true,
-      firstName: true,
-      lastName: true,
-      email: true,
+      ...basicUserContactSelect,
       isActive: true,
     },
   },
@@ -112,15 +85,6 @@ export const ensureRequiredIdentifier = (
   if (typeof value !== "string" || !value.trim()) {
     throw new ValidationError(`${label} is required`);
   }
-
-  return value.trim();
-};
-
-const ensureRequiredText = (value: unknown, label: string): string => {
-  if (typeof value !== "string" || !value.trim()) {
-    throw new ValidationError(`${label} is required`);
-  }
-
   return value.trim();
 };
 
@@ -128,7 +92,6 @@ export const requireTeacherProfileByUserId = async (
   userId: string,
 ): Promise<TeacherProfile> => {
   const normalizedUserId = ensureRequiredIdentifier(userId, "User ID");
-
   const teacherProfile = await prisma.teacherProfile.findUnique({
     where: { userId: normalizedUserId },
   });
@@ -136,7 +99,6 @@ export const requireTeacherProfileByUserId = async (
   if (!teacherProfile) {
     throw new NotFoundError("Teacher profile not found");
   }
-
   return teacherProfile;
 };
 
@@ -147,7 +109,6 @@ export const requireTeacherProfileById = async (
     teacherProfileId,
     "Teacher profile ID",
   );
-
   const teacherProfile = await prisma.teacherProfile.findUnique({
     where: { id: normalizedTeacherProfileId },
   });
@@ -155,7 +116,6 @@ export const requireTeacherProfileById = async (
   if (!teacherProfile) {
     throw new NotFoundError("Teacher profile not found");
   }
-
   return teacherProfile;
 };
 
@@ -170,7 +130,6 @@ export const requireTeacherVerificationById = async (
     verificationId,
     "Verification ID",
   );
-
   const verification = await prisma.teacherVerification.findUnique({
     where: { id: normalizedVerificationId },
     include: { teacherProfile: true },
@@ -179,7 +138,6 @@ export const requireTeacherVerificationById = async (
   if (!verification) {
     throw new NotFoundError("Verification not found");
   }
-
   return verification;
 };
 
@@ -187,55 +145,44 @@ const calculateActualTeacherStudentCountMap = async (
   teacherProfileIds: string[],
 ): Promise<Map<string, number>> => {
   const normalizedTeacherProfileIds = Array.from(
-    new Set(
-      teacherProfileIds.map((id) => id.trim()).filter((id) => id.length > 0),
-    ),
+    new Set(teacherProfileIds.map((id) => id.trim()).filter(Boolean)),
   );
-
   const countMap = new Map<string, number>();
 
   if (normalizedTeacherProfileIds.length === 0) {
     return countMap;
   }
 
-  const referenceDate = new Date();
-
   const enrollments = await prisma.enrollment.findMany({
-    where: {
-      isActive: true,
-      OR: [{ expiresAt: null }, { expiresAt: { gt: referenceDate } }],
-      package: {
-        course: {
-          teacherProfileId: {
-            in: normalizedTeacherProfileIds,
+    where: buildCurrentEnrollmentWhere(
+      {
+        package: {
+          course: {
+            teacherProfileId: { in: normalizedTeacherProfileIds },
           },
         },
       },
-    },
+      new Date(),
+    ),
     select: {
       userId: true,
       package: {
         select: {
-          course: {
-            select: {
-              teacherProfileId: true,
-            },
-          },
+          course: { select: { teacherProfileId: true } },
         },
       },
     },
   });
 
   const studentSetsByTeacher = new Map<string, Set<string>>();
-
   for (const enrollment of enrollments) {
     const teacherProfileId = enrollment.package.course.teacherProfileId;
-
-    if (!studentSetsByTeacher.has(teacherProfileId)) {
-      studentSetsByTeacher.set(teacherProfileId, new Set<string>());
+    let set = studentSetsByTeacher.get(teacherProfileId);
+    if (!set) {
+      set = new Set<string>();
+      studentSetsByTeacher.set(teacherProfileId, set);
     }
-
-    studentSetsByTeacher.get(teacherProfileId)?.add(enrollment.userId);
+    set.add(enrollment.userId);
   }
 
   for (const teacherProfileId of normalizedTeacherProfileIds) {
@@ -255,20 +202,16 @@ export const calculateActualTeacherStudentCount = async (
     teacherProfileId,
     "Teacher profile ID",
   );
-
   const countMap = await calculateActualTeacherStudentCountMap([
     normalizedTeacherProfileId,
   ]);
-
   return countMap.get(normalizedTeacherProfileId) ?? 0;
 };
 
 export const applyActualTeacherStudentCounts = async <T extends { id: string }>(
   teachers: T[],
 ): Promise<Array<T & { totalStudents: number }>> => {
-  if (teachers.length === 0) {
-    return [];
-  }
+  if (teachers.length === 0) return [];
 
   const countMap = await calculateActualTeacherStudentCountMap(
     teachers.map((teacher) => teacher.id),
@@ -285,18 +228,12 @@ export const createTeacherNotification = async (params: {
   title: string;
   message: string;
   type: string;
-}) => {
-  const userId = ensureRequiredIdentifier(params.userId, "User ID");
-  const title = ensureRequiredText(params.title, "Notification title");
-  const message = ensureRequiredText(params.message, "Notification message");
-  const type = ensureRequiredText(params.type, "Notification type");
-
-  return prisma.notification.create({
+}) =>
+  prisma.notification.create({
     data: {
-      userId,
-      title,
-      message,
-      type,
+      userId: ensureRequiredIdentifier(params.userId, "User ID"),
+      title: ensureRequiredIdentifier(params.title, "Notification title"),
+      message: ensureRequiredIdentifier(params.message, "Notification message"),
+      type: ensureRequiredIdentifier(params.type, "Notification type"),
     },
   });
-};

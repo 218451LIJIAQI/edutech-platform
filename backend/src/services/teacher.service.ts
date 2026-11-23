@@ -7,6 +7,7 @@ import {
 } from "@prisma/client";
 import config from "../config/env";
 import prisma from "../config/database";
+import logger from "../utils/logger";
 import type {
   TeacherProfile,
   Certification,
@@ -25,8 +26,10 @@ import {
   normalizeOptionalUrlOrPath,
 } from "../utils/url-or-path";
 import { sanitizeUserPlainText } from "../utils/sanitize-user-content";
+import autoVerificationService from "./auto-verification.service";
 import { buildPaginationMeta, normalizePagination } from "./shared/pagination";
 import { toNumber } from "./shared/payment-utils";
+import { ensureActiveAdmin } from "./shared/service-helpers";
 import {
   buildApprovedTeacherProfileUpdateData,
   buildPublicTeacherWhere,
@@ -37,6 +40,7 @@ import {
   mapTeacherByIdResponse,
   overlayPendingProfileSubmission,
   parseJsonArray,
+  parseProfileJsonLists,
   pendingProfileVerificationInclude,
   PROFILE_STATUS_APPROVED,
   PROFILE_STATUS_INCOMPLETE,
@@ -66,7 +70,6 @@ import {
 
 const SUPERSEDED_PROFILE_SUBMISSION_REVIEW_NOTE =
   "Superseded by a newer profile submission review";
-
 const TEACHER_CERTIFICATE_UPLOAD_FOLDER = "teacher-certificates";
 const MAX_SHORT_TEXT_LENGTH = 150;
 const MAX_LONG_TEXT_LENGTH = 5000;
@@ -91,40 +94,8 @@ const mapVerificationAccess = <T extends { id: string }>(verification: T) => ({
       : `/api/${config.API_VERSION}/teachers/verifications/${verification.id}/document`,
 });
 
-const isTeacherCertificateUploadPath = (uploadPath: string): boolean => {
-  const [folder] = uploadPath.split("/");
-  return folder === TEACHER_CERTIFICATE_UPLOAD_FOLDER;
-};
-
-const getComparableUploadPath = (
-  value: string | null | undefined,
-): string | null => {
-  if (!value) {
-    return null;
-  }
-
-  return extractUploadPathFromUrlOrPath(value);
-};
-
-const getStringArrayFromUnknown = (value: unknown): string[] => {
-  if (!Array.isArray(value)) {
-    return [];
-  }
-
-  return value.filter((item): item is string => typeof item === "string");
-};
-
-const getSubmissionCertificateUrls = (
-  payload: Prisma.JsonValue | null,
-): string[] => {
-  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
-    return [];
-  }
-
-  return getStringArrayFromUnknown(
-    (payload as Record<string, unknown>).certificatePhotos,
-  );
-};
+const isTeacherCertificateUploadPath = (uploadPath: string): boolean =>
+  uploadPath.split("/")[0] === TEACHER_CERTIFICATE_UPLOAD_FOLDER;
 
 const collectTeacherCertificateUploadPaths = (teacherProfile: {
   certificatePhotos: string | null;
@@ -132,71 +103,66 @@ const collectTeacherCertificateUploadPaths = (teacherProfile: {
   profileSubmissions: Array<{ payload: Prisma.JsonValue | null }>;
 }): Set<string> => {
   const uploadPaths = new Set<string>();
-
   const addCandidate = (value: string | null | undefined) => {
-    const uploadPath = getComparableUploadPath(value);
+    const uploadPath = value ? extractUploadPathFromUrlOrPath(value) : null;
     if (uploadPath && isTeacherCertificateUploadPath(uploadPath)) {
       uploadPaths.add(uploadPath);
     }
   };
 
-  parseJsonArray(teacherProfile.certificatePhotos).forEach((item) => {
-    if (typeof item === "string") {
-      addCandidate(item);
-    }
-  });
+  for (const item of parseJsonArray(teacherProfile.certificatePhotos)) {
+    if (typeof item === "string") addCandidate(item);
+  }
 
-  teacherProfile.certifications.forEach((certification) => {
+  for (const certification of teacherProfile.certifications) {
     addCandidate(certification.credentialUrl);
-  });
+  }
 
-  teacherProfile.profileSubmissions.forEach((submission) => {
-    getSubmissionCertificateUrls(submission.payload).forEach(addCandidate);
-  });
+  for (const submission of teacherProfile.profileSubmissions) {
+    const payload = submission.payload;
+    if (payload && typeof payload === "object" && !Array.isArray(payload)) {
+      const photos = (payload as Record<string, unknown>).certificatePhotos;
+      if (Array.isArray(photos)) {
+        for (const item of photos) {
+          if (typeof item === "string") addCandidate(item);
+        }
+      }
+    }
+  }
 
   return uploadPaths;
 };
 
 const normalizeOptionalTeacherText = (
   value?: string,
-  maxLength: number = MAX_LONG_TEXT_LENGTH,
+  maxLength = MAX_LONG_TEXT_LENGTH,
 ): string | undefined => {
-  if (value === undefined) {
-    return undefined;
-  }
-
+  if (value === undefined) return undefined;
   const trimmedValue = sanitizeUserPlainText(value);
-  if (!trimmedValue) {
-    return undefined;
-  }
+  if (!trimmedValue) return undefined;
 
   if (trimmedValue.length > maxLength) {
     throw new ValidationError(
       `Text value must not exceed ${maxLength} characters`,
     );
   }
-
   return trimmedValue;
 };
 
 const normalizeRequiredTeacherText = (
   value: string | undefined,
   fieldName: string,
-  maxLength: number = MAX_SHORT_TEXT_LENGTH,
+  maxLength = MAX_SHORT_TEXT_LENGTH,
 ): string => {
   const normalizedValue = normalizeOptionalTeacherText(value, maxLength);
-
   if (!normalizedValue) {
     throw new ValidationError(`${fieldName} is required`);
   }
-
   return normalizedValue;
 };
 
 const normalizeTeacherTextList = (values?: string[]): string[] | undefined => {
-  if (values === undefined) {
-    return undefined;
-  }
+  if (values === undefined) return undefined;
 
   const normalizedValues = values
     .map((value) => sanitizeUserPlainText(value))
@@ -215,14 +181,10 @@ const normalizeNonNegativeNumber = (
   value: number | undefined,
   fieldName: string,
 ): number | undefined => {
-  if (value === undefined) {
-    return undefined;
-  }
-
+  if (value === undefined) return undefined;
   if (!Number.isFinite(value) || value < 0) {
     throw new ValidationError(`${fieldName} must be a non-negative number`);
   }
-
   return Math.round(value * 100) / 100;
 };
 
@@ -232,7 +194,6 @@ const normalizeTeacherAsset = (
   errorMessage: string,
 ): string | undefined => {
   const normalizedValue = normalizeOptionalUrlOrPath(value) ?? undefined;
-
   return normalizedValue
     ? ensureUrlOrUploadPathForFolders(
         normalizedValue,
@@ -247,10 +208,7 @@ const normalizeTeacherAssetList = (
   allowedFolders: string[],
   errorMessage: string,
 ): string[] | undefined => {
-  if (values === undefined) {
-    return undefined;
-  }
-
+  if (values === undefined) return undefined;
   return values
     .map((value) => normalizeOptionalUrlOrPath(value) ?? undefined)
     .filter((value): value is string => Boolean(value))
@@ -258,15 +216,6 @@ const normalizeTeacherAssetList = (
       ensureUrlOrUploadPathForFolders(value, allowedFolders, errorMessage),
     );
 };
-
-const normalizeTeacherCredentialUrl = (
-  credentialUrl?: string,
-): string | undefined =>
-  normalizeTeacherAsset(
-    credentialUrl,
-    ["teacher-certificates"],
-    "Credential URL must be an external URL or use the /uploads/teacher-certificates/ folder",
-  );
 
 const normalizeTeacherExtendedProfileInput = (
   data: TeacherExtendedProfileInput,
@@ -308,14 +257,12 @@ const normalizeTeacherProfileUpdateData = (
   if (data.bio !== undefined) {
     updateData.bio = normalizeOptionalTeacherText(data.bio);
   }
-
   if (data.headline !== undefined) {
     updateData.headline = normalizeOptionalTeacherText(
       data.headline,
       MAX_SHORT_TEXT_LENGTH,
     );
   }
-
   if (data.hourlyRate !== undefined) {
     updateData.hourlyRate = normalizeNonNegativeNumber(
       data.hourlyRate,
@@ -335,69 +282,74 @@ const normalizeTeacherProfileUpdateData = (
 const normalizeReviewVerificationStatus = (
   status: ReviewVerificationStatus,
 ): VerificationStatus => {
-  if (status === VerificationStatus.APPROVED)
-    return VerificationStatus.APPROVED;
-  if (status === VerificationStatus.REJECTED)
-    return VerificationStatus.REJECTED;
+  if (status === VerificationStatus.APPROVED) return VerificationStatus.APPROVED;
+  if (status === VerificationStatus.REJECTED) return VerificationStatus.REJECTED;
   throw new ValidationError("Review status must be APPROVED or REJECTED");
 };
 
 const normalizeReviewRegistrationStatus = (
   status: ReviewRegistrationStatus,
 ): RegistrationStatus => {
-  if (status === RegistrationStatus.APPROVED)
-    return RegistrationStatus.APPROVED;
-  if (status === RegistrationStatus.REJECTED)
-    return RegistrationStatus.REJECTED;
+  if (status === RegistrationStatus.APPROVED) return RegistrationStatus.APPROVED;
+  if (status === RegistrationStatus.REJECTED) return RegistrationStatus.REJECTED;
   throw new ValidationError("Registration status must be APPROVED or REJECTED");
 };
-
-const normalizeReviewNotes = (reviewNotes?: string): string | undefined =>
-  normalizeOptionalTeacherText(reviewNotes, MAX_LONG_TEXT_LENGTH);
 
 const assertValidDate = (
   date: Date | undefined,
   fieldName: string,
 ): Date | undefined => {
-  if (date === undefined) {
-    return undefined;
-  }
-
+  if (date === undefined) return undefined;
   if (!(date instanceof Date) || Number.isNaN(date.getTime())) {
     throw new ValidationError(`${fieldName} must be a valid date`);
   }
-
   return date;
 };
 
-const ensureActiveAdmin = async (adminId: string): Promise<void> => {
-  const normalizedAdminId = ensureRequiredIdentifier(adminId, "Admin ID");
-
-  const admin = await prisma.user.findUnique({
-    where: { id: normalizedAdminId },
-    select: {
-      id: true,
-      role: true,
-      isActive: true,
-    },
-  });
-
-  if (!admin) {
-    throw new NotFoundError("Admin user not found");
-  }
-
-  if (admin.role !== UserRole.ADMIN) {
-    throw new AuthorizationError("Only admins can review teacher records");
-  }
-
-  if (!admin.isActive) {
-    throw new AuthorizationError(
-      "Inactive admins cannot review teacher records",
-    );
-  }
-};
-
 class TeacherService {
+  private async saveExtendedProfileSubmission(
+    userId: string,
+    data: TeacherExtendedProfileInput,
+    preserveApprovedVisibility: boolean,
+  ) {
+    const normalizedUserId = ensureRequiredIdentifier(userId, "User ID");
+    const teacherProfile =
+      await requireTeacherProfileByUserId(normalizedUserId);
+    const normalizedData = normalizeTeacherExtendedProfileInput(data);
+    const submissionTime = new Date();
+    const nextCompletionStatus =
+      preserveApprovedVisibility &&
+      isApprovedTeacherProfileCompletionStatus(
+        teacherProfile.profileCompletionStatus,
+      )
+        ? PROFILE_STATUS_APPROVED
+        : PROFILE_STATUS_PENDING_REVIEW;
+
+    return prisma.$transaction(async (tx) => {
+      const updatedProfile = await tx.teacherProfile.update({
+        where: { userId: normalizedUserId },
+        data: {
+          profileCompletionStatus: nextCompletionStatus,
+          profileSubmittedAt: submissionTime,
+          profileReviewedAt: null,
+          profileReviewNotes: null,
+        },
+        include: teacherProfileSubmissionInclude,
+      });
+
+      await tx.teacherProfileSubmission.create({
+        data: {
+          teacherProfileId: teacherProfile.id,
+          status: VerificationStatus.PENDING,
+          submittedAt: submissionTime,
+          payload: createTeacherProfileSubmissionPayload(normalizedData),
+        },
+      });
+
+      return updatedProfile;
+    });
+  }
+
   async getAllTeachers(filters: {
     isVerified?: boolean;
     category?: string;
@@ -405,35 +357,9 @@ class TeacherService {
     search?: string;
     page?: number;
     limit?: number;
-  }): Promise<{
-    teachers: Array<
-      TeacherProfile & {
-        user: {
-          id: string;
-          firstName: string;
-          lastName: string;
-          avatar: string | null;
-        };
-        certifications: Certification[];
-        _count: { courses: number };
-      }
-    >;
-    pagination: {
-      total: number;
-      page: number;
-      limit: number;
-      totalPages: number;
-    };
-  }> {
-    const { isVerified, category, minRating, search } = filters;
+  }) {
     const pagination = normalizePagination(filters.page, filters.limit);
-
-    const where = buildPublicTeacherWhere({
-      isVerified,
-      category,
-      minRating,
-      search,
-    });
+    const where = buildPublicTeacherWhere(filters);
 
     const [teachers, total] = await Promise.all([
       prisma.teacherProfile.findMany({
@@ -446,11 +372,8 @@ class TeacherService {
       prisma.teacherProfile.count({ where }),
     ]);
 
-    const teachersWithActualCounts =
-      await applyActualTeacherStudentCounts(teachers);
-
     return {
-      teachers: teachersWithActualCounts,
+      teachers: await applyActualTeacherStudentCounts(teachers),
       pagination: buildPaginationMeta(total, pagination.page, pagination.limit),
     };
   }
@@ -498,7 +421,6 @@ class TeacherService {
     }
   > {
     const normalizedUserId = ensureRequiredIdentifier(userId, "User ID");
-
     const teacher = await prisma.teacherProfile.findUnique({
       where: { userId: normalizedUserId },
       include: teacherOwnProfileInclude,
@@ -507,32 +429,16 @@ class TeacherService {
     if (!teacher) {
       throw new NotFoundError("Teacher profile not found");
     }
-
     return teacher;
   }
 
-  async updateTeacherProfile(
-    userId: string,
-    data: TeacherUpdateInput,
-  ): Promise<
-    TeacherProfile & {
-      user: {
-        id: string;
-        firstName: string;
-        lastName: string;
-        email: string;
-        avatar: string | null;
-      };
-    }
-  > {
+  async updateTeacherProfile(userId: string, data: TeacherUpdateInput) {
     const normalizedUserId = ensureRequiredIdentifier(userId, "User ID");
     await requireTeacherProfileByUserId(normalizedUserId);
 
-    const updateData = normalizeTeacherProfileUpdateData(data);
-
     return prisma.teacherProfile.update({
       where: { userId: normalizedUserId },
-      data: updateData,
+      data: normalizeTeacherProfileUpdateData(data),
       include: teacherProfileUpdateInclude,
     });
   }
@@ -552,25 +458,10 @@ class TeacherService {
     const teacherProfile =
       await requireTeacherProfileByUserId(normalizedUserId);
 
-    const normalizedTitle = normalizeRequiredTeacherText(
-      data.title,
-      "Certification title",
-    );
-    const normalizedIssuer = normalizeRequiredTeacherText(
-      data.issuer,
-      "Certification issuer",
-    );
     const normalizedIssueDate = assertValidDate(data.issueDate, "Issue date");
     const normalizedExpiryDate = assertValidDate(
       data.expiryDate,
       "Expiry date",
-    );
-    const normalizedCredentialId = normalizeOptionalTeacherText(
-      data.credentialId,
-      MAX_SHORT_TEXT_LENGTH,
-    );
-    const normalizedCredentialUrl = normalizeTeacherCredentialUrl(
-      data.credentialUrl,
     );
 
     if (!normalizedIssueDate) {
@@ -586,12 +477,22 @@ class TeacherService {
     return prisma.certification.create({
       data: {
         teacherProfileId: teacherProfile.id,
-        title: normalizedTitle,
-        issuer: normalizedIssuer,
+        title: normalizeRequiredTeacherText(data.title, "Certification title"),
+        issuer: normalizeRequiredTeacherText(
+          data.issuer,
+          "Certification issuer",
+        ),
         issueDate: normalizedIssueDate,
         expiryDate: normalizedExpiryDate,
-        credentialId: normalizedCredentialId,
-        credentialUrl: normalizedCredentialUrl,
+        credentialId: normalizeOptionalTeacherText(
+          data.credentialId,
+          MAX_SHORT_TEXT_LENGTH,
+        ),
+        credentialUrl: normalizeTeacherAsset(
+          data.credentialUrl,
+          [TEACHER_CERTIFICATE_UPLOAD_FOLDER],
+          "Credential URL must be an external URL or use the /uploads/teacher-certificates/ folder",
+        ),
       },
     });
   }
@@ -610,10 +511,7 @@ class TeacherService {
 
     const certification = await prisma.certification.findUnique({
       where: { id: normalizedCertificationId },
-      select: {
-        id: true,
-        teacherProfileId: true,
-      },
+      select: { id: true, teacherProfileId: true },
     });
 
     if (
@@ -663,20 +561,13 @@ class TeacherService {
     });
 
     void this.triggerAutoVerification(verification.id);
-
     return mapVerificationAccess(verification);
   }
 
-  private async triggerAutoVerification(
-    verificationId: string,
-  ): Promise<void> {
+  private async triggerAutoVerification(verificationId: string): Promise<void> {
     try {
-      const autoVerificationService = (
-        await import("./auto-verification.service")
-      ).default;
       await autoVerificationService.processVerification(verificationId);
     } catch (error) {
-      const logger = (await import("../utils/logger")).default;
       logger.error("Auto-verification processing failed (non-blocking)", {
         verificationId,
         error,
@@ -697,10 +588,6 @@ class TeacherService {
     return verifications.map(mapVerificationAccess);
   }
 
-  /**
-   * Reviews a TeacherVerification document without touching extended-profile
-   * review timestamps (`profileReviewedAt` / `profileReviewNotes`).
-   */
   async reviewVerification(
     verificationId: string,
     adminId: string,
@@ -711,9 +598,8 @@ class TeacherService {
       verificationId,
       "Verification ID",
     );
-    const normalizedAdminId = ensureRequiredIdentifier(adminId, "Admin ID");
     const normalizedStatus = normalizeReviewVerificationStatus(status);
-    const normalizedReviewNotes = normalizeReviewNotes(reviewNotes);
+    const normalizedReviewNotes = normalizeOptionalTeacherText(reviewNotes);
 
     if (
       normalizedStatus === VerificationStatus.REJECTED &&
@@ -724,8 +610,10 @@ class TeacherService {
       );
     }
 
-    await ensureActiveAdmin(normalizedAdminId);
-
+    const normalizedAdminId = await ensureActiveAdmin(
+      adminId,
+      "review teacher records",
+    );
     const verification = await requireTeacherVerificationById(
       normalizedVerificationId,
     );
@@ -757,17 +645,14 @@ class TeacherService {
         );
       }
 
-      const existingApprovedCount =
-        normalizedStatus === VerificationStatus.APPROVED
-          ? 1
-          : await tx.teacherVerification.count({
-              where: {
-                teacherProfileId: verification.teacherProfileId,
-                status: VerificationStatus.APPROVED,
-              },
-            });
-
-      const hasApprovedVerification = existingApprovedCount > 0;
+      const hasApprovedVerification =
+        normalizedStatus === VerificationStatus.APPROVED ||
+        (await tx.teacherVerification.count({
+          where: {
+            teacherProfileId: verification.teacherProfileId,
+            status: VerificationStatus.APPROVED,
+          },
+        })) > 0;
 
       await tx.teacherProfile.update({
         where: { id: verification.teacherProfileId },
@@ -779,15 +664,9 @@ class TeacherService {
         },
       });
 
-      const refreshedVerification = await tx.teacherVerification.findUnique({
+      return tx.teacherVerification.findUniqueOrThrow({
         where: { id: normalizedVerificationId },
       });
-
-      if (!refreshedVerification) {
-        throw new NotFoundError("Verification not found after review");
-      }
-
-      return refreshedVerification;
     });
 
     await createTeacherNotification({
@@ -808,20 +687,7 @@ class TeacherService {
     return mapVerificationAccess(updated);
   }
 
-  async getPendingVerifications(): Promise<
-    Array<
-      TeacherVerification & {
-        teacherProfile: TeacherProfile & {
-          user: {
-            id: string;
-            firstName: string;
-            lastName: string;
-            email: string;
-          };
-        };
-      }
-    >
-  > {
+  async getPendingVerifications() {
     const verifications = await prisma.teacherVerification.findMany({
       where: { status: VerificationStatus.PENDING },
       include: pendingTeacherVerificationInclude,
@@ -851,9 +717,7 @@ class TeacherService {
         id: true,
         documentType: true,
         documentUrl: true,
-        teacherProfile: {
-          select: { userId: true },
-        },
+        teacherProfile: { select: { userId: true } },
       },
     });
 
@@ -889,9 +753,7 @@ class TeacherService {
       certificateUrl,
       "Certificate URL",
     );
-    const uploadPath = extractUploadPathFromUrlOrPath(
-      normalizedCertificateUrl,
-    );
+    const uploadPath = extractUploadPathFromUrlOrPath(normalizedCertificateUrl);
 
     if (!uploadPath || !isTeacherCertificateUploadPath(uploadPath)) {
       throw new ValidationError(
@@ -910,9 +772,7 @@ class TeacherService {
         where: { userId: normalizedRequesterUserId },
         select: {
           certificatePhotos: true,
-          certifications: {
-            select: { credentialUrl: true },
-          },
+          certifications: { select: { credentialUrl: true } },
           profileSubmissions: {
             where: { status: VerificationStatus.PENDING },
             select: { payload: true },
@@ -924,10 +784,9 @@ class TeacherService {
         throw new NotFoundError("Teacher profile not found");
       }
 
-      const allowedUploadPaths =
-        collectTeacherCertificateUploadPaths(teacherProfile);
-
-      if (!allowedUploadPaths.has(uploadPath)) {
+      if (
+        !collectTeacherCertificateUploadPaths(teacherProfile).has(uploadPath)
+      ) {
         throw new AuthorizationError(
           "You can only access certificate files linked to your own profile",
         );
@@ -940,88 +799,37 @@ class TeacherService {
     });
   }
 
-  async getTeacherStats(userId: string): Promise<{
-    totalCourses: number;
-    totalEnrollments: number;
-    totalRevenue: number;
-    averageRating: number;
-    totalStudents: number;
-    isVerified: boolean;
-  }> {
+  async getTeacherStats(userId: string) {
     const normalizedUserId = ensureRequiredIdentifier(userId, "User ID");
     const teacherProfile =
       await requireTeacherProfileByUserId(normalizedUserId);
 
-    const [totalCourses, totalEnrollments, actualStudentCount] =
-      await Promise.all([
-        prisma.course.count({ where: { teacherProfileId: teacherProfile.id } }),
-        prisma.enrollment.count({
-          where: {
-            package: {
-              course: { teacherProfileId: teacherProfile.id },
-            },
-          },
-        }),
-        calculateActualTeacherStudentCount(teacherProfile.id),
-      ]);
+    const [totalCourses, totalEnrollments, totalStudents] = await Promise.all([
+      prisma.course.count({ where: { teacherProfileId: teacherProfile.id } }),
+      prisma.enrollment.count({
+        where: {
+          package: { course: { teacherProfileId: teacherProfile.id } },
+        },
+      }),
+      calculateActualTeacherStudentCount(teacherProfile.id),
+    ]);
 
     return {
       totalCourses,
       totalEnrollments,
       totalRevenue: toNumber(teacherProfile.totalEarnings),
       averageRating: toNumber(teacherProfile.averageRating),
-      totalStudents: actualStudentCount,
+      totalStudents,
       isVerified: teacherProfile.isVerified,
     };
   }
 
-  async submitExtendedProfile(
-    userId: string,
-    data: TeacherExtendedProfileInput,
-  ): Promise<
-    TeacherProfile & {
-      user: {
-        id: string;
-        firstName: string;
-        lastName: string;
-        email: string;
-      };
-    }
-  > {
-    const normalizedUserId = ensureRequiredIdentifier(userId, "User ID");
-    const teacherProfile =
-      await requireTeacherProfileByUserId(normalizedUserId);
-    const normalizedData = normalizeTeacherExtendedProfileInput(data);
-    const submissionTime = new Date();
-
-    return prisma.$transaction(async (tx) => {
-      const updatedProfile = await tx.teacherProfile.update({
-        where: { userId: normalizedUserId },
-        data: {
-          profileCompletionStatus: PROFILE_STATUS_PENDING_REVIEW,
-          profileSubmittedAt: submissionTime,
-          profileReviewedAt: null,
-          profileReviewNotes: null,
-        },
-        include: teacherProfileSubmissionInclude,
-      });
-
-      await tx.teacherProfileSubmission.create({
-        data: {
-          teacherProfileId: teacherProfile.id,
-          status: VerificationStatus.PENDING,
-          submittedAt: submissionTime,
-          payload: createTeacherProfileSubmissionPayload(normalizedData),
-        },
-      });
-
-      return updatedProfile;
-    });
+  async submitExtendedProfile(userId: string, data: TeacherExtendedProfileInput) {
+    return this.saveExtendedProfileSubmission(userId, data, false);
   }
 
   async getExtendedProfile(userId: string): Promise<ExtendedProfileResponse> {
     const normalizedUserId = ensureRequiredIdentifier(userId, "User ID");
-
     const teacherProfile = await prisma.teacherProfile.findUnique({
       where: { userId: normalizedUserId },
       include: extendedProfileInclude,
@@ -1034,94 +842,27 @@ class TeacherService {
     return mapExtendedProfileResponse(teacherProfile);
   }
 
-  async updateExtendedProfile(
-    userId: string,
-    data: TeacherExtendedProfileInput,
-  ): Promise<
-    TeacherProfile & {
-      user: {
-        id: string;
-        firstName: string;
-        lastName: string;
-        email: string;
-      };
-    }
-  > {
-    const normalizedUserId = ensureRequiredIdentifier(userId, "User ID");
-    const teacherProfile =
-      await requireTeacherProfileByUserId(normalizedUserId);
-    const normalizedData = normalizeTeacherExtendedProfileInput(data);
-    const retainsApprovedProfileVisibility =
-      isApprovedTeacherProfileCompletionStatus(
-        teacherProfile.profileCompletionStatus,
-      );
-    const submissionTime = new Date();
-
-    return prisma.$transaction(async (tx) => {
-      const updatedProfile = await tx.teacherProfile.update({
-        where: { userId: normalizedUserId },
-        data: {
-          profileCompletionStatus: retainsApprovedProfileVisibility
-            ? PROFILE_STATUS_APPROVED
-            : PROFILE_STATUS_PENDING_REVIEW,
-          profileSubmittedAt: submissionTime,
-          profileReviewedAt: null,
-          profileReviewNotes: null,
-        },
-        include: teacherProfileSubmissionInclude,
-      });
-
-      await tx.teacherProfileSubmission.create({
-        data: {
-          teacherProfileId: teacherProfile.id,
-          status: VerificationStatus.PENDING,
-          submittedAt: submissionTime,
-          payload: createTeacherProfileSubmissionPayload(normalizedData),
-        },
-      });
-
-      return updatedProfile;
-    });
+  async updateExtendedProfile(userId: string, data: TeacherExtendedProfileInput) {
+    return this.saveExtendedProfileSubmission(userId, data, true);
   }
 
-  async getPendingRegistrations(
-    page = 1,
-    limit = 10,
-  ): Promise<{
-    teachers: Array<
-      TeacherProfile & {
-        user: {
-          id: string;
-          firstName: string;
-          lastName: string;
-          avatar: string | null;
-        };
-      }
-    >;
-    pagination: {
-      total: number;
-      page: number;
-      limit: number;
-      totalPages: number;
-    };
-  }> {
+  async getPendingRegistrations(page = 1, limit = 10) {
     const pagination = normalizePagination(page, limit);
+    const where = { registrationStatus: RegistrationStatus.PENDING };
 
     const [teachers, total] = await Promise.all([
       prisma.teacherProfile.findMany({
-        where: { registrationStatus: RegistrationStatus.PENDING },
+        where,
         skip: pagination.skip,
         take: pagination.limit,
         include: pendingTeacherRegistrationInclude,
         orderBy: { createdAt: "asc" },
       }),
-      prisma.teacherProfile.count({
-        where: { registrationStatus: RegistrationStatus.PENDING },
-      }),
+      prisma.teacherProfile.count({ where }),
     ]);
 
     return {
-      teachers: teachers,
+      teachers,
       pagination: buildPaginationMeta(total, pagination.page, pagination.limit),
     };
   }
@@ -1131,26 +872,15 @@ class TeacherService {
     adminId: string,
     status: ReviewRegistrationStatus,
     reviewNotes?: string,
-  ): Promise<
-    TeacherProfile & {
-      user: {
-        id: string;
-        firstName: string;
-        lastName: string;
-        email: string;
-        isActive: boolean;
-      };
-    }
-  > {
+  ) {
     const normalizedTeacherProfileId = ensureRequiredIdentifier(
       teacherProfileId,
       "Teacher profile ID",
     );
-    const normalizedAdminId = ensureRequiredIdentifier(adminId, "Admin ID");
     const normalizedStatus = normalizeReviewRegistrationStatus(status);
-    const normalizedReviewNotes = normalizeReviewNotes(reviewNotes);
+    const normalizedReviewNotes = normalizeOptionalTeacherText(reviewNotes);
 
-    await ensureActiveAdmin(normalizedAdminId);
+    await ensureActiveAdmin(adminId, "review teacher records");
 
     const reviewed = await prisma.$transaction(async (tx) => {
       const currentProfile = await tx.teacherProfile.findUnique({
@@ -1171,7 +901,6 @@ class TeacherService {
       }
 
       const nextIsActive = normalizedStatus !== RegistrationStatus.REJECTED;
-
       const reviewedProfile = await tx.teacherProfile.update({
         where: { id: normalizedTeacherProfileId },
         data: { registrationStatus: normalizedStatus },
@@ -1223,12 +952,9 @@ class TeacherService {
     };
   }> {
     const pagination = normalizePagination(page, limit);
-
     const where: Prisma.TeacherProfileWhereInput = {
       profileSubmissions: {
-        some: {
-          status: VerificationStatus.PENDING,
-        },
+        some: { status: VerificationStatus.PENDING },
       },
     };
 
@@ -1254,25 +980,17 @@ class TeacherService {
     adminId: string,
     status: ReviewVerificationStatus,
     reviewNotes?: string,
-  ): Promise<
-    TeacherProfile & {
-      user: {
-        id: string;
-        firstName: string;
-        lastName: string;
-        email: string;
-      };
-    }
-  > {
+  ) {
     const normalizedTeacherProfileId = ensureRequiredIdentifier(
       teacherProfileId,
       "Teacher profile ID",
     );
-    const normalizedAdminId = ensureRequiredIdentifier(adminId, "Admin ID");
     const normalizedStatus = normalizeReviewVerificationStatus(status);
-    const normalizedReviewNotes = normalizeReviewNotes(reviewNotes);
-
-    await ensureActiveAdmin(normalizedAdminId);
+    const normalizedReviewNotes = normalizeOptionalTeacherText(reviewNotes);
+    const normalizedAdminId = await ensureActiveAdmin(
+      adminId,
+      "review teacher records",
+    );
 
     const teacherProfile = await requireTeacherProfileById(
       normalizedTeacherProfileId,
@@ -1291,153 +1009,87 @@ class TeacherService {
     }
 
     const reviewTimestamp = new Date();
+    const isApproved = normalizedStatus === VerificationStatus.APPROVED;
 
-    if (normalizedStatus === VerificationStatus.APPROVED) {
-      const updated = await prisma.$transaction(async (tx) => {
-        const currentSubmission = await tx.teacherProfileSubmission.findUnique({
-          where: { id: submission.id },
-          select: {
-            id: true,
-            status: true,
-            payload: true,
-          },
-        });
+    const updated = await prisma.$transaction(async (tx) => {
+      const currentSubmission = await tx.teacherProfileSubmission.findUnique({
+        where: { id: submission.id },
+        select: { id: true, status: true, payload: true },
+      });
 
-        if (
-          !currentSubmission ||
-          currentSubmission.status !== VerificationStatus.PENDING
-        ) {
-          throw new ValidationError(
-            "Profile submission has already been reviewed",
-          );
-        }
+      if (
+        !currentSubmission ||
+        currentSubmission.status !== VerificationStatus.PENDING
+      ) {
+        throw new ValidationError(
+          "Profile submission has already been reviewed",
+        );
+      }
 
-        const updatedProfile = await tx.teacherProfile.update({
-          where: { id: normalizedTeacherProfileId },
-          data: buildApprovedTeacherProfileUpdateData(
+      const profileData: Prisma.TeacherProfileUpdateInput = isApproved
+        ? buildApprovedTeacherProfileUpdateData(
             teacherProfile,
             currentSubmission.payload,
             normalizedReviewNotes,
-          ),
-          include: teacherProfileSubmissionInclude,
-        });
-
-        await tx.teacherProfileSubmission.update({
-          where: { id: submission.id },
-          data: {
-            status: VerificationStatus.APPROVED,
-            reviewedBy: normalizedAdminId,
-            reviewedAt: reviewTimestamp,
-            reviewNotes: normalizedReviewNotes,
-            payload: Prisma.DbNull,
-          },
-        });
-
-        await tx.teacherProfileSubmission.updateMany({
-          where: {
-            teacherProfileId: normalizedTeacherProfileId,
-            status: VerificationStatus.PENDING,
-            NOT: { id: submission.id },
-          },
-          data: {
-            status: VerificationStatus.REJECTED,
-            reviewedBy: normalizedAdminId,
-            reviewedAt: reviewTimestamp,
-            reviewNotes: SUPERSEDED_PROFILE_SUBMISSION_REVIEW_NOTE,
-            payload: Prisma.DbNull,
-          },
-        });
-
-        return updatedProfile;
-      });
-
-      await createTeacherNotification({
-        userId: updated.user.id,
-        title: "Profile Approved",
-        message: "Your teacher profile submission has been approved.",
-        type: "profile",
-      });
-
-      return updated;
-    }
-
-    if (normalizedStatus === VerificationStatus.REJECTED) {
-      const nextStatus = isApprovedTeacherProfileCompletionStatus(
-        teacherProfile.profileCompletionStatus,
-      )
-        ? PROFILE_STATUS_APPROVED
-        : PROFILE_STATUS_INCOMPLETE;
-
-      const updated = await prisma.$transaction(async (tx) => {
-        const currentSubmission = await tx.teacherProfileSubmission.findUnique({
-          where: { id: submission.id },
-          select: {
-            id: true,
-            status: true,
-          },
-        });
-
-        if (
-          !currentSubmission ||
-          currentSubmission.status !== VerificationStatus.PENDING
-        ) {
-          throw new ValidationError(
-            "Profile submission has already been reviewed",
-          );
-        }
-
-        await tx.teacherProfileSubmission.update({
-          where: { id: submission.id },
-          data: {
-            status: VerificationStatus.REJECTED,
-            reviewedBy: normalizedAdminId,
-            reviewedAt: reviewTimestamp,
-            reviewNotes: normalizedReviewNotes,
-            payload: Prisma.DbNull,
-          },
-        });
-
-        await tx.teacherProfileSubmission.updateMany({
-          where: {
-            teacherProfileId: normalizedTeacherProfileId,
-            status: VerificationStatus.PENDING,
-            NOT: { id: submission.id },
-          },
-          data: {
-            status: VerificationStatus.REJECTED,
-            reviewedBy: normalizedAdminId,
-            reviewedAt: reviewTimestamp,
-            reviewNotes: SUPERSEDED_PROFILE_SUBMISSION_REVIEW_NOTE,
-            payload: Prisma.DbNull,
-          },
-        });
-
-        return tx.teacherProfile.update({
-          where: { id: normalizedTeacherProfileId },
-          data: {
-            profileCompletionStatus: nextStatus,
+            reviewTimestamp,
+          )
+        : {
+            profileCompletionStatus: isApprovedTeacherProfileCompletionStatus(
+              teacherProfile.profileCompletionStatus,
+            )
+              ? PROFILE_STATUS_APPROVED
+              : PROFILE_STATUS_INCOMPLETE,
             profileReviewedAt: reviewTimestamp,
             profileReviewNotes: normalizedReviewNotes,
-          },
-          include: teacherProfileSubmissionInclude,
-        });
+          };
+
+      const updatedProfile = await tx.teacherProfile.update({
+        where: { id: normalizedTeacherProfileId },
+        data: profileData,
+        include: teacherProfileSubmissionInclude,
       });
 
-      await createTeacherNotification({
-        userId: updated.user.id,
-        title: "Profile Rejected",
-        message: `Your teacher profile submission was rejected. Reason: ${
-          normalizedReviewNotes || "Not specified"
-        }`,
-        type: "profile",
+      await tx.teacherProfileSubmission.update({
+        where: { id: submission.id },
+        data: {
+          status: normalizedStatus,
+          reviewedBy: normalizedAdminId,
+          reviewedAt: reviewTimestamp,
+          reviewNotes: normalizedReviewNotes,
+          payload: Prisma.DbNull,
+        },
       });
 
-      return updated;
-    }
+      await tx.teacherProfileSubmission.updateMany({
+        where: {
+          teacherProfileId: normalizedTeacherProfileId,
+          status: VerificationStatus.PENDING,
+          NOT: { id: submission.id },
+        },
+        data: {
+          status: VerificationStatus.REJECTED,
+          reviewedBy: normalizedAdminId,
+          reviewedAt: reviewTimestamp,
+          reviewNotes: SUPERSEDED_PROFILE_SUBMISSION_REVIEW_NOTE,
+          payload: Prisma.DbNull,
+        },
+      });
 
-    throw new ValidationError(
-      "Profile review status must be APPROVED or REJECTED",
-    );
+      return updatedProfile;
+    });
+
+    await createTeacherNotification({
+      userId: updated.user.id,
+      title: isApproved ? "Profile Approved" : "Profile Rejected",
+      message: isApproved
+        ? "Your teacher profile submission has been approved."
+        : `Your teacher profile submission was rejected. Reason: ${
+            normalizedReviewNotes || "Not specified"
+          }`,
+      type: "profile",
+    });
+
+    return updated;
   }
 
   async getVerifiedTeachers(filters: {
@@ -1445,40 +1097,12 @@ class TeacherService {
     minRating?: number;
     page?: number;
     limit?: number;
-  }): Promise<{
-    teachers: Array<
-      Omit<
-        TeacherProfile,
-        "awards" | "specialties" | "languages" | "certificatePhotos"
-      > & {
-        user: {
-          id: string;
-          firstName: string;
-          lastName: string;
-          avatar: string | null;
-        };
-        certifications: Certification[];
-        _count: { courses: number };
-        awards: unknown[];
-        specialties: unknown[];
-        languages: unknown[];
-        certificatePhotos: unknown[];
-      }
-    >;
-    pagination: {
-      total: number;
-      page: number;
-      limit: number;
-      totalPages: number;
-    };
-  }> {
-    const { search, minRating } = filters;
+  }) {
     const pagination = normalizePagination(filters.page, filters.limit);
-
     const where = buildPublicTeacherWhere({
       isVerified: true,
-      minRating,
-      search,
+      minRating: filters.minRating,
+      search: filters.search,
     });
 
     const [teachers, total] = await Promise.all([
@@ -1495,16 +1119,11 @@ class TeacherService {
     const teachersWithActualCounts =
       await applyActualTeacherStudentCounts(teachers);
 
-    const mapped = teachersWithActualCounts.map((teacher) => ({
-      ...teacher,
-      awards: parseJsonArray(teacher.awards),
-      specialties: parseJsonArray(teacher.specialties),
-      languages: parseJsonArray(teacher.languages),
-      certificatePhotos: parseJsonArray(teacher.certificatePhotos),
-    }));
-
     return {
-      teachers: mapped,
+      teachers: teachersWithActualCounts.map((teacher) => ({
+        ...teacher,
+        ...parseProfileJsonLists(teacher),
+      })),
       pagination: buildPaginationMeta(total, pagination.page, pagination.limit),
     };
   }

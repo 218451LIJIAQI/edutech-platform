@@ -1,30 +1,23 @@
 import { Router } from "express";
-import { UserRole } from "@prisma/client";
-import { body, param } from "express-validator";
-
+import { body } from "express-validator";
 import adminController from "../controllers/admin.controller";
 import refundAdminController from "../controllers/refund-admin.controller";
 import supportAdminController from "../controllers/support-admin.controller";
 import walletAdminController from "../controllers/wallet-admin.controller";
 import adsController from "../controllers/ads.controller";
 import financialReportController from "../controllers/financial-report.controller";
-
-import { authenticate, authorize } from "../middleware/auth";
+import { adminOnly } from "../middleware/teacher-access";
 import { validate } from "../middleware/validate";
-import { validateUrlOrUploadPathForFolders } from "../utils/url-or-path";
+import {
+  supportAttachmentBodyField,
+  uuidParam,
+} from "../validators/common.validator";
 
 const router = Router();
-
-const uuidParam = (name = "id") =>
-  param(name)
-    .notEmpty()
-    .withMessage(`${name} is required`)
-    .bail()
-    .isUUID()
-    .withMessage(`Invalid ${name}`);
+const idParam = uuidParam("id");
 
 const supportResponseValidation = [
-  uuidParam("id"),
+  idParam,
   body("message")
     .trim()
     .notEmpty()
@@ -32,34 +25,10 @@ const supportResponseValidation = [
     .bail()
     .isLength({ max: 2000 })
     .withMessage("message too long"),
-
-  body("attachment")
-    .optional({ values: "null" })
-    .isString()
-    .withMessage("attachment must be a string")
-    .bail()
-    .isLength({ max: 500 })
-    .withMessage("attachment too long")
-    .bail()
-    .custom(
-      validateUrlOrUploadPathForFolders(
-        "Attachment must be an external URL or use the /uploads/support-attachments/ folder",
-        ["support-attachments"],
-      ),
-    ),
+  supportAttachmentBodyField({ nullableOnly: true }),
 ];
 
-/**
- * Admin routes.
- *
- * All routes require authentication and ADMIN role authorization.
- */
-router.use(authenticate);
-router.use(authorize(UserRole.ADMIN));
-
-// ================================
-// PLATFORM STATISTICS & FINANCIALS
-// ================================
+router.use(adminOnly);
 
 router.get("/stats", adminController.getPlatformStats);
 router.get("/activities", adminController.getRecentActivities);
@@ -75,195 +44,56 @@ router.get("/financials/settlements", adminController.getSettlements);
 router.get("/financials/invoices", adminController.getInvoices);
 router.get("/financials/analytics", adminController.getRevenueAnalytics);
 
-// ================================
-// USER MANAGEMENT
-// ================================
-
 router.get("/users", adminController.getAllUsers);
-
-// Static user routes must be declared before /users/:id
 router.get("/users/audit-logs", adminController.getUserAuditLogs);
 router.post("/users/batch/delete", adminController.batchDeleteUsers);
 router.post("/users/batch/status", adminController.batchUpdateUserStatus);
-
-router.get(
-  "/users/:id",
-  validate(uuidParam("id")),
-  adminController.getUserById,
-);
-
+router.get("/users/:id", validate(idParam), adminController.getUserById);
 router.post("/users", adminController.createUser);
-
-router.put("/users/:id", validate(uuidParam("id")), adminController.updateUser);
-
-router.put(
-  "/users/:id/status",
-  validate(uuidParam("id")),
-  adminController.updateUserStatus,
-);
-
-router.put(
-  "/users/:id/password",
-  validate(uuidParam("id")),
-  adminController.resetUserPassword,
-);
-
-router.put(
-  "/users/:id/lock",
-  validate(uuidParam("id")),
-  adminController.lockUserAccount,
-);
-
-router.delete(
-  "/users/:id",
-  validate(uuidParam("id")),
-  adminController.deleteUser,
-);
-
-// ================================
-// COURSE MANAGEMENT
-// ================================
+router.put("/users/:id", validate(idParam), adminController.updateUser);
+router.put("/users/:id/status", validate(idParam), adminController.updateUserStatus);
+router.put("/users/:id/password", validate(idParam), adminController.resetUserPassword);
+router.put("/users/:id/lock", validate(idParam), adminController.lockUserAccount);
+router.delete("/users/:id", validate(idParam), adminController.deleteUser);
 
 router.get("/courses", adminController.getAllCourses);
-
-router.put(
-  "/courses/:id/publish",
-  validate(uuidParam("id")),
-  adminController.updateCourseStatus,
-);
-
-router.delete(
-  "/courses/:id",
-  validate(uuidParam("id")),
-  adminController.deleteCourse,
-);
-
-// ================================
-// ADVERTISING MANAGEMENT
-// ================================
+router.put("/courses/:id/publish", validate(idParam), adminController.updateCourseStatus);
+router.delete("/courses/:id", validate(idParam), adminController.deleteCourse);
 
 router.get("/ads", adsController.getAllAds);
 router.post("/ads", adsController.createAd);
-
-router.put("/ads/:id", validate(uuidParam("id")), adsController.updateAd);
-
-router.post("/ads/:id/move", validate(uuidParam("id")), adsController.moveAd);
-
-router.delete("/ads/:id", validate(uuidParam("id")), adsController.deleteAd);
-
-// ================================
-// VERIFICATION MANAGEMENT
-// ================================
+router.put("/ads/:id", validate(idParam), adsController.updateAd);
+router.post("/ads/:id/move", validate(idParam), adsController.moveAd);
+router.delete("/ads/:id", validate(idParam), adsController.deleteAd);
 
 router.get("/verifications", adminController.getAllVerifications);
-
-router.put(
-  "/verifications/:id",
-  validate(uuidParam("id")),
-  adminController.reviewVerification,
-);
-
-// ================================
-// REPORT MANAGEMENT
-// ================================
+router.put("/verifications/:id", validate(idParam), adminController.reviewVerification);
 
 router.get("/reports", adminController.getAllReports);
-
-router.put(
-  "/reports/:id",
-  validate(uuidParam("id")),
-  adminController.updateReportStatus,
-);
-
-// ================================
-// REFUND MANAGEMENT
-// ================================
+router.put("/reports/:id", validate(idParam), adminController.updateReportStatus);
 
 router.get("/refunds/stats", refundAdminController.getStats);
 router.get("/refunds", refundAdminController.getAllRefunds);
-
-router.get(
-  "/refunds/:id",
-  validate(uuidParam("id")),
-  refundAdminController.getRefundById,
-);
-
-router.post(
-  "/refunds/:id/approve",
-  validate(uuidParam("id")),
-  refundAdminController.approveRefund,
-);
-
-router.post(
-  "/refunds/:id/reject",
-  validate(uuidParam("id")),
-  refundAdminController.rejectRefund,
-);
-
-router.post(
-  "/refunds/:id/processing",
-  validate(uuidParam("id")),
-  refundAdminController.markAsProcessing,
-);
-
-router.post(
-  "/refunds/:id/complete",
-  validate(uuidParam("id")),
-  refundAdminController.completeRefund,
-);
-
-// ================================
-// SUPPORT TICKET MANAGEMENT
-// ================================
+router.get("/refunds/:id", validate(idParam), refundAdminController.getRefundById);
+router.post("/refunds/:id/approve", validate(idParam), refundAdminController.approveRefund);
+router.post("/refunds/:id/reject", validate(idParam), refundAdminController.rejectRefund);
+router.post("/refunds/:id/processing", validate(idParam), refundAdminController.markAsProcessing);
+router.post("/refunds/:id/complete", validate(idParam), refundAdminController.completeRefund);
 
 router.get("/support/stats", supportAdminController.getStats);
 router.get("/support", supportAdminController.getAllTickets);
-
-router.get(
-  "/support/:id",
-  validate(uuidParam("id")),
-  supportAdminController.getTicketById,
-);
-
-router.post(
-  "/support/:id/assign",
-  validate(uuidParam("id")),
-  supportAdminController.assignTicket,
-);
-
+router.get("/support/:id", validate(idParam), supportAdminController.getTicketById);
+router.post("/support/:id/assign", validate(idParam), supportAdminController.assignTicket);
 router.post(
   "/support/:id/response",
   validate(supportResponseValidation),
   supportAdminController.addResponse,
 );
-
-router.post(
-  "/support/:id/resolve",
-  validate(uuidParam("id")),
-  supportAdminController.resolveTicket,
-);
-
-router.post(
-  "/support/:id/close",
-  validate(uuidParam("id")),
-  supportAdminController.closeTicket,
-);
-
-// ================================
-// WALLET PAYOUT REVIEW
-// ================================
+router.post("/support/:id/resolve", validate(idParam), supportAdminController.resolveTicket);
+router.post("/support/:id/close", validate(idParam), supportAdminController.closeTicket);
 
 router.get("/wallet/payouts", walletAdminController.listPayouts);
-
-router.post(
-  "/wallet/payouts/:id/review",
-  validate(uuidParam("id")),
-  walletAdminController.reviewPayout,
-);
-
-// ================================
-// FINANCIAL REPORTS (AUTO-GENERATED)
-// ================================
+router.post("/wallet/payouts/:id/review", validate(idParam), walletAdminController.reviewPayout);
 
 router.get("/financial-reports/summary", financialReportController.getSummary);
 router.get(

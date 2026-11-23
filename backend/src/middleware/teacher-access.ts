@@ -2,6 +2,7 @@ import type { RequestHandler } from "express";
 import { RegistrationStatus, UserRole } from "@prisma/client";
 
 import prisma from "../config/database";
+import { authenticate, authorize } from "./auth";
 import { AuthorizationError, NotFoundError } from "../utils/errors";
 import { isApprovedTeacherProfileCompletionStatus } from "../services/teacher/teacher-profile-helpers";
 
@@ -26,9 +27,6 @@ const INCOMPLETE_TEACHER_PROFILE_MESSAGE =
 
 /**
  * Middleware to ensure that a teacher account has been approved by an admin.
- *
- * This should be used after authentication middleware.
- * It blocks teacher-protected endpoints until the teacher registration status is APPROVED.
  */
 export const ensureTeacherApproved: RequestHandler = async (
   req,
@@ -81,3 +79,29 @@ export const ensureTeacherApproved: RequestHandler = async (
     return next(error);
   }
 };
+
+export const studentOnly: RequestHandler[] = [
+  authenticate,
+  authorize(UserRole.STUDENT),
+];
+
+export const teacherOnly: RequestHandler[] = [
+  authenticate,
+  authorize(UserRole.TEACHER),
+];
+
+export const approvedTeacherOnly: RequestHandler[] = [
+  authenticate,
+  authorize(UserRole.TEACHER),
+  ensureTeacherApproved,
+];
+
+export const adminOnly: RequestHandler[] = [
+  authenticate,
+  authorize(UserRole.ADMIN),
+];
+
+export const teacherOrAdminOnly: RequestHandler[] = [
+  authenticate,
+  authorize(UserRole.TEACHER, UserRole.ADMIN),
+];

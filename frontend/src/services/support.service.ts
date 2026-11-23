@@ -4,10 +4,8 @@ import {
   normalizeSupportMessageAssets,
   normalizeSupportTicketAssets,
 } from '@/utils/asset-normalizers';
+import { extractData, extractDataOrDefault } from './response-utils';
 
-/**
- * Support Statistics Interface
- */
 export interface SupportStats {
   totalConversations: number;
   activeConversations: number;
@@ -16,10 +14,15 @@ export interface SupportStats {
   satisfactionRating: number | null;
 }
 
+const DEFAULT_SUPPORT_STATS: SupportStats = {
+  totalConversations: 0,
+  activeConversations: 0,
+  resolvedConversations: 0,
+  averageResponseTime: 0,
+  satisfactionRating: null,
+};
+
 const supportService = {
-  /**
-   * Create a new support ticket
-   */
   createTicket: async (
     subject: string,
     description: string,
@@ -36,37 +39,19 @@ const supportService = {
       priority,
       attachment,
     });
-    if (!res.data.data) {
-      throw new Error('Failed to create support ticket');
-    }
-    return normalizeSupportTicketAssets(res.data.data);
+    return normalizeSupportTicketAssets(extractData(res));
   },
 
-  /**
-   * Get all support tickets for the current user
-   */
   getUserTickets: async (): Promise<SupportTicket[]> => {
     const res = await api.get<ApiResponse<SupportTicket[]>>('/support');
-    if (!res.data.data) {
-      throw new Error('Failed to get support tickets');
-    }
-    return res.data.data.map(normalizeSupportTicketAssets);
+    return extractData(res).map(normalizeSupportTicketAssets);
   },
 
-  /**
-   * Get a specific support ticket by ID
-   */
   getTicketById: async (id: string): Promise<SupportTicket> => {
     const res = await api.get<ApiResponse<SupportTicket>>(`/support/${id}`);
-    if (!res.data.data) {
-      throw new Error('Failed to get support ticket');
-    }
-    return normalizeSupportTicketAssets(res.data.data);
+    return normalizeSupportTicketAssets(extractData(res));
   },
 
-  /**
-   * Add a message to a support ticket
-   */
   addMessage: async (
     ticketId: string,
     message: string,
@@ -74,42 +59,21 @@ const supportService = {
   ): Promise<SupportTicketMessage> => {
     const res = await api.post<ApiResponse<SupportTicketMessage>>(
       `/support/${ticketId}/messages`,
-      {
-        message,
-        attachment,
-      }
+      { message, attachment }
     );
-    if (!res.data.data) {
-      throw new Error('Failed to add message to ticket');
-    }
-    return normalizeSupportMessageAssets(res.data.data);
+    return normalizeSupportMessageAssets(extractData(res));
   },
 
-  /**
-   * Close a support ticket
-   */
   closeTicket: async (ticketId: string, resolution?: string): Promise<SupportTicket> => {
     const res = await api.post<ApiResponse<SupportTicket>>(`/support/${ticketId}/close`, {
       resolution,
     });
-    if (!res.data.data) {
-      throw new Error('Failed to close support ticket');
-    }
-    return normalizeSupportTicketAssets(res.data.data);
+    return normalizeSupportTicketAssets(extractData(res));
   },
 
-  /**
-   * Get support statistics for the current user
-   */
   getStats: async (): Promise<SupportStats> => {
     const res = await api.get<ApiResponse<SupportStats>>('/support/stats');
-    return res.data.data || {
-      totalConversations: 0,
-      activeConversations: 0,
-      resolvedConversations: 0,
-      averageResponseTime: 0,
-      satisfactionRating: null,
-    };
+    return extractDataOrDefault(res, DEFAULT_SUPPORT_STATS);
   },
 };
 
