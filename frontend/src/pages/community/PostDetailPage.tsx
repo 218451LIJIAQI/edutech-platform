@@ -10,7 +10,18 @@ import ReportSubmissionModal from '@/components/common/ReportSubmissionModal';
 import UniversalVideoPlayer from '@/components/common/UniversalVideoPlayer';
 import { extractErrorMessage } from '@/utils/error-handler';
 import { shareLink } from '@/utils/clipboard';
+import { resolveBackendAssetUrl } from '@/utils/runtime';
 import { usePageTitle } from '@/hooks';
+
+const getDisplayUserName = (
+  author?: { firstName?: string; lastName?: string; email?: string } | null
+): string => {
+  const fullName = `${author?.firstName ?? ''} ${author?.lastName ?? ''}`.trim();
+  if (fullName) {
+    return fullName;
+  }
+  return author?.email || 'Community Member';
+};
 
 const PostDetailPage = () => {
   const { id } = useParams<{ id: string }>();
@@ -32,9 +43,12 @@ const PostDetailPage = () => {
       if (!id) return;
       setIsLoading(true);
       try {
-        const p = await communityService.getPostById(id);
-        setPost(p);
-        setComments(await communityService.getComments(id));
+        const [loadedPost, loadedComments] = await Promise.all([
+          communityService.getPostById(id),
+          communityService.getComments(id),
+        ]);
+        setPost(loadedPost);
+        setComments(loadedComments);
       } catch (error) {
         clientLogger.error('Failed to load post:', error);
         toast.error(extractErrorMessage(error, 'Failed to load post'));
@@ -42,7 +56,7 @@ const PostDetailPage = () => {
         setIsLoading(false);
       }
     };
-    load();
+    void load();
   }, [id]);
 
   const onShare = async () => {
@@ -127,20 +141,31 @@ const PostDetailPage = () => {
     );
   }
 
+  const authorName = getDisplayUserName(post.author);
+  const authorAvatarUrl = resolveBackendAssetUrl(post.author?.avatar);
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-primary-50/10 to-indigo-50/20 py-8 relative">
       <div className="absolute inset-0 bg-[linear-gradient(rgba(0,0,0,0.015)_1px,transparent_1px),linear-gradient(90deg,rgba(0,0,0,0.015)_1px,transparent_1px)] bg-[size:32px_32px] pointer-events-none"></div>
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 max-w-3xl relative">
+      <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 relative">
         <div className="card shadow-xl border border-gray-100 rounded-2xl">
           <div className="flex items-start gap-3 mb-4">
-            <div className="w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center"><User className="w-5 h-5 text-gray-500" aria-label="user" /></div>
+            {authorAvatarUrl ? (
+              <img
+                src={authorAvatarUrl}
+                alt={authorName}
+                className="w-10 h-10 rounded-full object-cover"
+              />
+            ) : (
+              <div className="w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center">
+                <User className="w-5 h-5 text-gray-500" aria-label="user" />
+              </div>
+            )}
             <div className="flex-1">
               <div className="flex items-center justify-between">
                 <div>
                   <Link to={`/community/user/${post.authorId}`} className="font-bold text-gray-900 hover:underline">
-                    {post.author?.firstName && post.author?.lastName
-                      ? `${post.author.firstName} ${post.author.lastName}`
-                      : post.author?.email || 'Unknown User'}
+                    {authorName}
                   </Link>
                   <p className="text-xs text-gray-500">{new Date(post.createdAt).toLocaleString()}</p>
                 </div>
@@ -156,21 +181,30 @@ const PostDetailPage = () => {
 
           {post.media && post.media.length > 0 && (
             <div className="grid grid-cols-1 gap-3 mb-4">
-              {post.media.map(m => (
-                <div key={m.id}>
-                  {m.type === 'image' ? (
-                    <img src={m.url} alt={post.title ? `${post.title} media` : 'Community post media'} className="w-full rounded-xl border" />
-                  ) : (
-                    <UniversalVideoPlayer src={m.url} title={post.title || 'Post video'} />
-                  )}
-                </div>
-              ))}
+              {post.media.map((m) => {
+                const mediaUrl = resolveBackendAssetUrl(m.url) || m.url;
+                return (
+                  <div key={m.id}>
+                    {m.type === 'image' ? (
+                      <img src={mediaUrl} alt={post.title ? `${post.title} media` : 'Community post media'} className="w-full rounded-xl border" />
+                    ) : (
+                      <UniversalVideoPlayer src={mediaUrl} title={post.title || 'Post video'} />
+                    )}
+                  </div>
+                );
+              })}
             </div>
           )}
 
           <div className="flex items-center gap-2 flex-wrap mb-4">
-            {post.tags?.map(t => (
-              <button type="button" key={t.id} className="badge-primary text-xs inline-flex items-center gap-1"><Tag className="w-3 h-3" aria-label="tag" /> #{t.name}</button>
+            {post.tags?.map((t) => (
+              <Link
+                key={t.id}
+                to={`/community?tag=${encodeURIComponent(t.name)}`}
+                className="badge-primary text-xs inline-flex items-center gap-1 hover:bg-primary-200 transition-colors"
+              >
+                <Tag className="w-3 h-3" aria-label="tag" /> #{t.name}
+              </Link>
             ))}
             {post.courseTitle && (
               <Link to={`/courses/${post.courseId}`} className="text-xs text-primary-600 hover:underline">Linked course: {post.courseTitle}</Link>
@@ -197,9 +231,15 @@ const PostDetailPage = () => {
             <div className="space-y-3">
               {comments.length === 0 ? (
                 <p className="text-sm text-gray-500">No comments yet.</p>
-              ) : comments.map(c => (
+              ) : comments.map((c) => (
                 <div key={c.id} className="p-3 bg-gray-50 rounded-xl border border-gray-200">
-                  <div className="flex items-center justify-between mb-1">
+                  <div className="flex items-center justify-between mb-1 gap-2">
+                    <Link
+                      to={`/community/user/${c.authorId}`}
+                      className="text-xs font-semibold text-gray-800 hover:underline"
+                    >
+                      {getDisplayUserName(c.author)}
+                    </Link>
                     <div className="text-xs text-gray-500">{new Date(c.createdAt).toLocaleString()}</div>
                   </div>
                   <div className="text-sm text-gray-800 whitespace-pre-wrap">{c.content}</div>
@@ -214,30 +254,26 @@ const PostDetailPage = () => {
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' && !e.shiftKey) {
                     e.preventDefault();
-                    addComment();
+                    void addComment();
                   }
                 }}
                 className="input flex-1"
                 placeholder="Write your comment..."
               />
-              <button type="button" onClick={addComment} className="btn-primary btn-sm">Post</button>
+              <button type="button" onClick={() => void addComment()} className="btn-primary btn-sm">Post</button>
             </div>
           </div>
         </div>
       </div>
 
-      {post && (
-        <ReportSubmissionModal
-          isOpen={isReportModalOpen}
-          onClose={() => setIsReportModalOpen(false)}
-          reportedId={post.authorId}
-          reportedName={post.author?.firstName && post.author?.lastName
-            ? `${post.author.firstName} ${post.author.lastName}`
-            : post.author?.email || 'Unknown User'}
-          contentType="community_post"
-          contentId={post.id}
-        />
-      )}
+      <ReportSubmissionModal
+        isOpen={isReportModalOpen}
+        onClose={() => setIsReportModalOpen(false)}
+        reportedId={post.authorId}
+        reportedName={authorName}
+        contentType="community_post"
+        contentId={post.id}
+      />
     </div>
   );
 };

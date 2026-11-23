@@ -1,13 +1,7 @@
 import { body, query, type Meta } from "express-validator";
 import { CourseType, LessonType } from "@prisma/client";
 import { validateUrlOrUploadPathForFolders } from "../utils/url-or-path";
-
-/**
- * Validation rules for course endpoints.
- *
- * These validators protect course, lesson, package, material, and public course
- * search endpoints from invalid or unsafe request data.
- */
+import { COURSE_FIELD_LIMITS } from "../services/course.service";
 
 const COURSE_TYPES = Object.values(CourseType);
 const LESSON_TYPES = Object.values(LessonType);
@@ -21,23 +15,19 @@ const SORT_BY_VALUES = [
 ] as const;
 const SORT_ORDER_VALUES = ["asc", "desc"] as const;
 
-const MAX_MONEY_VALUE = 99999999.99;
-
-// Error message constants
 const ERROR_MESSAGES = {
   COURSE_TITLE_STRING: "Course title must be a string",
   COURSE_TITLE_REQUIRED: "Course title is required",
-  COURSE_TITLE_LENGTH: "Course title must be between 5 and 200 characters",
+  COURSE_TITLE_LENGTH: `Course title must be between ${COURSE_FIELD_LIMITS.COURSE_TITLE_MIN} and ${COURSE_FIELD_LIMITS.COURSE_TITLE_MAX} characters`,
 
   COURSE_DESCRIPTION_STRING: "Course description must be a string",
   COURSE_DESCRIPTION_REQUIRED: "Course description is required",
-  COURSE_DESCRIPTION_LENGTH:
-    "Course description must be between 20 and 2000 characters",
+  COURSE_DESCRIPTION_LENGTH: `Course description must be between ${COURSE_FIELD_LIMITS.COURSE_DESCRIPTION_MIN} and ${COURSE_FIELD_LIMITS.COURSE_DESCRIPTION_MAX} characters`,
 
   COURSE_CATEGORY_STRING: "Course category must be a string",
   COURSE_CATEGORY_REQUIRED: "Course category is required",
   COURSE_CATEGORY_EMPTY: "Course category cannot be empty",
-  COURSE_CATEGORY_LENGTH: "Course category must not exceed 100 characters",
+  COURSE_CATEGORY_LENGTH: `Course category must be between ${COURSE_FIELD_LIMITS.COURSE_CATEGORY_MIN} and ${COURSE_FIELD_LIMITS.COURSE_CATEGORY_MAX} characters`,
 
   COURSE_TYPE_STRING: "Course type must be a string",
   COURSE_TYPE_INVALID: "Course type must be LIVE, RECORDED, or HYBRID",
@@ -52,20 +42,16 @@ const ERROR_MESSAGES = {
 
   TITLE_STRING: "Title must be a string",
   TITLE_REQUIRED: "Title is required",
-  TITLE_LENGTH: "Title must not exceed 200 characters",
-
   DESCRIPTION_STRING: "Description must be a string",
-  DESCRIPTION_LENGTH: "Description must not exceed 1000 characters",
 
   IS_PUBLISHED_BOOLEAN: "isPublished must be a boolean",
 
   LESSON_TITLE_STRING: "Lesson title must be a string",
   LESSON_TITLE_REQUIRED: "Lesson title is required",
-  LESSON_TITLE_LENGTH: "Lesson title must be between 2 and 200 characters",
+  LESSON_TITLE_LENGTH: `Lesson title must be between ${COURSE_FIELD_LIMITS.LESSON_TITLE_MIN} and ${COURSE_FIELD_LIMITS.LESSON_TITLE_MAX} characters`,
 
   LESSON_DESCRIPTION_STRING: "Lesson description must be a string",
-  LESSON_DESCRIPTION_LENGTH:
-    "Lesson description must not exceed 1000 characters",
+  LESSON_DESCRIPTION_LENGTH: `Lesson description must not exceed ${COURSE_FIELD_LIMITS.LESSON_DESCRIPTION_MAX} characters`,
 
   LESSON_TYPE_STRING: "Lesson type must be a string",
   LESSON_TYPE_REQUIRED: "Lesson type is required",
@@ -84,17 +70,15 @@ const ERROR_MESSAGES = {
 
   PACKAGE_NAME_STRING: "Package name must be a string",
   PACKAGE_NAME_REQUIRED: "Package name is required",
-  PACKAGE_NAME_LENGTH: "Package name must be between 2 and 200 characters",
+  PACKAGE_NAME_LENGTH: `Package name must be between ${COURSE_FIELD_LIMITS.PACKAGE_NAME_MIN} and ${COURSE_FIELD_LIMITS.PACKAGE_NAME_MAX} characters`,
 
   PACKAGE_DESCRIPTION_STRING: "Description must be a string",
-  PACKAGE_DESCRIPTION_LENGTH: "Description must not exceed 1000 characters",
+  PACKAGE_DESCRIPTION_LENGTH: `Description must not exceed ${COURSE_FIELD_LIMITS.PACKAGE_DESCRIPTION_MAX} characters`,
 
   PRICE_REQUIRED: "Price is required",
-  PRICE_VALID: "Price must be a valid non-negative number",
-  PRICE_RANGE: `Price must be between 0 and ${MAX_MONEY_VALUE}`,
+  PRICE_RANGE: `Price must be between 0 and ${COURSE_FIELD_LIMITS.MAX_PRICE}`,
 
-  DISCOUNT_VALID: "Discount must be a valid non-negative number",
-  DISCOUNT_RANGE: `Discount must be between 0 and ${MAX_MONEY_VALUE}`,
+  DISCOUNT_RANGE: `Discount must be between 0 and ${COURSE_FIELD_LIMITS.MAX_PRICE}`,
   DISCOUNT_NOT_ABOVE_PRICE: "Discount must not be greater than price",
 
   MAX_STUDENTS_INTEGER: "Max students must be a positive integer",
@@ -102,10 +86,10 @@ const ERROR_MESSAGES = {
 
   MATERIAL_TITLE_STRING: "Material title must be a string",
   MATERIAL_TITLE_REQUIRED: "Material title is required",
-  MATERIAL_TITLE_LENGTH: "Material title must be between 2 and 200 characters",
+  MATERIAL_TITLE_LENGTH: `Material title must be between ${COURSE_FIELD_LIMITS.MATERIAL_TITLE_MIN} and ${COURSE_FIELD_LIMITS.MATERIAL_TITLE_MAX} characters`,
 
   MATERIAL_DESCRIPTION_STRING: "Description must be a string",
-  MATERIAL_DESCRIPTION_LENGTH: "Description must not exceed 500 characters",
+  MATERIAL_DESCRIPTION_LENGTH: `Description must not exceed ${COURSE_FIELD_LIMITS.MATERIAL_DESCRIPTION_MAX} characters`,
 
   FILE_URL_STRING: "File URL must be a string URL or file path",
   FILE_URL_REQUIRED: "File URL is required",
@@ -114,7 +98,7 @@ const ERROR_MESSAGES = {
   FILE_TYPE_STRING: "File type must be a string",
   FILE_TYPE_REQUIRED: "File type is required",
   FILE_TYPE_EMPTY: "File type cannot be empty",
-  FILE_TYPE_LENGTH: "File type must not exceed 100 characters",
+  FILE_TYPE_LENGTH: `File type must not exceed ${COURSE_FIELD_LIMITS.MATERIAL_FILE_TYPE_MAX} characters`,
 
   FILE_SIZE_REQUIRED: "File size is required",
   FILE_SIZE_INTEGER: "File size must be a non-negative integer",
@@ -158,7 +142,6 @@ const parseJsonIfString = (value: unknown): unknown => {
   }
 
   const trimmed = value.trim();
-
   if (!trimmed) {
     return value;
   }
@@ -170,16 +153,16 @@ const parseJsonIfString = (value: unknown): unknown => {
   }
 };
 
-const validateMoneyValue = (message: string) => {
-  return (value: unknown) => {
-    const parsed = parseNumber(value);
-
-    if (parsed === undefined || parsed < 0 || parsed > MAX_MONEY_VALUE) {
-      throw new Error(message);
-    }
-
-    return true;
-  };
+const validateMoneyValue = (message: string) => (value: unknown) => {
+  const parsed = parseNumber(value);
+  if (
+    parsed === undefined ||
+    parsed < 0 ||
+    parsed > COURSE_FIELD_LIMITS.MAX_PRICE
+  ) {
+    throw new Error(message);
+  }
+  return true;
 };
 
 const validateDiscountNotAbovePrice = (value: unknown, { req }: Meta) => {
@@ -214,7 +197,6 @@ const validateQuiz = (value: unknown) => {
   }
 
   const quiz = value as { questions?: unknown };
-
   if (
     !Array.isArray(quiz.questions) ||
     quiz.questions.length === 0 ||
@@ -261,7 +243,6 @@ const validateQuiz = (value: unknown) => {
       }
 
       const trimmedOption = option.trim();
-
       if (!trimmedOption || trimmedOption.length > 200) {
         throw new Error(ERROR_MESSAGES.QUIZ_INVALID);
       }
@@ -299,6 +280,20 @@ const validateQuiz = (value: unknown) => {
   return true;
 };
 
+const optionalAssetField = (
+  field: string,
+  stringMsg: string,
+  invalidMsg: string,
+  folders: string[],
+) =>
+  body(field)
+    .optional({ nullable: true, checkFalsy: true })
+    .isString()
+    .withMessage(stringMsg)
+    .bail()
+    .trim()
+    .custom(validateUrlOrUploadPathForFolders(invalidMsg, folders));
+
 export const createCourseValidation = [
   body("title")
     .isString()
@@ -308,7 +303,10 @@ export const createCourseValidation = [
     .notEmpty()
     .withMessage(ERROR_MESSAGES.COURSE_TITLE_REQUIRED)
     .bail()
-    .isLength({ min: 5, max: 200 })
+    .isLength({
+      min: COURSE_FIELD_LIMITS.COURSE_TITLE_MIN,
+      max: COURSE_FIELD_LIMITS.COURSE_TITLE_MAX,
+    })
     .withMessage(ERROR_MESSAGES.COURSE_TITLE_LENGTH),
 
   body("description")
@@ -319,7 +317,10 @@ export const createCourseValidation = [
     .notEmpty()
     .withMessage(ERROR_MESSAGES.COURSE_DESCRIPTION_REQUIRED)
     .bail()
-    .isLength({ min: 20, max: 2000 })
+    .isLength({
+      min: COURSE_FIELD_LIMITS.COURSE_DESCRIPTION_MIN,
+      max: COURSE_FIELD_LIMITS.COURSE_DESCRIPTION_MAX,
+    })
     .withMessage(ERROR_MESSAGES.COURSE_DESCRIPTION_LENGTH),
 
   body("category")
@@ -330,7 +331,10 @@ export const createCourseValidation = [
     .notEmpty()
     .withMessage(ERROR_MESSAGES.COURSE_CATEGORY_REQUIRED)
     .bail()
-    .isLength({ max: 100 })
+    .isLength({
+      min: COURSE_FIELD_LIMITS.COURSE_CATEGORY_MIN,
+      max: COURSE_FIELD_LIMITS.COURSE_CATEGORY_MAX,
+    })
     .withMessage(ERROR_MESSAGES.COURSE_CATEGORY_LENGTH),
 
   body("courseType")
@@ -342,29 +346,19 @@ export const createCourseValidation = [
     .isIn(COURSE_TYPES)
     .withMessage(ERROR_MESSAGES.COURSE_TYPE_INVALID),
 
-  body("thumbnail")
-    .optional({ nullable: true, checkFalsy: true })
-    .isString()
-    .withMessage(ERROR_MESSAGES.THUMBNAIL_STRING)
-    .bail()
-    .trim()
-    .custom(
-      validateUrlOrUploadPathForFolders(ERROR_MESSAGES.THUMBNAIL_INVALID, [
-        "thumbnails",
-      ]),
-    ),
+  optionalAssetField(
+    "thumbnail",
+    ERROR_MESSAGES.THUMBNAIL_STRING,
+    ERROR_MESSAGES.THUMBNAIL_INVALID,
+    ["thumbnails"],
+  ),
 
-  body("previewVideoUrl")
-    .optional({ nullable: true, checkFalsy: true })
-    .isString()
-    .withMessage(ERROR_MESSAGES.PREVIEW_VIDEO_STRING)
-    .bail()
-    .trim()
-    .custom(
-      validateUrlOrUploadPathForFolders(ERROR_MESSAGES.PREVIEW_VIDEO_INVALID, [
-        "videos",
-      ]),
-    ),
+  optionalAssetField(
+    "previewVideoUrl",
+    ERROR_MESSAGES.PREVIEW_VIDEO_STRING,
+    ERROR_MESSAGES.PREVIEW_VIDEO_INVALID,
+    ["videos"],
+  ),
 ];
 
 export const updateCourseValidation = [
@@ -377,7 +371,10 @@ export const updateCourseValidation = [
     .notEmpty()
     .withMessage(ERROR_MESSAGES.TITLE_REQUIRED)
     .bail()
-    .isLength({ min: 5, max: 200 })
+    .isLength({
+      min: COURSE_FIELD_LIMITS.COURSE_TITLE_MIN,
+      max: COURSE_FIELD_LIMITS.COURSE_TITLE_MAX,
+    })
     .withMessage(ERROR_MESSAGES.COURSE_TITLE_LENGTH),
 
   body("description")
@@ -389,7 +386,10 @@ export const updateCourseValidation = [
     .notEmpty()
     .withMessage(ERROR_MESSAGES.COURSE_DESCRIPTION_REQUIRED)
     .bail()
-    .isLength({ min: 20, max: 2000 })
+    .isLength({
+      min: COURSE_FIELD_LIMITS.COURSE_DESCRIPTION_MIN,
+      max: COURSE_FIELD_LIMITS.COURSE_DESCRIPTION_MAX,
+    })
     .withMessage(ERROR_MESSAGES.COURSE_DESCRIPTION_LENGTH),
 
   body("category")
@@ -401,7 +401,10 @@ export const updateCourseValidation = [
     .notEmpty()
     .withMessage(ERROR_MESSAGES.COURSE_CATEGORY_EMPTY)
     .bail()
-    .isLength({ max: 100 })
+    .isLength({
+      min: COURSE_FIELD_LIMITS.COURSE_CATEGORY_MIN,
+      max: COURSE_FIELD_LIMITS.COURSE_CATEGORY_MAX,
+    })
     .withMessage(ERROR_MESSAGES.COURSE_CATEGORY_LENGTH),
 
   body("courseType")
@@ -413,29 +416,19 @@ export const updateCourseValidation = [
     .isIn(COURSE_TYPES)
     .withMessage(ERROR_MESSAGES.COURSE_TYPE_INVALID),
 
-  body("thumbnail")
-    .optional({ nullable: true, checkFalsy: true })
-    .isString()
-    .withMessage(ERROR_MESSAGES.THUMBNAIL_STRING)
-    .bail()
-    .trim()
-    .custom(
-      validateUrlOrUploadPathForFolders(ERROR_MESSAGES.THUMBNAIL_INVALID, [
-        "thumbnails",
-      ]),
-    ),
+  optionalAssetField(
+    "thumbnail",
+    ERROR_MESSAGES.THUMBNAIL_STRING,
+    ERROR_MESSAGES.THUMBNAIL_INVALID,
+    ["thumbnails"],
+  ),
 
-  body("previewVideoUrl")
-    .optional({ nullable: true, checkFalsy: true })
-    .isString()
-    .withMessage(ERROR_MESSAGES.PREVIEW_VIDEO_STRING)
-    .bail()
-    .trim()
-    .custom(
-      validateUrlOrUploadPathForFolders(ERROR_MESSAGES.PREVIEW_VIDEO_INVALID, [
-        "videos",
-      ]),
-    ),
+  optionalAssetField(
+    "previewVideoUrl",
+    ERROR_MESSAGES.PREVIEW_VIDEO_STRING,
+    ERROR_MESSAGES.PREVIEW_VIDEO_INVALID,
+    ["videos"],
+  ),
 
   body("isPublished")
     .optional({ nullable: true })
@@ -454,7 +447,10 @@ export const createLessonValidation = [
     .notEmpty()
     .withMessage(ERROR_MESSAGES.LESSON_TITLE_REQUIRED)
     .bail()
-    .isLength({ min: 2, max: 200 })
+    .isLength({
+      min: COURSE_FIELD_LIMITS.LESSON_TITLE_MIN,
+      max: COURSE_FIELD_LIMITS.LESSON_TITLE_MAX,
+    })
     .withMessage(ERROR_MESSAGES.LESSON_TITLE_LENGTH),
 
   body("description")
@@ -463,7 +459,7 @@ export const createLessonValidation = [
     .withMessage(ERROR_MESSAGES.LESSON_DESCRIPTION_STRING)
     .bail()
     .trim()
-    .isLength({ max: 1000 })
+    .isLength({ max: COURSE_FIELD_LIMITS.LESSON_DESCRIPTION_MAX })
     .withMessage(ERROR_MESSAGES.LESSON_DESCRIPTION_LENGTH),
 
   body("type")
@@ -478,23 +474,18 @@ export const createLessonValidation = [
     .withMessage(ERROR_MESSAGES.LESSON_TYPE_INVALID),
 
   body("duration")
-    .optional({ nullable: true })
+    .optional({ nullable: true, checkFalsy: true })
     .isInt({ min: 1 })
     .withMessage(ERROR_MESSAGES.DURATION_INTEGER)
     .bail()
     .toInt(),
 
-  body("videoUrl")
-    .optional({ nullable: true, checkFalsy: true })
-    .isString()
-    .withMessage(ERROR_MESSAGES.VIDEO_URL_STRING)
-    .bail()
-    .trim()
-    .custom(
-      validateUrlOrUploadPathForFolders(ERROR_MESSAGES.VIDEO_URL_INVALID, [
-        "videos",
-      ]),
-    ),
+  optionalAssetField(
+    "videoUrl",
+    ERROR_MESSAGES.VIDEO_URL_STRING,
+    ERROR_MESSAGES.VIDEO_URL_INVALID,
+    ["videos"],
+  ),
 
   body("quiz")
     .optional({ nullable: true })
@@ -519,7 +510,10 @@ export const updateLessonValidation = [
     .notEmpty()
     .withMessage(ERROR_MESSAGES.TITLE_REQUIRED)
     .bail()
-    .isLength({ min: 2, max: 200 })
+    .isLength({
+      min: COURSE_FIELD_LIMITS.LESSON_TITLE_MIN,
+      max: COURSE_FIELD_LIMITS.LESSON_TITLE_MAX,
+    })
     .withMessage(ERROR_MESSAGES.LESSON_TITLE_LENGTH),
 
   body("description")
@@ -528,7 +522,7 @@ export const updateLessonValidation = [
     .withMessage(ERROR_MESSAGES.LESSON_DESCRIPTION_STRING)
     .bail()
     .trim()
-    .isLength({ max: 1000 })
+    .isLength({ max: COURSE_FIELD_LIMITS.LESSON_DESCRIPTION_MAX })
     .withMessage(ERROR_MESSAGES.LESSON_DESCRIPTION_LENGTH),
 
   body("type")
@@ -541,23 +535,18 @@ export const updateLessonValidation = [
     .withMessage(ERROR_MESSAGES.LESSON_TYPE_INVALID),
 
   body("duration")
-    .optional({ nullable: true })
+    .optional({ nullable: true, checkFalsy: true })
     .isInt({ min: 1 })
     .withMessage(ERROR_MESSAGES.DURATION_INTEGER)
     .bail()
     .toInt(),
 
-  body("videoUrl")
-    .optional({ nullable: true, checkFalsy: true })
-    .isString()
-    .withMessage(ERROR_MESSAGES.VIDEO_URL_STRING)
-    .bail()
-    .trim()
-    .custom(
-      validateUrlOrUploadPathForFolders(ERROR_MESSAGES.VIDEO_URL_INVALID, [
-        "videos",
-      ]),
-    ),
+  optionalAssetField(
+    "videoUrl",
+    ERROR_MESSAGES.VIDEO_URL_STRING,
+    ERROR_MESSAGES.VIDEO_URL_INVALID,
+    ["videos"],
+  ),
 
   body("quiz")
     .optional({ nullable: true })
@@ -588,7 +577,10 @@ export const createPackageValidation = [
     .notEmpty()
     .withMessage(ERROR_MESSAGES.PACKAGE_NAME_REQUIRED)
     .bail()
-    .isLength({ min: 2, max: 200 })
+    .isLength({
+      min: COURSE_FIELD_LIMITS.PACKAGE_NAME_MIN,
+      max: COURSE_FIELD_LIMITS.PACKAGE_NAME_MAX,
+    })
     .withMessage(ERROR_MESSAGES.PACKAGE_NAME_LENGTH),
 
   body("description")
@@ -597,7 +589,7 @@ export const createPackageValidation = [
     .withMessage(ERROR_MESSAGES.PACKAGE_DESCRIPTION_STRING)
     .bail()
     .trim()
-    .isLength({ max: 1000 })
+    .isLength({ max: COURSE_FIELD_LIMITS.PACKAGE_DESCRIPTION_MAX })
     .withMessage(ERROR_MESSAGES.PACKAGE_DESCRIPTION_LENGTH),
 
   body("price")
@@ -617,14 +609,14 @@ export const createPackageValidation = [
     .toFloat(),
 
   body("duration")
-    .optional({ nullable: true })
+    .optional({ nullable: true, checkFalsy: true })
     .isInt({ min: 1 })
     .withMessage(ERROR_MESSAGES.DURATION_INTEGER)
     .bail()
     .toInt(),
 
   body("maxStudents")
-    .optional({ nullable: true })
+    .optional({ nullable: true, checkFalsy: true })
     .isInt({ min: 1 })
     .withMessage(ERROR_MESSAGES.MAX_STUDENTS_INTEGER)
     .bail()
@@ -641,7 +633,10 @@ export const updatePackageValidation = [
     .notEmpty()
     .withMessage(ERROR_MESSAGES.PACKAGE_NAME_REQUIRED)
     .bail()
-    .isLength({ min: 2, max: 200 })
+    .isLength({
+      min: COURSE_FIELD_LIMITS.PACKAGE_NAME_MIN,
+      max: COURSE_FIELD_LIMITS.PACKAGE_NAME_MAX,
+    })
     .withMessage(ERROR_MESSAGES.PACKAGE_NAME_LENGTH),
 
   body("description")
@@ -650,7 +645,7 @@ export const updatePackageValidation = [
     .withMessage(ERROR_MESSAGES.PACKAGE_DESCRIPTION_STRING)
     .bail()
     .trim()
-    .isLength({ max: 1000 })
+    .isLength({ max: COURSE_FIELD_LIMITS.PACKAGE_DESCRIPTION_MAX })
     .withMessage(ERROR_MESSAGES.PACKAGE_DESCRIPTION_LENGTH),
 
   body("price")
@@ -668,14 +663,14 @@ export const updatePackageValidation = [
     .toFloat(),
 
   body("duration")
-    .optional({ nullable: true })
+    .optional({ nullable: true, checkFalsy: true })
     .isInt({ min: 1 })
     .withMessage(ERROR_MESSAGES.DURATION_INTEGER)
     .bail()
     .toInt(),
 
   body("maxStudents")
-    .optional({ nullable: true })
+    .optional({ nullable: true, checkFalsy: true })
     .isInt({ min: 1 })
     .withMessage(ERROR_MESSAGES.MAX_STUDENTS_INTEGER)
     .bail()
@@ -698,7 +693,10 @@ export const uploadMaterialValidation = [
     .notEmpty()
     .withMessage(ERROR_MESSAGES.MATERIAL_TITLE_REQUIRED)
     .bail()
-    .isLength({ min: 2, max: 200 })
+    .isLength({
+      min: COURSE_FIELD_LIMITS.MATERIAL_TITLE_MIN,
+      max: COURSE_FIELD_LIMITS.MATERIAL_TITLE_MAX,
+    })
     .withMessage(ERROR_MESSAGES.MATERIAL_TITLE_LENGTH),
 
   body("description")
@@ -707,7 +705,7 @@ export const uploadMaterialValidation = [
     .withMessage(ERROR_MESSAGES.MATERIAL_DESCRIPTION_STRING)
     .bail()
     .trim()
-    .isLength({ max: 500 })
+    .isLength({ max: COURSE_FIELD_LIMITS.MATERIAL_DESCRIPTION_MAX })
     .withMessage(ERROR_MESSAGES.MATERIAL_DESCRIPTION_LENGTH),
 
   body("fileUrl")
@@ -732,7 +730,7 @@ export const uploadMaterialValidation = [
     .notEmpty()
     .withMessage(ERROR_MESSAGES.FILE_TYPE_REQUIRED)
     .bail()
-    .isLength({ max: 100 })
+    .isLength({ max: COURSE_FIELD_LIMITS.MATERIAL_FILE_TYPE_MAX })
     .withMessage(ERROR_MESSAGES.FILE_TYPE_LENGTH),
 
   body("fileSize")
@@ -762,7 +760,10 @@ export const updateMaterialValidation = [
     .notEmpty()
     .withMessage(ERROR_MESSAGES.TITLE_REQUIRED)
     .bail()
-    .isLength({ min: 2, max: 200 })
+    .isLength({
+      min: COURSE_FIELD_LIMITS.MATERIAL_TITLE_MIN,
+      max: COURSE_FIELD_LIMITS.MATERIAL_TITLE_MAX,
+    })
     .withMessage(ERROR_MESSAGES.MATERIAL_TITLE_LENGTH),
 
   body("description")
@@ -771,20 +772,15 @@ export const updateMaterialValidation = [
     .withMessage(ERROR_MESSAGES.MATERIAL_DESCRIPTION_STRING)
     .bail()
     .trim()
-    .isLength({ max: 500 })
+    .isLength({ max: COURSE_FIELD_LIMITS.MATERIAL_DESCRIPTION_MAX })
     .withMessage(ERROR_MESSAGES.MATERIAL_DESCRIPTION_LENGTH),
 
-  body("fileUrl")
-    .optional({ nullable: true, checkFalsy: true })
-    .isString()
-    .withMessage(ERROR_MESSAGES.FILE_URL_STRING)
-    .bail()
-    .trim()
-    .custom(
-      validateUrlOrUploadPathForFolders(ERROR_MESSAGES.FILE_URL_INVALID, [
-        "documents",
-      ]),
-    ),
+  optionalAssetField(
+    "fileUrl",
+    ERROR_MESSAGES.FILE_URL_STRING,
+    ERROR_MESSAGES.FILE_URL_INVALID,
+    ["documents"],
+  ),
 
   body("fileType")
     .optional({ nullable: true })
@@ -795,7 +791,7 @@ export const updateMaterialValidation = [
     .notEmpty()
     .withMessage(ERROR_MESSAGES.FILE_TYPE_EMPTY)
     .bail()
-    .isLength({ max: 100 })
+    .isLength({ max: COURSE_FIELD_LIMITS.MATERIAL_FILE_TYPE_MAX })
     .withMessage(ERROR_MESSAGES.FILE_TYPE_LENGTH),
 
   body("fileSize")
@@ -811,6 +807,41 @@ export const updateMaterialValidation = [
     .withMessage(ERROR_MESSAGES.IS_DOWNLOADABLE_BOOLEAN)
     .bail()
     .toBoolean(),
+];
+
+export const sendCourseNotificationValidation = [
+  body("title")
+    .isString()
+    .withMessage("Notification title must be a string")
+    .bail()
+    .trim()
+    .notEmpty()
+    .withMessage("Notification title is required")
+    .bail()
+    .isLength({ max: COURSE_FIELD_LIMITS.NOTIFICATION_TITLE_MAX })
+    .withMessage(
+      `Notification title must not exceed ${COURSE_FIELD_LIMITS.NOTIFICATION_TITLE_MAX} characters`,
+    ),
+  body("message")
+    .isString()
+    .withMessage("Notification message must be a string")
+    .bail()
+    .trim()
+    .notEmpty()
+    .withMessage("Notification message is required")
+    .bail()
+    .isLength({ max: COURSE_FIELD_LIMITS.NOTIFICATION_MESSAGE_MAX })
+    .withMessage(
+      `Notification message must not exceed ${COURSE_FIELD_LIMITS.NOTIFICATION_MESSAGE_MAX} characters`,
+    ),
+  body("type")
+    .optional({ nullable: true, checkFalsy: true })
+    .isString()
+    .withMessage("Notification type must be a string")
+    .bail()
+    .trim()
+    .isLength({ max: 80 })
+    .withMessage("Notification type must not exceed 80 characters"),
 ];
 
 export const getCoursesValidation = [
@@ -829,7 +860,7 @@ export const getCoursesValidation = [
     .withMessage(ERROR_MESSAGES.COURSE_CATEGORY_STRING)
     .bail()
     .trim()
-    .isLength({ max: 100 })
+    .isLength({ max: COURSE_FIELD_LIMITS.COURSE_CATEGORY_MAX })
     .withMessage(ERROR_MESSAGES.COURSE_CATEGORY_LENGTH),
 
   query("teacherId")

@@ -7,12 +7,14 @@ import {
 } from "@prisma/client";
 import adminService from "../services/admin.service";
 import asyncHandler from "../utils/async-handler";
-import { AuthenticationError, BadRequestError } from "../utils/errors";
-
-/**
- * Admin Controller
- * Handles HTTP requests for admin-related endpoints.
- */
+import { BadRequestError } from "../utils/errors";
+import {
+  parseOptionalBoolean,
+  parseOptionalDate,
+  requireAuthUser,
+  sendCreated,
+  sendSuccess,
+} from "../utils/http";
 
 type OriginValue = unknown;
 type PaginationQuery = {
@@ -36,21 +38,6 @@ type AdminUserSortBy =
   | "updatedAt";
 type SortOrder = "asc" | "desc";
 
-const sendSuccess = (
-  res: Response,
-  data?: unknown,
-  message?: string,
-  statusCode = 200,
-) => {
-  res.status(statusCode).json({
-    status: "success",
-    ...(message ? { message } : {}),
-    ...(data !== undefined ? { data } : {}),
-  });
-};
-
-const DATE_ONLY_QUERY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
-
 const getQueryString = (value: OriginValue): string | undefined => {
   if (typeof value === "string") {
     const trimmed = value.trim();
@@ -65,20 +52,8 @@ const getQueryString = (value: OriginValue): string | undefined => {
   return undefined;
 };
 
-const parseOptionalString = (
-  value: OriginValue,
-  fieldName: string,
-): string | undefined => {
-  const parsed = getQueryString(value);
-
-  if (parsed === undefined) return undefined;
-
-  if (parsed.length === 0) {
-    throw new BadRequestError(`${fieldName} cannot be empty.`);
-  }
-
-  return parsed;
-};
+const parseOptionalQueryString = (value: OriginValue): string | undefined =>
+  getQueryString(value);
 
 const parseOptionalBodyString = (
   value: OriginValue,
@@ -93,7 +68,6 @@ const parseOptionalBodyString = (
   }
 
   const parsed = value.trim();
-
   if (!parsed) {
     throw new BadRequestError(`${fieldName} cannot be empty.`);
   }
@@ -118,7 +92,6 @@ const parseOptionalNullableBodyString = (
   }
 
   const parsed = value.trim();
-
   return parsed || null;
 };
 
@@ -130,22 +103,18 @@ const parseRequiredString = (value: OriginValue, fieldName: string): string => {
   return value.trim();
 };
 
-const parseOptionalBoolean = (
+/**
+ * Preserves exact password characters without trimming leading or trailing spaces.
+ */
+const parseRequiredRawPassword = (
   value: OriginValue,
   fieldName: string,
-): boolean | undefined => {
-  if (value === undefined || value === null) return undefined;
+): string => {
+  if (typeof value !== "string" || value.length === 0) {
+    throw new BadRequestError(`${fieldName} is required.`);
+  }
 
-  if (typeof value === "boolean") return value;
-
-  const parsed = getQueryString(value);
-
-  if (parsed === undefined) return undefined;
-
-  if (parsed === "true") return true;
-  if (parsed === "false") return false;
-
-  throw new BadRequestError(`${fieldName} must be true or false.`);
+  return value;
 };
 
 const parseRequiredBoolean = (
@@ -153,13 +122,11 @@ const parseRequiredBoolean = (
   fieldName: string,
 ): boolean => {
   const parsed = parseOptionalBoolean(value, fieldName);
-
   if (parsed === undefined) {
     throw new BadRequestError(
       `${fieldName} is required and must be true or false.`,
     );
   }
-
   return parsed;
 };
 
@@ -169,73 +136,35 @@ const parseOptionalPositiveInteger = (
   max = 1000,
 ): number | undefined => {
   const parsed = getQueryString(value);
-
   if (parsed === undefined) return undefined;
 
   const numberValue = Number(parsed);
-
   if (!Number.isInteger(numberValue) || numberValue < 1) {
     throw new BadRequestError(`${fieldName} must be a positive integer.`);
   }
 
-  if (numberValue > max) return max;
-
-  return numberValue;
+  return Math.min(numberValue, max);
 };
 
-const parsePagination = (query: Request["query"]): PaginationQuery => {
-  return {
-    page: parseOptionalPositiveInteger(query.page, "page"),
-    limit: parseOptionalPositiveInteger(query.limit, "limit", 100),
-  };
-};
-
-const parseOptionalDate = (
-  value: OriginValue,
-  fieldName: string,
-  options?: { endOfDay?: boolean },
-): Date | undefined => {
-  const parsed = getQueryString(value);
-
-  if (parsed === undefined) return undefined;
-
-  const date = DATE_ONLY_QUERY_PATTERN.test(parsed)
-    ? new Date(
-        `${parsed}T${
-          options?.endOfDay ? "23:59:59.999" : "00:00:00.000"
-        }Z`,
-      )
-    : new Date(parsed);
-
-  if (Number.isNaN(date.getTime())) {
-    throw new BadRequestError(`${fieldName} must be a valid date.`);
-  }
-
-  return date;
-};
-
-const parseDateRange = (query: Request["query"]): DateRangeQuery => {
-  const startDate = parseOptionalDate(query.startDate, "startDate");
-  const endDate = parseOptionalDate(query.endDate, "endDate", {
-    endOfDay: true,
-  });
-
-  if (startDate && endDate && startDate > endDate) {
-    throw new BadRequestError("startDate cannot be later than endDate.");
-  }
-
-  return { startDate, endDate };
-};
+const parsePagination = (query: Request["query"]): PaginationQuery => ({
+  page: parseOptionalPositiveInteger(query.page, "page"),
+  limit: parseOptionalPositiveInteger(query.limit, "limit", 100),
+});
 
 const parseNamedDateRange = (
   query: Request["query"],
   startFieldName: string,
   endFieldName: string,
 ): DateRangeQuery => {
-  const startDate = parseOptionalDate(query[startFieldName], startFieldName);
-  const endDate = parseOptionalDate(query[endFieldName], endFieldName, {
-    endOfDay: true,
-  });
+  const startDate = parseOptionalDate(
+    getQueryString(query[startFieldName]),
+    startFieldName,
+  );
+  const endDate = parseOptionalDate(
+    getQueryString(query[endFieldName]),
+    endFieldName,
+    { endOfDayIfDateOnly: true },
+  );
 
   if (startDate && endDate && startDate > endDate) {
     throw new BadRequestError(
@@ -246,17 +175,18 @@ const parseNamedDateRange = (
   return { startDate, endDate };
 };
 
+const parseDateRange = (query: Request["query"]): DateRangeQuery =>
+  parseNamedDateRange(query, "startDate", "endDate");
+
 const parseEnumValue = <T extends Record<string, string>>(
   value: OriginValue,
   enumObject: T,
   fieldName: string,
 ): T[keyof T] | undefined => {
   const parsed = getQueryString(value);
-
   if (parsed === undefined) return undefined;
 
   const allowedValues = Object.values(enumObject);
-
   if (!allowedValues.includes(parsed)) {
     throw new BadRequestError(
       `${fieldName} must be one of: ${allowedValues.join(", ")}.`,
@@ -270,13 +200,10 @@ const parseRevenueGroupBy = (
   value: OriginValue,
 ): RevenueGroupBy | undefined => {
   const parsed = getQueryString(value);
-
   if (parsed === undefined) return undefined;
-
   if (parsed === "day" || parsed === "week" || parsed === "month") {
     return parsed;
   }
-
   throw new BadRequestError("groupBy must be one of: day, week, month.");
 };
 
@@ -284,7 +211,6 @@ const parseAdminUserSortBy = (
   value: OriginValue,
 ): AdminUserSortBy | undefined => {
   const parsed = getQueryString(value);
-
   if (parsed === undefined) return undefined;
 
   const allowedValues: AdminUserSortBy[] = [
@@ -308,13 +234,10 @@ const parseAdminUserSortBy = (
 
 const parseSortOrder = (value: OriginValue): SortOrder | undefined => {
   const parsed = getQueryString(value);
-
   if (parsed === undefined) return undefined;
-
   if (parsed === "asc" || parsed === "desc") {
     return parsed;
   }
-
   throw new BadRequestError("sortOrder must be asc or desc.");
 };
 
@@ -391,28 +314,12 @@ const parseRequiredStringArray = (
   return parsed;
 };
 
-const getAuthenticatedAdminId = (req: Request): string => {
-  if (!req.user) {
-    throw new AuthenticationError("Authentication required");
-  }
-
-  return req.user.id;
-};
-
 class AdminController {
-  /**
-   * Get platform statistics
-   * GET /api/admin/stats
-   */
   getPlatformStats = asyncHandler(async (_req: Request, res: Response) => {
     const stats = await adminService.getPlatformStats();
     sendSuccess(res, stats);
   });
 
-  /**
-   * Get all users with filters
-   * GET /api/admin/users
-   */
   getAllUsers = asyncHandler(async (req: Request, res: Response) => {
     const { startDate: createdAfter, endDate: createdBefore } =
       parseNamedDateRange(req.query, "createdAfter", "createdBefore");
@@ -421,7 +328,7 @@ class AdminController {
       role: parseEnumValue(req.query.role, UserRole, "role"),
       isActive: parseOptionalBoolean(req.query.isActive, "isActive"),
       isLocked: parseOptionalBoolean(req.query.isLocked, "isLocked"),
-      search: parseOptionalString(req.query.search, "search"),
+      search: parseOptionalQueryString(req.query.search),
       sortBy: parseAdminUserSortBy(req.query.sortBy),
       sortOrder: parseSortOrder(req.query.sortOrder),
       createdAfter,
@@ -432,21 +339,13 @@ class AdminController {
     sendSuccess(res, result);
   });
 
-  /**
-   * Get user by ID
-   * GET /api/admin/users/:id
-   */
   getUserById = asyncHandler(async (req: Request, res: Response) => {
     const user = await adminService.getUserById(req.params.id);
     sendSuccess(res, user);
   });
 
-  /**
-   * Update user status
-   * PUT /api/admin/users/:id/status
-   */
   updateUserStatus = asyncHandler(async (req: Request, res: Response) => {
-    const adminId = getAuthenticatedAdminId(req);
+    const { id: adminId } = requireAuthUser(req);
     const isActive = parseRequiredBoolean(req.body?.isActive, "isActive");
 
     const user = await adminService.updateUserStatus(
@@ -462,12 +361,8 @@ class AdminController {
     );
   });
 
-  /**
-   * Delete user
-   * DELETE /api/admin/users/:id
-   */
   deleteUser = asyncHandler(async (req: Request, res: Response) => {
-    const adminId = getAuthenticatedAdminId(req);
+    const { id: adminId } = requireAuthUser(req);
     const force =
       parseOptionalBoolean(req.query.force, "force") ??
       parseOptionalBoolean(req.body?.force, "force") ??
@@ -484,25 +379,17 @@ class AdminController {
     );
   });
 
-  /**
-   * Get all courses, including unpublished courses
-   * GET /api/admin/courses
-   */
   getAllCourses = asyncHandler(async (req: Request, res: Response) => {
     const result = await adminService.getAllCourses({
       isPublished: parseOptionalBoolean(req.query.isPublished, "isPublished"),
-      category: parseOptionalString(req.query.category, "category"),
-      search: parseOptionalString(req.query.search, "search"),
+      category: parseOptionalQueryString(req.query.category),
+      search: parseOptionalQueryString(req.query.search),
       ...parsePagination(req.query),
     });
 
     sendSuccess(res, result);
   });
 
-  /**
-   * Publish or unpublish a course
-   * PUT /api/admin/courses/:id/publish
-   */
   updateCourseStatus = asyncHandler(async (req: Request, res: Response) => {
     const isPublished = parseRequiredBoolean(
       req.body?.isPublished,
@@ -521,20 +408,11 @@ class AdminController {
     );
   });
 
-  /**
-   * Delete course
-   * DELETE /api/admin/courses/:id
-   */
   deleteCourse = asyncHandler(async (req: Request, res: Response) => {
     await adminService.deleteCourse(req.params.id);
-
     sendSuccess(res, undefined, "Course deleted successfully");
   });
 
-  /**
-   * Get all verification requests
-   * GET /api/admin/verifications
-   */
   getAllVerifications = asyncHandler(async (req: Request, res: Response) => {
     const result = await adminService.getAllVerifications({
       status: parseEnumValue(req.query.status, VerificationStatus, "status"),
@@ -544,20 +422,19 @@ class AdminController {
     sendSuccess(res, result);
   });
 
-  /**
-   * Review verification
-   * PUT /api/admin/verifications/:id
-   */
   reviewVerification = asyncHandler(async (req: Request, res: Response) => {
-    const adminId = getAuthenticatedAdminId(req);
+    const { id: adminId } = requireAuthUser(req);
     const status = parseEnumValue(
       req.body?.status,
       VerificationStatus,
       "status",
     );
 
-    if (!status) {
-      throw new BadRequestError("status is required.");
+    if (
+      status !== VerificationStatus.APPROVED &&
+      status !== VerificationStatus.REJECTED
+    ) {
+      throw new BadRequestError("status must be APPROVED or REJECTED.");
     }
 
     const verification = await adminService.reviewVerification(
@@ -572,10 +449,6 @@ class AdminController {
     sendSuccess(res, verification, "Verification reviewed successfully");
   });
 
-  /**
-   * Get all reports
-   * GET /api/admin/reports
-   */
   getAllReports = asyncHandler(async (req: Request, res: Response) => {
     const result = await adminService.getAllReports({
       status: parseEnumValue(req.query.status, ReportStatus, "status"),
@@ -586,13 +459,8 @@ class AdminController {
     sendSuccess(res, result);
   });
 
-  /**
-   * Update report status
-   * PUT /api/admin/reports/:id
-   */
   updateReportStatus = asyncHandler(async (req: Request, res: Response) => {
     const status = parseEnumValue(req.body?.status, ReportStatus, "status");
-
     if (!status) {
       throw new BadRequestError("status is required.");
     }
@@ -608,38 +476,24 @@ class AdminController {
     sendSuccess(res, report, "Report updated successfully");
   });
 
-  /**
-   * Get financial statistics
-   * GET /api/admin/financials
-   */
   getFinancials = asyncHandler(async (req: Request, res: Response) => {
     const { startDate, endDate } = parseDateRange(req.query);
-
     const result = await adminService.getFinancials(startDate, endDate);
-
     sendSuccess(res, result);
   });
 
-  /**
-   * List teacher commissions
-   * GET /api/admin/financials/commissions
-   */
   getTeacherCommissions = asyncHandler(async (req: Request, res: Response) => {
     const data = await adminService.getTeacherCommissions({
-      search: parseOptionalString(req.query.search, "search"),
+      search: parseOptionalQueryString(req.query.search),
       ...parsePagination(req.query),
     });
 
     sendSuccess(res, data);
   });
 
-  /**
-   * Update a teacher commission rate
-   * PUT /api/admin/financials/commissions/:userId
-   */
   updateTeacherCommission = asyncHandler(
     async (req: Request, res: Response) => {
-      const adminId = getAuthenticatedAdminId(req);
+      const { id: adminId } = requireAuthUser(req);
       const commissionRate = parseNullableNumber(
         req.body?.commissionRate,
         "commissionRate",
@@ -657,28 +511,19 @@ class AdminController {
     },
   );
 
-  /**
-   * Get recent activities
-   * GET /api/admin/activities
-   */
   getRecentActivities = asyncHandler(async (req: Request, res: Response) => {
     const data = await adminService.getRecentActivities(
       parsePagination(req.query),
     );
-
     sendSuccess(res, data);
   });
 
-  /**
-   * Create a new user
-   * POST /api/admin/users
-   */
   createUser = asyncHandler(async (req: Request, res: Response) => {
-    const adminId = getAuthenticatedAdminId(req);
+    const { id: adminId } = requireAuthUser(req);
 
     const user = await adminService.createUser({
       email: parseRequiredString(req.body?.email, "email"),
-      password: parseRequiredString(req.body?.password, "password"),
+      password: parseRequiredRawPassword(req.body?.password, "password"),
       firstName: parseRequiredString(req.body?.firstName, "firstName"),
       lastName: parseRequiredString(req.body?.lastName, "lastName"),
       role:
@@ -695,15 +540,11 @@ class AdminController {
       createdBy: adminId,
     });
 
-    sendSuccess(res, user, "User created successfully", 201);
+    sendCreated(res, user, "User created successfully");
   });
 
-  /**
-   * Update user information
-   * PUT /api/admin/users/:id
-   */
   updateUser = asyncHandler(async (req: Request, res: Response) => {
-    const adminId = getAuthenticatedAdminId(req);
+    const { id: adminId } = requireAuthUser(req);
 
     const user = await adminService.updateUser(
       req.params.id,
@@ -728,13 +569,9 @@ class AdminController {
     sendSuccess(res, user, "User updated successfully");
   });
 
-  /**
-   * Reset user password
-   * PUT /api/admin/users/:id/password
-   */
   resetUserPassword = asyncHandler(async (req: Request, res: Response) => {
-    const adminId = getAuthenticatedAdminId(req);
-    const newPassword = parseRequiredString(
+    const { id: adminId } = requireAuthUser(req);
+    const newPassword = parseRequiredRawPassword(
       req.body?.newPassword,
       "newPassword",
     );
@@ -748,12 +585,8 @@ class AdminController {
     sendSuccess(res, user, "Password reset successfully");
   });
 
-  /**
-   * Lock or unlock user account
-   * PUT /api/admin/users/:id/lock
-   */
   lockUserAccount = asyncHandler(async (req: Request, res: Response) => {
-    const adminId = getAuthenticatedAdminId(req);
+    const { id: adminId } = requireAuthUser(req);
     const lock = parseRequiredBoolean(req.body?.lock, "lock");
 
     const user = await adminService.lockUserAccount(
@@ -770,25 +603,15 @@ class AdminController {
     );
   });
 
-  /**
-   * Batch delete users
-   * POST /api/admin/users/batch/delete
-   */
   batchDeleteUsers = asyncHandler(async (req: Request, res: Response) => {
-    const adminId = getAuthenticatedAdminId(req);
+    const { id: adminId } = requireAuthUser(req);
     const userIds = parseRequiredStringArray(req.body?.userIds, "userIds");
-
     const result = await adminService.batchDeleteUsers(userIds, adminId);
-
     sendSuccess(res, result, "Users deactivated successfully");
   });
 
-  /**
-   * Batch update user status
-   * POST /api/admin/users/batch/status
-   */
   batchUpdateUserStatus = asyncHandler(async (req: Request, res: Response) => {
-    const adminId = getAuthenticatedAdminId(req);
+    const { id: adminId } = requireAuthUser(req);
     const userIds = parseRequiredStringArray(req.body?.userIds, "userIds");
     const isActive = parseRequiredBoolean(req.body?.isActive, "isActive");
 
@@ -801,67 +624,48 @@ class AdminController {
     );
   });
 
-  /**
-   * Get user audit logs
-   * GET /api/admin/users/audit-logs
-   */
   getUserAuditLogs = asyncHandler(async (req: Request, res: Response) => {
     const result = await adminService.getUserAuditLogs({
-      userId: parseOptionalString(req.query.userId, "userId"),
-      adminId: parseOptionalString(req.query.adminId, "adminId"),
-      action: parseOptionalString(req.query.action, "action"),
+      userId: parseOptionalQueryString(req.query.userId),
+      adminId: parseOptionalQueryString(req.query.adminId),
+      action: parseOptionalQueryString(req.query.action),
       ...parsePagination(req.query),
     });
 
     sendSuccess(res, result);
   });
 
-  /**
-   * Get settlements aggregated by teacher
-   * GET /api/admin/financials/settlements
-   */
   getSettlements = asyncHandler(async (req: Request, res: Response) => {
     const { startDate, endDate } = parseDateRange(req.query);
-
     const data = await adminService.getSettlements({
       startDate,
       endDate,
       ...parsePagination(req.query),
     });
-
     sendSuccess(res, data);
   });
 
-  /**
-   * Get invoices and bills
-   * GET /api/admin/financials/invoices
-   */
   getInvoices = asyncHandler(async (req: Request, res: Response) => {
     const { startDate, endDate } = parseDateRange(req.query);
-
     const data = await adminService.getInvoices({
       startDate,
       endDate,
-      search: parseOptionalString(req.query.search, "search"),
+      search: parseOptionalQueryString(req.query.search),
       ...parsePagination(req.query),
     });
-
     sendSuccess(res, data);
   });
 
   /**
-   * Get revenue analytics
-   * GET /api/admin/financials/revenue-analytics
+   * GET /api/v1/admin/financials/analytics
    */
   getRevenueAnalytics = asyncHandler(async (req: Request, res: Response) => {
     const { startDate, endDate } = parseDateRange(req.query);
-
     const data = await adminService.getRevenueAnalytics({
       startDate,
       endDate,
       groupBy: parseRevenueGroupBy(req.query.groupBy),
     });
-
     sendSuccess(res, data);
   });
 }

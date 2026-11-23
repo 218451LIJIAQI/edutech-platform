@@ -27,9 +27,12 @@ import {
 } from '@/types';
 import { extractErrorMessage } from '@/utils/error-handler';
 import { openProtectedAsset } from '@/utils/protected-assets';
+import { toStorableBackendAssetPath } from '@/utils/runtime';
 import {
+  SUPPORT_ATTACHMENT_ACCEPT,
   buildSupportConversationEntries,
   getSupportAttachmentLabel,
+  validateSupportAttachmentFile,
 } from '@/utils/support-thread';
 
 interface CustomerServiceModalProps {
@@ -44,15 +47,6 @@ type PendingAttachment = {
   readonly name: string;
   readonly url: string;
 };
-
-const MAX_ATTACHMENT_SIZE_BYTES = 10 * 1024 * 1024;
-
-const ACCEPTED_ATTACHMENT_TYPES = [
-  'image/jpeg',
-  'image/png',
-  'image/webp',
-  'application/pdf',
-];
 
 const getTicketStatusClass = (status: SupportTicketStatus) => {
   switch (status) {
@@ -70,20 +64,6 @@ const getTicketStatusClass = (status: SupportTicketStatus) => {
 
 const formatDateTime = (value: string | Date) => {
   return new Date(value).toLocaleString();
-};
-
-const validateAttachment = (file: File) => {
-  if (!ACCEPTED_ATTACHMENT_TYPES.includes(file.type)) {
-    toast.error('Only JPG, PNG, WebP, and PDF files are supported.');
-    return false;
-  }
-
-  if (file.size > MAX_ATTACHMENT_SIZE_BYTES) {
-    toast.error('Attachment must be 10MB or smaller.');
-    return false;
-  }
-
-  return true;
 };
 
 /**
@@ -208,7 +188,9 @@ const CustomerServiceModal = ({
       setUploading: (value: boolean) => void,
       setAttachment: (attachment: PendingAttachment | null) => void
     ) => {
-      if (!validateAttachment(file)) {
+      const validationError = validateSupportAttachmentFile(file);
+      if (validationError) {
+        toast.error(validationError);
         return;
       }
 
@@ -219,7 +201,7 @@ const CustomerServiceModal = ({
 
         setAttachment({
           name: result.filename || file.name,
-          url: result.url,
+          url: toStorableBackendAssetPath(result.url),
         });
 
         toast.success('Attachment uploaded');
@@ -543,23 +525,19 @@ const CustomerServiceModal = ({
                               {entry.message}
                             </p>
 
-                            {(() => {
-                              const attachment = entry.attachment;
-
-                              return attachment ? (
-                                <button
-                                  type="button"
-                                  onClick={() => void handleOpenAttachment(attachment)}
-                                  className="mt-3 inline-flex max-w-full items-center gap-2 rounded-lg border border-primary-200 bg-white px-3 py-2 text-xs font-medium text-primary-700 hover:bg-primary-50"
-                                >
-                                  <Paperclip className="h-3.5 w-3.5 flex-shrink-0" />
-                                  <span className="truncate">
-                                    {getSupportAttachmentLabel(attachment)}
-                                  </span>
-                                  <ExternalLink className="h-3 w-3 flex-shrink-0" />
-                                </button>
-                              ) : null;
-                            })()}
+                            {entry.attachment ? (
+                              <button
+                                type="button"
+                                onClick={() => void handleOpenAttachment(entry.attachment!)}
+                                className="mt-3 inline-flex max-w-full items-center gap-2 rounded-lg border border-primary-200 bg-white px-3 py-2 text-xs font-medium text-primary-700 hover:bg-primary-50"
+                              >
+                                <Paperclip className="h-3.5 w-3.5 flex-shrink-0" />
+                                <span className="truncate">
+                                  {getSupportAttachmentLabel(entry.attachment)}
+                                </span>
+                                <ExternalLink className="h-3 w-3 flex-shrink-0" />
+                              </button>
+                            ) : null}
                           </div>
                         );
                       })
@@ -584,7 +562,7 @@ const CustomerServiceModal = ({
                       <input
                         ref={messageAttachmentInputRef}
                         type="file"
-                        accept={ACCEPTED_ATTACHMENT_TYPES.join(',')}
+                        accept={SUPPORT_ATTACHMENT_ACCEPT}
                         className="hidden"
                         onChange={(event) => void handleMessageAttachmentChange(event)}
                       />
@@ -786,7 +764,7 @@ const CustomerServiceModal = ({
                 <input
                   ref={createAttachmentInputRef}
                   type="file"
-                  accept={ACCEPTED_ATTACHMENT_TYPES.join(',')}
+                  accept={SUPPORT_ATTACHMENT_ACCEPT}
                   className="hidden"
                   onChange={(event) => void handleCreateAttachmentChange(event)}
                 />

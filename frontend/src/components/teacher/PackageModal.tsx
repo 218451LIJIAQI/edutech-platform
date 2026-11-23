@@ -75,7 +75,7 @@ const PackageModal: FC<PackageModalProps> = ({
   const { ref: nameRegisterRef, ...nameField } = register('name', {
     required: 'Package name is required',
     validate: (value) =>
-      value.trim().length > 0 || 'Package name cannot be empty',
+      value.trim().length >= 2 || 'Package name must be at least 2 characters',
   });
 
   useEffect(() => {
@@ -87,7 +87,8 @@ const PackageModal: FC<PackageModalProps> = ({
     setValue('description', initialPackage.description ?? '');
     setValue('price', initialPackage.price);
     setValue('discount', initialPackage.discount ?? 0);
-    setValue('duration', initialPackage.duration ?? 30);
+    // Preserve lifetime packages (`duration === undefined` -> `0`) instead of overwriting with 30 days.
+    setValue('duration', initialPackage.duration ?? 0);
     setValue('maxStudents', initialPackage.maxStudents ?? 100);
     setFeatures(initialPackage.features ?? []);
   }, [isEditMode, initialPackage, setValue]);
@@ -122,7 +123,9 @@ const PackageModal: FC<PackageModalProps> = ({
     setIsSubmitting(true);
 
     try {
-      const packageData = buildPackageSavePayload(data, features);
+      const packageData = buildPackageSavePayload(data, features, {
+        isEditMode,
+      });
 
       if (isEditMode && packageId) {
         await courseService.updatePackage(packageId, packageData);

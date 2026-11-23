@@ -10,6 +10,23 @@ import { useAuthStore } from '@/store/auth-store';
 import { usePageTitle } from '@/hooks';
 import QuickStartGuide from '@/components/teacher/QuickStartGuide';
 
+const getTransactionCourseTitle = (payment: PaymentWithDetails): string => {
+  const directTitle = payment.package?.course?.title?.trim();
+  if (directTitle) {
+    return directTitle;
+  }
+
+  const orderItems = (payment as PaymentWithDetails & {
+    order?: { items?: Array<{ package?: { course?: { title?: string | null } | null } | null }> | null } | null;
+  }).order?.items;
+  const orderTitles = (orderItems || [])
+    .map((item) => item.package?.course?.title?.trim())
+    .filter((title): title is string => Boolean(title));
+  const uniqueTitles = Array.from(new Set(orderTitles));
+
+  return uniqueTitles.length > 0 ? uniqueTitles.join(', ') : 'Course Purchase';
+};
+
 /**
  * Teacher Dashboard
  * Overview of teacher's performance, earnings, and courses
@@ -40,15 +57,14 @@ const TeacherDashboard = () => {
   const fetchDashboardData = useCallback(async () => {
     setIsLoading(true);
     try {
-      // Fetch teacher stats
-      const statsData = await teacherService.getStats();
+      const [statsData, earningsData] = await Promise.all([
+        teacherService.getStats(),
+        paymentService.getTeacherEarningsByCourse(),
+      ]);
       setStats(statsData);
-
-      // Fetch earnings grouped by course
-      const earningsData = await paymentService.getTeacherEarningsByCourse();
       setTotalEarnings(earningsData.totalEarnings || 0);
       setCourseEarnings(earningsData.courseEarnings || []);
-      setEarnings((earningsData.recentPayments || []).slice(0, 5)); // Latest 5
+      setEarnings((earningsData.recentPayments || []).slice(0, 5));
     } catch (error) {
       clientLogger.error('Failed to fetch dashboard data:', error);
     } finally {
@@ -299,7 +315,7 @@ const TeacherDashboard = () => {
                   >
                     <div className="flex-1">
                       <p className="font-bold text-gray-900">
-                        {payment.package?.course?.title || 'Course Purchase'}
+                        {getTransactionCourseTitle(payment)}
                       </p>
                       <div className="flex items-center space-x-2 text-sm text-gray-600 mt-1">
                         <span>{payment.user?.firstName} {payment.user?.lastName}</span>

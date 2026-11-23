@@ -1,11 +1,7 @@
 import api from './api';
 import { Review, ApiResponse } from '@/types';
 import { extractData } from './response-utils';
-
-/**
- * Review Service
- * Handles all review-related API calls
- */
+import { normalizeReviewAssets } from '@/utils/asset-normalizers';
 
 export interface TeacherReviewListResponse {
   reviews: Review[];
@@ -17,10 +13,14 @@ export interface TeacherReviewListResponse {
   };
 }
 
+const normalizeReviewList = (
+  data: TeacherReviewListResponse
+): TeacherReviewListResponse => ({
+  ...data,
+  reviews: (data.reviews || []).map(normalizeReviewAssets),
+});
+
 const reviewService = {
-  /**
-   * Create a review
-   */
   createReview: async (
     enrollmentId: string,
     rating: number,
@@ -31,7 +31,7 @@ const reviewService = {
       rating,
       comment,
     });
-    return extractData(response);
+    return normalizeReviewAssets(extractData(response));
   },
 
   getTeacherReviews: async (
@@ -42,7 +42,7 @@ const reviewService = {
       `/reviews/teacher/${teacherId}`,
       { params }
     );
-    return extractData(response);
+    return normalizeReviewList(extractData(response));
   },
 
   getCourseReviews: async (
@@ -53,14 +53,13 @@ const reviewService = {
       `/reviews/course/${courseId}`,
       { params }
     );
-    return extractData(response);
+    return normalizeReviewList(extractData(response));
   },
 
   getMyReviews: async (): Promise<Review[]> => {
     const response = await api.get<ApiResponse<Review[]>>('/reviews/my-reviews');
-    return extractData(response);
+    return extractData(response).map(normalizeReviewAssets);
   },
-
 };
 
 export default reviewService;

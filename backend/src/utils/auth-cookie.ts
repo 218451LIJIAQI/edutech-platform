@@ -17,7 +17,7 @@ const decodeCookieComponent = (value: string): string => {
   }
 };
 
-const parseCookieHeader = (cookieHeader?: string): CookieMap => {
+export const parseCookieHeader = (cookieHeader?: string): CookieMap => {
   if (!cookieHeader) {
     return {};
   }
@@ -46,7 +46,7 @@ const parseCookieHeader = (cookieHeader?: string): CookieMap => {
     }, {});
 };
 
-const parseDurationToMs = (value: string): number | undefined => {
+export const parseDurationToMs = (value: string): number | undefined => {
   const duration = value.trim();
 
   if (!duration) {
@@ -75,8 +75,6 @@ const parseDurationToMs = (value: string): number | undefined => {
     return undefined;
   }
 
-  const unit = match[2].toLowerCase();
-
   const multiplier: Record<string, number> = {
     ms: 1,
     s: 1000,
@@ -86,46 +84,85 @@ const parseDurationToMs = (value: string): number | undefined => {
     w: 7 * 24 * 60 * 60 * 1000,
   };
 
-  const maxAge = amount * multiplier[unit];
+  const maxAge = amount * multiplier[match[2].toLowerCase()];
 
   return Number.isSafeInteger(maxAge) && maxAge > 0 ? maxAge : undefined;
 };
 
-const getRefreshTokenCookieOptions = (includeMaxAge = true): CookieOptions => {
-  const maxAge = parseDurationToMs(config.JWT_REFRESH_EXPIRES_IN);
+/**
+ * Uses `SameSite=Lax` by default (including same-origin production deployments such as Render)
+ * and switches to `SameSite=None; Secure` only when an explicit cross-origin HTTPS frontend
+ * is configured via `CORS_ORIGIN`.
+ */
+export const resolveCookieSameSitePolicy = (options?: {
+  isProd?: boolean;
+  corsOrigin?: string | string[];
+  rawCorsOriginEnv?: string;
+  renderExternalUrl?: string;
+}): "lax" | "none" => {
+  const isProd = options?.isProd ?? config.IS_PROD;
+  if (!isProd) {
+    return "lax";
+  }
 
-  return {
-    httpOnly: true,
-    secure: config.IS_PROD,
-    sameSite: config.IS_PROD ? "none" : "lax",
-    path: REFRESH_TOKEN_COOKIE_PATH,
-    ...(includeMaxAge && maxAge ? { maxAge } : {}),
-  };
+  const rawCorsOrigin = options?.rawCorsOriginEnv ?? process.env.CORS_ORIGIN;
+  if (!rawCorsOrigin || !rawCorsOrigin.trim()) {
+    return "lax";
+  }
+
+  const corsOrigin = options?.corsOrigin ?? config.CORS_ORIGIN;
+  const configuredOrigins = Array.isArray(corsOrigin)
+    ? corsOrigin
+    : [corsOrigin];
+  const backendUrl =
+    options?.renderExternalUrl ?? process.env.RENDER_EXTERNAL_URL;
+
+  let backendOrigin: string | null = null;
+  if (backendUrl && backendUrl.trim()) {
+    try {
+      backendOrigin = new URL(backendUrl.trim()).origin;
+    } catch {
+      backendOrigin = null;
+    }
+  }
+
+  const hasCrossOriginHttpsFrontend = configuredOrigins.some((candidate) => {
+    try {
+      const parsed = new URL(candidate);
+      if (parsed.protocol !== "https:") {
+        return false;
+      }
+      return backendOrigin ? parsed.origin !== backendOrigin : true;
+    } catch {
+      return false;
+    }
+  });
+
+  return hasCrossOriginHttpsFrontend ? "none" : "lax";
 };
 
-const getRefreshSessionHintCookieOptions = (
+const buildCookieOptions = (
+  path: string,
+  httpOnly: boolean,
   includeMaxAge = true,
 ): CookieOptions => {
   const maxAge = parseDurationToMs(config.JWT_REFRESH_EXPIRES_IN);
+  const sameSite = resolveCookieSameSitePolicy();
 
   return {
-    httpOnly: false,
+    httpOnly,
     secure: config.IS_PROD,
-    sameSite: config.IS_PROD ? "none" : "lax",
-    path: REFRESH_SESSION_HINT_COOKIE_PATH,
+    sameSite,
+    path,
     ...(includeMaxAge && maxAge ? { maxAge } : {}),
   };
 };
 
-export const hasRefreshTokenCookieHeader = (cookieHeader?: string): boolean => {
-  return Boolean(parseCookieHeader(cookieHeader)[REFRESH_TOKEN_COOKIE_NAME]);
-};
+export const hasRefreshTokenCookieHeader = (cookieHeader?: string): boolean =>
+  Boolean(parseCookieHeader(cookieHeader)[REFRESH_TOKEN_COOKIE_NAME]);
 
-export const getRefreshTokenFromRequest = (req: Request): string | null => {
-  return (
-    parseCookieHeader(req.headers.cookie)[REFRESH_TOKEN_COOKIE_NAME] ?? null
-  );
-};
+export const getRefreshTokenFromRequest = (req: Request): string | null =>
+  parseCookieHeader(req.headers.cookie)[REFRESH_TOKEN_COOKIE_NAME] ?? null;
 
 export const setRefreshTokenCookie = (
   res: Response,
@@ -134,14 +171,14 @@ export const setRefreshTokenCookie = (
   res.cookie(
     REFRESH_TOKEN_COOKIE_NAME,
     refreshToken,
-    getRefreshTokenCookieOptions(),
+    buildCookieOptions(REFRESH_TOKEN_COOKIE_PATH, true, true),
   );
 };
 
 export const clearRefreshTokenCookie = (res: Response): void => {
   res.clearCookie(
     REFRESH_TOKEN_COOKIE_NAME,
-    getRefreshTokenCookieOptions(false),
+    buildCookieOptions(REFRESH_TOKEN_COOKIE_PATH, true, false),
   );
 };
 
@@ -149,13 +186,13 @@ export const setRefreshSessionHintCookie = (res: Response): void => {
   res.cookie(
     REFRESH_SESSION_HINT_COOKIE_NAME,
     "1",
-    getRefreshSessionHintCookieOptions(),
+    buildCookieOptions(REFRESH_SESSION_HINT_COOKIE_PATH, false, true),
   );
 };
 
 export const clearRefreshSessionHintCookie = (res: Response): void => {
   res.clearCookie(
     REFRESH_SESSION_HINT_COOKIE_NAME,
-    getRefreshSessionHintCookieOptions(false),
+    buildCookieOptions(REFRESH_SESSION_HINT_COOKIE_PATH, false, false),
   );
 };

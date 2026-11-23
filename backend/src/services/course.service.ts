@@ -8,6 +8,7 @@ import {
 import { buildProtectedAssetDescriptor } from "../utils/protected-asset";
 import { sanitizeUserPlainText } from "../utils/sanitize-user-content";
 import { ensureUrlOrUploadPathForFolders } from "../utils/url-or-path";
+import notificationService from "./notification.service";
 import { buildPaginationMeta, normalizePagination } from "./shared/pagination";
 import { buildCurrentEnrollmentWhere } from "./shared/enrollment-access";
 import {
@@ -42,31 +43,31 @@ import {
 } from "./course/course-service-helpers";
 import { calculateActualTeacherStudentCount } from "./teacher/teacher-service-helpers";
 
+export const COURSE_FIELD_LIMITS = {
+  COURSE_TITLE_MIN: 3,
+  COURSE_TITLE_MAX: 200,
+  COURSE_DESCRIPTION_MIN: 10,
+  COURSE_DESCRIPTION_MAX: 5000,
+  COURSE_CATEGORY_MIN: 2,
+  COURSE_CATEGORY_MAX: 100,
+  LESSON_TITLE_MIN: 2,
+  LESSON_TITLE_MAX: 200,
+  LESSON_DESCRIPTION_MAX: 3000,
+  PACKAGE_NAME_MIN: 2,
+  PACKAGE_NAME_MAX: 200,
+  PACKAGE_DESCRIPTION_MAX: 2000,
+  MATERIAL_TITLE_MIN: 2,
+  MATERIAL_TITLE_MAX: 200,
+  MATERIAL_DESCRIPTION_MAX: 2000,
+  MATERIAL_FILE_TYPE_MAX: 100,
+  NOTIFICATION_TITLE_MAX: 150,
+  NOTIFICATION_MESSAGE_MAX: 2000,
+  MAX_PRICE: 99999999.99,
+  MAX_DURATION_MINUTES: 60 * 24 * 365,
+  MAX_FILE_SIZE_BYTES: 1024 * 1024 * 1024 * 5,
+} as const;
+
 const LESSON_ORDER_RETRY_ATTEMPTS = 3;
-
-const MIN_COURSE_TITLE_LENGTH = 3;
-const MAX_COURSE_TITLE_LENGTH = 150;
-const MIN_COURSE_DESCRIPTION_LENGTH = 10;
-const MAX_COURSE_DESCRIPTION_LENGTH = 5000;
-const MIN_CATEGORY_LENGTH = 2;
-const MAX_CATEGORY_LENGTH = 80;
-
-const MIN_LESSON_TITLE_LENGTH = 3;
-const MAX_LESSON_TITLE_LENGTH = 150;
-const MAX_LESSON_DESCRIPTION_LENGTH = 3000;
-
-const MIN_PACKAGE_NAME_LENGTH = 3;
-const MAX_PACKAGE_NAME_LENGTH = 120;
-const MAX_PACKAGE_DESCRIPTION_LENGTH = 2000;
-
-const MIN_MATERIAL_TITLE_LENGTH = 3;
-const MAX_MATERIAL_TITLE_LENGTH = 150;
-const MAX_MATERIAL_DESCRIPTION_LENGTH = 2000;
-const MAX_FILE_TYPE_LENGTH = 80;
-
-const MAX_PRICE = 99999999.99;
-const MAX_DURATION_MINUTES = 60 * 24 * 365;
-const MAX_FILE_SIZE_BYTES = 1024 * 1024 * 1024 * 5; // 5 GB
 
 const isUniqueConstraintError = (error: unknown) =>
   error instanceof Prisma.PrismaClientKnownRequestError &&
@@ -166,6 +167,25 @@ const normalizeOptionalText = (
   return normalized;
 };
 
+const normalizeNullableOptionalText = (
+  value: string | null | undefined,
+  fieldName: string,
+  options: {
+    maxLength?: number;
+    preserveLineBreaks?: boolean;
+  } = {},
+): string | null | undefined => {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (value === null) {
+    return null;
+  }
+
+  return normalizeOptionalText(value, fieldName, options) ?? null;
+};
+
 const toFiniteNumber = (value: unknown, fieldName: string): number => {
   const numericValue =
     typeof value === "object" &&
@@ -198,7 +218,7 @@ const normalizeMoney = (
     );
   }
 
-  if (numericValue > MAX_PRICE) {
+  if (numericValue > COURSE_FIELD_LIMITS.MAX_PRICE) {
     throw new ValidationError(`${fieldName} is too large`);
   }
 
@@ -229,6 +249,22 @@ const normalizePositiveInteger = (
   }
 
   return numericValue;
+};
+
+const normalizeNullablePositiveInteger = (
+  value: number | null | undefined,
+  fieldName: string,
+  options: { max?: number } = {},
+): number | null | undefined => {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (value === null) {
+    return null;
+  }
+
+  return normalizePositiveInteger(value, fieldName, options) ?? null;
 };
 
 const normalizeNonNegativeInteger = (
@@ -263,8 +299,29 @@ const normalizeOptionalAssetUrl = (
   errorMessage: string,
 ): string | undefined => {
   const normalized = value?.trim();
-  if (normalized === undefined || normalized === "") {
+  if (!normalized) {
     return undefined;
+  }
+
+  return ensureUrlOrUploadPathForFolders(normalized, folders, errorMessage);
+};
+
+const normalizeNullableAssetUrl = (
+  value: string | null | undefined,
+  folders: string[],
+  errorMessage: string,
+): string | null | undefined => {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (value === null) {
+    return null;
+  }
+
+  const normalized = value.trim();
+  if (!normalized) {
+    return null;
   }
 
   return ensureUrlOrUploadPathForFolders(normalized, folders, errorMessage);
@@ -279,17 +336,17 @@ const normalizeCourseCreateData = (data: {
   previewVideoUrl?: string;
 }) => ({
   title: normalizeRequiredText(data.title, "Course title", {
-    minLength: MIN_COURSE_TITLE_LENGTH,
-    maxLength: MAX_COURSE_TITLE_LENGTH,
+    minLength: COURSE_FIELD_LIMITS.COURSE_TITLE_MIN,
+    maxLength: COURSE_FIELD_LIMITS.COURSE_TITLE_MAX,
   }),
   description: normalizeRequiredText(data.description, "Course description", {
-    minLength: MIN_COURSE_DESCRIPTION_LENGTH,
-    maxLength: MAX_COURSE_DESCRIPTION_LENGTH,
+    minLength: COURSE_FIELD_LIMITS.COURSE_DESCRIPTION_MIN,
+    maxLength: COURSE_FIELD_LIMITS.COURSE_DESCRIPTION_MAX,
     preserveLineBreaks: true,
   }),
   category: normalizeRequiredText(data.category, "Course category", {
-    minLength: MIN_CATEGORY_LENGTH,
-    maxLength: MAX_CATEGORY_LENGTH,
+    minLength: COURSE_FIELD_LIMITS.COURSE_CATEGORY_MIN,
+    maxLength: COURSE_FIELD_LIMITS.COURSE_CATEGORY_MAX,
   }),
   courseType: data.courseType,
   thumbnail: normalizeOptionalAssetUrl(
@@ -309,16 +366,16 @@ const normalizeCourseUpdateData = (data: {
   description?: string;
   category?: string;
   courseType?: CourseType;
-  thumbnail?: string;
-  previewVideoUrl?: string;
+  thumbnail?: string | null;
+  previewVideoUrl?: string | null;
   isPublished?: boolean;
 }): Prisma.CourseUpdateInput => {
   const updateData: Prisma.CourseUpdateInput = {};
 
   if (data.title !== undefined) {
     updateData.title = normalizeRequiredText(data.title, "Course title", {
-      minLength: MIN_COURSE_TITLE_LENGTH,
-      maxLength: MAX_COURSE_TITLE_LENGTH,
+      minLength: COURSE_FIELD_LIMITS.COURSE_TITLE_MIN,
+      maxLength: COURSE_FIELD_LIMITS.COURSE_TITLE_MAX,
     });
   }
 
@@ -327,8 +384,8 @@ const normalizeCourseUpdateData = (data: {
       data.description,
       "Course description",
       {
-        minLength: MIN_COURSE_DESCRIPTION_LENGTH,
-        maxLength: MAX_COURSE_DESCRIPTION_LENGTH,
+        minLength: COURSE_FIELD_LIMITS.COURSE_DESCRIPTION_MIN,
+        maxLength: COURSE_FIELD_LIMITS.COURSE_DESCRIPTION_MAX,
         preserveLineBreaks: true,
       },
     );
@@ -339,8 +396,8 @@ const normalizeCourseUpdateData = (data: {
       data.category,
       "Course category",
       {
-        minLength: MIN_CATEGORY_LENGTH,
-        maxLength: MAX_CATEGORY_LENGTH,
+        minLength: COURSE_FIELD_LIMITS.COURSE_CATEGORY_MIN,
+        maxLength: COURSE_FIELD_LIMITS.COURSE_CATEGORY_MAX,
       },
     );
   }
@@ -350,7 +407,7 @@ const normalizeCourseUpdateData = (data: {
   }
 
   if (data.thumbnail !== undefined) {
-    updateData.thumbnail = normalizeOptionalAssetUrl(
+    updateData.thumbnail = normalizeNullableAssetUrl(
       data.thumbnail,
       ["thumbnails"],
       "Course thumbnail must be an external URL or use the /uploads/thumbnails/ folder",
@@ -358,7 +415,7 @@ const normalizeCourseUpdateData = (data: {
   }
 
   if (data.previewVideoUrl !== undefined) {
-    updateData.previewVideoUrl = normalizeOptionalAssetUrl(
+    updateData.previewVideoUrl = normalizeNullableAssetUrl(
       data.previewVideoUrl,
       ["videos"],
       "Preview video URL must be an external URL or use the /uploads/videos/ folder",
@@ -382,16 +439,16 @@ const normalizeLessonCreateData = (data: {
   isFree?: boolean;
 }) => ({
   title: normalizeRequiredText(data.title, "Lesson title", {
-    minLength: MIN_LESSON_TITLE_LENGTH,
-    maxLength: MAX_LESSON_TITLE_LENGTH,
+    minLength: COURSE_FIELD_LIMITS.LESSON_TITLE_MIN,
+    maxLength: COURSE_FIELD_LIMITS.LESSON_TITLE_MAX,
   }),
   description: normalizeOptionalText(data.description, "Lesson description", {
-    maxLength: MAX_LESSON_DESCRIPTION_LENGTH,
+    maxLength: COURSE_FIELD_LIMITS.LESSON_DESCRIPTION_MAX,
     preserveLineBreaks: true,
   }),
   type: data.type,
   duration: normalizePositiveInteger(data.duration, "Lesson duration", {
-    max: MAX_DURATION_MINUTES,
+    max: COURSE_FIELD_LIMITS.MAX_DURATION_MINUTES,
   }),
   videoUrl: normalizeOptionalAssetUrl(
     data.videoUrl,
@@ -420,14 +477,14 @@ const normalizePackageCreateData = (data: {
 
   return {
     name: normalizeRequiredText(data.name, "Package name", {
-      minLength: MIN_PACKAGE_NAME_LENGTH,
-      maxLength: MAX_PACKAGE_NAME_LENGTH,
+      minLength: COURSE_FIELD_LIMITS.PACKAGE_NAME_MIN,
+      maxLength: COURSE_FIELD_LIMITS.PACKAGE_NAME_MAX,
     }),
     description: normalizeOptionalText(
       data.description,
       "Package description",
       {
-        maxLength: MAX_PACKAGE_DESCRIPTION_LENGTH,
+        maxLength: COURSE_FIELD_LIMITS.PACKAGE_DESCRIPTION_MAX,
         preserveLineBreaks: true,
       },
     ),
@@ -435,7 +492,7 @@ const normalizePackageCreateData = (data: {
     discount,
     finalPrice: calculateFinalPrice(price, discount),
     duration: normalizePositiveInteger(data.duration, "Package duration", {
-      max: MAX_DURATION_MINUTES,
+      max: COURSE_FIELD_LIMITS.MAX_DURATION_MINUTES,
     }),
     maxStudents: normalizePositiveInteger(data.maxStudents, "Maximum students"),
     features: data.features,
@@ -450,11 +507,11 @@ const normalizePackageUpdateData = (
   },
   data: {
     name?: string;
-    description?: string;
+    description?: string | null;
     price?: number;
     discount?: number;
-    duration?: number;
-    maxStudents?: number;
+    duration?: number | null;
+    maxStudents?: number | null;
     features?: Prisma.InputJsonValue;
     isActive?: boolean;
   },
@@ -463,17 +520,17 @@ const normalizePackageUpdateData = (
 
   if (data.name !== undefined) {
     updateData.name = normalizeRequiredText(data.name, "Package name", {
-      minLength: MIN_PACKAGE_NAME_LENGTH,
-      maxLength: MAX_PACKAGE_NAME_LENGTH,
+      minLength: COURSE_FIELD_LIMITS.PACKAGE_NAME_MIN,
+      maxLength: COURSE_FIELD_LIMITS.PACKAGE_NAME_MAX,
     });
   }
 
   if (data.description !== undefined) {
-    updateData.description = normalizeOptionalText(
+    updateData.description = normalizeNullableOptionalText(
       data.description,
       "Package description",
       {
-        maxLength: MAX_PACKAGE_DESCRIPTION_LENGTH,
+        maxLength: COURSE_FIELD_LIMITS.PACKAGE_DESCRIPTION_MAX,
         preserveLineBreaks: true,
       },
     );
@@ -504,17 +561,15 @@ const normalizePackageUpdateData = (
   }
 
   if (data.duration !== undefined) {
-    updateData.duration = normalizePositiveInteger(
+    updateData.duration = normalizeNullablePositiveInteger(
       data.duration,
       "Package duration",
-      {
-        max: MAX_DURATION_MINUTES,
-      },
+      { max: COURSE_FIELD_LIMITS.MAX_DURATION_MINUTES },
     );
   }
 
   if (data.maxStudents !== undefined) {
-    updateData.maxStudents = normalizePositiveInteger(
+    updateData.maxStudents = normalizeNullablePositiveInteger(
       data.maxStudents,
       "Maximum students",
     );
@@ -546,11 +601,11 @@ const normalizeMaterialCreateData = (data: {
   isDownloadable?: boolean;
 }) => ({
   title: normalizeRequiredText(data.title, "Material title", {
-    minLength: MIN_MATERIAL_TITLE_LENGTH,
-    maxLength: MAX_MATERIAL_TITLE_LENGTH,
+    minLength: COURSE_FIELD_LIMITS.MATERIAL_TITLE_MIN,
+    maxLength: COURSE_FIELD_LIMITS.MATERIAL_TITLE_MAX,
   }),
   description: normalizeOptionalText(data.description, "Material description", {
-    maxLength: MAX_MATERIAL_DESCRIPTION_LENGTH,
+    maxLength: COURSE_FIELD_LIMITS.MATERIAL_DESCRIPTION_MAX,
     preserveLineBreaks: true,
   }),
   fileUrl: ensureUrlOrUploadPathForFolders(
@@ -560,18 +615,18 @@ const normalizeMaterialCreateData = (data: {
   ),
   fileType: normalizeRequiredText(data.fileType, "Material file type", {
     minLength: 1,
-    maxLength: MAX_FILE_TYPE_LENGTH,
+    maxLength: COURSE_FIELD_LIMITS.MATERIAL_FILE_TYPE_MAX,
   }),
   fileSize: normalizeNonNegativeInteger(data.fileSize, "Material file size", {
     required: true,
-    max: MAX_FILE_SIZE_BYTES,
+    max: COURSE_FIELD_LIMITS.MAX_FILE_SIZE_BYTES,
   }) as number,
   isDownloadable: data.isDownloadable,
 });
 
 const normalizeMaterialUpdateData = (data: {
   title?: string;
-  description?: string;
+  description?: string | null;
   fileUrl?: string;
   fileType?: string;
   fileSize?: number;
@@ -581,17 +636,17 @@ const normalizeMaterialUpdateData = (data: {
 
   if (data.title !== undefined) {
     updateData.title = normalizeRequiredText(data.title, "Material title", {
-      minLength: MIN_MATERIAL_TITLE_LENGTH,
-      maxLength: MAX_MATERIAL_TITLE_LENGTH,
+      minLength: COURSE_FIELD_LIMITS.MATERIAL_TITLE_MIN,
+      maxLength: COURSE_FIELD_LIMITS.MATERIAL_TITLE_MAX,
     });
   }
 
   if (data.description !== undefined) {
-    updateData.description = normalizeOptionalText(
+    updateData.description = normalizeNullableOptionalText(
       data.description,
       "Material description",
       {
-        maxLength: MAX_MATERIAL_DESCRIPTION_LENGTH,
+        maxLength: COURSE_FIELD_LIMITS.MATERIAL_DESCRIPTION_MAX,
         preserveLineBreaks: true,
       },
     );
@@ -611,7 +666,7 @@ const normalizeMaterialUpdateData = (data: {
       "Material file type",
       {
         minLength: 1,
-        maxLength: MAX_FILE_TYPE_LENGTH,
+        maxLength: COURSE_FIELD_LIMITS.MATERIAL_FILE_TYPE_MAX,
       },
     );
   }
@@ -622,7 +677,7 @@ const normalizeMaterialUpdateData = (data: {
       "Material file size",
       {
         required: true,
-        max: MAX_FILE_SIZE_BYTES,
+        max: COURSE_FIELD_LIMITS.MAX_FILE_SIZE_BYTES,
       },
     );
   }
@@ -652,28 +707,16 @@ const ensureValidQuizAnswers = (answers: number[]) => {
   }
 };
 
-const ensureCourseCanBeSafelyDeleted = async (courseId: string) => {
+export const ensureCourseCanBeSafelyDeleted = async (courseId: string) => {
   const [enrollmentCount, paymentCount, orderItemCount] = await Promise.all([
     prisma.enrollment.count({
-      where: {
-        package: {
-          courseId,
-        },
-      },
+      where: { package: { courseId } },
     }),
     prisma.payment.count({
-      where: {
-        package: {
-          courseId,
-        },
-      },
+      where: { package: { courseId } },
     }),
     prisma.orderItem.count({
-      where: {
-        package: {
-          courseId,
-        },
-      },
+      where: { package: { courseId } },
     }),
   ]);
 
@@ -700,12 +743,9 @@ const ensurePackageCanBeSafelyDeleted = async (packageId: string) => {
 
 /**
  * Course Service
- * Handles course, lesson, quiz, package, material, and protected download management.
+ * Handles course, lesson, quiz, package, material, course notification, and protected download management.
  */
 class CourseService {
-  /**
-   * Get all published courses with filters.
-   */
   async getAllCourses(filters: {
     category?: string;
     teacherId?: string;
@@ -788,9 +828,6 @@ class CourseService {
     };
   }
 
-  /**
-   * Get course by ID.
-   */
   async getCourseById(courseId: string, userId?: string) {
     const normalizedCourseId = ensureRequiredCourseIdentifier(
       courseId,
@@ -816,9 +853,7 @@ class CourseService {
         select: {
           role: true,
           teacherProfile: {
-            select: {
-              id: true,
-            },
+            select: { id: true },
           },
         },
       });
@@ -830,9 +865,7 @@ class CourseService {
         where: buildCurrentEnrollmentWhere(
           {
             userId: userId.trim(),
-            package: {
-              courseId: course.id,
-            },
+            package: { courseId: course.id },
           },
           new Date(),
         ),
@@ -849,15 +882,13 @@ class CourseService {
       throw new NotFoundError("Course not found");
     }
 
-    const canViewQuizAnswers = isCourseOwnerOrAdmin;
-    const canManageMaterials = isCourseOwnerOrAdmin;
     const actualTeacherStudentCount = await calculateActualTeacherStudentCount(
       course.teacherProfileId,
     );
     const mappedCourse = mapCourseDetailResponse(course, {
       isEnrolled,
-      canViewQuizAnswers,
-      canManageMaterials,
+      canViewQuizAnswers: isCourseOwnerOrAdmin,
+      canManageMaterials: isCourseOwnerOrAdmin,
     });
 
     return {
@@ -869,9 +900,6 @@ class CourseService {
     };
   }
 
-  /**
-   * Create a new course. Teacher only.
-   */
   async createCourse(
     userId: string,
     data: {
@@ -886,7 +914,7 @@ class CourseService {
     const teacherProfile = await requireTeacherProfileByUserId(userId);
     const normalizedData = normalizeCourseCreateData(data);
 
-    const course = await prisma.course.create({
+    return prisma.course.create({
       data: {
         teacherProfileId: teacherProfile.id,
         ...normalizedData,
@@ -904,13 +932,8 @@ class CourseService {
         },
       },
     });
-
-    return course;
   }
 
-  /**
-   * Update course. Teacher only.
-   */
   async updateCourse(
     userId: string,
     courseId: string,
@@ -919,25 +942,20 @@ class CourseService {
       description?: string;
       category?: string;
       courseType?: CourseType;
-      thumbnail?: string;
-      previewVideoUrl?: string;
+      thumbnail?: string | null;
+      previewVideoUrl?: string | null;
       isPublished?: boolean;
     },
   ) {
     const ownedCourse = await requireOwnedCourse(userId, courseId);
     const updateData = normalizeCourseUpdateData(data);
 
-    const updated = await prisma.course.update({
+    return prisma.course.update({
       where: { id: ownedCourse.id },
       data: updateData,
     });
-
-    return updated;
   }
 
-  /**
-   * Delete course. Teacher only.
-   */
   async deleteCourse(userId: string, courseId: string) {
     const ownedCourse = await requireOwnedCourse(userId, courseId);
     await ensureCourseCanBeSafelyDeleted(ownedCourse.id);
@@ -949,9 +967,6 @@ class CourseService {
     return { message: "Course deleted successfully" };
   }
 
-  /**
-   * Create lesson in a course.
-   */
   async createLesson(
     userId: string,
     courseId: string,
@@ -968,7 +983,7 @@ class CourseService {
     const ownedCourse = await requireOwnedCourse(userId, courseId);
     const normalizedData = normalizeLessonCreateData(data);
 
-    const lesson = await withLessonOrderRetry(() =>
+    return withLessonOrderRetry(() =>
       prisma.$transaction(async (tx) => {
         const orderedLessonIds = await listCourseLessonIdsInOrder(
           ownedCourse.id,
@@ -1009,22 +1024,17 @@ class CourseService {
         return refreshedLesson;
       }),
     );
-
-    return lesson;
   }
 
-  /**
-   * Update lesson.
-   */
   async updateLesson(
     userId: string,
     lessonId: string,
     data: {
       title?: string;
-      description?: string;
+      description?: string | null;
       type?: LessonType;
-      duration?: number;
-      videoUrl?: string;
+      duration?: number | null;
+      videoUrl?: string | null;
       quiz?: LessonQuiz | null;
       isFree?: boolean;
       orderIndex?: number;
@@ -1046,32 +1056,28 @@ class CourseService {
         data.title === undefined
           ? undefined
           : normalizeRequiredText(data.title, "Lesson title", {
-              minLength: MIN_LESSON_TITLE_LENGTH,
-              maxLength: MAX_LESSON_TITLE_LENGTH,
+              minLength: COURSE_FIELD_LIMITS.LESSON_TITLE_MIN,
+              maxLength: COURSE_FIELD_LIMITS.LESSON_TITLE_MAX,
             }),
-      description: normalizeOptionalText(
+      description: normalizeNullableOptionalText(
         data.description,
         "Lesson description",
         {
-          maxLength: MAX_LESSON_DESCRIPTION_LENGTH,
+          maxLength: COURSE_FIELD_LIMITS.LESSON_DESCRIPTION_MAX,
           preserveLineBreaks: true,
         },
       ),
       type: data.type,
-      duration:
-        data.duration === undefined
-          ? undefined
-          : normalizePositiveInteger(data.duration, "Lesson duration", {
-              max: MAX_DURATION_MINUTES,
-            }),
-      videoUrl:
-        data.videoUrl === undefined
-          ? undefined
-          : normalizeOptionalAssetUrl(
-              data.videoUrl,
-              ["videos"],
-              "Lesson video URL must be an external URL or use the /uploads/videos/ folder",
-            ),
+      duration: normalizeNullablePositiveInteger(
+        data.duration,
+        "Lesson duration",
+        { max: COURSE_FIELD_LIMITS.MAX_DURATION_MINUTES },
+      ),
+      videoUrl: normalizeNullableAssetUrl(
+        data.videoUrl,
+        ["videos"],
+        "Lesson video URL must be an external URL or use the /uploads/videos/ folder",
+      ),
       quiz: data.quiz,
       isFree: data.isFree,
     });
@@ -1086,7 +1092,7 @@ class CourseService {
       });
     }
 
-    const updated = await withLessonOrderRetry(() =>
+    return withLessonOrderRetry(() =>
       prisma.$transaction(async (tx) => {
         const orderedLessonIds = await listCourseLessonIdsInOrder(
           lesson.courseId,
@@ -1117,13 +1123,8 @@ class CourseService {
         return refreshedLesson;
       }),
     );
-
-    return updated;
   }
 
-  /**
-   * Delete lesson.
-   */
   async deleteLesson(userId: string, lessonId: string) {
     const lesson = await requireLessonWithCourse(lessonId);
     await requireOwnedCourse(userId, lesson.courseId);
@@ -1145,9 +1146,6 @@ class CourseService {
     return { message: "Lesson deleted successfully" };
   }
 
-  /**
-   * Grade a lesson quiz for an enrolled student.
-   */
   async submitLessonQuiz(userId: string, lessonId: string, answers: number[]) {
     const normalizedUserId = ensureRequiredCourseIdentifier(userId, "User ID");
     const normalizedLessonId = ensureRequiredCourseIdentifier(
@@ -1180,15 +1178,11 @@ class CourseService {
       where: buildCurrentEnrollmentWhere(
         {
           userId: normalizedUserId,
-          package: {
-            courseId: lesson.course.id,
-          },
+          package: { courseId: lesson.course.id },
         },
         new Date(),
       ),
-      select: {
-        id: true,
-      },
+      select: { id: true },
     });
 
     if (!enrollment && (!lesson.isFree || !lesson.course.isPublished)) {
@@ -1236,17 +1230,12 @@ class CourseService {
     };
   }
 
-  /**
-   * Get quiz attempts for a teacher-owned course.
-   */
   async getCourseQuizAttempts(userId: string, courseId: string) {
     const ownedCourse = await requireOwnedCourse(userId, courseId);
 
     const attempts = await prisma.quizAttempt.findMany({
       where: {
-        lesson: {
-          courseId: ownedCourse.id,
-        },
+        lesson: { courseId: ownedCourse.id },
       },
       include: courseQuizAttemptInclude,
       orderBy: [{ submittedAt: "desc" }],
@@ -1255,9 +1244,6 @@ class CourseService {
     return attempts.map(mapCourseQuizAttempt);
   }
 
-  /**
-   * Get quiz attempts for the authenticated student within a course.
-   */
   async getMyCourseQuizAttempts(userId: string, courseId: string) {
     const normalizedUserId = ensureRequiredCourseIdentifier(userId, "User ID");
     const normalizedCourseId = ensureRequiredCourseIdentifier(
@@ -1268,9 +1254,7 @@ class CourseService {
     const attempts = await prisma.quizAttempt.findMany({
       where: {
         studentId: normalizedUserId,
-        lesson: {
-          courseId: normalizedCourseId,
-        },
+        lesson: { courseId: normalizedCourseId },
       },
       include: courseQuizAttemptInclude,
       orderBy: [{ submittedAt: "desc" }],
@@ -1279,9 +1263,6 @@ class CourseService {
     return attempts.map(mapCourseQuizAttempt);
   }
 
-  /**
-   * Create lesson package.
-   */
   async createPackage(
     userId: string,
     courseId: string,
@@ -1298,29 +1279,24 @@ class CourseService {
     const ownedCourse = await requireOwnedCourse(userId, courseId);
     const normalizedData = normalizePackageCreateData(data);
 
-    const lessonPackage = await prisma.lessonPackage.create({
+    return prisma.lessonPackage.create({
       data: {
         courseId: ownedCourse.id,
         ...normalizedData,
       },
     });
-
-    return lessonPackage;
   }
 
-  /**
-   * Update lesson package.
-   */
   async updatePackage(
     userId: string,
     packageId: string,
     data: {
       name?: string;
-      description?: string;
+      description?: string | null;
       price?: number;
       discount?: number;
-      duration?: number;
-      maxStudents?: number;
+      duration?: number | null;
+      maxStudents?: number | null;
       features?: Prisma.InputJsonValue;
       isActive?: boolean;
     },
@@ -1330,17 +1306,12 @@ class CourseService {
 
     const updateData = normalizePackageUpdateData(lessonPackage, data);
 
-    const updated = await prisma.lessonPackage.update({
+    return prisma.lessonPackage.update({
       where: { id: lessonPackage.id },
       data: updateData,
     });
-
-    return updated;
   }
 
-  /**
-   * Delete lesson package.
-   */
   async deletePackage(userId: string, packageId: string) {
     const lessonPackage = await requirePackageWithCourse(packageId);
     await requireOwnedCourse(userId, lessonPackage.courseId);
@@ -1353,9 +1324,6 @@ class CourseService {
     return { message: "Package deleted successfully" };
   }
 
-  /**
-   * Upload material to course.
-   */
   async uploadMaterial(
     userId: string,
     courseId: string,
@@ -1371,25 +1339,20 @@ class CourseService {
     const ownedCourse = await requireOwnedCourse(userId, courseId);
     const normalizedData = normalizeMaterialCreateData(data);
 
-    const material = await prisma.material.create({
+    return prisma.material.create({
       data: {
         courseId: ownedCourse.id,
         ...normalizedData,
       },
     });
-
-    return material;
   }
 
-  /**
-   * Update material.
-   */
   async updateMaterial(
     userId: string,
     materialId: string,
     data: {
       title?: string;
-      description?: string;
+      description?: string | null;
       fileUrl?: string;
       fileType?: string;
       fileSize?: number;
@@ -1400,17 +1363,12 @@ class CourseService {
     await requireOwnedCourse(userId, material.courseId);
     const updateData = normalizeMaterialUpdateData(data);
 
-    const updated = await prisma.material.update({
+    return prisma.material.update({
       where: { id: material.id },
       data: updateData,
     });
-
-    return updated;
   }
 
-  /**
-   * Delete material.
-   */
   async deleteMaterial(userId: string, materialId: string) {
     const material = await requireMaterialWithCourse(materialId);
     await requireOwnedCourse(userId, material.courseId);
@@ -1422,9 +1380,6 @@ class CourseService {
     return { message: "Material deleted successfully" };
   }
 
-  /**
-   * Get a protected material download target.
-   */
   async getMaterialDownloadAsset(userId: string, materialId: string) {
     const normalizedUserId = ensureRequiredCourseIdentifier(userId, "User ID");
     const normalizedMaterialId = ensureRequiredCourseIdentifier(
@@ -1463,9 +1418,7 @@ class CourseService {
       select: {
         role: true,
         teacherProfile: {
-          select: {
-            id: true,
-          },
+          select: { id: true },
         },
       },
     });
@@ -1483,15 +1436,11 @@ class CourseService {
         where: buildCurrentEnrollmentWhere(
           {
             userId: normalizedUserId,
-            package: {
-              courseId: material.course.id,
-            },
+            package: { courseId: material.course.id },
           },
           new Date(),
         ),
-        select: {
-          id: true,
-        },
+        select: { id: true },
       });
 
       if (!enrollment) {
@@ -1507,16 +1456,11 @@ class CourseService {
     });
   }
 
-  /**
-   * Get teacher's own courses.
-   */
   async getTeacherCourses(userId: string) {
     const teacherProfile = await requireTeacherProfileByUserId(userId);
 
     const courses = await prisma.course.findMany({
-      where: {
-        teacherProfileId: teacherProfile.id,
-      },
+      where: { teacherProfileId: teacherProfile.id },
       include: teacherCourseInclude,
       orderBy: { createdAt: "desc" },
     });
@@ -1524,9 +1468,6 @@ class CourseService {
     return attachEnrollmentCountsToTeacherCourses(courses);
   }
 
-  /**
-   * Get course categories.
-   */
   async getCategories() {
     const courses = await prisma.course.findMany({
       where: { isPublished: true },
@@ -1536,6 +1477,76 @@ class CourseService {
     });
 
     return courses.map((course) => course.category);
+  }
+
+  async sendCourseNotification(
+    teacherUserId: string,
+    courseId: string,
+    data: {
+      title: string;
+      message: string;
+      type?: string;
+    },
+  ) {
+    const normalizedTitle = normalizeRequiredText(
+      data.title,
+      "Notification title",
+      { maxLength: COURSE_FIELD_LIMITS.NOTIFICATION_TITLE_MAX },
+    );
+    const normalizedMessage = normalizeRequiredText(
+      data.message,
+      "Notification message",
+      {
+        maxLength: COURSE_FIELD_LIMITS.NOTIFICATION_MESSAGE_MAX,
+        preserveLineBreaks: true,
+      },
+    );
+    const notificationType =
+      normalizeOptionalText(data.type, "Notification type", {
+        maxLength: 80,
+      }) || "COURSE_ANNOUNCEMENT";
+
+    const course = await prisma.course.findUnique({
+      where: { id: ensureRequiredCourseIdentifier(courseId, "Course ID") },
+      select: {
+        id: true,
+        teacherProfile: {
+          select: { userId: true },
+        },
+      },
+    });
+
+    if (!course) {
+      throw new NotFoundError("Course not found");
+    }
+
+    if (course.teacherProfile.userId !== teacherUserId) {
+      throw new AuthorizationError(
+        "You can only notify students of your own course",
+      );
+    }
+
+    const enrollments = await prisma.enrollment.findMany({
+      where: buildCurrentEnrollmentWhere({
+        package: { courseId: course.id },
+      }),
+      select: { userId: true },
+    });
+
+    const userIds = Array.from(
+      new Set(enrollments.map((enrollment) => enrollment.userId)),
+    );
+
+    if (userIds.length > 0) {
+      await notificationService.createBulkNotifications(
+        userIds,
+        normalizedTitle,
+        normalizedMessage,
+        notificationType,
+      );
+    }
+
+    return { recipients: userIds.length };
   }
 }
 

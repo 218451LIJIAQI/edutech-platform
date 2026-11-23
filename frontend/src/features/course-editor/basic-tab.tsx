@@ -20,16 +20,20 @@ interface CourseEditorBasicTabProps {
   isEditMode: boolean;
   thumbnailType: MediaSourceType;
   thumbnailLink: string;
+  existingUploadedThumbnail?: string;
   thumbnailPreviewError: boolean;
   previewVideoType: MediaSourceType;
   previewVideoLink: string;
+  existingUploadedPreviewVideo?: string;
   onCancel: () => void;
   onThumbnailSourceTypeChange: (sourceType: MediaSourceType) => void;
   onThumbnailLinkChange: (link: string) => void;
+  onClearExistingThumbnail?: () => void;
   onThumbnailPreviewErrorChange: (hasError: boolean) => void;
   onThumbnailFileSelect: (file: File | null) => void;
   onPreviewVideoSourceTypeChange: (sourceType: MediaSourceType) => void;
   onPreviewVideoLinkChange: (link: string) => void;
+  onClearExistingPreviewVideo?: () => void;
   onPreviewVideoFileSelect: (file: File | null) => void;
 }
 
@@ -41,16 +45,20 @@ export default function CourseEditorBasicTab({
   isEditMode,
   thumbnailType,
   thumbnailLink,
+  existingUploadedThumbnail,
   thumbnailPreviewError,
   previewVideoType,
   previewVideoLink,
+  existingUploadedPreviewVideo,
   onCancel,
   onThumbnailSourceTypeChange,
   onThumbnailLinkChange,
+  onClearExistingThumbnail,
   onThumbnailPreviewErrorChange,
   onThumbnailFileSelect,
   onPreviewVideoSourceTypeChange,
   onPreviewVideoLinkChange,
+  onClearExistingPreviewVideo,
   onPreviewVideoFileSelect,
 }: CourseEditorBasicTabProps) {
   return (
@@ -68,19 +76,19 @@ export default function CourseEditorBasicTab({
           {...register('title', {
             required: 'Title is required',
             minLength: {
-              value: 5,
-              message: 'Title must be at least 5 characters',
+              value: 3,
+              message: 'Title must be at least 3 characters',
             },
             maxLength: {
               value: 200,
               message: 'Title must not exceed 200 characters',
             },
             validate: (value) =>
-              value.trim().length >= 5 ||
-              'Title must be at least 5 non-empty characters',
+              value.trim().length >= 3 ||
+              'Title must be at least 3 non-empty characters',
           })}
           className="input"
-          placeholder="Enter course title (minimum 5 characters)"
+          placeholder="Enter course title (3–200 characters)"
           disabled={isSaving}
           aria-invalid={Boolean(errors.title)}
           aria-describedby={errors.title ? 'course-title-error' : undefined}
@@ -104,20 +112,20 @@ export default function CourseEditorBasicTab({
           {...register('description', {
             required: 'Description is required',
             minLength: {
-              value: 20,
-              message: 'Description must be at least 20 characters',
+              value: 10,
+              message: 'Description must be at least 10 characters',
             },
             maxLength: {
-              value: 2000,
-              message: 'Description must not exceed 2000 characters',
+              value: 5000,
+              message: 'Description must not exceed 5000 characters',
             },
             validate: (value) =>
-              value.trim().length >= 20 ||
-              'Description must be at least 20 non-empty characters',
+              value.trim().length >= 10 ||
+              'Description must be at least 10 non-empty characters',
           })}
           rows={6}
           className="input"
-          placeholder="Describe your course, what students will learn, prerequisites, etc. (minimum 20 characters)"
+          placeholder="Describe your course, what students will learn, prerequisites, etc. (minimum 10 characters)"
           disabled={isSaving}
           aria-invalid={Boolean(errors.description)}
           aria-describedby={
@@ -224,9 +232,11 @@ export default function CourseEditorBasicTab({
       <ThumbnailSourceField
         sourceType={thumbnailType}
         link={thumbnailLink}
+        existingUploadUrl={existingUploadedThumbnail}
         previewError={thumbnailPreviewError}
         onSourceTypeChange={onThumbnailSourceTypeChange}
         onLinkChange={onThumbnailLinkChange}
+        onClearExistingUpload={onClearExistingThumbnail}
         onPreviewErrorChange={onThumbnailPreviewErrorChange}
         onFileSelect={onThumbnailFileSelect}
       />
@@ -234,8 +244,10 @@ export default function CourseEditorBasicTab({
       <VideoSourceField
         sourceType={previewVideoType}
         link={previewVideoLink}
+        existingUploadUrl={existingUploadedPreviewVideo}
         onSourceTypeChange={onPreviewVideoSourceTypeChange}
         onLinkChange={onPreviewVideoLinkChange}
+        onClearExistingUpload={onClearExistingPreviewVideo}
         onFileSelect={onPreviewVideoFileSelect}
       />
 

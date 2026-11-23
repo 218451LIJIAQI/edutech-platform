@@ -9,6 +9,7 @@ import toast from 'react-hot-toast';
 import { extractErrorMessage } from '@/utils/error-handler';
 import { copyTextToClipboard } from '@/utils/clipboard';
 import { buildCsvContent, downloadCsvFile } from '@/utils/download';
+import { getCourseLessonCount } from '@/utils/course-counts';
 import { usePageTitle } from '@/hooks';
 
 interface AggregatedStudent {
@@ -70,7 +71,7 @@ const TeacherStudentManagementPage = () => {
 
         const aggregatedStudents = new Map<string, AggregatedStudent>();
         for (const entry of allEnrollments) {
-          const totalLessons = entry.course.lessons?.length || 0;
+          const totalLessons = getCourseLessonCount(entry.course);
 
           for (const enrollment of entry.enrollments as (Enrollment & { user?: AppUser })[]) {
             if (!enrollment.user) {

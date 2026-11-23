@@ -7,6 +7,19 @@ import toast from 'react-hot-toast';
 import { extractErrorMessage } from '@/utils/error-handler';
 import { usePageTitle } from '@/hooks';
 
+const getReportBadgeClass = (status: string): string => {
+  switch (status) {
+    case 'OPEN':
+      return 'badge-danger';
+    case 'UNDER_REVIEW':
+      return 'badge-warning';
+    case 'RESOLVED':
+      return 'badge-success';
+    default:
+      return 'bg-gray-100 text-gray-700';
+  }
+};
+
 const ReportsManagement = () => {
   usePageTitle('Reports Management');
   const [reports, setReports] = useState<Report[]>([]);
@@ -29,9 +42,10 @@ const ReportsManagement = () => {
     fetchReports();
   }, [fetchReports]);
 
-  const handleUpdateStatus = useCallback(async (id: string, status: string) => {
+  const handleUpdateStatus = useCallback(async (id: string, status: 'RESOLVED' | 'DISMISSED') => {
     try {
-      await adminService.updateReportStatus(id, status, 'Resolved by admin');
+      const resolution = status === 'DISMISSED' ? 'Dismissed by admin' : 'Resolved by admin';
+      await adminService.updateReportStatus(id, status, resolution);
       toast.success('Report updated');
       await fetchReports();
     } catch (error) {
@@ -60,7 +74,13 @@ const ReportsManagement = () => {
           {isLoading ? (
             <div className="flex justify-center py-16">
               <div className="flex flex-col items-center space-y-4">
-                <div className="relative"><div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-primary-500 to-indigo-600 animate-pulse flex items-center justify-center"><AlertCircle className="w-8 h-8 text-white" /></div><div className="absolute inset-0 rounded-2xl bg-primary-500/20 animate-ping"></div></div><p className="text-gray-600 font-medium">Loading reports...</p>
+                <div className="relative">
+                  <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-primary-500 to-indigo-600 animate-pulse flex items-center justify-center">
+                    <AlertCircle className="w-8 h-8 text-white" />
+                  </div>
+                  <div className="absolute inset-0 rounded-2xl bg-primary-500/20 animate-ping"></div>
+                </div>
+                <p className="text-gray-600 font-medium">Loading reports...</p>
               </div>
             </div>
           ) : reports.length === 0 ? (
@@ -71,51 +91,50 @@ const ReportsManagement = () => {
             </div>
           ) : (
             <div className="divide-y divide-gray-200">
-              {reports.map((report) => (
-                <div key={report.id} className="p-6 hover:bg-gradient-to-r hover:from-gray-50 hover:to-gray-100 transition-all">
-                  <div className="flex justify-between items-start">
-                    <div className="flex-1">
-                      <div className="flex items-center space-x-3 mb-3">
-                        <span className={`badge ${
-                          report.status === 'OPEN' ? 'badge-danger' :
-                          report.status === 'RESOLVED' ? 'badge-success' :
-                          'badge-warning'
-                        }`}>
-                          {report.status}
-                        </span>
-                        <span className="text-sm text-gray-600 font-medium">{report.type}</span>
-                      </div>
-                      <p className="text-gray-900 mb-3 font-medium leading-relaxed">{report.description}</p>
-                      <div className="text-sm text-gray-600 space-y-1">
-                        <div>
-                          <span className="font-semibold">Reported by:</span> {report.reporter?.firstName} {report.reporter?.lastName}
+              {reports.map((report) => {
+                const isActionable = report.status === 'OPEN' || report.status === 'UNDER_REVIEW';
+                return (
+                  <div key={report.id} className="p-6 hover:bg-gradient-to-r hover:from-gray-50 hover:to-gray-100 transition-all">
+                    <div className="flex justify-between items-start">
+                      <div className="flex-1">
+                        <div className="flex items-center space-x-3 mb-3">
+                          <span className={`badge ${getReportBadgeClass(report.status)}`}>
+                            {report.status}
+                          </span>
+                          <span className="text-sm text-gray-600 font-medium">{report.type}</span>
                         </div>
-                        <div>
-                          <span className="font-semibold">Against:</span> {report.reported?.firstName} {report.reported?.lastName}
+                        <p className="text-gray-900 mb-3 font-medium leading-relaxed">{report.description}</p>
+                        <div className="text-sm text-gray-600 space-y-1">
+                          <div>
+                            <span className="font-semibold">Reported by:</span> {report.reporter?.firstName} {report.reporter?.lastName}
+                          </div>
+                          <div>
+                            <span className="font-semibold">Against:</span> {report.reported?.firstName} {report.reported?.lastName}
+                          </div>
                         </div>
                       </div>
+                      {isActionable && (
+                        <div className="flex space-x-3 ml-6">
+                          <button
+                            type="button"
+                            onClick={() => handleUpdateStatus(report.id, 'RESOLVED')}
+                            className="btn-sm bg-gradient-to-r from-green-600 to-green-700 text-white hover:from-green-700 hover:to-green-800"
+                          >
+                            Resolve
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleUpdateStatus(report.id, 'DISMISSED')}
+                            className="btn-sm btn-secondary"
+                          >
+                            Dismiss
+                          </button>
+                        </div>
+                      )}
                     </div>
-                    {report.status === 'OPEN' && (
-                      <div className="flex space-x-3 ml-6">
-                        <button
-                          type="button"
-                          onClick={() => handleUpdateStatus(report.id, 'RESOLVED')}
-                          className="btn-sm bg-gradient-to-r from-green-600 to-green-700 text-white hover:from-green-700 hover:to-green-800"
-                        >
-                          Resolve
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleUpdateStatus(report.id, 'DISMISSED')}
-                          className="btn-sm btn-secondary"
-                        >
-                          Dismiss
-                        </button>
-                      </div>
-                    )}
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>

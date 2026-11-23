@@ -255,33 +255,38 @@ const UserFormModal = ({
       return;
     }
 
-    const cleanedData = {
-      email: formData.email.trim().toLowerCase(),
-      password: formData.password,
-      firstName: formData.firstName.trim(),
-      lastName: formData.lastName.trim(),
-      phone: formData.phone.trim() || undefined,
-      address: formData.address.trim() || undefined,
-      department: formData.department.trim() || undefined,
-      role: formData.role,
-    };
+    const email = formData.email.trim().toLowerCase();
+    const firstName = formData.firstName.trim();
+    const lastName = formData.lastName.trim();
+    const phone = formData.phone.trim();
+    const address = formData.address.trim();
+    const department = formData.department.trim();
 
     setIsLoading(true);
 
     try {
       if (user) {
         await adminService.updateUser(user.id, {
-          firstName: cleanedData.firstName,
-          lastName: cleanedData.lastName,
-          phone: cleanedData.phone,
-          address: cleanedData.address,
-          department: cleanedData.department,
-          role: cleanedData.role,
+          firstName,
+          lastName,
+          phone: phone || null,
+          address: address || null,
+          department: department || null,
+          role: formData.role,
         });
 
         toast.success('User updated successfully.');
       } else {
-        await adminService.createUser(cleanedData);
+        await adminService.createUser({
+          email,
+          password: formData.password,
+          firstName,
+          lastName,
+          phone: phone || undefined,
+          address: address || undefined,
+          department: department || undefined,
+          role: formData.role,
+        });
         toast.success('User created successfully.');
       }
 

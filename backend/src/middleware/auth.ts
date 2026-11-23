@@ -12,9 +12,17 @@ import {
 
 interface AuthTokenPayload extends JwtPayload {
   id: string;
+  email?: string;
+  role?: UserRole;
+  tokenVersion?: number;
+}
+
+export interface AuthenticatedUser {
+  id: string;
   email: string;
   role: UserRole;
-  tokenVersion?: number;
+  firstName: string;
+  lastName: string;
 }
 
 const AUTH_USER_SELECT = {
@@ -30,15 +38,12 @@ const AUTH_USER_SELECT = {
   tokenVersion: true,
 } as const;
 
-const getBearerToken = (req: Request): string | null => {
-  const authorizationHeader = req.headers.authorization;
-
+export const extractBearerToken = (authorizationHeader?: unknown): string | null => {
   if (typeof authorizationHeader !== "string") {
     return null;
   }
 
   const match = authorizationHeader.match(/^\s*Bearer\s+(.+)$/i);
-
   if (!match) {
     return null;
   }
@@ -55,36 +60,37 @@ const isAuthTokenPayload = (
   }
 
   const candidate = payload as Partial<AuthTokenPayload>;
-
-  return (
-    typeof candidate.id === "string" &&
-    candidate.id.trim().length > 0 &&
-    typeof candidate.email === "string" &&
-    candidate.email.trim().length > 0 &&
-    Object.values(UserRole).includes(candidate.role as UserRole)
-  );
+  return typeof candidate.id === "string" && candidate.id.trim().length > 0;
 };
 
-const verifyAccessToken = (token: string): AuthTokenPayload => {
-  const decoded = jwt.verify(token, config.JWT_SECRET);
-
-  if (!isAuthTokenPayload(decoded)) {
-    throw new AuthenticationError("Invalid token payload");
+/**
+ * Validates an access token against JWT signature, account activity, lock status,
+ * and current `tokenVersion`. Shared across HTTP middleware and Socket.IO handshakes.
+ */
+export const authenticateAccessToken = async (
+  token: string,
+): Promise<AuthenticatedUser> => {
+  let decoded: string | JwtPayload;
+  try {
+    decoded = jwt.verify(token, config.JWT_SECRET);
+  } catch (error) {
+    if (error instanceof jwt.TokenExpiredError) {
+      throw new AuthenticationError("Token expired");
+    }
+    throw new AuthenticationError("Invalid token");
   }
 
-  return decoded;
-};
+  if (!isAuthTokenPayload(decoded)) {
+    throw new AuthenticationError("Invalid token");
+  }
 
-const getAuthenticatedUserFromToken = async (token: string) => {
-  const decoded = verifyAccessToken(token);
   const tokenVersion = getTokenVersionFromPayload(decoded.tokenVersion);
-
   if (tokenVersion < 0) {
     throw new AuthenticationError("Invalid token");
   }
 
   const user = await prisma.user.findUnique({
-    where: { id: decoded.id },
+    where: { id: decoded.id.trim() },
     select: AUTH_USER_SELECT,
   });
 
@@ -115,42 +121,24 @@ const getAuthenticatedUserFromToken = async (token: string) => {
   };
 };
 
-/**
- * Middleware to verify JWT token and attach the authenticated user to the request.
- */
 export const authenticate = async (
   req: Request,
   _res: Response,
   next: NextFunction,
 ) => {
   try {
-    const token = getBearerToken(req);
-
+    const token = extractBearerToken(req.headers.authorization);
     if (!token) {
       throw new AuthenticationError("No token provided");
     }
 
-    req.user = await getAuthenticatedUserFromToken(token);
-
+    req.user = await authenticateAccessToken(token);
     return next();
   } catch (error) {
-    if (error instanceof jwt.TokenExpiredError) {
-      return next(new AuthenticationError("Token expired"));
-    }
-
-    if (error instanceof jwt.JsonWebTokenError) {
-      return next(new AuthenticationError("Invalid token"));
-    }
-
     return next(error);
   }
 };
 
-/**
- * Middleware to check whether the authenticated user has one of the allowed roles.
- *
- * If no role is passed, the middleware only requires the user to be authenticated.
- */
 export const authorize = (...roles: UserRole[]) => {
   return (req: Request, _res: Response, next: NextFunction) => {
     if (!req.user) {
@@ -169,33 +157,21 @@ export const authorize = (...roles: UserRole[]) => {
   };
 };
 
-/**
- * Optional authentication middleware.
- *
- * If a valid token is provided, the user is attached to the request.
- * If the token is missing, invalid, expired, locked, or inactive, the request continues as a guest.
- */
 export const optionalAuth = async (
   req: Request,
   _res: Response,
   next: NextFunction,
 ) => {
   try {
-    const token = getBearerToken(req);
-
+    const token = extractBearerToken(req.headers.authorization);
     if (!token) {
       return next();
     }
 
-    req.user = await getAuthenticatedUserFromToken(token);
-
+    req.user = await authenticateAccessToken(token);
     return next();
   } catch (error) {
-    if (
-      error instanceof AuthenticationError ||
-      error instanceof jwt.TokenExpiredError ||
-      error instanceof jwt.JsonWebTokenError
-    ) {
+    if (error instanceof AuthenticationError) {
       return next();
     }
 

@@ -45,9 +45,8 @@ type FullscreenCapableDocument = Document & {
 const SKIP_SECONDS = 10;
 const CONTROL_HIDE_DELAY = 2500;
 
-const clamp = (value: number, min: number, max: number) => {
-  return Math.min(Math.max(value, min), max);
-};
+const clamp = (value: number, min: number, max: number) =>
+  Math.min(Math.max(value, min), max);
 
 const formatTime = (time: number) => {
   if (!Number.isFinite(time) || time < 0) return '0:00';
@@ -66,10 +65,6 @@ const formatTime = (time: number) => {
   return `${minutes}:${seconds.toString().padStart(2, '0')}`;
 };
 
-/**
- * Video Player Component
- * Custom accessible video player with playback, progress, volume, skip, and fullscreen controls.
- */
 const VideoPlayer = ({
   src,
   poster,
@@ -132,7 +127,6 @@ const VideoPlayer = ({
 
   useEffect(() => {
     scheduleHideControls();
-
     return () => {
       clearHideControlsTimer();
     };
@@ -452,7 +446,7 @@ const VideoPlayer = ({
       )}
 
       {isLoading && (
-        <div className="absolute inset-0 flex items-center justify-center bg-black/50" aria-live="polite">
+        <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/50" aria-live="polite">
           <div
             className="h-12 w-12 animate-spin rounded-full border-4 border-white border-t-transparent"
             aria-label="Loading video"
@@ -462,7 +456,7 @@ const VideoPlayer = ({
       )}
 
       <div
-        className={`absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-4 transition-opacity duration-300 ${
+        className={`absolute bottom-0 left-0 right-0 z-20 bg-gradient-to-t from-black/80 to-transparent p-4 transition-opacity duration-300 ${
           showControls || !isPlaying ? 'opacity-100' : 'pointer-events-none opacity-0'
         }`}
       >
@@ -560,11 +554,11 @@ const VideoPlayer = ({
       </div>
 
       {!isPlaying && !isLoading && (
-        <div className="absolute inset-0 flex items-center justify-center">
+        <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center">
           <button
             type="button"
             onClick={togglePlay}
-            className="flex h-20 w-20 items-center justify-center rounded-full bg-white/90 transition-all hover:scale-110 hover:bg-white focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-white/70"
+            className="pointer-events-auto flex h-20 w-20 items-center justify-center rounded-full bg-white/90 transition-all hover:scale-110 hover:bg-white focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-white/70"
             aria-label="Play video"
           >
             <Play className="ml-1 h-10 w-10 text-gray-900" />

@@ -1,5 +1,6 @@
 import {
   Prisma,
+  VerificationMethod,
   VerificationStatus,
   RegistrationStatus,
   UserRole,
@@ -32,7 +33,6 @@ import {
   createTeacherProfileSubmissionPayload,
   extendedProfileInclude,
   isApprovedTeacherProfileCompletionStatus,
-  LEGACY_PROFILE_STATUS_COMPLETE,
   mapExtendedProfileResponse,
   mapTeacherByIdResponse,
   overlayPendingProfileSubmission,
@@ -96,7 +96,9 @@ const isTeacherCertificateUploadPath = (uploadPath: string): boolean => {
   return folder === TEACHER_CERTIFICATE_UPLOAD_FOLDER;
 };
 
-const getComparableUploadPath = (value: string | null | undefined): string | null => {
+const getComparableUploadPath = (
+  value: string | null | undefined,
+): string | null => {
   if (!value) {
     return null;
   }
@@ -133,7 +135,6 @@ const collectTeacherCertificateUploadPaths = (teacherProfile: {
 
   const addCandidate = (value: string | null | undefined) => {
     const uploadPath = getComparableUploadPath(value);
-
     if (uploadPath && isTeacherCertificateUploadPath(uploadPath)) {
       uploadPaths.add(uploadPath);
     }
@@ -165,7 +166,6 @@ const normalizeOptionalTeacherText = (
   }
 
   const trimmedValue = sanitizeUserPlainText(value);
-
   if (!trimmedValue) {
     return undefined;
   }
@@ -397,14 +397,7 @@ const ensureActiveAdmin = async (adminId: string): Promise<void> => {
   }
 };
 
-/**
- * Teacher Service
- * Handles teacher profile management and verification.
- */
 class TeacherService {
-  /**
-   * Get all public teachers with optional filters.
-   */
   async getAllTeachers(filters: {
     isVerified?: boolean;
     category?: string;
@@ -462,9 +455,6 @@ class TeacherService {
     };
   }
 
-  /**
-   * Get public teacher profile by teacher profile ID.
-   */
   async getTeacherById(teacherId: string): Promise<TeacherByIdResponse> {
     const normalizedTeacherId = ensureRequiredIdentifier(
       teacherId,
@@ -492,9 +482,6 @@ class TeacherService {
     return mapTeacherByIdResponse(teacher, actualStudentCount);
   }
 
-  /**
-   * Get teacher profile by user ID.
-   */
   async getTeacherByUserId(userId: string): Promise<
     TeacherProfile & {
       user: {
@@ -524,9 +511,6 @@ class TeacherService {
     return teacher;
   }
 
-  /**
-   * Update simple teacher profile fields.
-   */
   async updateTeacherProfile(
     userId: string,
     data: TeacherUpdateInput,
@@ -553,9 +537,6 @@ class TeacherService {
     });
   }
 
-  /**
-   * Add a teacher certification.
-   */
   async addCertification(
     userId: string,
     data: {
@@ -615,9 +596,6 @@ class TeacherService {
     });
   }
 
-  /**
-   * Delete a teacher certification.
-   */
   async deleteCertification(
     userId: string,
     certificationId: string,
@@ -654,9 +632,6 @@ class TeacherService {
     return { message: "Certification deleted successfully" };
   }
 
-  /**
-   * Submit a verification document.
-   */
   async submitVerification(
     userId: string,
     documentType: string,
@@ -687,16 +662,11 @@ class TeacherService {
       },
     });
 
-    // Trigger auto-verification asynchronously (non-blocking)
     void this.triggerAutoVerification(verification.id);
 
     return mapVerificationAccess(verification);
   }
 
-  /**
-   * Trigger auto-verification for a newly submitted document.
-   * Runs asynchronously so it doesn't block the submission response.
-   */
   private async triggerAutoVerification(
     verificationId: string,
   ): Promise<void> {
@@ -706,7 +676,6 @@ class TeacherService {
       ).default;
       await autoVerificationService.processVerification(verificationId);
     } catch (error) {
-      // Auto-verification failure should never block the submission flow
       const logger = (await import("../utils/logger")).default;
       logger.error("Auto-verification processing failed (non-blocking)", {
         verificationId,
@@ -715,9 +684,6 @@ class TeacherService {
     }
   }
 
-  /**
-   * Get current teacher's verification records.
-   */
   async getVerifications(userId: string): Promise<TeacherVerification[]> {
     const normalizedUserId = ensureRequiredIdentifier(userId, "User ID");
     const teacherProfile =
@@ -732,8 +698,8 @@ class TeacherService {
   }
 
   /**
-   * Review a verification document.
-   * This method should be called only from an admin-protected route.
+   * Reviews a TeacherVerification document without touching extended-profile
+   * review timestamps (`profileReviewedAt` / `profileReviewNotes`).
    */
   async reviewVerification(
     verificationId: string,
@@ -748,6 +714,15 @@ class TeacherService {
     const normalizedAdminId = ensureRequiredIdentifier(adminId, "Admin ID");
     const normalizedStatus = normalizeReviewVerificationStatus(status);
     const normalizedReviewNotes = normalizeReviewNotes(reviewNotes);
+
+    if (
+      normalizedStatus === VerificationStatus.REJECTED &&
+      !normalizedReviewNotes
+    ) {
+      throw new ValidationError(
+        "Review notes are required when rejecting a verification",
+      );
+    }
 
     await ensureActiveAdmin(normalizedAdminId);
 
@@ -769,8 +744,9 @@ class TeacherService {
         },
         data: {
           status: normalizedStatus,
+          verificationMethod: VerificationMethod.MANUAL,
           reviewedBy: normalizedAdminId,
-          reviewNotes: normalizedReviewNotes,
+          reviewNotes: normalizedReviewNotes ?? null,
           reviewedAt: reviewTimestamp,
         },
       });
@@ -781,13 +757,25 @@ class TeacherService {
         );
       }
 
+      const existingApprovedCount =
+        normalizedStatus === VerificationStatus.APPROVED
+          ? 1
+          : await tx.teacherVerification.count({
+              where: {
+                teacherProfileId: verification.teacherProfileId,
+                status: VerificationStatus.APPROVED,
+              },
+            });
+
+      const hasApprovedVerification = existingApprovedCount > 0;
+
       await tx.teacherProfile.update({
         where: { id: verification.teacherProfileId },
         data: {
-          isVerified: normalizedStatus === VerificationStatus.APPROVED,
-          verificationStatus: normalizedStatus,
-          profileReviewedAt: reviewTimestamp,
-          profileReviewNotes: normalizedReviewNotes,
+          isVerified: hasApprovedVerification,
+          verificationStatus: hasApprovedVerification
+            ? VerificationStatus.APPROVED
+            : normalizedStatus,
         },
       });
 
@@ -820,10 +808,6 @@ class TeacherService {
     return mapVerificationAccess(updated);
   }
 
-  /**
-   * Get all pending verifications.
-   * This method should be called only from an admin-protected route.
-   */
   async getPendingVerifications(): Promise<
     Array<
       TeacherVerification & {
@@ -847,9 +831,6 @@ class TeacherService {
     return verifications.map(mapVerificationAccess);
   }
 
-  /**
-   * Get a protected verification document target.
-   */
   async getVerificationDocumentAsset(
     requesterUserId: string,
     requesterRole: UserRole,
@@ -871,9 +852,7 @@ class TeacherService {
         documentType: true,
         documentUrl: true,
         teacherProfile: {
-          select: {
-            userId: true,
-          },
+          select: { userId: true },
         },
       },
     });
@@ -897,12 +876,6 @@ class TeacherService {
     });
   }
 
-  /**
-   * Get a protected teacher certificate upload target.
-   * Admins can review every submitted certificate upload; teachers can only
-   * access files already linked to their own profile, certifications, or
-   * pending profile submissions.
-   */
   async getCertificateAsset(
     requesterUserId: string,
     requesterRole: UserRole,
@@ -938,17 +911,11 @@ class TeacherService {
         select: {
           certificatePhotos: true,
           certifications: {
-            select: {
-              credentialUrl: true,
-            },
+            select: { credentialUrl: true },
           },
           profileSubmissions: {
-            where: {
-              status: VerificationStatus.PENDING,
-            },
-            select: {
-              payload: true,
-            },
+            where: { status: VerificationStatus.PENDING },
+            select: { payload: true },
           },
         },
       });
@@ -973,9 +940,6 @@ class TeacherService {
     });
   }
 
-  /**
-   * Get teacher statistics.
-   */
   async getTeacherStats(userId: string): Promise<{
     totalCourses: number;
     totalEnrollments: number;
@@ -994,9 +958,7 @@ class TeacherService {
         prisma.enrollment.count({
           where: {
             package: {
-              course: {
-                teacherProfileId: teacherProfile.id,
-              },
+              course: { teacherProfileId: teacherProfile.id },
             },
           },
         }),
@@ -1013,10 +975,6 @@ class TeacherService {
     };
   }
 
-  /**
-   * Submit an extended profile for review.
-   * Draft profile information is stored in the submission payload until approved.
-   */
   async submitExtendedProfile(
     userId: string,
     data: TeacherExtendedProfileInput,
@@ -1061,9 +1019,6 @@ class TeacherService {
     });
   }
 
-  /**
-   * Get extended profile for teacher.
-   */
   async getExtendedProfile(userId: string): Promise<ExtendedProfileResponse> {
     const normalizedUserId = ensureRequiredIdentifier(userId, "User ID");
 
@@ -1079,10 +1034,6 @@ class TeacherService {
     return mapExtendedProfileResponse(teacherProfile);
   }
 
-  /**
-   * Update extended profile for approved teachers.
-   * This creates a new draft submission for review.
-   */
   async updateExtendedProfile(
     userId: string,
     data: TeacherExtendedProfileInput,
@@ -1133,10 +1084,6 @@ class TeacherService {
     });
   }
 
-  /**
-   * Get pending teacher registrations.
-   * This method should be called only from an admin-protected route.
-   */
   async getPendingRegistrations(
     page = 1,
     limit = 10,
@@ -1174,15 +1121,11 @@ class TeacherService {
     ]);
 
     return {
-      teachers,
+      teachers: teachers,
       pagination: buildPaginationMeta(total, pagination.page, pagination.limit),
     };
   }
 
-  /**
-   * Review teacher registration.
-   * This method should be called only from an admin-protected route.
-   */
   async reviewRegistration(
     teacherProfileId: string,
     adminId: string,
@@ -1215,11 +1158,7 @@ class TeacherService {
         select: {
           id: true,
           registrationStatus: true,
-          user: {
-            select: {
-              id: true,
-            },
-          },
+          user: { select: { id: true } },
         },
       });
 
@@ -1271,10 +1210,6 @@ class TeacherService {
     return reviewed;
   }
 
-  /**
-   * Get all teachers pending extended profile verification.
-   * This method should be called only from an admin-protected route.
-   */
   async getPendingProfileVerifications(
     page = 1,
     limit = 10,
@@ -1314,10 +1249,6 @@ class TeacherService {
     };
   }
 
-  /**
-   * Review and approve/reject a teacher extended profile.
-   * This method should be called only from an admin-protected route.
-   */
   async reviewTeacherProfile(
     teacherProfileId: string,
     adminId: string,
@@ -1509,9 +1440,6 @@ class TeacherService {
     );
   }
 
-  /**
-   * Get all verified teachers for student view.
-   */
   async getVerifiedTeachers(filters: {
     search?: string;
     minRating?: number;

@@ -10,6 +10,7 @@ import {
 } from "@prisma/client";
 import prisma from "../../config/database";
 import { NotFoundError, ValidationError } from "../../utils/errors";
+import { normalizeCanonicalEmail } from "../../utils/sanitize-user-content";
 import { buildCurrentEnrollmentWhere } from "../shared/enrollment-access";
 
 type PrismaClientLike = Prisma.TransactionClient | typeof prisma;
@@ -183,45 +184,7 @@ export const adminFinancialPaymentsInclude = {
   },
 } satisfies Prisma.PaymentInclude;
 
-export const adminInvoicesInclude = {
-  user: {
-    select: {
-      firstName: true,
-      lastName: true,
-      email: true,
-    },
-  },
-  package: {
-    include: {
-      course: {
-        select: {
-          id: true,
-          title: true,
-          courseType: true,
-        },
-      },
-    },
-  },
-  order: {
-    include: {
-      items: {
-        include: {
-          package: {
-            include: {
-              course: {
-                select: {
-                  id: true,
-                  title: true,
-                  courseType: true,
-                },
-              },
-            },
-          },
-        },
-      },
-    },
-  },
-} satisfies Prisma.PaymentInclude;
+export const adminInvoicesInclude = adminFinancialPaymentsInclude;
 
 const validateDateRange = (startDate?: Date, endDate?: Date) => {
   if (startDate && Number.isNaN(startDate.getTime())) {
@@ -363,32 +326,16 @@ export const buildAdminCourseWhere = (
 
 export const buildAdminVerificationWhere = (
   status?: VerificationStatus,
-): Prisma.TeacherVerificationWhereInput => {
-  const where: Prisma.TeacherVerificationWhereInput = {};
-
-  if (status) {
-    where.status = status;
-  }
-
-  return where;
-};
+): Prisma.TeacherVerificationWhereInput =>
+  status ? { status } : {};
 
 export const buildAdminReportWhere = (
   status?: ReportStatus,
   type?: ReportType,
-): Prisma.ReportWhereInput => {
-  const where: Prisma.ReportWhereInput = {};
-
-  if (status) {
-    where.status = status;
-  }
-
-  if (type) {
-    where.type = type;
-  }
-
-  return where;
-};
+): Prisma.ReportWhereInput => ({
+  ...(status ? { status } : {}),
+  ...(type ? { type } : {}),
+});
 
 export const buildTeacherCommissionWhere = (
   search?: string,
@@ -416,22 +363,12 @@ export const buildUserAuditLogWhere = (
     action?: string;
   } = {},
 ): Prisma.UserAuditLogWhereInput => {
-  const where: Prisma.UserAuditLogWhereInput = {};
   const action = normalizeSearchKeyword(filters.action);
-
-  if (filters.userId) {
-    where.userId = filters.userId;
-  }
-
-  if (filters.adminId) {
-    where.adminId = filters.adminId;
-  }
-
-  if (action) {
-    where.action = action;
-  }
-
-  return where;
+  return {
+    ...(filters.userId ? { userId: filters.userId } : {}),
+    ...(filters.adminId ? { adminId: filters.adminId } : {}),
+    ...(action ? { action } : {}),
+  };
 };
 
 export const requireUser = async (
@@ -525,7 +462,7 @@ export const ensureCommissionRateInRange = (commissionRate: number | null) => {
 };
 
 export const normalizeEmail = (email: string) => {
-  const normalizedEmail = email.trim().toLowerCase();
+  const normalizedEmail = normalizeCanonicalEmail(email);
 
   if (!normalizedEmail) {
     throw new ValidationError("Email is required");
@@ -554,13 +491,7 @@ export const ensureEmailAvailable = async (
         equals: normalizedEmail,
         mode: "insensitive",
       },
-      ...(excludedUserId
-        ? {
-            id: {
-              not: excludedUserId,
-            },
-          }
-        : {}),
+      ...(excludedUserId ? { id: { not: excludedUserId } } : {}),
     },
   });
 
@@ -597,28 +528,7 @@ export const createUserAuditLog = async (
     data.newValues = params.newValues;
   }
 
-  return client.userAuditLog.create({
-    data,
-  });
-};
-
-export const createAdminNotification = async (
-  params: {
-    userId: string;
-    title: string;
-    message: string;
-    type: string;
-  },
-  client: PrismaClientLike = prisma,
-) => {
-  return client.notification.create({
-    data: {
-      userId: params.userId,
-      title: params.title,
-      message: params.message,
-      type: params.type,
-    },
-  });
+  return client.userAuditLog.create({ data });
 };
 
 export const collectImpactedTeacherUserIdsForStudent = async (
@@ -639,20 +549,14 @@ export const collectImpactedTeacherUserIdsForStudents = async (
   }
 
   const enrollments = await client.enrollment.findMany({
-    where: {
-      userId: {
-        in: userIds,
-      },
-    },
+    where: { userId: { in: userIds } },
     select: {
       package: {
         select: {
           course: {
             select: {
               teacherProfile: {
-                select: {
-                  userId: true,
-                },
+                select: { userId: true },
               },
             },
           },
@@ -663,7 +567,6 @@ export const collectImpactedTeacherUserIdsForStudents = async (
 
   for (const enrollment of enrollments) {
     const teacherUserId = enrollment.package?.course?.teacherProfile?.userId;
-
     if (teacherUserId) {
       impactedTeacherUserIds.add(teacherUserId);
     }
@@ -682,9 +585,7 @@ export const assertTeacherHasNoActiveStudents = async (
       {
         package: {
           course: {
-            teacherProfile: {
-              userId: teacherUserId,
-            },
+            teacherProfile: { userId: teacherUserId },
           },
         },
       },
@@ -707,9 +608,7 @@ const recalculateTeacherStudentCount = async (
 ) => {
   const teacherProfile = await client.teacherProfile.findUnique({
     where: { userId: teacherUserId },
-    select: {
-      id: true,
-    },
+    select: { id: true },
   });
 
   if (!teacherProfile) {
@@ -720,24 +619,18 @@ const recalculateTeacherStudentCount = async (
     where: buildCurrentEnrollmentWhere(
       {
         package: {
-          course: {
-            teacherProfileId: teacherProfile.id,
-          },
+          course: { teacherProfileId: teacherProfile.id },
         },
       },
       new Date(),
     ),
-    select: {
-      userId: true,
-    },
+    select: { userId: true },
     distinct: ["userId"],
   });
 
   await client.teacherProfile.update({
     where: { id: teacherProfile.id },
-    data: {
-      totalStudents: enrollments.length,
-    },
+    data: { totalStudents: enrollments.length },
   });
 };
 
@@ -745,9 +638,7 @@ export const recalculateTeacherStudentCounts = async (
   teacherUserIds: Iterable<string>,
   client: PrismaClientLike = prisma,
 ) => {
-  const uniqueTeacherUserIds = Array.from(new Set(teacherUserIds));
-
-  for (const teacherUserId of uniqueTeacherUserIds) {
+  for (const teacherUserId of new Set(teacherUserIds)) {
     await recalculateTeacherStudentCount(teacherUserId, client);
   }
 };

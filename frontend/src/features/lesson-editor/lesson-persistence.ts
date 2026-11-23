@@ -1,8 +1,9 @@
 import type { Lesson } from '@/types';
+import type { LessonUpdatePayload } from '@/services/course.service';
+import { toStorableBackendAssetPath } from '@/utils/runtime';
 import { normalizeSafeHttpUrl } from '@/utils/safe-url';
-import type { LessonFormData, VideoSourceType } from './types';
+import type { LessonFormData, VideoSourceType, EditableQuizQuestion } from './types';
 import { buildLessonQuizPayload } from './quiz-utils';
-import type { EditableQuizQuestion } from './types';
 
 interface LessonUploadServiceLike {
   uploadVideo: (
@@ -21,18 +22,20 @@ export const buildLessonSavePayload = async (params: {
   videoType: VideoSourceType;
   videoFile: File | null;
   videoLink: string;
+  clearExistingVideo?: boolean;
   existingLesson?: Pick<Lesson, 'videoUrl'>;
   quizEnabled: boolean;
   quizQuestions: EditableQuizQuestion[];
   uploadService: LessonUploadServiceLike;
   uploadProgressHandler: (progress: number) => void;
   toastController: LessonToastController;
-}) => {
+}): Promise<LessonUpdatePayload> => {
   const {
     data,
     videoType,
     videoFile,
     videoLink,
+    clearExistingVideo = false,
     existingLesson,
     quizEnabled,
     quizQuestions,
@@ -41,40 +44,65 @@ export const buildLessonSavePayload = async (params: {
     toastController,
   } = params;
 
-  let videoUrl = '';
+  const isEditMode = Boolean(existingLesson);
+  let videoUrl: string | null | undefined;
 
-  if (videoType === 'upload' && videoFile) {
-    const loadingToastId = toastController.show('Uploading video...');
-    try {
-      videoUrl = await uploadService.uploadVideo(videoFile, uploadProgressHandler);
-    } finally {
-      toastController.dismiss(loadingToastId);
+  if (videoType === 'upload') {
+    if (videoFile) {
+      const loadingToastId = toastController.show('Uploading video...');
+      try {
+        const uploadedUrl = await uploadService.uploadVideo(
+          videoFile,
+          uploadProgressHandler
+        );
+        videoUrl = toStorableBackendAssetPath(uploadedUrl);
+      } finally {
+        toastController.dismiss(loadingToastId);
+      }
+    } else if (clearExistingVideo) {
+      videoUrl = isEditMode ? null : undefined;
+    } else if (existingLesson?.videoUrl) {
+      videoUrl = toStorableBackendAssetPath(existingLesson.videoUrl);
     }
-  } else if (videoType === 'upload' && existingLesson?.videoUrl) {
-    throw new Error('Please upload a video to replace the current lesson media');
-  } else if (videoType === 'link' && videoLink.trim()) {
-    const safeVideoLink = normalizeSafeHttpUrl(videoLink);
-    if (!safeVideoLink) {
-      throw new Error('Video link must be a valid http(s) URL');
+  } else {
+    const trimmedLink = videoLink.trim();
+    if (trimmedLink) {
+      const storableLink = toStorableBackendAssetPath(trimmedLink);
+      if (storableLink.startsWith('/uploads/')) {
+        videoUrl = storableLink;
+      } else {
+        const safeVideoLink = normalizeSafeHttpUrl(storableLink);
+        if (!safeVideoLink) {
+          throw new Error('Video link must be a valid http(s) URL');
+        }
+        videoUrl = safeVideoLink;
+      }
+    } else if (existingLesson?.videoUrl) {
+      videoUrl = null;
     }
-
-    videoUrl =
-      existingLesson?.videoUrl && safeVideoLink === existingLesson.videoUrl
-        ? ''
-        : safeVideoLink;
-  } else if (videoType === 'link' && existingLesson?.videoUrl) {
-    throw new Error('Please provide a video link to replace the current lesson media');
   }
 
-  const duration =
+  const rawDuration =
     typeof data.duration === 'string'
-      ? parseInt(data.duration, 10) || 0
+      ? Number.parseInt(data.duration, 10)
       : data.duration;
 
+  const duration =
+    typeof rawDuration === 'number' && Number.isFinite(rawDuration) && rawDuration > 0
+      ? Math.trunc(rawDuration)
+      : isEditMode
+        ? null
+        : undefined;
+
+  const trimmedDescription = data.description?.trim() ?? '';
+
   return {
-    ...data,
-    duration,
-    ...(videoUrl ? { videoUrl } : {}),
+    title: data.title.trim(),
+    description: trimmedDescription || (isEditMode ? null : undefined),
+    type: data.type,
+    isFree: Boolean(data.isFree),
+    ...(duration !== undefined ? { duration } : {}),
+    ...(videoUrl !== undefined ? { videoUrl } : {}),
     quiz: buildLessonQuizPayload(quizEnabled, quizQuestions),
   };
 };

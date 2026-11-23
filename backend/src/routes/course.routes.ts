@@ -1,12 +1,11 @@
 import { Router } from "express";
 import { UserRole } from "@prisma/client";
-import { body, param } from "express-validator";
-
+import { body } from "express-validator";
 import courseController from "../controllers/course.controller";
 import { authenticate, authorize, optionalAuth } from "../middleware/auth";
 import { validate } from "../middleware/validate";
 import { ensureTeacherApproved } from "../middleware/teacher-access";
-
+import { uuidParam } from "../validators/common.validator";
 import {
   createCourseValidation,
   updateCourseValidation,
@@ -16,23 +15,16 @@ import {
   updatePackageValidation,
   uploadMaterialValidation,
   updateMaterialValidation,
+  sendCourseNotificationValidation,
   getCoursesValidation,
 } from "../validators/course.validator";
 
 const router = Router();
 
-const uuidParam = (name = "id", label = "ID") =>
-  param(name)
-    .notEmpty()
-    .withMessage(`${label} is required`)
-    .bail()
-    .isUUID()
-    .withMessage(`Invalid ${label.toLowerCase()}`);
-
-const courseIdParam = uuidParam("id", "Course ID");
-const lessonIdParam = uuidParam("id", "Lesson ID");
-const packageIdParam = uuidParam("id", "Package ID");
-const materialIdParam = uuidParam("id", "Material ID");
+const courseIdParam = uuidParam("id", "course ID");
+const lessonIdParam = uuidParam("id", "lesson ID");
+const packageIdParam = uuidParam("id", "package ID");
+const materialIdParam = uuidParam("id", "material ID");
 
 const approvedTeacherOnly = [
   authenticate,
@@ -44,38 +36,17 @@ const studentOnly = [authenticate, authorize(UserRole.STUDENT)];
 
 const submitQuizValidation = [
   lessonIdParam,
-
   body("answers")
     .isArray({ min: 1 })
     .withMessage("answers must be a non-empty array"),
-
   body("answers.*")
     .optional({ values: "null" })
     .isInt({ min: 0 })
     .withMessage("Each answer must be a non-negative integer"),
 ];
 
-/**
- * Course routes.
- *
- * Public users can browse courses and categories.
- * Students can submit lesson quizzes.
- * Approved teachers can manage their own courses, lessons, packages, materials, and notifications.
- *
- * More specific routes must be declared before generic routes such as /:id.
- */
-
-// ================================
-// PUBLIC COURSE ROUTES
-// ================================
-
 router.get("/", validate(getCoursesValidation), courseController.getAllCourses);
-
 router.get("/categories/all", courseController.getCategories);
-
-// ================================
-// TEACHER COURSE OVERVIEW
-// ================================
 
 router.get("/my-courses", approvedTeacherOnly, courseController.getMyCourses);
 
@@ -93,20 +64,12 @@ router.get(
   courseController.getMyCourseQuizAttempts,
 );
 
-// ================================
-// STUDENT QUIZ ROUTES
-// ================================
-
 router.post(
   "/lessons/:id/quiz/submit",
   studentOnly,
   validate(submitQuizValidation),
   courseController.submitLessonQuiz,
 );
-
-// ================================
-// LESSON MANAGEMENT
-// ================================
 
 router.post(
   "/:id/lessons",
@@ -129,10 +92,6 @@ router.delete(
   courseController.deleteLesson,
 );
 
-// ================================
-// PACKAGE MANAGEMENT
-// ================================
-
 router.post(
   "/:id/packages",
   approvedTeacherOnly,
@@ -153,10 +112,6 @@ router.delete(
   validate(packageIdParam),
   courseController.deletePackage,
 );
-
-// ================================
-// MATERIAL MANAGEMENT
-// ================================
 
 router.post(
   "/:id/materials",
@@ -186,20 +141,12 @@ router.delete(
   courseController.deleteMaterial,
 );
 
-// ================================
-// COURSE NOTIFICATIONS
-// ================================
-
 router.post(
   "/:id/notifications",
   approvedTeacherOnly,
-  validate(courseIdParam),
+  validate([courseIdParam, ...sendCourseNotificationValidation]),
   courseController.sendCourseNotification,
 );
-
-// ================================
-// COURSE MANAGEMENT
-// ================================
 
 router.post(
   "/",
@@ -221,11 +168,6 @@ router.delete(
   validate(courseIdParam),
   courseController.deleteCourse,
 );
-
-// ================================
-// GENERIC COURSE DETAILS
-// ================================
-// Keep this near the end to avoid conflicts with more specific GET routes.
 
 router.get(
   "/:id",

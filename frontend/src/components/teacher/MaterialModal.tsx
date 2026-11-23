@@ -14,6 +14,7 @@ import { extractErrorMessage } from '@/utils/error-handler';
 import courseService from '@/services/course.service';
 import uploadService from '@/services/upload.service';
 import { useOverlayAccessibility } from '@/hooks';
+import { isExternalMediaLink } from '@/features/course-editor/media-utils';
 import MaterialSourceField from '@/features/course-editor/material-source-field';
 import { buildMaterialSavePayload } from '@/features/course-editor/material-persistence';
 
@@ -31,12 +32,6 @@ interface MaterialModalProps {
   onSuccess: () => void;
 }
 
-/**
- * MaterialModal
- *
- * Allows teachers to upload a new course material or edit an existing material.
- * Supports both file upload and external resource links.
- */
 const MaterialModal = ({
   courseId,
   materialId,
@@ -68,6 +63,8 @@ const MaterialModal = ({
 
   const { ref: titleRegisterRef, ...titleField } = register('title', {
     required: 'Title is required',
+    validate: (value) =>
+      value.trim().length >= 2 || 'Title must be at least 2 characters',
   });
 
   const handleRequestClose = useCallback(() => {
@@ -93,10 +90,15 @@ const MaterialModal = ({
     setValue('title', initialMaterial.title);
     setValue('description', initialMaterial.description || '');
     setValue('isDownloadable', initialMaterial.isDownloadable);
-
-    setMaterialType('link');
-    setMaterialLink(initialMaterial.fileUrl || '');
     setMaterialFile(null);
+
+    if (isExternalMediaLink(initialMaterial.fileUrl)) {
+      setMaterialType('link');
+      setMaterialLink(initialMaterial.fileUrl || '');
+    } else {
+      setMaterialType('upload');
+      setMaterialLink('');
+    }
   }, [initialMaterial, isEditMode, setValue]);
 
   const handleBackdropMouseDown = (event: MouseEvent<HTMLDivElement>) => {
@@ -119,7 +121,7 @@ const MaterialModal = ({
         materialType,
         materialFile,
         materialLink,
-        existingMaterial: initialMaterial,
+        existingMaterial: isEditMode ? initialMaterial : undefined,
         uploadService,
         toastController: {
           show: (message) => toast.loading(message),

@@ -4,6 +4,7 @@ import { Link, useParams } from 'react-router-dom';
 import { User as UserIcon, Flame, Bookmark, Heart, Share2 } from 'lucide-react';
 import communityService from '@/services/community.service';
 import { CommunityPost, CommunityUserProfile } from '@/types/community';
+import CommunityMediaPreview from '@/components/community/CommunityMediaPreview';
 import toast from 'react-hot-toast';
 import { useAuthStore } from '@/store/auth-store';
 import { extractErrorMessage } from '@/utils/error-handler';
@@ -26,9 +27,11 @@ const CommunityUserProfilePage = () => {
       if (!userId) return;
       setIsLoading(true);
       try {
-        const profileResult = await communityService.getUserProfile(userId);
+        const [profileResult, postsResult] = await Promise.all([
+          communityService.getUserProfile(userId),
+          communityService.getUserPosts(userId, 1, 20),
+        ]);
         setProfile(profileResult);
-        const postsResult = await communityService.getUserPosts(userId, 1, 20);
         setPosts(postsResult.items);
       } catch (error) {
         clientLogger.error('Failed to load profile:', error);
@@ -134,19 +137,29 @@ const CommunityUserProfilePage = () => {
     );
   }
 
+  const displayName =
+    `${profile.firstName ?? ''} ${profile.lastName ?? ''}`.trim() ||
+    (isMe ? 'My Profile' : 'User Profile');
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-primary-50/10 to-indigo-50/20 py-8 relative">
       <div className="absolute inset-0 bg-[linear-gradient(rgba(0,0,0,0.015)_1px,transparent_1px),linear-gradient(90deg,rgba(0,0,0,0.015)_1px,transparent_1px)] bg-[size:32px_32px] pointer-events-none"></div>
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 relative">
         <div className="card shadow-xl border border-gray-100 rounded-2xl mb-6 bg-white/80 backdrop-blur-sm">
           <div className="flex items-center gap-4">
-            <div className="w-16 h-16 rounded-full bg-gradient-to-br from-primary-500 to-indigo-600 flex items-center justify-center shadow-lg">
-              <UserIcon className="w-8 h-8 text-white" />
-            </div>
+            {profile.avatar ? (
+              <img
+                src={profile.avatar}
+                alt={displayName}
+                className="w-16 h-16 rounded-full object-cover shadow-lg border border-gray-200"
+              />
+            ) : (
+              <div className="w-16 h-16 rounded-full bg-gradient-to-br from-primary-500 to-indigo-600 flex items-center justify-center shadow-lg">
+                <UserIcon className="w-8 h-8 text-white" />
+              </div>
+            )}
             <div className="flex-1">
-              <h1 className="text-2xl font-extrabold text-gray-900">
-                {isMe ? 'My Profile' : 'User Profile'}
-              </h1>
+              <h1 className="text-2xl font-extrabold text-gray-900">{displayName}</h1>
               <p className="text-sm text-gray-600">
                 Followers {profile.followers} | Following {profile.following}
               </p>
@@ -191,22 +204,11 @@ const CommunityUserProfilePage = () => {
                 className="card shadow-xl border border-gray-100 rounded-2xl hover:shadow-2xl transition-all duration-300 transform hover:scale-105 flex flex-col"
               >
                 {post.media && post.media[0] && (
-                  post.media[0].type === 'image' ? (
-                    <img
-                      src={post.media[0].url}
-                      alt={post.title ? `${post.title} cover` : 'Community post cover'}
-                      className="w-full h-44 object-cover rounded-xl mb-3"
-                    />
-                  ) : (
-                    <video
-                      src={post.media[0].url}
-                      title={post.title ? `${post.title} video preview` : 'Community post video preview'}
-                      aria-label={post.title ? `${post.title} video preview` : 'Community post video preview'}
-                      className="w-full h-44 object-cover rounded-xl mb-3"
-                      controls={false}
-                      muted
-                    />
-                  )
+                  <CommunityMediaPreview
+                    media={post.media[0]}
+                    title={post.title}
+                    className="w-full h-44 object-cover rounded-xl mb-3"
+                  />
                 )}
                 <Link to={`/community/post/${post.id}`} className="block">
                   <h3 className="text-lg font-bold text-gray-900 mb-1 line-clamp-2">

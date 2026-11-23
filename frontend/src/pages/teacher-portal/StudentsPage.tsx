@@ -8,6 +8,7 @@ import enrollmentService from '@/services/enrollment.service';
 import toast from 'react-hot-toast';
 import { extractErrorMessage } from '@/utils/error-handler';
 import { buildCsvContent, downloadCsvFile } from '@/utils/download';
+import { getCourseLessonCount } from '@/utils/course-counts';
 import { usePageTitle } from '@/hooks';
 
 // Extended Enrollment type with user data (as returned by backend)
@@ -38,11 +39,9 @@ const StudentsPage = () => {
   const fetchTeacherCourses = useCallback(async () => {
     setIsLoading(true);
     try {
-      // Fetch teacher's courses
       const coursesList = await courseService.getMyCourses();
       setCourses(coursesList);
 
-      // Select first course or course from URL
       if (courseId) {
         const course = coursesList.find((c: Course) => c.id === courseId);
         if (course) setSelectedCourse(course);
@@ -93,17 +92,22 @@ const StudentsPage = () => {
   }, [selectedCourse, fetchCourseStudents, fetchCourseStats]);
 
   const filteredStudents = useMemo(() => {
-    return students.filter((enrollment) => {
-    const student = enrollment.user;
-    if (!student) return false;
-
-    const fullName = `${student.firstName} ${student.lastName}`.toLowerCase();
-    const email = student.email.toLowerCase();
     const query = searchQuery.toLowerCase();
+    return students.filter((enrollment) => {
+      const student = enrollment.user;
+      if (!student) return false;
 
-    return fullName.includes(query) || email.includes(query);
+      const fullName = `${student.firstName} ${student.lastName}`.toLowerCase();
+      const email = student.email.toLowerCase();
+
+      return fullName.includes(query) || email.includes(query);
     });
   }, [students, searchQuery]);
+
+  const selectedCourseLessonCount = useMemo(
+    () => getCourseLessonCount(selectedCourse),
+    [selectedCourse]
+  );
 
   const exportToCSV = useCallback(() => {
     if (!selectedCourse) {
@@ -344,8 +348,7 @@ const StudentsPage = () => {
                           </td>
                           <td className="py-5 px-4">
                             <span className="text-sm font-medium text-gray-700">
-                              {enrollment.completedLessons} /{' '}
-                              {selectedCourse?.lessons?.length || 0}
+                              {enrollment.completedLessons} / {selectedCourseLessonCount}
                             </span>
                           </td>
                           <td className="py-5 px-4">

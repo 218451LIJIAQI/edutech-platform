@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import communityService from '@/services/community.service';
 import { CommunityPost, CommunityTag, FeedQuery } from '@/types/community';
+import CommunityMediaPreview from '@/components/community/CommunityMediaPreview';
 import { usePageTitle } from '@/hooks';
 import toast from 'react-hot-toast';
 import { extractErrorMessage } from '@/utils/error-handler';
@@ -47,6 +48,11 @@ const CommunityHomePage = () => {
   const query: FeedQuery = useMemo(() => ({ tab, tag, page, limit: 9 }), [tab, tag, page]);
 
   useEffect(() => {
+    const nextTag = params.get('tag') || undefined;
+    setTag((current) => (current === nextTag ? current : nextTag));
+  }, [params]);
+
+  useEffect(() => {
     setParams((prev) => {
       const next = new URLSearchParams(prev);
       next.set('tab', tab);
@@ -56,7 +62,7 @@ const CommunityHomePage = () => {
         next.delete('tag');
       }
       return next;
-    });
+    }, { replace: true });
   }, [tab, tag, setParams]);
 
   useEffect(() => {
@@ -244,22 +250,15 @@ const CommunityHomePage = () => {
               >
                 {post.media && post.media.length > 0 && (
                   <div className="mb-3 h-48 overflow-hidden rounded-t-2xl">
-                    {post.media[0].type === 'image' ? (
-                      <img
-                        src={post.media[0].url}
-                        alt={post.title ? `${post.title} cover` : 'Community post cover'}
-                        className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
-                      />
-                    ) : (
-                      <video
-                        src={post.media[0].url}
-                        title={post.title ? `${post.title} video preview` : 'Community post video preview'}
-                        aria-label={post.title ? `${post.title} video preview` : 'Community post video preview'}
-                        className="w-full h-full object-cover"
-                        controls={false}
-                        muted
-                      />
-                    )}
+                    <CommunityMediaPreview
+                      media={post.media[0]}
+                      title={post.title}
+                      className={`w-full h-full object-cover ${
+                        post.media[0].type === 'image'
+                          ? 'group-hover:scale-110 transition-transform duration-300'
+                          : ''
+                      }`}
+                    />
                   </div>
                 )}
                 <div className="flex-1 p-5">
@@ -271,9 +270,17 @@ const CommunityHomePage = () => {
                   </Link>
                   <div className="mt-3 flex items-center gap-2 flex-wrap">
                     {post.tags?.map((item) => (
-                      <span key={item.id} className="badge-primary text-xs font-semibold">
+                      <button
+                        key={item.id}
+                        type="button"
+                        onClick={() => {
+                          setTag(item.name);
+                          setPage(1);
+                        }}
+                        className="badge-primary text-xs font-semibold hover:bg-primary-200 transition-colors"
+                      >
                         #{item.name}
-                      </span>
+                      </button>
                     ))}
                     {post.courseTitle && (
                       <Link

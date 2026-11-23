@@ -1,4 +1,4 @@
-﻿import { useMemo } from 'react';
+import { useMemo } from 'react';
 import {
   CalendarDays,
   ExternalLink,
@@ -10,7 +10,11 @@ import {
 
 import VideoPlayer from './VideoPlayer';
 import { resolveBackendAssetUrl } from '@/utils/runtime';
-import { getNormalizedHostname, hasExactHostname, parseSafeHttpUrl } from '@/utils/safe-url';
+import { hasExactHostname, parseSafeHttpUrl } from '@/utils/safe-url';
+import {
+  isRecognizedVideoPlatformHost,
+  resolveExternalVideoEmbed,
+} from '@/utils/video-embed';
 
 interface UniversalVideoPlayerProps {
   src: string;
@@ -23,145 +27,24 @@ interface UniversalVideoPlayerProps {
 }
 
 const GOOGLE_MEET_HOSTNAMES = ['meet.google.com'];
-const YOUTUBE_HOSTNAMES = ['youtube.com', 'www.youtube.com', 'm.youtube.com', 'youtu.be'];
-const VIMEO_HOSTNAMES = ['vimeo.com', 'www.vimeo.com', 'player.vimeo.com'];
-const DAILYMOTION_HOSTNAMES = ['dailymotion.com', 'www.dailymotion.com', 'dai.ly'];
 const PLACEHOLDER_HOSTNAMES = [
   'example.com',
-  'www.example.com',
   'example.org',
-  'www.example.org',
   'example.net',
-  'www.example.net',
 ];
 
-const YOUTUBE_ID_PATTERN = /^[a-zA-Z0-9_-]{11}$/;
-const VIMEO_ID_PATTERN = /^\d+$/;
-const DAILYMOTION_ID_PATTERN = /^[a-zA-Z0-9]+$/;
-
-const getSafeStartTime = (startTime: number): number => {
-  if (!Number.isFinite(startTime) || startTime < 0) {
-    return 0;
-  }
-
-  return Math.floor(startTime);
-};
-
-const isGoogleMeetUrl = (url: URL | null): boolean =>
-  hasExactHostname(url, GOOGLE_MEET_HOSTNAMES);
+const getSafeStartTime = (startTime: number): number =>
+  Number.isFinite(startTime) && startTime >= 0 ? Math.floor(startTime) : 0;
 
 const extractMeetCode = (url: URL | null): string | null => {
   if (!url) return null;
-
   const match = url.pathname.match(/\/([a-z]{3}-[a-z]{4}-[a-z]{3})$/i);
   return match?.[1] ?? null;
-};
-
-const getYouTubeId = (url: URL | null, normalizedHostname: string): string | null => {
-  if (!url) return null;
-
-  let videoId: string | null = null;
-
-  if (normalizedHostname === 'youtu.be') {
-    videoId = url.pathname.split('/').filter(Boolean)[0] ?? null;
-  }
-
-  if (
-    normalizedHostname === 'youtube.com' ||
-    normalizedHostname === 'www.youtube.com' ||
-    normalizedHostname === 'm.youtube.com'
-  ) {
-    if (url.pathname === '/watch') {
-      videoId = url.searchParams.get('v');
-    } else {
-      const [, collection, id] = url.pathname.split('/');
-
-      if ((collection === 'embed' || collection === 'shorts') && id) {
-        videoId = id;
-      }
-    }
-  }
-
-  return videoId && YOUTUBE_ID_PATTERN.test(videoId) ? videoId : null;
-};
-
-const getVimeoId = (url: URL | null, normalizedHostname: string): string | null => {
-  if (!url) return null;
-
-  const segments = url.pathname.split('/').filter(Boolean);
-  let videoId: string | undefined;
-
-  if (normalizedHostname === 'player.vimeo.com' && segments[0] === 'video') {
-    videoId = segments[1];
-  } else {
-    videoId = [...segments].reverse().find((segment) => VIMEO_ID_PATTERN.test(segment));
-  }
-
-  return videoId && VIMEO_ID_PATTERN.test(videoId) ? videoId : null;
-};
-
-const getDailymotionId = (url: URL | null, normalizedHostname: string): string | null => {
-  if (!url) return null;
-
-  const segments = url.pathname.split('/').filter(Boolean);
-  let videoId: string | undefined;
-
-  if (normalizedHostname === 'dai.ly') {
-    videoId = segments[0];
-  } else if (segments[0] === 'video') {
-    videoId = segments[1]?.split('_')[0];
-  }
-
-  return videoId && DAILYMOTION_ID_PATTERN.test(videoId) ? videoId : null;
 };
 
 const isImageUrl = (url: string): boolean => {
   const pathname = url.split(/[?#]/)[0];
   return /\.(jpg|jpeg|png|gif|webp|svg|bmp|ico|tiff|heic|heif)$/i.test(pathname);
-};
-
-const buildYouTubeEmbedUrl = (
-  videoId: string,
-  autoPlay: boolean,
-  startTime: number
-): string => {
-  const params = new URLSearchParams({
-    start: String(startTime),
-    rel: '0',
-  });
-
-  if (autoPlay) {
-    params.set('autoplay', '1');
-  }
-
-  return `https://www.youtube.com/embed/${encodeURIComponent(videoId)}?${params.toString()}`;
-};
-
-const buildVimeoEmbedUrl = (
-  videoId: string,
-  autoPlay: boolean,
-  startTime: number
-): string => {
-  const params = new URLSearchParams();
-
-  if (autoPlay) {
-    params.set('autoplay', '1');
-  }
-
-  return `https://player.vimeo.com/video/${encodeURIComponent(videoId)}?${params.toString()}#t=${startTime}s`;
-};
-
-const buildDailymotionEmbedUrl = (
-  videoId: string,
-  autoPlay: boolean,
-  startTime: number
-): string => {
-  const params = new URLSearchParams({
-    autoplay: autoPlay ? '1' : '0',
-    start: String(startTime),
-  });
-
-  return `https://www.dailymotion.com/embed/video/${encodeURIComponent(videoId)}?${params.toString()}`;
 };
 
 const InvalidVideoMessage = ({ message }: { message: string }) => (
@@ -183,15 +66,10 @@ const EmbedShell = ({
         {title}
       </div>
     )}
-
     <div className="aspect-video">{children}</div>
   </div>
 );
 
-/**
- * Universal Video Player Component
- * Supports local videos, images, YouTube, Vimeo, Dailymotion, Google Meet, and direct video links.
- */
 const UniversalVideoPlayer = ({
   src,
   poster,
@@ -202,11 +80,15 @@ const UniversalVideoPlayer = ({
   startTime = 0,
 }: UniversalVideoPlayerProps) => {
   const trimmedSrc = src.trim();
-
+  const safeStartTime = useMemo(() => getSafeStartTime(startTime), [startTime]);
   const parsedSrc = useMemo(() => parseSafeHttpUrl(trimmedSrc), [trimmedSrc]);
-  const normalizedExternalHostname = useMemo(
-    () => getNormalizedHostname(parsedSrc),
-    [parsedSrc]
+  const externalEmbed = useMemo(
+    () =>
+      resolveExternalVideoEmbed(trimmedSrc, {
+        autoPlay,
+        startTime: safeStartTime,
+      }),
+    [autoPlay, safeStartTime, trimmedSrc]
   );
 
   const resolvedSrc = useMemo(() => resolveBackendAssetUrl(trimmedSrc), [trimmedSrc]);
@@ -215,19 +97,19 @@ const UniversalVideoPlayer = ({
     [poster]
   );
 
-  const safeStartTime = useMemo(() => getSafeStartTime(startTime), [startTime]);
-  const safeExternalSrc = parsedSrc?.toString() ?? '';
-
   if (!trimmedSrc) {
     return <InvalidVideoMessage message="Video source is missing." />;
   }
 
   if (hasExactHostname(parsedSrc, PLACEHOLDER_HOSTNAMES)) {
-    return <InvalidVideoMessage message="Video source is a placeholder and has not been configured yet." />;
+    return (
+      <InvalidVideoMessage message="Video source is a placeholder and has not been configured yet." />
+    );
   }
 
-  if (isGoogleMeetUrl(parsedSrc)) {
+  if (hasExactHostname(parsedSrc, GOOGLE_MEET_HOSTNAMES)) {
     const meetCode = extractMeetCode(parsedSrc);
+    const safeExternalSrc = parsedSrc?.toString() ?? '';
 
     return (
       <div className="relative overflow-hidden rounded-[28px] bg-[#202124] text-white shadow-2xl">
@@ -278,9 +160,7 @@ const UniversalVideoPlayer = ({
                   </div>
 
                   <div>
-                    <p className="text-xs uppercase text-white/55">
-                      Meeting link
-                    </p>
+                    <p className="text-xs uppercase text-white/55">Meeting link</p>
                     <p className="text-sm font-medium text-white/85 sm:text-base">
                       {meetCode || 'Google Meet room'}
                     </p>
@@ -293,9 +173,7 @@ const UniversalVideoPlayer = ({
               </div>
 
               <div className="rounded-[24px] border border-white/10 bg-[#171717]/50 p-4 backdrop-blur-sm sm:p-5">
-                <p className="text-xs uppercase text-white/55">
-                  Quick action
-                </p>
+                <p className="text-xs uppercase text-white/55">Quick action</p>
 
                 <a
                   href={safeExternalSrc}
@@ -337,64 +215,21 @@ const UniversalVideoPlayer = ({
     );
   }
 
-  if (hasExactHostname(parsedSrc, YOUTUBE_HOSTNAMES)) {
-    const videoId = getYouTubeId(parsedSrc, normalizedExternalHostname);
-
-    if (!videoId) {
-      return <InvalidVideoMessage message="Invalid YouTube URL." />;
+  if (isRecognizedVideoPlatformHost(parsedSrc)) {
+    if (!externalEmbed) {
+      return <InvalidVideoMessage message="Invalid external video URL." />;
     }
 
     return (
       <EmbedShell title={title}>
         <iframe
-          src={buildYouTubeEmbedUrl(videoId, autoPlay, safeStartTime)}
+          src={externalEmbed.embedUrl}
           className="h-full w-full"
-          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen"
           allowFullScreen
           loading="lazy"
-          title={title || 'YouTube video player'}
-        />
-      </EmbedShell>
-    );
-  }
-
-  if (hasExactHostname(parsedSrc, VIMEO_HOSTNAMES)) {
-    const videoId = getVimeoId(parsedSrc, normalizedExternalHostname);
-
-    if (!videoId) {
-      return <InvalidVideoMessage message="Invalid Vimeo URL." />;
-    }
-
-    return (
-      <EmbedShell title={title}>
-        <iframe
-          src={buildVimeoEmbedUrl(videoId, autoPlay, safeStartTime)}
-          className="h-full w-full"
-          allow="autoplay; fullscreen; picture-in-picture"
-          allowFullScreen
-          loading="lazy"
-          title={title || 'Vimeo video player'}
-        />
-      </EmbedShell>
-    );
-  }
-
-  if (hasExactHostname(parsedSrc, DAILYMOTION_HOSTNAMES)) {
-    const videoId = getDailymotionId(parsedSrc, normalizedExternalHostname);
-
-    if (!videoId) {
-      return <InvalidVideoMessage message="Invalid Dailymotion URL." />;
-    }
-
-    return (
-      <EmbedShell title={title}>
-        <iframe
-          src={buildDailymotionEmbedUrl(videoId, autoPlay, safeStartTime)}
-          className="h-full w-full"
-          allow="autoplay; fullscreen; picture-in-picture"
-          allowFullScreen
-          loading="lazy"
-          title={title || 'Dailymotion video player'}
+          referrerPolicy="strict-origin-when-cross-origin"
+          title={title || `${externalEmbed.provider} video player`}
         />
       </EmbedShell>
     );

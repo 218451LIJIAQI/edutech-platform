@@ -27,6 +27,19 @@ const getPaymentCourseTitle = (payment: AdminPaymentRow): string => {
   return uniqueTitles.length > 0 ? uniqueTitles.join(', ') : '-';
 };
 
+const getPaymentStatusClass = (status?: string): string => {
+  switch (status) {
+    case 'REFUNDED':
+      return 'text-amber-700 font-medium';
+    case 'FAILED':
+      return 'text-red-600 font-medium';
+    case 'PENDING':
+      return 'text-gray-600 font-medium';
+    default:
+      return 'text-green-700 font-medium';
+  }
+};
+
 const FinancialsManagement = () => {
   usePageTitle('Financial Management');
   const [tab, setTab] = useState<'payments' | 'commissions' | 'settlements' | 'analytics' | 'auto-reports'>('payments');
@@ -538,7 +551,9 @@ const FinancialsManagement = () => {
                             <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold">{formatMoney(p.amount)}</td>
                             <td className="px-6 py-4 whitespace-nowrap text-sm">{formatMoney(p.platformCommission)}</td>
                             <td className="px-6 py-4 whitespace-nowrap text-sm">{formatMoney(p.teacherEarning)}</td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-green-700">COMPLETED</td>
+                            <td className={`px-6 py-4 whitespace-nowrap text-sm ${getPaymentStatusClass(p.status)}`}>
+                              {p.status || 'COMPLETED'}
+                            </td>
                           </tr>
                         ))
                       )}

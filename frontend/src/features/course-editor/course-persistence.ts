@@ -1,4 +1,6 @@
 import { CourseType } from '@/types';
+import type { CourseUpdatePayload } from '@/services/course.service';
+import { toStorableBackendAssetPath } from '@/utils/runtime';
 import { normalizeSafeHttpUrl } from '@/utils/safe-url';
 import type { CourseFormData, MediaSourceType, PendingDeleteItem } from './types';
 
@@ -23,27 +25,24 @@ interface PreviewUploadToastController {
 
 type DeleteKind = NonNullable<PendingDeleteItem>['kind'];
 
-const normalizeText = (value: string | null | undefined): string => {
-  return value?.trim() ?? '';
-};
-
-const normalizeOptionalText = (
-  value: string | null | undefined
-): string | undefined => {
-  const trimmedValue = value?.trim();
-  return trimmedValue ? trimmedValue : undefined;
-};
+const normalizeText = (value: string | null | undefined): string =>
+  value?.trim() ?? '';
 
 const normalizeOptionalMediaUrl = (
   value: string | null | undefined,
   fieldName: string
 ): string | undefined => {
-  const trimmedValue = normalizeOptionalText(value);
+  const trimmedValue = value?.trim();
   if (!trimmedValue) {
     return undefined;
   }
 
-  const safeUrl = normalizeSafeHttpUrl(trimmedValue);
+  const storable = toStorableBackendAssetPath(trimmedValue);
+  if (storable.startsWith('/uploads/')) {
+    return storable;
+  }
+
+  const safeUrl = normalizeSafeHttpUrl(storable);
   if (!safeUrl) {
     throw new Error(`${fieldName} must be a valid http(s) URL`);
   }
@@ -66,46 +65,69 @@ const deleteDialogLabels: Record<DeleteKind, string> = {
 const resolveThumbnailUrl = async (
   data: CourseFormData,
   media: CourseMediaDraft,
-  uploadService: CourseUploadServiceLike
-): Promise<string | undefined> => {
-  if (media.thumbnailType === 'upload' && media.thumbnailFile) {
-    return uploadService.uploadThumbnail(media.thumbnailFile);
+  uploadService: CourseUploadServiceLike,
+  isEditMode: boolean
+): Promise<string | null | undefined> => {
+  if (media.thumbnailType === 'upload') {
+    if (media.thumbnailFile) {
+      const uploadedUrl = await uploadService.uploadThumbnail(media.thumbnailFile);
+      return toStorableBackendAssetPath(uploadedUrl);
+    }
+
+    const existingStorable = toStorableBackendAssetPath(data.thumbnail);
+    if (existingStorable) {
+      return existingStorable;
+    }
+
+    return isEditMode ? null : undefined;
   }
 
-  if (media.thumbnailType === 'link') {
-    return (
-      normalizeOptionalMediaUrl(media.thumbnailLink, 'Thumbnail link') ??
-      normalizeOptionalMediaUrl(data.thumbnail, 'Thumbnail link')
-    );
+  const normalizedLink = normalizeOptionalMediaUrl(
+    media.thumbnailLink,
+    'Thumbnail link'
+  );
+  if (normalizedLink) {
+    return normalizedLink;
   }
 
-  return normalizeOptionalText(data.thumbnail);
+  return isEditMode ? null : undefined;
 };
 
 const resolvePreviewVideoUrl = async (
   data: CourseFormData,
   media: CourseMediaDraft,
   uploadService: CourseUploadServiceLike,
-  previewUploadToast: PreviewUploadToastController
-): Promise<string | undefined> => {
-  if (media.previewVideoType === 'upload' && media.previewVideoFile) {
-    const loadingToastId = previewUploadToast.show('Uploading preview video...');
-
-    try {
-      return await uploadService.uploadVideo(media.previewVideoFile);
-    } finally {
-      previewUploadToast.dismiss(loadingToastId);
+  previewUploadToast: PreviewUploadToastController,
+  isEditMode: boolean
+): Promise<string | null | undefined> => {
+  if (media.previewVideoType === 'upload') {
+    if (media.previewVideoFile) {
+      const loadingToastId = previewUploadToast.show('Uploading preview video...');
+      try {
+        const uploadedUrl = await uploadService.uploadVideo(media.previewVideoFile);
+        return toStorableBackendAssetPath(uploadedUrl);
+      } finally {
+        previewUploadToast.dismiss(loadingToastId);
+      }
     }
+
+    const existingStorable = toStorableBackendAssetPath(data.previewVideoUrl);
+    if (existingStorable) {
+      return existingStorable;
+    }
+
+    return isEditMode ? null : undefined;
   }
 
-  if (media.previewVideoType === 'link') {
-    return (
-      normalizeOptionalMediaUrl(media.previewVideoLink, 'Preview video link') ??
-      normalizeOptionalMediaUrl(data.previewVideoUrl, 'Preview video link')
-    );
+  const normalizedLink = normalizeOptionalMediaUrl(
+    media.previewVideoLink,
+    'Preview video link'
+  );
+  if (normalizedLink) {
+    return normalizedLink;
   }
 
-  return normalizeOptionalText(data.previewVideoUrl);
+  return isEditMode ? null : undefined;
 };
 
 export const buildCourseSavePayload = async (params: {
@@ -113,35 +135,47 @@ export const buildCourseSavePayload = async (params: {
   media: CourseMediaDraft;
   uploadService: CourseUploadServiceLike;
   previewUploadToast: PreviewUploadToastController;
-}): Promise<Record<string, unknown>> => {
-  const { data, media, uploadService, previewUploadToast } = params;
+  isEditMode?: boolean;
+}): Promise<CourseUpdatePayload> => {
+  const {
+    data,
+    media,
+    uploadService,
+    previewUploadToast,
+    isEditMode = false,
+  } = params;
 
   const [thumbnailUrl, previewVideoUrl] = await Promise.all([
-    resolveThumbnailUrl(data, media, uploadService),
-    resolvePreviewVideoUrl(data, media, uploadService, previewUploadToast),
+    resolveThumbnailUrl(data, media, uploadService, isEditMode),
+    resolvePreviewVideoUrl(
+      data,
+      media,
+      uploadService,
+      previewUploadToast,
+      isEditMode
+    ),
   ]);
 
-  const cleanPayload: Record<string, unknown> = {
+  const cleanPayload: CourseUpdatePayload = {
     title: normalizeText(data.title),
     description: normalizeText(data.description),
     category: normalizeText(data.category),
     courseType: data.courseType ?? CourseType.RECORDED,
   };
 
-  if (thumbnailUrl) {
+  if (thumbnailUrl !== undefined) {
     cleanPayload.thumbnail = thumbnailUrl;
   }
 
-  if (previewVideoUrl) {
+  if (previewVideoUrl !== undefined) {
     cleanPayload.previewVideoUrl = previewVideoUrl;
   }
 
   return cleanPayload;
 };
 
-export const buildDeleteSuccessMessage = (kind: DeleteKind): string => {
-  return deleteSuccessMessages[kind];
-};
+export const buildDeleteSuccessMessage = (kind: DeleteKind): string =>
+  deleteSuccessMessages[kind];
 
 export const buildDeleteDialogLabel = (
   pendingDeleteItem: PendingDeleteItem

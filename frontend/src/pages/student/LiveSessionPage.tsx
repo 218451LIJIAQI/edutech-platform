@@ -1,4 +1,4 @@
-﻿import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import clientLogger from '@/utils/logger';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Send, Users, Hand, ExternalLink } from 'lucide-react';

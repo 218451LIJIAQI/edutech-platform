@@ -1,13 +1,15 @@
-import { CheckCircle } from 'lucide-react';
+import { CheckCircle, Trash2, Video } from 'lucide-react';
 import type { VideoSourceType } from './types';
 
 interface LessonVideoSourceFieldProps {
   videoType: VideoSourceType;
   videoFile: File | null;
   videoLink: string;
+  existingUploadUrl?: string;
   uploadProgress: number;
   onVideoTypeChange: (nextType: VideoSourceType) => void;
   onVideoFileChange: (file: File | null) => void;
+  onClearExistingUpload?: () => void;
   onVideoLinkChange: (value: string) => void;
 }
 
@@ -15,9 +17,11 @@ export default function LessonVideoSourceField({
   videoType,
   videoFile,
   videoLink,
+  existingUploadUrl,
   uploadProgress,
   onVideoTypeChange,
   onVideoFileChange,
+  onClearExistingUpload,
   onVideoLinkChange,
 }: LessonVideoSourceFieldProps) {
   return (
@@ -57,9 +61,30 @@ export default function LessonVideoSourceField({
 
       {videoType === 'upload' ? (
         <div className="space-y-3">
+          {existingUploadUrl && !videoFile && (
+            <div className="flex items-center justify-between gap-3 rounded-lg border border-gray-200 bg-white p-3">
+              <div className="flex items-center gap-2 text-xs text-gray-700">
+                <Video className="h-4 w-4 shrink-0 text-primary-600" />
+                <span>
+                  Current uploaded video will be kept unless you choose a replacement or remove it.
+                </span>
+              </div>
+              {onClearExistingUpload && (
+                <button
+                  type="button"
+                  onClick={onClearExistingUpload}
+                  className="inline-flex shrink-0 items-center gap-1 rounded-md px-2.5 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                  Remove
+                </button>
+              )}
+            </div>
+          )}
+
           <input
             type="file"
-            accept="video/*"
+            accept="video/mp4,video/webm,video/quicktime"
             onChange={(event) => onVideoFileChange(event.target.files?.[0] || null)}
             className="input"
             aria-label="Upload video file"
@@ -98,12 +123,12 @@ export default function LessonVideoSourceField({
             className="input"
           />
           <p className="text-xs text-gray-600">
-            Paste a video URL from YouTube, Vimeo, or direct video link
+            Paste a video URL from YouTube, Vimeo, Dailymotion, or direct video link (leave blank to clear when editing)
           </p>
           {videoLink && (
             <p className="text-sm text-green-600 font-medium flex items-center gap-2">
               <CheckCircle className="w-4 h-4" />
-              <span>Video URL: {videoLink.substring(0, 50)}...</span>
+              <span>Video URL: {videoLink.substring(0, 60)}</span>
             </p>
           )}
         </div>

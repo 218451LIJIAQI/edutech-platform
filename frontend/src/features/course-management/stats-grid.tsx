@@ -1,4 +1,4 @@
-﻿import { BookOpen, FileText, Settings, Users } from 'lucide-react';
+import { BookOpen, FileText, Settings, Users } from 'lucide-react';
 import type { Course } from '@/types';
 import { getCourseEnrollmentCount } from './helpers';
 import { getCourseLessonCount, getCourseMaterialCount } from '@/utils/course-counts';
@@ -57,14 +57,14 @@ export default function CourseManagementStatsGrid({
       <div className="card bg-gradient-to-br from-orange-500 to-orange-600 text-white shadow-xl hover:shadow-2xl transition-all duration-300 transform hover:scale-105 border border-orange-400/30 rounded-2xl">
         <div className="flex items-center justify-between">
           <div>
-            <p className="text-sm font-medium text-orange-700 uppercase">
+            <p className="text-sm font-bold text-orange-100 uppercase">
               Pricing Options
             </p>
-            <p className="text-3xl font-bold text-orange-900 mt-2">
+            <p className="text-4xl font-bold text-white mt-3">
               {course.packages?.length || 0}
             </p>
           </div>
-          <Settings className="w-12 h-12 text-orange-300" />
+          <Settings className="w-16 h-16 text-orange-200 opacity-50" />
         </div>
       </div>
     </div>

@@ -57,13 +57,12 @@ const UsersManagement = () => {
   }>({});
   const [isLoading, setIsLoading] = useState(true);
   const [filters, setFilters] = useState<{
-    role?: string;
+    role?: UserRole;
     isActive?: boolean;
-    search?: string;
-    page?: number;
-    limit?: number;
-    sortBy?: string;
-    sortOrder?: 'asc' | 'desc';
+    page: number;
+    limit: number;
+    sortBy: string;
+    sortOrder: 'asc' | 'desc';
   }>({
     page: 1,
     limit: 20,
@@ -86,14 +85,39 @@ const UsersManagement = () => {
   const [batchOperation, setBatchOperation] = useState<'activate' | 'deactivate' | 'delete' | null>(null);
   const [isBatchModalOpen, setIsBatchModalOpen] = useState(false);
 
+  const handleSearchChange = useCallback((query: string) => {
+    setSearch(query);
+    setFilters((prev) => (prev.page === 1 ? prev : { ...prev, page: 1 }));
+  }, []);
+
+  const handleFilterChange = useCallback((rawFilters: Record<string, string>) => {
+    const nextRole =
+      rawFilters.role === UserRole.STUDENT ||
+      rawFilters.role === UserRole.TEACHER ||
+      rawFilters.role === UserRole.ADMIN
+        ? (rawFilters.role as UserRole)
+        : undefined;
+    const nextIsActive =
+      rawFilters.isActive === 'true'
+        ? true
+        : rawFilters.isActive === 'false'
+          ? false
+          : undefined;
+
+    setFilters((prev) => ({
+      ...prev,
+      page: 1,
+      role: nextRole,
+      isActive: nextIsActive,
+    }));
+  }, []);
+
   const fetchUsers = useCallback(async () => {
     setIsLoading(true);
     try {
       const data = await adminService.getAllUsers({
         ...filters,
-        search,
-        isActive: filters.isActive,
-        role: filters.role as UserRole,
+        search: search || undefined,
       });
       setUsers(data.items || []);
       setPagination(data.pagination);
@@ -237,7 +261,7 @@ const UsersManagement = () => {
       u.firstName,
       u.lastName,
       u.email,
-      (u as ExtendedUser).phone,
+      u.phone,
       u.role,
       u.isActive ? 'Active' : 'Inactive',
       new Date(u.createdAt).toLocaleDateString(),
@@ -323,9 +347,9 @@ const UsersManagement = () => {
         <div className="card mb-8 shadow-xl border border-gray-100 rounded-2xl">
           <SearchFilter
             placeholder="Search by name, email, or phone..."
-            onSearch={setSearch}
+            onSearch={handleSearchChange}
             filters={filterOptions}
-            onFilterChange={setFilters}
+            onFilterChange={handleFilterChange}
           />
         </div>
 
@@ -517,7 +541,7 @@ const UsersManagement = () => {
                           }`}>
                             {user.isActive ? 'Active' : 'Inactive'}
                           </span>
-                          {(user as ExtendedUser).isLocked && (
+                          {user.isLocked && (
                             <span className="px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800 flex items-center gap-1">
                               <Lock className="w-3 h-3" /> Locked
                             </span>
@@ -525,11 +549,11 @@ const UsersManagement = () => {
                         </div>
                       </td>
                       <td className="px-6 py-5 whitespace-nowrap text-sm">
-                        {(user as ExtendedUser).phone && (
-                          <div className="text-gray-700">{(user as ExtendedUser).phone}</div>
+                        {user.phone && (
+                          <div className="text-gray-700">{user.phone}</div>
                         )}
-                        {(user as ExtendedUser).department && (
-                          <div className="text-gray-600 text-xs">{(user as ExtendedUser).department}</div>
+                        {user.department && (
+                          <div className="text-gray-600 text-xs">{user.department}</div>
                         )}
                       </td>
                       <td className="px-6 py-5 whitespace-nowrap text-sm">
@@ -545,7 +569,7 @@ const UsersManagement = () => {
                           </div>
                         ) : user.role === 'STUDENT' ? (
                           <div className="font-medium text-gray-700">
-                            {(user as ExtendedUser)._count?.enrollments || 0} enrollments
+                            {user._count?.enrollments || 0} enrollments
                           </div>
                         ) : (
                           <span className="text-gray-400">-</span>
@@ -600,7 +624,7 @@ const UsersManagement = () => {
                 <button
                   type="button"
                   disabled={!pagination.page || pagination.page === 1}
-                  onClick={() => setFilters({ ...filters, page: (pagination.page || 1) - 1 })}
+                  onClick={() => setFilters((prev) => ({ ...prev, page: Math.max(1, (pagination.page || 1) - 1) }))}
                   className="btn-outline btn-sm"
                 >
                   Previous
@@ -608,7 +632,7 @@ const UsersManagement = () => {
                 <button
                   type="button"
                   disabled={!pagination.page || pagination.page === pagination.totalPages}
-                  onClick={() => setFilters({ ...filters, page: (pagination.page || 1) + 1 })}
+                  onClick={() => setFilters((prev) => ({ ...prev, page: (pagination.page || 1) + 1 }))}
                   className="btn-primary btn-sm"
                 >
                   Next

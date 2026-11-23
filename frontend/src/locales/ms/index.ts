@@ -234,7 +234,7 @@ export default {
     reply: 'Balas',
     writeComment: 'Tulis komen...',
     noComments: 'Tiada komen lagi',
-    beFirFirst: 'Jadilah yang pertama komen!',
+    beFirst: 'Jadilah yang pertama komen!',
   },
 
   // Messages

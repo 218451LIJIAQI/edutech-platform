@@ -1,4 +1,4 @@
-﻿import {
+import {
   AlertCircle,
   BarChart3,
   CheckCircle,

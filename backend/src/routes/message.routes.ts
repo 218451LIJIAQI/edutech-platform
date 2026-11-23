@@ -1,9 +1,12 @@
 import { Router } from "express";
-import { body, param, query } from "express-validator";
-
+import { body, query } from "express-validator";
 import { authenticate } from "../middleware/auth";
 import { validate } from "../middleware/validate";
-
+import { uuidParam } from "../validators/common.validator";
+import {
+  MAX_MESSAGE_LENGTH,
+  MAX_MESSAGE_LIMIT,
+} from "../services/message.service";
 import {
   getContacts,
   getOrCreateThread,
@@ -18,16 +21,8 @@ import {
 
 const router = Router();
 
-const uuidParam = (name: string) =>
-  param(name)
-    .notEmpty()
-    .withMessage(`${name} is required`)
-    .bail()
-    .isUUID()
-    .withMessage(`Invalid ${name}`);
-
-const contactIdParam = uuidParam("contactId");
-const threadIdParam = uuidParam("threadId");
+const contactIdParam = uuidParam("contactId", "contactId");
+const threadIdParam = uuidParam("threadId", "threadId");
 
 const contactIdBodyValidation = body("contactId")
   .notEmpty()
@@ -36,9 +31,7 @@ const contactIdBodyValidation = body("contactId")
   .isUUID()
   .withMessage("Invalid contactId");
 
-const getMessagesValidation = [
-  threadIdParam,
-
+const messageListQueryValidation = [
   query("cursor")
     .optional({ values: "falsy" })
     .isString()
@@ -46,47 +39,29 @@ const getMessagesValidation = [
     .bail()
     .isLength({ max: 200 })
     .withMessage("cursor too long"),
-
   query("limit")
     .optional({ values: "falsy" })
-    .isInt({ min: 1, max: 100 })
-    .withMessage("limit must be 1-100"),
+    .isInt({ min: 1, max: MAX_MESSAGE_LIMIT })
+    .withMessage(`limit must be 1-${MAX_MESSAGE_LIMIT}`)
+    .toInt(),
 ];
 
-const sendMessageValidation = [
-  threadIdParam,
-
-  body("content")
-    .trim()
-    .notEmpty()
-    .withMessage("content is required")
-    .bail()
-    .isLength({ min: 1, max: 5000 })
-    .withMessage("content must be between 1 and 5000 characters"),
-];
-
-const sendContactMessageValidation = [
-  contactIdParam,
-
-  body("content")
-    .trim()
-    .notEmpty()
-    .withMessage("content is required")
-    .bail()
-    .isLength({ min: 1, max: 5000 })
-    .withMessage("content must be between 1 and 5000 characters"),
-];
-
-/**
- * Message routes.
- *
- * All message routes require authentication.
- */
+const messageBodyValidation = body("content")
+  .isString()
+  .withMessage("content must be a string")
+  .bail()
+  .trim()
+  .notEmpty()
+  .withMessage("content is required")
+  .bail()
+  .isLength({ min: 1, max: MAX_MESSAGE_LENGTH })
+  .withMessage(
+    `content must be between 1 and ${MAX_MESSAGE_LENGTH} characters`,
+  );
 
 router.use(authenticate);
 
 router.get("/contacts", getContacts);
-
 router.get("/unread-count", getUnreadCount);
 
 router.get(
@@ -97,13 +72,13 @@ router.get(
 
 router.get(
   "/contacts/:contactId/messages",
-  validate([contactIdParam, ...getMessagesValidation.slice(1)]),
+  validate([contactIdParam, ...messageListQueryValidation]),
   getMessagesWithContact,
 );
 
 router.post(
   "/contacts/:contactId/messages",
-  validate(sendContactMessageValidation),
+  validate([contactIdParam, messageBodyValidation]),
   sendMessageToContact,
 );
 
@@ -111,13 +86,13 @@ router.post("/threads", validate(contactIdBodyValidation), getOrCreateThread);
 
 router.get(
   "/threads/:threadId/messages",
-  validate(getMessagesValidation),
+  validate([threadIdParam, ...messageListQueryValidation]),
   getMessages,
 );
 
 router.post(
   "/threads/:threadId/messages",
-  validate(sendMessageValidation),
+  validate([threadIdParam, messageBodyValidation]),
   sendMessage,
 );
 

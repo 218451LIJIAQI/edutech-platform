@@ -31,10 +31,13 @@ import {
 import { useAuthStore } from '@/store/auth-store';
 import { extractErrorMessage } from '@/utils/error-handler';
 import { openProtectedAsset } from '@/utils/protected-assets';
+import { toStorableBackendAssetPath } from '@/utils/runtime';
 import {
+  SUPPORT_ATTACHMENT_ACCEPT,
   buildSupportConversationEntries,
   getSupportAttachmentLabel,
   getSupportConversationPreview,
+  validateSupportAttachmentFile,
 } from '@/utils/support-thread';
 
 /**
@@ -57,15 +60,6 @@ type SupportCategoryOption = {
   readonly value: string;
   readonly label: string;
 };
-
-const MAX_ATTACHMENT_SIZE_BYTES = 10 * 1024 * 1024;
-
-const ACCEPTED_ATTACHMENT_TYPES = [
-  'image/jpeg',
-  'image/png',
-  'image/webp',
-  'application/pdf',
-];
 
 const SUPPORT_CATEGORIES: SupportCategoryOption[] = [
   { value: 'GENERAL', label: 'General Inquiry' },
@@ -116,20 +110,6 @@ const formatTicketTime = (value: string | Date) =>
     hour: '2-digit',
     minute: '2-digit',
   });
-
-const validateAttachment = (file: File) => {
-  if (!ACCEPTED_ATTACHMENT_TYPES.includes(file.type)) {
-    toast.error('Only JPG, PNG, WebP, and PDF files are supported.');
-    return false;
-  }
-
-  if (file.size > MAX_ATTACHMENT_SIZE_BYTES) {
-    toast.error('Attachment must be 10MB or smaller.');
-    return false;
-  }
-
-  return true;
-};
 
 const CustomerSupportChat = ({
   open,
@@ -316,7 +296,9 @@ const CustomerSupportChat = ({
       setUploading: (value: boolean) => void,
       setAttachment: (attachment: PendingAttachment | null) => void
     ) => {
-      if (!validateAttachment(file)) {
+      const validationError = validateSupportAttachmentFile(file);
+      if (validationError) {
+        toast.error(validationError);
         return;
       }
 
@@ -331,7 +313,7 @@ const CustomerSupportChat = ({
 
         setAttachment({
           name: result.filename || file.name,
-          url: result.url,
+          url: toStorableBackendAssetPath(result.url),
         });
 
         toast.success('Attachment uploaded');
@@ -760,27 +742,23 @@ const CustomerSupportChat = ({
                                 {entry.message}
                               </p>
 
-                              {(() => {
-                                const attachment = entry.attachment;
-
-                                return attachment ? (
-                                  <button
-                                    type="button"
-                                    onClick={() => void handleOpenAttachment(attachment)}
-                                    className={`mt-2 inline-flex max-w-full items-center gap-2 rounded-md border px-2.5 py-1.5 text-xs font-medium transition-colors ${
-                                      isCurrentUser
-                                        ? 'border-white/20 bg-white/10 text-white hover:bg-white/15'
-                                        : 'border-primary-200 bg-primary-50 text-primary-700 hover:bg-primary-100'
-                                    }`}
-                                  >
-                                    <Paperclip className="h-3.5 w-3.5 flex-shrink-0" />
-                                    <span className="truncate">
-                                      {getSupportAttachmentLabel(attachment)}
-                                    </span>
-                                    <ExternalLink className="h-3 w-3 flex-shrink-0" />
-                                  </button>
-                                ) : null;
-                              })()}
+                              {entry.attachment ? (
+                                <button
+                                  type="button"
+                                  onClick={() => void handleOpenAttachment(entry.attachment!)}
+                                  className={`mt-2 inline-flex max-w-full items-center gap-2 rounded-md border px-2.5 py-1.5 text-xs font-medium transition-colors ${
+                                    isCurrentUser
+                                      ? 'border-white/20 bg-white/10 text-white hover:bg-white/15'
+                                      : 'border-primary-200 bg-primary-50 text-primary-700 hover:bg-primary-100'
+                                  }`}
+                                >
+                                  <Paperclip className="h-3.5 w-3.5 flex-shrink-0" />
+                                  <span className="truncate">
+                                    {getSupportAttachmentLabel(entry.attachment)}
+                                  </span>
+                                  <ExternalLink className="h-3 w-3 flex-shrink-0" />
+                                </button>
+                              ) : null}
 
                               <p
                                 className={`mt-1 text-xs ${
@@ -820,7 +798,7 @@ const CustomerSupportChat = ({
                         <input
                           ref={messageAttachmentInputRef}
                           type="file"
-                          accept={ACCEPTED_ATTACHMENT_TYPES.join(',')}
+                          accept={SUPPORT_ATTACHMENT_ACCEPT}
                           className="hidden"
                           onChange={(event) => void handleMessageAttachmentChange(event)}
                         />
@@ -1037,7 +1015,7 @@ const CustomerSupportChat = ({
                 <input
                   ref={newChatAttachmentInputRef}
                   type="file"
-                  accept={ACCEPTED_ATTACHMENT_TYPES.join(',')}
+                  accept={SUPPORT_ATTACHMENT_ACCEPT}
                   className="hidden"
                   onChange={(event) => void handleNewChatAttachmentChange(event)}
                 />

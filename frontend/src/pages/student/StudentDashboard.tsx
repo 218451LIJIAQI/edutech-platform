@@ -9,6 +9,7 @@ import { useAuthStore } from '@/store/auth-store';
 import { usePageTitle, useSmoothLoading } from '@/hooks';
 import { StatsSkeleton } from '@/components/common';
 import { extractErrorMessage } from '@/utils/error-handler';
+import { getPreferredCourseEnrollments } from '@/utils/enrollment';
 
 /**
  * Student Dashboard
@@ -23,17 +24,21 @@ const StudentDashboard = () => {
   // Smooth loading transition
   const { showSkeleton, contentClass } = useSmoothLoading(isLoading);
 
+  const preferredEnrollments = useMemo(
+    () => getPreferredCourseEnrollments(enrollments),
+    [enrollments]
+  );
+
   const stats = useMemo(() => {
-    const total = enrollments.length;
+    const total = preferredEnrollments.length;
     const avgProgress =
       total > 0
-        ? enrollments.reduce((sum: number, e: Enrollment) => sum + e.progress, 0) / total
+        ? preferredEnrollments.reduce((sum: number, e: Enrollment) => sum + e.progress, 0) / total
         : 0;
-    const completed = enrollments.filter((e: Enrollment) => e.progress === 100).length;
+    const completed = preferredEnrollments.filter((e: Enrollment) => e.progress === 100).length;
 
     // Calculate estimated hours based on completed lessons
-    const estimatedHours = enrollments.reduce((sum: number, e: Enrollment) => {
-      // Estimate 1 hour per completed lesson
+    const estimatedHours = preferredEnrollments.reduce((sum: number, e: Enrollment) => {
       return sum + e.completedLessons;
     }, 0);
 
@@ -43,7 +48,7 @@ const StudentDashboard = () => {
       completedCourses: completed,
       hoursLearned: estimatedHours,
     };
-  }, [enrollments]);
+  }, [preferredEnrollments]);
 
   const fetchDashboardData = useCallback(async () => {
     setIsLoading(true);
@@ -216,16 +221,16 @@ const StudentDashboard = () => {
             </Link>
           </div>
 
-          {enrollments.length > 0 ? (
+          {preferredEnrollments.length > 0 ? (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {enrollments.slice(0, 3).map((enrollment) => {
+              {preferredEnrollments.slice(0, 3).map((enrollment) => {
                 const course = enrollment.package?.course;
                 if (!course) return null;
 
                 return (
                   <Link
                     key={enrollment.id}
-                    to={`/courses/${course.id}`}
+                    to={`/courses/${course.id}/learn`}
                     className="group bg-white/95 backdrop-blur-sm rounded-2xl p-6 shadow-card hover:shadow-card-hover transition-all duration-300 hover:-translate-y-1 border border-gray-100/60 flex flex-col"
                   >
                     {/* Course Info */}

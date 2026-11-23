@@ -6,6 +6,7 @@ import teacherService from '@/services/teacher.service';
 import uploadService from '@/services/upload.service';
 import type { TeacherProfile } from '@/types';
 import { extractErrorMessage } from '@/utils/error-handler';
+import { resolveBackendAssetUrl, toStorableBackendAssetPath } from '@/utils/runtime';
 
 interface TeacherProfileCompletionFormProps {
   onSuccess: (profile: TeacherProfile) => void;
@@ -217,7 +218,7 @@ const TeacherProfileCompletionForm = ({
 
       setFormData((prev) => ({
         ...prev,
-        profilePhoto: uploadUrl,
+        profilePhoto: toStorableBackendAssetPath(uploadUrl),
       }));
     } catch (error) {
       onError(extractErrorMessage(error, 'Failed to upload profile photo'));
@@ -276,7 +277,10 @@ const TeacherProfileCompletionForm = ({
 
       setFormData((prev) => ({
         ...prev,
-        certificatePhotos: [...prev.certificatePhotos, ...uploadedUrls],
+        certificatePhotos: [
+          ...prev.certificatePhotos,
+          ...uploadedUrls.map(toStorableBackendAssetPath).filter(Boolean),
+        ],
       }));
     } catch (error) {
       onError(extractErrorMessage(error, 'Failed to upload certificate photos'));
@@ -317,8 +321,10 @@ const TeacherProfileCompletionForm = ({
     teachingStyle: formData.teachingStyle.trim(),
     languages: formData.languages.map((language) => language.trim()).filter(Boolean),
     yearsOfExperience: formData.yearsOfExperience,
-    profilePhoto: formData.profilePhoto,
-    certificatePhotos: formData.certificatePhotos,
+    profilePhoto: toStorableBackendAssetPath(formData.profilePhoto),
+    certificatePhotos: formData.certificatePhotos
+      .map(toStorableBackendAssetPath)
+      .filter(Boolean),
   });
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
@@ -361,6 +367,8 @@ const TeacherProfileCompletionForm = ({
       setIsSubmitting(false);
     }
   };
+
+  const profilePhotoPreviewUrl = resolveBackendAssetUrl(formData.profilePhoto);
 
   return (
     <form onSubmit={handleSubmit} className="space-y-8" noValidate>
@@ -642,10 +650,10 @@ const TeacherProfileCompletionForm = ({
         </h3>
 
         <div className="space-y-4">
-          {formData.profilePhoto && (
+          {profilePhotoPreviewUrl && (
             <div className="relative inline-block">
               <img
-                src={formData.profilePhoto}
+                src={profilePhotoPreviewUrl}
                 alt="Teacher profile preview"
                 className="h-32 w-32 rounded-lg object-cover"
               />

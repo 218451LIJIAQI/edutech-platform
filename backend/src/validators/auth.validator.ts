@@ -2,15 +2,7 @@ import { body } from "express-validator";
 import { UserRole } from "@prisma/client";
 import { validateUrlOrUploadPathForFolders } from "../utils/url-or-path";
 import { hasRefreshTokenCookieHeader } from "../utils/auth-cookie";
-
-/**
- * Validation rules for authentication endpoints.
- *
- * Security notes:
- * - Public registration only allows STUDENT and TEACHER roles.
- * - ADMIN accounts should be created through a protected admin process, not public registration.
- * - Passwords are limited to a reasonable maximum length to reduce abuse and hashing overhead.
- */
+import { canonicalEmailBodyField } from "./common.validator";
 
 // Password must contain at least one lowercase letter, one uppercase letter, and one digit.
 const passwordComplexity = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).+$/;
@@ -20,12 +12,7 @@ const PASSWORD_MAX_LENGTH = 72;
 
 const ALLOWED_REGISTER_ROLES = [UserRole.STUDENT, UserRole.TEACHER];
 
-// Error message constants
 const ERROR_MESSAGES = {
-  EMAIL_STRING: "Email must be a string",
-  EMAIL_REQUIRED: "Email is required",
-  INVALID_EMAIL: "Please provide a valid email address",
-
   PASSWORD_STRING: "Password must be a string",
   PASSWORD_REQUIRED: "Password is required",
   PASSWORD_MIN_LENGTH: `Password must be at least ${PASSWORD_MIN_LENGTH} characters long`,
@@ -69,78 +56,76 @@ const ERROR_MESSAGES = {
   RESET_CODE_FORMAT: "Verification code must be exactly 6 digits",
 } as const;
 
-const emailValidation = body("email")
-  .isString()
-  .withMessage(ERROR_MESSAGES.EMAIL_STRING)
-  .bail()
-  .trim()
-  .notEmpty()
-  .withMessage(ERROR_MESSAGES.EMAIL_REQUIRED)
-  .bail()
-  .isEmail()
-  .withMessage(ERROR_MESSAGES.INVALID_EMAIL)
-  .bail()
-  .normalizeEmail();
+const buildStrongPasswordField = (
+  field: "password" | "newPassword",
+  messages: {
+    notString: string;
+    required: string;
+    minLength: string;
+    maxLength: string;
+  },
+) =>
+  body(field)
+    .isString()
+    .withMessage(messages.notString)
+    .bail()
+    .notEmpty()
+    .withMessage(messages.required)
+    .bail()
+    .isLength({ min: PASSWORD_MIN_LENGTH })
+    .withMessage(messages.minLength)
+    .bail()
+    .isLength({ max: PASSWORD_MAX_LENGTH })
+    .withMessage(messages.maxLength)
+    .bail()
+    .matches(passwordComplexity)
+    .withMessage(ERROR_MESSAGES.PASSWORD_COMPLEXITY);
 
-const passwordValidation = body("password")
-  .isString()
-  .withMessage(ERROR_MESSAGES.PASSWORD_STRING)
-  .bail()
-  .notEmpty()
-  .withMessage(ERROR_MESSAGES.PASSWORD_REQUIRED)
-  .bail()
-  .isLength({ min: PASSWORD_MIN_LENGTH })
-  .withMessage(ERROR_MESSAGES.PASSWORD_MIN_LENGTH)
-  .bail()
-  .isLength({ max: PASSWORD_MAX_LENGTH })
-  .withMessage(ERROR_MESSAGES.PASSWORD_MAX_LENGTH)
-  .bail()
-  .matches(passwordComplexity)
-  .withMessage(ERROR_MESSAGES.PASSWORD_COMPLEXITY);
+const passwordValidation = buildStrongPasswordField("password", {
+  notString: ERROR_MESSAGES.PASSWORD_STRING,
+  required: ERROR_MESSAGES.PASSWORD_REQUIRED,
+  minLength: ERROR_MESSAGES.PASSWORD_MIN_LENGTH,
+  maxLength: ERROR_MESSAGES.PASSWORD_MAX_LENGTH,
+});
 
-const newPasswordValidation = body("newPassword")
-  .isString()
-  .withMessage(ERROR_MESSAGES.NEW_PASSWORD_STRING)
-  .bail()
-  .notEmpty()
-  .withMessage(ERROR_MESSAGES.NEW_PASSWORD_REQUIRED)
-  .bail()
-  .isLength({ min: PASSWORD_MIN_LENGTH })
-  .withMessage(ERROR_MESSAGES.NEW_PASSWORD_MIN_LENGTH)
-  .bail()
-  .isLength({ max: PASSWORD_MAX_LENGTH })
-  .withMessage(ERROR_MESSAGES.NEW_PASSWORD_MAX_LENGTH)
-  .bail()
-  .matches(passwordComplexity)
-  .withMessage(ERROR_MESSAGES.PASSWORD_COMPLEXITY);
+const newPasswordValidation = buildStrongPasswordField("newPassword", {
+  notString: ERROR_MESSAGES.NEW_PASSWORD_STRING,
+  required: ERROR_MESSAGES.NEW_PASSWORD_REQUIRED,
+  minLength: ERROR_MESSAGES.NEW_PASSWORD_MIN_LENGTH,
+  maxLength: ERROR_MESSAGES.NEW_PASSWORD_MAX_LENGTH,
+});
+
+const buildNameValidation = (
+  field: "firstName" | "lastName",
+  messages: { notString: string; required: string; length: string },
+  optional = false,
+) => {
+  const base = optional ? body(field).optional({ nullable: true }) : body(field);
+  return base
+    .isString()
+    .withMessage(messages.notString)
+    .bail()
+    .trim()
+    .notEmpty()
+    .withMessage(messages.required)
+    .bail()
+    .isLength({ min: 2, max: 50 })
+    .withMessage(messages.length);
+};
 
 export const registerValidation = [
-  emailValidation,
-
+  canonicalEmailBodyField("email"),
   passwordValidation,
-
-  body("firstName")
-    .isString()
-    .withMessage(ERROR_MESSAGES.FIRST_NAME_STRING)
-    .bail()
-    .trim()
-    .notEmpty()
-    .withMessage(ERROR_MESSAGES.FIRST_NAME_REQUIRED)
-    .bail()
-    .isLength({ min: 2, max: 50 })
-    .withMessage(ERROR_MESSAGES.FIRST_NAME_LENGTH),
-
-  body("lastName")
-    .isString()
-    .withMessage(ERROR_MESSAGES.LAST_NAME_STRING)
-    .bail()
-    .trim()
-    .notEmpty()
-    .withMessage(ERROR_MESSAGES.LAST_NAME_REQUIRED)
-    .bail()
-    .isLength({ min: 2, max: 50 })
-    .withMessage(ERROR_MESSAGES.LAST_NAME_LENGTH),
-
+  buildNameValidation("firstName", {
+    notString: ERROR_MESSAGES.FIRST_NAME_STRING,
+    required: ERROR_MESSAGES.FIRST_NAME_REQUIRED,
+    length: ERROR_MESSAGES.FIRST_NAME_LENGTH,
+  }),
+  buildNameValidation("lastName", {
+    notString: ERROR_MESSAGES.LAST_NAME_STRING,
+    required: ERROR_MESSAGES.LAST_NAME_REQUIRED,
+    length: ERROR_MESSAGES.LAST_NAME_LENGTH,
+  }),
   body("role")
     .optional({ nullable: true, checkFalsy: true })
     .isString()
@@ -152,8 +137,7 @@ export const registerValidation = [
 ];
 
 export const loginValidation = [
-  emailValidation,
-
+  canonicalEmailBodyField("email"),
   body("password")
     .isString()
     .withMessage(ERROR_MESSAGES.PASSWORD_STRING)
@@ -174,11 +158,9 @@ export const refreshTokenValidation = [
 
   body().custom((_value, { req }) => {
     const bodyRefreshToken = req.body?.refreshToken;
-
     const hasBodyRefreshToken =
       typeof bodyRefreshToken === "string" &&
       bodyRefreshToken.trim().length > 0;
-
     const hasCookieRefreshToken = hasRefreshTokenCookieHeader(
       req?.headers?.cookie,
     );
@@ -192,30 +174,24 @@ export const refreshTokenValidation = [
 ];
 
 export const updateProfileValidation = [
-  body("firstName")
-    .optional({ nullable: true })
-    .isString()
-    .withMessage(ERROR_MESSAGES.FIRST_NAME_STRING)
-    .bail()
-    .trim()
-    .notEmpty()
-    .withMessage(ERROR_MESSAGES.FIRST_NAME_REQUIRED)
-    .bail()
-    .isLength({ min: 2, max: 50 })
-    .withMessage(ERROR_MESSAGES.FIRST_NAME_LENGTH),
-
-  body("lastName")
-    .optional({ nullable: true })
-    .isString()
-    .withMessage(ERROR_MESSAGES.LAST_NAME_STRING)
-    .bail()
-    .trim()
-    .notEmpty()
-    .withMessage(ERROR_MESSAGES.LAST_NAME_REQUIRED)
-    .bail()
-    .isLength({ min: 2, max: 50 })
-    .withMessage(ERROR_MESSAGES.LAST_NAME_LENGTH),
-
+  buildNameValidation(
+    "firstName",
+    {
+      notString: ERROR_MESSAGES.FIRST_NAME_STRING,
+      required: ERROR_MESSAGES.FIRST_NAME_REQUIRED,
+      length: ERROR_MESSAGES.FIRST_NAME_LENGTH,
+    },
+    true,
+  ),
+  buildNameValidation(
+    "lastName",
+    {
+      notString: ERROR_MESSAGES.LAST_NAME_STRING,
+      required: ERROR_MESSAGES.LAST_NAME_REQUIRED,
+      length: ERROR_MESSAGES.LAST_NAME_LENGTH,
+    },
+    true,
+  ),
   body("avatar")
     .optional({ nullable: true, checkFalsy: true })
     .isString()
@@ -236,21 +212,20 @@ export const changePasswordValidation = [
     .withMessage(ERROR_MESSAGES.CURRENT_PASSWORD_REQUIRED),
 
   newPasswordValidation.custom((value, { req }) => {
-    const currentPassword = req.body.currentPassword;
-
-    if (typeof currentPassword === "string" && value === currentPassword) {
+    if (
+      typeof req.body.currentPassword === "string" &&
+      value === req.body.currentPassword
+    ) {
       throw new Error(ERROR_MESSAGES.NEW_PASSWORD_DIFFERENT);
     }
-
     return true;
   }),
 ];
 
-export const forgotPasswordValidation = [emailValidation];
+export const forgotPasswordValidation = [canonicalEmailBodyField("email")];
 
 export const verifyPasswordResetCodeValidation = [
-  emailValidation,
-
+  canonicalEmailBodyField("email"),
   body("code")
     .isString()
     .withMessage(ERROR_MESSAGES.RESET_CODE_STRING)
@@ -271,6 +246,5 @@ export const resetPasswordValidation = [
     .trim()
     .notEmpty()
     .withMessage(ERROR_MESSAGES.RESET_TOKEN_REQUIRED),
-
   newPasswordValidation,
 ];

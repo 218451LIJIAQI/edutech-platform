@@ -234,7 +234,7 @@ export default {
     reply: '回复',
     writeComment: '写下你的评论...',
     noComments: '暂无评论',
-    beFirFirst: '成为第一个评论的人！',
+    beFirst: '成为第一个评论的人！',
   },
 
   // Messages

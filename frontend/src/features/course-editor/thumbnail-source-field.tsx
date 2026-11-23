@@ -1,33 +1,36 @@
 import { useId } from 'react';
+import { Trash2 } from 'lucide-react';
 import FileUpload from '@/components/common/FileUpload';
+import { resolveBackendAssetUrl } from '@/utils/runtime';
 import { normalizeSafeHttpUrl } from '@/utils/safe-url';
 import type { MediaSourceType } from './types';
 
 interface ThumbnailSourceFieldProps {
   sourceType: MediaSourceType;
   link: string;
+  existingUploadUrl?: string;
   previewError: boolean;
   onSourceTypeChange: (sourceType: MediaSourceType) => void;
   onLinkChange: (value: string) => void;
+  onClearExistingUpload?: () => void;
   onPreviewErrorChange: (hasError: boolean) => void;
   onFileSelect: (file: File | null) => void;
 }
 
-const IMAGE_ACCEPT = 'image/png,image/jpeg,image/jpg,image/webp,image/gif';
+const IMAGE_ACCEPT = 'image/png,image/jpeg,image/jpg,image/webp';
 const MAX_IMAGE_SIZE_MB = 5;
 
-const getSafePreviewUrl = (value: string): string => {
-  const safeUrl = normalizeSafeHttpUrl(value.trim());
-
-  return safeUrl || '';
-};
+const getSafePreviewUrl = (value: string): string =>
+  normalizeSafeHttpUrl(value.trim()) || '';
 
 export default function ThumbnailSourceField({
   sourceType,
   link,
+  existingUploadUrl,
   previewError,
   onSourceTypeChange,
   onLinkChange,
+  onClearExistingUpload,
   onPreviewErrorChange,
   onFileSelect,
 }: ThumbnailSourceFieldProps) {
@@ -38,6 +41,9 @@ export default function ThumbnailSourceField({
   const safePreviewUrl = getSafePreviewUrl(link);
   const hasLinkValue = link.trim().length > 0;
   const hasPreview = Boolean(safePreviewUrl) && !previewError;
+  const resolvedExistingUploadUrl = existingUploadUrl
+    ? resolveBackendAssetUrl(existingUploadUrl)
+    : '';
 
   return (
     <fieldset>
@@ -89,6 +95,29 @@ export default function ThumbnailSourceField({
 
       {sourceType === 'upload' ? (
         <>
+          {resolvedExistingUploadUrl && (
+            <div className="mb-3 flex items-center gap-4 rounded-lg border border-gray-200 bg-gray-50 p-3">
+              <img
+                src={resolvedExistingUploadUrl}
+                alt="Current course thumbnail"
+                className="h-16 w-28 rounded object-cover"
+              />
+              <div className="flex-1 text-xs text-gray-600">
+                Current uploaded thumbnail will be kept unless you upload a replacement or remove it.
+              </div>
+              {onClearExistingUpload && (
+                <button
+                  type="button"
+                  onClick={onClearExistingUpload}
+                  className="inline-flex items-center gap-1 rounded-md px-2.5 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                  Remove
+                </button>
+              )}
+            </div>
+          )}
+
           <FileUpload
             label=""
             accept={IMAGE_ACCEPT}
@@ -97,7 +126,7 @@ export default function ThumbnailSourceField({
             preview
           />
           <p className="mt-2 text-xs text-gray-500">
-            Recommended size: 1280 × 720 px. Supported formats: PNG, JPG, JPEG, WebP, or GIF.
+            Recommended size: 1280 × 720 px. Supported formats: PNG, JPG, JPEG, or WebP.
             Maximum file size: {MAX_IMAGE_SIZE_MB}MB.
           </p>
         </>
@@ -125,8 +154,7 @@ export default function ThumbnailSourceField({
             aria-describedby={`${linkInputId}-help`}
           />
           <p id={`${linkInputId}-help`} className="mt-1 text-xs text-gray-500">
-            Paste a safe HTTP or HTTPS image URL. Supported formats include JPEG, PNG, WebP,
-            and GIF.
+            Paste a safe HTTP or HTTPS image URL (leave blank to clear when editing).
           </p>
 
           {hasLinkValue ? (

@@ -1,4 +1,4 @@
-﻿import type { ChangeEvent, FormEvent } from 'react';
+import type { ChangeEvent, FormEvent } from 'react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Upload } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -15,7 +15,7 @@ import {
   UserRole,
 } from '@/types';
 import { extractErrorMessage } from '@/utils/error-handler';
-import { toStorableBackendAssetPath } from '@/utils/runtime';
+import { resolveBackendAssetUrl, toStorableBackendAssetPath } from '@/utils/runtime';
 
 interface AdFormState {
   name: string;
@@ -158,7 +158,7 @@ const getSafeImagePreviewUrl = (value: string) => {
 
   if (storableImageUrl.startsWith('/')) {
     return storableImageUrl.startsWith(ALLOWED_INTERNAL_AD_IMAGE_PREFIX)
-      ? storableImageUrl
+      ? resolveBackendAssetUrl(storableImageUrl)
       : '';
   }
 
@@ -357,7 +357,7 @@ export default function AdEditorModal({
     try {
       validateImageFile(file);
       const imageUrl = await uploadService.uploadThumbnail(file);
-      updateForm('imageUrl', imageUrl);
+      updateForm('imageUrl', toStorableBackendAssetPath(imageUrl));
       toast.success('Ad image uploaded');
     } catch (error) {
       toast.error(extractErrorMessage(error, 'Failed to upload image'));

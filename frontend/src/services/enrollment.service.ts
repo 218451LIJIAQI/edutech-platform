@@ -2,29 +2,19 @@ import api from './api';
 import clientLogger from '@/utils/logger';
 import { Enrollment, ApiResponse } from '@/types';
 import { extractData, extractDataOrDefault } from './response-utils';
-
-/**
- * Enrollment Service
- * Handles all enrollment-related API calls
- */
+import { normalizeEnrollmentAssets } from '@/utils/asset-normalizers';
 
 const enrollmentService = {
-  /**
-   * Get user's enrolled courses
-   */
   getMyCourses: async (): Promise<Enrollment[]> => {
     try {
       const response = await api.get<ApiResponse<Enrollment[]>>('/enrollments/my-courses');
-      return extractDataOrDefault(response, []);
+      return extractDataOrDefault(response, []).map(normalizeEnrollmentAssets);
     } catch (error) {
       clientLogger.error('Failed to fetch enrolled courses:', error);
       throw error;
     }
   },
 
-  /**
-   * Update enrollment progress
-   */
   updateProgress: async (
     id: string,
     completedLessons: number,
@@ -47,16 +37,13 @@ const enrollmentService = {
           progress,
         }
       );
-      return extractData(response);
+      return normalizeEnrollmentAssets(extractData(response));
     } catch (error) {
       clientLogger.error(`Failed to update progress for enrollment ${id}:`, error);
       throw error;
     }
   },
 
-  /**
-   * Check if user has access to a course
-   */
   checkAccess: async (courseId: string): Promise<boolean> => {
     try {
       if (!courseId || courseId.trim() === '') {
@@ -72,9 +59,6 @@ const enrollmentService = {
     }
   },
 
-  /**
-   * Get course students (Teacher only)
-   */
   getCourseStudents: async (courseId: string): Promise<Enrollment[]> => {
     try {
       if (!courseId || courseId.trim() === '') {
@@ -83,16 +67,13 @@ const enrollmentService = {
       const response = await api.get<ApiResponse<Enrollment[]>>(
         `/enrollments/course/${courseId}/students`
       );
-      return extractDataOrDefault(response, []);
+      return extractDataOrDefault(response, []).map(normalizeEnrollmentAssets);
     } catch (error) {
       clientLogger.error(`Failed to fetch students for course ${courseId}:`, error);
       throw error;
     }
   },
 
-  /**
-   * Get course statistics (Teacher only)
-   */
   getCourseStats: async (
     courseId: string
   ): Promise<{

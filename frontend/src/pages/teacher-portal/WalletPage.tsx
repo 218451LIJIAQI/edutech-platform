@@ -1,4 +1,4 @@
-﻿import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import clientLogger from '@/utils/logger';
 import { Wallet as WalletIcon, DollarSign, ArrowDownToLine, ArrowUpRight, Settings, Plus, CheckCircle, XCircle, CreditCard, Building2, Trash2 } from 'lucide-react';
 import walletService from '@/services/wallet.service';

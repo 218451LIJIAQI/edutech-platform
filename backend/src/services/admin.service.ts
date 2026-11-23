@@ -53,7 +53,10 @@ import {
   normalizeOptionalUrlOrPath,
 } from "../utils/url-or-path";
 import { shouldInvalidateSessions } from "../utils/auth-session";
-import { sanitizeUserPlainText } from "../utils/sanitize-user-content";
+import {
+  normalizeCanonicalEmail,
+  sanitizeUserPlainText,
+} from "../utils/sanitize-user-content";
 
 const AVATAR_URL_ERROR =
   "Avatar must be an external URL or use the /uploads/avatars/ folder";
@@ -114,11 +117,6 @@ type UserRecordWithPassword = {
   password?: unknown;
 };
 
-/**
- * Admin Service
- * Handles administrative functions for users, content, verification, reports,
- * financials, analytics, commissions, settlements, and audit logs.
- */
 class AdminService {
   private withoutPassword<T extends UserRecordWithPassword>(
     user: T,
@@ -263,16 +261,10 @@ class AdminService {
     return this.withoutPassword(updatedUser);
   }
 
-  /**
-   * Get platform statistics.
-   */
   async getPlatformStats() {
     return getAdminPlatformStats();
   }
 
-  /**
-   * Get all users with filters and pagination.
-   */
   async getAllUsers(filters: UserFilters = {}) {
     const {
       role,
@@ -303,7 +295,7 @@ class AdminService {
 
     const orderBy = buildAdminUserOrderBy(sortBy, sortOrder);
 
-    const [users, total] = await Promise.all([
+    const [users, total, active, teachers, students] = await Promise.all([
       prisma.user.findMany({
         where,
         skip: pagination.skip,
@@ -312,27 +304,9 @@ class AdminService {
         orderBy,
       }),
       prisma.user.count({ where }),
-    ]);
-
-    const [active, teachers, students] = await Promise.all([
-      prisma.user.count({
-        where: {
-          ...where,
-          isActive: true,
-        },
-      }),
-      prisma.user.count({
-        where: {
-          ...where,
-          role: UserRole.TEACHER,
-        },
-      }),
-      prisma.user.count({
-        where: {
-          ...where,
-          role: UserRole.STUDENT,
-        },
-      }),
+      prisma.user.count({ where: { ...where, isActive: true } }),
+      prisma.user.count({ where: { ...where, role: UserRole.TEACHER } }),
+      prisma.user.count({ where: { ...where, role: UserRole.STUDENT } }),
     ]);
 
     return {
@@ -347,9 +321,6 @@ class AdminService {
     };
   }
 
-  /**
-   * Get user by ID with detailed information.
-   */
   async getUserById(userId: string) {
     const user = await prisma.user.findUnique({
       where: { id: userId },
@@ -398,9 +369,6 @@ class AdminService {
     return this.withoutPassword(user);
   }
 
-  /**
-   * Activate or deactivate a user account.
-   */
   async updateUserStatus(userId: string, isActive: boolean, adminId?: string) {
     const user = await requireUser(userId);
     ensureNotAdminUser(user, "Cannot modify admin user status");
@@ -436,15 +404,6 @@ class AdminService {
     return this.withoutPassword(updatedUser);
   }
 
-  /**
-   * Delete user safely.
-   *
-   * Default behavior is soft delete/deactivation. This protects financial,
-   * report, support, wallet, and audit records from accidental loss.
-   *
-   * If force=true is passed, permanent deletion is allowed only when the user
-   * has no protected records and no blocking database relations.
-   */
   async deleteUser(
     userId: string,
     options?: { force?: boolean; adminId?: string },
@@ -478,9 +437,6 @@ class AdminService {
     return { deleted: true };
   }
 
-  /**
-   * Get all courses with filters.
-   */
   async getAllCourses(filters: {
     isPublished?: boolean;
     category?: string;
@@ -491,23 +447,14 @@ class AdminService {
     return getAllAdminCourses(filters);
   }
 
-  /**
-   * Update course publish status.
-   */
   async updateCourseStatus(courseId: string, isPublished: boolean) {
     return updateAdminCourseStatus(courseId, isPublished);
   }
 
-  /**
-   * Delete course.
-   */
   async deleteCourse(courseId: string) {
     return deleteAdminCourse(courseId);
   }
 
-  /**
-   * Get all teacher verification requests.
-   */
   async getAllVerifications(filters: {
     status?: VerificationStatus;
     page?: number;
@@ -516,9 +463,6 @@ class AdminService {
     return getAllAdminVerifications(filters);
   }
 
-  /**
-   * Review teacher verification.
-   */
   async reviewVerification(
     verificationId: string,
     adminId: string,
@@ -533,9 +477,6 @@ class AdminService {
     });
   }
 
-  /**
-   * Get all reports.
-   */
   async getAllReports(filters: {
     status?: ReportStatus;
     type?: ReportType;
@@ -545,9 +486,6 @@ class AdminService {
     return getAllAdminReports(filters);
   }
 
-  /**
-   * Update report status and resolution.
-   */
   async updateReportStatus(
     reportId: string,
     status: ReportStatus,
@@ -556,16 +494,10 @@ class AdminService {
     return updateAdminReportStatus(reportId, status, resolution);
   }
 
-  /**
-   * Get financial statistics.
-   */
   async getFinancials(startDate?: Date, endDate?: Date) {
     return getAdminFinancials(startDate, endDate);
   }
 
-  /**
-   * Create a new user.
-   */
   async createUser(data: {
     email: string;
     password: string;
@@ -577,7 +509,6 @@ class AdminService {
     department?: string;
     createdBy: string;
   }) {
-    const normalizedEmail = data.email.trim().toLowerCase();
     const firstName = normalizeInlineAdminText(data.firstName);
     const lastName = normalizeInlineAdminText(data.lastName);
 
@@ -586,7 +517,7 @@ class AdminService {
     }
 
     ensureAdminManageableRole(data.role);
-    await ensureEmailAvailable(normalizedEmail);
+    const normalizedEmail = await ensureEmailAvailable(data.email);
     ensureStrongPassword(data.password);
 
     const hashedPassword = await bcrypt.hash(data.password, 12);
@@ -630,9 +561,6 @@ class AdminService {
     });
   }
 
-  /**
-   * Update user information.
-   */
   async updateUser(
     userId: string,
     data: {
@@ -664,11 +592,14 @@ class AdminService {
       ensureAdminManageableRole(data.role);
     }
 
-    const nextEmail = data.email?.trim().toLowerCase();
+    const nextEmail =
+      data.email === undefined
+        ? undefined
+        : normalizeCanonicalEmail(data.email);
     const nextRole = data.role ?? user.role;
 
-    if (nextEmail && nextEmail !== user.email) {
-      await ensureEmailAvailable(nextEmail);
+    if (nextEmail !== undefined) {
+      await ensureEmailAvailable(nextEmail, userId);
     }
 
     const nextFirstName =
@@ -784,9 +715,6 @@ class AdminService {
     });
   }
 
-  /**
-   * Reset user password and invalidate existing sessions.
-   */
   async resetUserPassword(
     userId: string,
     newPassword: string,
@@ -842,9 +770,6 @@ class AdminService {
     });
   }
 
-  /**
-   * Lock or unlock a user account.
-   */
   async lockUserAccount(
     userId: string,
     lock: boolean,
@@ -900,12 +825,6 @@ class AdminService {
     return this.withoutPassword(updated);
   }
 
-  /**
-   * Batch deactivate users safely.
-   *
-   * This intentionally performs soft deletion instead of hard deletion to keep
-   * financial, report, support, wallet, and audit records intact.
-   */
   async batchDeleteUsers(userIds: string[], adminId?: string) {
     const normalizedIds = this.normalizeUserIds(userIds);
     const users = await this.assertUsersExist(normalizedIds);
@@ -959,9 +878,6 @@ class AdminService {
     return { affected: normalizedIds.length };
   }
 
-  /**
-   * Batch activate or deactivate users.
-   */
   async batchUpdateUserStatus(
     userIds: string[],
     isActive: boolean,
@@ -1000,9 +916,6 @@ class AdminService {
     return { affected: normalizedIds.length };
   }
 
-  /**
-   * Get user audit logs.
-   */
   async getUserAuditLogs(filters: {
     userId?: string;
     adminId?: string;
@@ -1034,16 +947,10 @@ class AdminService {
     };
   }
 
-  /**
-   * Get recent platform activities.
-   */
   async getRecentActivities(params?: { limit?: number; page?: number }) {
     return getAdminRecentActivities(params);
   }
 
-  /**
-   * List teacher commissions with pagination and search.
-   */
   async getTeacherCommissions(filters: {
     search?: string;
     page?: number;
@@ -1052,9 +959,6 @@ class AdminService {
     return getAdminTeacherCommissions(filters);
   }
 
-  /**
-   * Update a teacher's commission rate. Pass null to reset to platform default.
-   */
   async updateTeacherCommission(
     userId: string,
     adminId: string,
@@ -1063,9 +967,6 @@ class AdminService {
     return updateAdminTeacherCommission(userId, adminId, commissionRate);
   }
 
-  /**
-   * Get settlements aggregated by teacher within date range.
-   */
   async getSettlements(params?: {
     startDate?: Date;
     endDate?: Date;
@@ -1075,9 +976,6 @@ class AdminService {
     return getAdminSettlements(params);
   }
 
-  /**
-   * Get invoices in date range with pagination.
-   */
   async getInvoices(params?: {
     startDate?: Date;
     endDate?: Date;
@@ -1088,9 +986,6 @@ class AdminService {
     return getAdminInvoices(params);
   }
 
-  /**
-   * Get revenue analytics data for charts.
-   */
   async getRevenueAnalytics(params?: {
     startDate?: Date;
     endDate?: Date;

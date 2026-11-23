@@ -43,7 +43,6 @@ const MessagesPage = () => {
   const query = useQuery();
 
   const [contacts, setContacts] = useState<Contact[]>([]);
-  const [filtered, setFiltered] = useState<Contact[]>([]);
   const [searchText, setSearchText] = useState('');
   const [activeContact, setActiveContact] = useState<Contact | null>(null);
   const [thread, setThread] = useState<Thread | null>(null);
@@ -82,26 +81,13 @@ const MessagesPage = () => {
     });
   }, []);
 
-  const refreshContactUnreadCount = useCallback(async (contactId: string) => {
-    try {
-      const unreadCount = await messageService.getContactUnreadCount(contactId);
-      if (!isMountedRef.current) {
-        return;
-      }
-      setContacts((prev) =>
-        prev.map((c) =>
-          c.id === contactId ? { ...c, unreadCount } : c
-        )
-      );
-      setFiltered((prev) =>
-        prev.map((c) =>
-          c.id === contactId ? { ...c, unreadCount } : c
-        )
-      );
-    } catch (error) {
-      clientLogger.error(`Failed to refresh unread count for ${contactId}`, error);
+  const filteredContacts = useMemo(() => {
+    const q = searchText.trim().toLowerCase();
+    if (!q) {
+      return contacts;
     }
-  }, []);
+    return contacts.filter((c) => `${c.firstName} ${c.lastName}`.toLowerCase().includes(q));
+  }, [contacts, searchText]);
 
   const openConversation = useCallback(async (contact: Contact) => {
     const requestId = conversationRequestRef.current + 1;
@@ -124,21 +110,19 @@ const MessagesPage = () => {
       setThread(t);
       setMessages(data.items);
 
-      // Mark messages as read
+      // Mark messages as read and clear the contact badge locally without an extra HTTP round-trip
       if (t?.id) {
         await messageService.markMessagesAsRead(t.id);
         if (!isMountedRef.current || requestId !== conversationRequestRef.current) {
           return;
         }
 
-        // Refresh the contact's unread count from server
-        await refreshContactUnreadCount(contact.id);
-
-        // Notify global listeners (e.g., Navbar) to refresh unread badge immediately
+        setContacts((prev) =>
+          prev.map((c) => (c.id === contact.id ? { ...c, unreadCount: 0 } : c))
+        );
         window.dispatchEvent(new CustomEvent('messages:unread-updated'));
       }
 
-      // scroll to bottom
       scheduleScrollToBottom();
     } catch (error) {
       if (isMountedRef.current && requestId === conversationRequestRef.current) {
@@ -150,9 +134,9 @@ const MessagesPage = () => {
         setLoadingThread(false);
       }
     }
-  }, [refreshContactUnreadCount, scheduleScrollToBottom]);
+  }, [scheduleScrollToBottom]);
 
-  // Load contacts
+  // Load contacts (backend GET /messages/contacts already includes batched unreadCount per contact)
   useEffect(() => {
     let isActive = true;
 
@@ -164,36 +148,21 @@ const MessagesPage = () => {
         // Ensure admin pinned at top for students and teachers
         if (user?.role === UserRole.STUDENT || user?.role === UserRole.TEACHER) {
           const adminContactIndex = list.findIndex((c) => c.role === 'ADMIN');
-          if (adminContactIndex > -1) {
-            const adminContact = list.splice(adminContactIndex, 1)[0];
+          if (adminContactIndex > 0) {
+            const [adminContact] = list.splice(adminContactIndex, 1);
             list = [adminContact, ...list];
           }
         }
-
-        // Load unread counts for each contact
-        const listWithUnread = await Promise.all(
-          list.map(async (contact) => {
-            try {
-              const unreadCount = await messageService.getContactUnreadCount(contact.id);
-              return { ...contact, unreadCount };
-            } catch (e) {
-              clientLogger.error(`Failed to load unread count for ${contact.id}`, e);
-              return contact;
-            }
-          })
-        );
 
         if (!isActive) {
           return;
         }
 
-        setContacts(listWithUnread);
-        setFiltered(listWithUnread);
+        setContacts(list);
 
-        // If query has contactId, open it
         const contactId = query.get('contactId');
         if (contactId) {
-          const contact = listWithUnread.find((item) => item.id === contactId);
+          const contact = list.find((item) => item.id === contactId);
           if (contact) {
             await openConversation(contact);
           }
@@ -216,15 +185,6 @@ const MessagesPage = () => {
       isActive = false;
     };
   }, [openConversation, query, user?.role]);
-
-  // Filter contacts
-  useEffect(() => {
-    const q = searchText.trim().toLowerCase();
-    if (!q) return setFiltered(contacts);
-    setFiltered(
-      contacts.filter((c) => `${c.firstName} ${c.lastName}`.toLowerCase().includes(q))
-    );
-  }, [searchText, contacts]);
 
   const handleSend = async () => {
     const text = input.trim();
@@ -308,12 +268,12 @@ const MessagesPage = () => {
 
               {loadingContacts ? (
                 <div className="text-center text-gray-600 py-6">Loading contacts...</div>
-              ) : filtered.length === 0 ? (
+              ) : filteredContacts.length === 0 ? (
                 <div className="text-center text-gray-600 py-6">No contacts yet</div>
               ) : (
                 <ul className="space-y-2 max-h-[65vh] overflow-auto pr-2">
-                  {filtered.map((c, idx) => (
-                    <li key={`${c.id}-${idx}`}>
+                  {filteredContacts.map((c, idx) => (
+                    <li key={c.id}>
                       <button
                         type="button"
                         onClick={() => openConversation(c)}
@@ -329,11 +289,11 @@ const MessagesPage = () => {
                               <User className="w-5 h-5 text-gray-500" />
                             </div>
                           )}
-                          {c.unreadCount && c.unreadCount > 0 && (
+                          {c.unreadCount && c.unreadCount > 0 ? (
                             <div className="absolute -top-1 -right-1 bg-red-500 text-white text-xs font-bold w-5 h-5 rounded-full flex items-center justify-center">
                               {c.unreadCount > 9 ? '9+' : c.unreadCount}
                             </div>
-                          )}
+                          ) : null}
                         </div>
                         <div className="flex-1 text-left">
                           <div className="font-semibold text-gray-900 flex items-center gap-2">

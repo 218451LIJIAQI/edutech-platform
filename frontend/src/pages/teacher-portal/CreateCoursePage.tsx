@@ -31,10 +31,6 @@ import type {
   PendingDeleteItem,
 } from '@/features/course-editor/types';
 
-/**
- * Create/Edit Course Page
- * Teacher interface for creating and editing courses
- */
 const CreateCoursePage = () => {
   const { courseId } = useParams<{ courseId?: string }>();
   const navigate = useNavigate();
@@ -68,8 +64,39 @@ const CreateCoursePage = () => {
     register,
     handleSubmit,
     setValue,
+    watch,
     formState: { errors },
   } = useForm<CourseFormData>();
+
+  const watchedThumbnail = watch('thumbnail');
+  const watchedPreviewVideoUrl = watch('previewVideoUrl');
+
+  const syncMediaStateFromCourse = useCallback(
+    (data: Course) => {
+      setValue('thumbnail', data.thumbnail ?? '');
+      setValue('previewVideoUrl', data.previewVideoUrl ?? '');
+      setThumbnailFile(null);
+      setPreviewVideoFile(null);
+      setThumbnailPreviewError(false);
+
+      if (isExternalMediaLink(data.thumbnail)) {
+        setThumbnailType('link');
+        setThumbnailLink(data.thumbnail ?? '');
+      } else {
+        setThumbnailType('upload');
+        setThumbnailLink('');
+      }
+
+      if (isExternalMediaLink(data.previewVideoUrl)) {
+        setPreviewVideoType('link');
+        setPreviewVideoLink(data.previewVideoUrl ?? '');
+      } else {
+        setPreviewVideoType('upload');
+        setPreviewVideoLink('');
+      }
+    },
+    [setValue]
+  );
 
   const fetchCourse = useCallback(async () => {
     setIsLoading(true);
@@ -80,31 +107,18 @@ const CreateCoursePage = () => {
       setPackages(data.packages || []);
       setMaterials(data.materials || []);
 
-      // Populate form
       setValue('title', data.title);
       setValue('description', data.description);
       setValue('category', data.category);
       setValue('courseType', data.courseType);
-      setValue('thumbnail', data.thumbnail);
-      setValue('previewVideoUrl', data.previewVideoUrl);
-
-      if (isExternalMediaLink(data.thumbnail)) {
-        setThumbnailType('link');
-        setThumbnailLink(data.thumbnail ?? '');
-        setThumbnailPreviewError(false);
-      }
-
-      if (isExternalMediaLink(data.previewVideoUrl)) {
-        setPreviewVideoType('link');
-        setPreviewVideoLink(data.previewVideoUrl ?? '');
-      }
+      syncMediaStateFromCourse(data);
     } catch (error) {
       clientLogger.error('Failed to fetch course:', error);
       toast.error(extractErrorMessage(error, 'Failed to load course'));
     } finally {
       setIsLoading(false);
     }
-  }, [courseId, setValue]);
+  }, [courseId, setValue, syncMediaStateFromCourse]);
 
   useEffect(() => {
     if (isEditMode && courseId) {
@@ -130,6 +144,7 @@ const CreateCoursePage = () => {
           show: toast.loading,
           dismiss: toast.dismiss,
         },
+        isEditMode,
       });
 
       let savedCourse: Course;
@@ -137,11 +152,12 @@ const CreateCoursePage = () => {
         savedCourse = await courseService.updateCourse(courseId!, cleanData);
         toast.success('Course updated successfully!');
       } else {
-        savedCourse = await courseService.createCourse(cleanData);
+        savedCourse = await courseService.createCourse(cleanData as Partial<Course>);
         toast.success('Course created successfully!');
       }
 
       setCourse(savedCourse);
+      syncMediaStateFromCourse(savedCourse);
       if (!isEditMode && savedCourse.id) {
         navigate(`/teacher/courses/${savedCourse.id}/edit`);
       }
@@ -256,6 +272,16 @@ const CreateCoursePage = () => {
     );
   }
 
+  const existingUploadedThumbnail =
+    watchedThumbnail && !isExternalMediaLink(watchedThumbnail)
+      ? watchedThumbnail
+      : undefined;
+
+  const existingUploadedPreviewVideo =
+    watchedPreviewVideoUrl && !isExternalMediaLink(watchedPreviewVideoUrl)
+      ? watchedPreviewVideoUrl
+      : undefined;
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-primary-50/10 to-indigo-50/20 py-8 relative">
       <div className="absolute inset-0 bg-[linear-gradient(rgba(0,0,0,0.015)_1px,transparent_1px),linear-gradient(90deg,rgba(0,0,0,0.015)_1px,transparent_1px)] bg-[size:32px_32px] pointer-events-none"></div>
@@ -282,9 +308,11 @@ const CreateCoursePage = () => {
               isEditMode={isEditMode}
               thumbnailType={thumbnailType}
               thumbnailLink={thumbnailLink}
+              existingUploadedThumbnail={existingUploadedThumbnail}
               thumbnailPreviewError={thumbnailPreviewError}
               previewVideoType={previewVideoType}
               previewVideoLink={previewVideoLink}
+              existingUploadedPreviewVideo={existingUploadedPreviewVideo}
               onCancel={() => navigate('/teacher/courses')}
               onThumbnailSourceTypeChange={(sourceType) => {
                 setThumbnailType(sourceType);
@@ -293,10 +321,13 @@ const CreateCoursePage = () => {
                   setThumbnailLink('');
                   return;
                 }
-
                 setThumbnailFile(null);
               }}
               onThumbnailLinkChange={setThumbnailLink}
+              onClearExistingThumbnail={() => {
+                setValue('thumbnail', '');
+                setThumbnailFile(null);
+              }}
               onThumbnailPreviewErrorChange={setThumbnailPreviewError}
               onThumbnailFileSelect={setThumbnailFile}
               onPreviewVideoSourceTypeChange={(sourceType) => {
@@ -305,10 +336,13 @@ const CreateCoursePage = () => {
                   setPreviewVideoLink('');
                   return;
                 }
-
                 setPreviewVideoFile(null);
               }}
               onPreviewVideoLinkChange={setPreviewVideoLink}
+              onClearExistingPreviewVideo={() => {
+                setValue('previewVideoUrl', '');
+                setPreviewVideoFile(null);
+              }}
               onPreviewVideoFileSelect={setPreviewVideoFile}
             />
           )}
@@ -350,7 +384,6 @@ const CreateCoursePage = () => {
           )}
         </div>
 
-        {/* Modals */}
         {showLessonModal && course && (
           <LessonModal
             courseId={course.id}
@@ -393,9 +426,7 @@ const CreateCoursePage = () => {
               ? `Permanently delete "${pendingDeleteItem.label}". This action cannot be undone.`
               : ''
           }
-          confirmLabel={
-            buildDeleteDialogLabel(pendingDeleteItem)
-          }
+          confirmLabel={buildDeleteDialogLabel(pendingDeleteItem)}
           tone="danger"
           isLoading={isDeletingItem}
           onClose={() => {

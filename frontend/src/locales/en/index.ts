@@ -234,7 +234,7 @@ export default {
     reply: 'Reply',
     writeComment: 'Write a comment...',
     noComments: 'No comments yet',
-    beFirFirst: 'Be the first to comment!',
+    beFirst: 'Be the first to comment!',
   },
 
   // Messages

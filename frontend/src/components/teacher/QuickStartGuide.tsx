@@ -18,17 +18,7 @@ import { CourseType, LessonType } from '@/types';
 import toast from 'react-hot-toast';
 import { extractErrorMessage } from '@/utils/error-handler';
 import clientLogger from '@/utils/logger';
-
-const CATEGORIES = [
-  'Programming',
-  'Business',
-  'Design',
-  'Marketing',
-  'Photography',
-  'Music',
-  'Language',
-  'Other',
-] as const;
+import { courseCategories } from '@/features/course-editor/constants';
 
 const COURSE_TYPES = [
   {
@@ -36,21 +26,18 @@ const COURSE_TYPES = [
     label: 'Recorded',
     description: 'Pre-recorded video lessons',
     icon: Video,
-    color: 'blue',
   },
   {
     value: CourseType.LIVE,
     label: 'Live Sessions',
     description: 'Real-time online classes',
     icon: Radio,
-    color: 'red',
   },
   {
     value: CourseType.HYBRID,
     label: 'Hybrid',
     description: 'Live + recorded content',
     icon: PlayCircle,
-    color: 'purple',
   },
 ] as const;
 
@@ -64,17 +51,13 @@ const QuickStartGuide = ({ isOpen, onClose }: QuickStartGuideProps) => {
   const [step, setStep] = useState(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Step 1: Course basics
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [category, setCategory] = useState('');
   const [courseType, setCourseType] = useState<CourseType>(CourseType.RECORDED);
 
-  // Step 2: First lesson
   const [lessonTitle, setLessonTitle] = useState('');
   const [lessonVideoUrl, setLessonVideoUrl] = useState('');
-
-  // Created course reference
   const [createdCourseId, setCreatedCourseId] = useState<string | null>(null);
 
   const resetForm = () => {
@@ -94,15 +77,17 @@ const QuickStartGuide = ({ isOpen, onClose }: QuickStartGuideProps) => {
     onClose();
   };
 
-  const isStep1Valid = title.trim().length >= 5 && description.trim().length >= 20 && category !== '';
-  const isStep2Valid = lessonTitle.trim().length >= 3;
+  const isStep1Valid =
+    title.trim().length >= 3 &&
+    description.trim().length >= 10 &&
+    category !== '';
+  const isStep2Valid = lessonTitle.trim().length >= 2;
 
   const handleCreateCourseAndLesson = async () => {
     if (!isStep1Valid || !isStep2Valid) return;
 
     setIsSubmitting(true);
     try {
-      // Step 1: Create the course
       const course = await courseService.createCourse({
         title: title.trim(),
         description: description.trim(),
@@ -112,19 +97,12 @@ const QuickStartGuide = ({ isOpen, onClose }: QuickStartGuideProps) => {
 
       setCreatedCourseId(course.id);
 
-      // Step 2: Add the first lesson
-      const lessonData: Partial<{ title: string; type: LessonType; videoUrl: string; orderIndex: number; isFree: boolean }> = {
+      await courseService.createLesson(course.id, {
         title: lessonTitle.trim(),
         type: courseType === CourseType.LIVE ? LessonType.LIVE : LessonType.RECORDED,
-        orderIndex: 0,
         isFree: true,
-      };
-
-      if (lessonVideoUrl.trim()) {
-        lessonData.videoUrl = lessonVideoUrl.trim();
-      }
-
-      await courseService.createLesson(course.id, lessonData);
+        ...(lessonVideoUrl.trim() ? { videoUrl: lessonVideoUrl.trim() } : {}),
+      });
 
       toast.success('Course and first lesson created successfully!');
       setStep(3);
@@ -153,7 +131,6 @@ const QuickStartGuide = ({ isOpen, onClose }: QuickStartGuideProps) => {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl mx-4 max-h-[90vh] overflow-y-auto">
-        {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 bg-gradient-to-r from-primary-50 to-indigo-50 rounded-t-2xl">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 bg-gradient-to-br from-primary-500 to-indigo-600 rounded-xl flex items-center justify-center shadow-lg">
@@ -168,12 +145,12 @@ const QuickStartGuide = ({ isOpen, onClose }: QuickStartGuideProps) => {
             type="button"
             onClick={handleClose}
             className="p-2 text-gray-400 hover:text-gray-600 hover:bg-white/50 rounded-lg transition-colors"
+            aria-label="Close quick start guide"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        {/* Progress Steps */}
         <div className="px-6 py-4 border-b border-gray-100">
           <div className="flex items-center justify-between">
             {[
@@ -216,9 +193,7 @@ const QuickStartGuide = ({ isOpen, onClose }: QuickStartGuideProps) => {
           </div>
         </div>
 
-        {/* Step Content */}
         <div className="px-6 py-6">
-          {/* Step 1: Course Basics */}
           {step === 1 && (
             <div className="space-y-5">
               <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 text-sm text-blue-700">
@@ -242,8 +217,8 @@ const QuickStartGuide = ({ isOpen, onClose }: QuickStartGuideProps) => {
                   className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all"
                   maxLength={200}
                 />
-                {title.trim().length > 0 && title.trim().length < 5 && (
-                  <p className="mt-1 text-xs text-red-500">Title must be at least 5 characters</p>
+                {title.trim().length > 0 && title.trim().length < 3 && (
+                  <p className="mt-1 text-xs text-red-500">Title must be at least 3 characters</p>
                 )}
               </div>
 
@@ -258,10 +233,10 @@ const QuickStartGuide = ({ isOpen, onClose }: QuickStartGuideProps) => {
                   placeholder="Briefly describe what students will learn..."
                   rows={3}
                   className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all resize-none"
-                  maxLength={2000}
+                  maxLength={5000}
                 />
-                {description.trim().length > 0 && description.trim().length < 20 && (
-                  <p className="mt-1 text-xs text-red-500">Description must be at least 20 characters</p>
+                {description.trim().length > 0 && description.trim().length < 10 && (
+                  <p className="mt-1 text-xs text-red-500">Description must be at least 10 characters</p>
                 )}
               </div>
 
@@ -276,7 +251,7 @@ const QuickStartGuide = ({ isOpen, onClose }: QuickStartGuideProps) => {
                   className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all"
                 >
                   <option value="">Select a category</option>
-                  {CATEGORIES.map((cat) => (
+                  {courseCategories.map((cat) => (
                     <option key={cat} value={cat}>
                       {cat}
                     </option>
@@ -320,7 +295,6 @@ const QuickStartGuide = ({ isOpen, onClose }: QuickStartGuideProps) => {
             </div>
           )}
 
-          {/* Step 2: First Lesson */}
           {step === 2 && (
             <div className="space-y-5">
               <div className="bg-green-50 border border-green-200 rounded-xl p-4 text-sm text-green-700">
@@ -344,8 +318,8 @@ const QuickStartGuide = ({ isOpen, onClose }: QuickStartGuideProps) => {
                   className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all"
                   maxLength={200}
                 />
-                {lessonTitle.trim().length > 0 && lessonTitle.trim().length < 3 && (
-                  <p className="mt-1 text-xs text-red-500">Lesson title must be at least 3 characters</p>
+                {lessonTitle.trim().length > 0 && lessonTitle.trim().length < 2 && (
+                  <p className="mt-1 text-xs text-red-500">Lesson title must be at least 2 characters</p>
                 )}
               </div>
 
@@ -373,7 +347,6 @@ const QuickStartGuide = ({ isOpen, onClose }: QuickStartGuideProps) => {
             </div>
           )}
 
-          {/* Step 3: Done */}
           {step === 3 && (
             <div className="text-center py-6">
               <div className="w-20 h-20 bg-gradient-to-br from-green-400 to-emerald-500 rounded-full flex items-center justify-center mx-auto mb-6 shadow-xl shadow-green-500/30">
@@ -405,7 +378,6 @@ const QuickStartGuide = ({ isOpen, onClose }: QuickStartGuideProps) => {
           )}
         </div>
 
-        {/* Footer Navigation */}
         {step < 3 && (
           <div className="px-6 py-4 border-t border-gray-200 flex items-center justify-between bg-gray-50 rounded-b-2xl">
             {step === 1 ? (

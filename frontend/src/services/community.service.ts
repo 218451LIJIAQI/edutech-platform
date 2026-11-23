@@ -1,7 +1,9 @@
 import api from './api';
 import { ApiResponse } from '@/types';
 import { extractData } from './response-utils';
+import { normalizeAssetUrl } from '@/utils/asset-normalizers';
 import {
+  CommunityAuthor,
   CommunityComment,
   CommunityMedia,
   CommunityPost,
@@ -20,10 +22,43 @@ export interface CreateCommunityPostInput {
   courseTitle?: string;
 }
 
+const normalizeCommunityAuthor = (
+  author?: CommunityAuthor
+): CommunityAuthor | undefined =>
+  author
+    ? {
+        ...author,
+        avatar: normalizeAssetUrl(author.avatar),
+      }
+    : author;
+
+const normalizeCommunityMedia = (media: CommunityMedia): CommunityMedia => ({
+  ...media,
+  url: normalizeAssetUrl(media.url) ?? media.url,
+});
+
+const normalizeCommunityPost = (post: CommunityPost): CommunityPost => ({
+  ...post,
+  author: normalizeCommunityAuthor(post.author),
+  media: post.media?.map(normalizeCommunityMedia),
+});
+
+const normalizeCommunityComment = (
+  comment: CommunityComment
+): CommunityComment => ({
+  ...comment,
+  author: normalizeCommunityAuthor(comment.author),
+});
+
+const normalizeFeedResult = (feed: FeedResult): FeedResult => ({
+  ...feed,
+  items: (feed.items || []).map(normalizeCommunityPost),
+});
+
 const communityService = {
   async getFeed(params: FeedQuery = {}): Promise<FeedResult> {
     const response = await api.get<ApiResponse<FeedResult>>('/community/feed', { params });
-    return extractData(response);
+    return normalizeFeedResult(extractData(response));
   },
 
   async getTags(): Promise<CommunityTag[]> {
@@ -38,12 +73,12 @@ const communityService = {
 
   async createPost(input: CreateCommunityPostInput): Promise<CommunityPost> {
     const response = await api.post<ApiResponse<CommunityPost>>('/community/posts', input);
-    return extractData(response);
+    return normalizeCommunityPost(extractData(response));
   },
 
   async getPostById(id: string): Promise<CommunityPost> {
     const response = await api.get<ApiResponse<CommunityPost>>(`/community/posts/${id}`);
-    return extractData(response);
+    return normalizeCommunityPost(extractData(response));
   },
 
   async likePost(id: string): Promise<{ likes: number; hasLiked: boolean }> {
@@ -61,11 +96,12 @@ const communityService = {
   },
 
   async getComments(postId: string): Promise<CommunityComment[]> {
-    const response = await api.get<ApiResponse<CommunityComment[] | { items: CommunityComment[] }>>(
-      `/community/posts/${postId}/comments`
-    );
+    const response = await api.get<
+      ApiResponse<CommunityComment[] | { items: CommunityComment[] }>
+    >(`/community/posts/${postId}/comments`);
     const data = extractData(response);
-    return Array.isArray(data) ? data : data.items ?? [];
+    const items = Array.isArray(data) ? data : data.items ?? [];
+    return items.map(normalizeCommunityComment);
   },
 
   async addComment(postId: string, content: string): Promise<CommunityComment> {
@@ -73,13 +109,15 @@ const communityService = {
       `/community/posts/${postId}/comments`,
       { content }
     );
-    return extractData(response);
+    return normalizeCommunityComment(extractData(response));
   },
 
-  async followUser(targetUserId: string): Promise<{ isFollowing: boolean; followers: number }> {
-    const response = await api.post<ApiResponse<{ isFollowing: boolean; followers: number }>>(
-      `/community/users/${targetUserId}/follow`
-    );
+  async followUser(
+    targetUserId: string
+  ): Promise<{ isFollowing: boolean; followers: number }> {
+    const response = await api.post<
+      ApiResponse<{ isFollowing: boolean; followers: number }>
+    >(`/community/users/${targetUserId}/follow`);
     return extractData(response);
   },
 
@@ -87,14 +125,19 @@ const communityService = {
     const response = await api.get<ApiResponse<CommunityUserProfile>>(
       `/community/users/${userId}/profile`
     );
-    return extractData(response);
+    const profile = extractData(response);
+    return {
+      ...profile,
+      avatar: normalizeAssetUrl(profile.avatar),
+    };
   },
 
   async getUserPosts(userId: string, page = 1, limit = 10): Promise<FeedResult> {
-    const response = await api.get<ApiResponse<FeedResult>>(`/community/users/${userId}/posts`, {
-      params: { page, limit },
-    });
-    return extractData(response);
+    const response = await api.get<ApiResponse<FeedResult>>(
+      `/community/users/${userId}/posts`,
+      { params: { page, limit } }
+    );
+    return normalizeFeedResult(extractData(response));
   },
 };
 

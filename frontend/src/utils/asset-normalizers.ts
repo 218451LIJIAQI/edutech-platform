@@ -2,6 +2,7 @@ import type {
   AdCampaign,
   CartSummary,
   Course,
+  Enrollment,
   Lesson,
   LessonPackage,
   Material,
@@ -9,6 +10,7 @@ import type {
   OrderItem,
   Payment,
   Refund,
+  Review,
   SupportTicket,
   SupportTicketMessage,
   TeacherProfile,
@@ -179,9 +181,10 @@ export const normalizeSupportMessageAssets = (
 
   return {
     ...message,
-    attachment: normalizedAttachment && isSupportAttachmentUploadPath(normalizedAttachment)
-      ? buildSupportAttachmentAccessUrl(message.id, normalizedAttachment)
-      : normalizeAssetUrl(attachment),
+    attachment:
+      normalizedAttachment && isSupportAttachmentUploadPath(normalizedAttachment)
+        ? buildSupportAttachmentAccessUrl(message.id, normalizedAttachment)
+        : normalizeAssetUrl(attachment),
     sender: normalizeUserAvatarOnly(message.sender),
   };
 };
@@ -218,8 +221,9 @@ export const normalizeTeacherProfileAssets = (
       }
     : profile;
 
-export const getTeacherDisplayPhoto = (profile?: TeacherProfile): string | undefined =>
-  profile?.profilePhoto || profile?.user?.avatar;
+export const getTeacherDisplayPhoto = (
+  profile?: TeacherProfile
+): string | undefined => profile?.profilePhoto || profile?.user?.avatar;
 
 export const normalizeUserAssets = (user?: User): User | undefined =>
   user
@@ -237,7 +241,9 @@ export const normalizeLessonAssets = (lesson: Lesson): Lesson => ({
   videoUrl: normalizeAssetUrl(lesson.videoUrl),
 });
 
-export const normalizeLessonPackage = <T extends LessonPackage & { course?: Course }>(
+export const normalizeLessonPackage = <
+  T extends LessonPackage & { course?: Course },
+>(
   lessonPackage: T
 ): T => ({
   ...lessonPackage,
@@ -271,6 +277,28 @@ export const normalizeCourseAssets = (course: Course): Course => ({
   lessons: course.lessons?.map(normalizeLessonAssets),
   packages: course.packages?.map(normalizeLessonPackage),
   materials: course.materials?.map(normalizeMaterialAssets),
+});
+
+export const normalizeEnrollmentAssets = (
+  enrollment: Enrollment
+): Enrollment => ({
+  ...enrollment,
+  progress: toFiniteNumber(enrollment.progress),
+  completedLessons: toFiniteNumber(enrollment.completedLessons),
+  user: normalizeUserAssets(enrollment.user),
+  package: enrollment.package
+    ? normalizeLessonPackage(enrollment.package)
+    : enrollment.package,
+});
+
+export const normalizeReviewAssets = (review: Review): Review => ({
+  ...review,
+  rating: toFiniteNumber(review.rating),
+  reviewer: normalizeUserAssets(review.reviewer),
+  teacher: normalizeUserAssets(review.teacher),
+  enrollment: review.enrollment
+    ? normalizeEnrollmentAssets(review.enrollment)
+    : review.enrollment,
 });
 
 export const normalizeTeacherVerificationAssets = (

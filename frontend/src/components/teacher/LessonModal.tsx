@@ -11,6 +11,7 @@ import courseService from '@/services/course.service';
 import uploadService from '@/services/upload.service';
 import { extractErrorMessage } from '@/utils/error-handler';
 import { useOverlayAccessibility } from '@/hooks';
+import { isExternalMediaLink } from '@/features/course-editor/media-utils';
 import LessonQuizEditor from '@/features/lesson-editor/lesson-quiz-editor';
 import LessonVideoSourceField from '@/features/lesson-editor/lesson-video-source-field';
 import { buildLessonSavePayload } from '@/features/lesson-editor/lesson-persistence';
@@ -59,6 +60,7 @@ const LessonModal: FC<LessonModalProps> = ({
   const [videoFile, setVideoFile] = useState<File | null>(null);
   const [videoType, setVideoType] = useState<'upload' | 'link'>(defaultVideoType ?? 'upload');
   const [videoLink, setVideoLink] = useState('');
+  const [clearExistingVideo, setClearExistingVideo] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [quizEnabled, setQuizEnabled] = useState(false);
   const [quizQuestions, setQuizQuestions] = useState<EditableQuizQuestion[]>([
@@ -77,7 +79,7 @@ const LessonModal: FC<LessonModalProps> = ({
   const { ref: titleRegisterRef, ...titleField } = register('title', {
     required: 'Title is required',
     validate: (value) =>
-      value.trim().length > 0 || 'Title cannot be empty',
+      value.trim().length >= 2 || 'Title must be at least 2 characters',
   });
 
   const handleRequestClose = useCallback(() => {
@@ -104,16 +106,20 @@ const LessonModal: FC<LessonModalProps> = ({
         duration:
           typeof initialLesson.duration === 'number'
             ? initialLesson.duration
-            : DEFAULT_LESSON_VALUES.duration,
+            : undefined,
         isFree: Boolean(initialLesson.isFree),
       });
 
       setVideoFile(null);
+      setClearExistingVideo(false);
       setUploadProgress(0);
 
-      if (initialLesson.videoUrl) {
+      if (initialLesson.videoUrl && isExternalMediaLink(initialLesson.videoUrl)) {
         setVideoType('link');
         setVideoLink(initialLesson.videoUrl);
+      } else if (initialLesson.videoUrl) {
+        setVideoType('upload');
+        setVideoLink('');
       } else {
         setVideoType(defaultVideoType ?? 'upload');
         setVideoLink('');
@@ -132,6 +138,7 @@ const LessonModal: FC<LessonModalProps> = ({
 
     reset(DEFAULT_LESSON_VALUES);
     setVideoFile(null);
+    setClearExistingVideo(false);
     setVideoType(defaultVideoType ?? 'upload');
     setVideoLink('');
     setUploadProgress(0);
@@ -189,7 +196,8 @@ const LessonModal: FC<LessonModalProps> = ({
         videoType,
         videoFile,
         videoLink,
-        existingLesson: initialLesson,
+        clearExistingVideo,
+        existingLesson: isEditMode ? initialLesson : undefined,
         quizEnabled,
         quizQuestions,
         uploadService,
@@ -236,6 +244,14 @@ const LessonModal: FC<LessonModalProps> = ({
 
     setVideoFile(null);
   };
+
+  const existingUploadedVideoUrl =
+    isEditMode &&
+    initialLesson?.videoUrl &&
+    !isExternalMediaLink(initialLesson.videoUrl) &&
+    !clearExistingVideo
+      ? initialLesson.videoUrl
+      : undefined;
 
   const modalContent = (
     <div
@@ -336,22 +352,27 @@ const LessonModal: FC<LessonModalProps> = ({
               htmlFor={durationId}
               className="mb-2 block text-sm font-medium text-gray-700"
             >
-              Duration (minutes) *
+              Duration (minutes)
             </label>
             <input
               id={durationId}
               type="number"
               min={1}
               {...register('duration', {
-                required: 'Duration is required',
-                valueAsNumber: true,
+                setValueAs: (value) => {
+                  if (value === '' || value === null || value === undefined) {
+                    return undefined;
+                  }
+                  const parsed = Number(value);
+                  return Number.isFinite(parsed) ? parsed : Number.NaN;
+                },
                 min: {
                   value: 1,
                   message: 'Duration must be at least 1 minute',
                 },
               })}
               className="input"
-              placeholder="30"
+              placeholder="30 (optional)"
               aria-invalid={Boolean(errors.duration)}
             />
             {errors.duration && (
@@ -365,9 +386,19 @@ const LessonModal: FC<LessonModalProps> = ({
             videoType={videoType}
             videoFile={videoFile}
             videoLink={videoLink}
+            existingUploadUrl={existingUploadedVideoUrl}
             uploadProgress={uploadProgress}
             onVideoTypeChange={handleVideoTypeChange}
-            onVideoFileChange={setVideoFile}
+            onVideoFileChange={(file) => {
+              setVideoFile(file);
+              if (file) {
+                setClearExistingVideo(false);
+              }
+            }}
+            onClearExistingUpload={() => {
+              setClearExistingVideo(true);
+              setVideoFile(null);
+            }}
             onVideoLinkChange={setVideoLink}
           />
 

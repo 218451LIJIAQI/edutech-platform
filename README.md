@@ -75,11 +75,11 @@ These points are important if you want to describe the repository accurately.
 4. A fresh database does not automatically include an admin account.
    Public registration allows `STUDENT` and `TEACHER`. To test admin workflows, an existing user must be promoted to `ADMIN`.
 
-5. The repository currently does not include project-owned automated tests.
-   Type checking and production builds are available, but there is no `backend` or `frontend` test suite with `*.test.*` or `*.spec.*` files in the source project itself.
+5. Automated unit and contract tests cover core backend and frontend business invariants.
+   `backend/src/__tests__` and `frontend/src/__tests__` exercise sanitization idempotency, email canonicalization, cookie security policies, multi-item order financial settlements, split-origin API/asset URL resolution, video embed parsing, course/package/lesson/material persistence contracts, and enrollment deduplication via Node's built-in test runner (`scripts/run-tests.mjs`).
 
-6. The root `package.json` is not a monorepo task runner.
-   Backend and frontend are started separately. In practice, local development uses one terminal for `backend` and one terminal for `frontend`.
+6. Backend and frontend are started as two independent processes in development.
+   Local development uses one terminal for `backend` and one terminal for `frontend`.
 
 ## Quick Start
 
@@ -214,8 +214,9 @@ One of the strongest parts of this repository is that it already models several 
 
 Implementation notes:
 
-- the backend uses JWT-based authentication
-- refresh tokens are part of the auth design
+- the backend uses JWT-based authentication with `tokenVersion` session invalidation
+- refresh tokens are stored in `HttpOnly` cookies (`SameSite=Lax` by default, or `SameSite=None; Secure` for cross-origin HTTPS deployments)
+- email addresses are canonicalized with trim + lowercase without mutating local-part dots or subaddresses
 - the frontend uses Axios interceptors for token attachment and refresh attempts
 
 ### 2. Teacher Onboarding and Approval
@@ -224,7 +225,7 @@ Implementation notes:
 - teachers can complete both basic and extended profile data
 - teachers can upload certifications and verification materials
 - teachers can submit profile and verification data for review
-- admins can review registration status, verification status, and extended profile submissions
+- admins can review registration status, document verification status, and extended profile submissions independently
 - only approved teachers can move through the full teacher operations flow
 
 This means the teacher experience is intentionally approval-gated rather than open immediately after registration.
@@ -235,7 +236,7 @@ This means the teacher experience is intentionally approval-gated rather than op
 - course categories and filtering
 - course details
 - lesson management
-- lesson package management
+- lesson package management (including lifetime `0`-day packages)
 - course material upload and download
 - lesson quiz submission and quiz result tracking
 - course notification dispatch
@@ -264,8 +265,8 @@ The commerce flow already includes meaningful business logic such as:
 - order states
 - payment states
 - refund states
-- platform commission
-- teacher net earnings
+- platform commission (honoring explicit `0%` teacher commission overrides)
+- teacher net earnings and multi-item cart order settlement attribution
 - automatic enrollment creation
 - cart and order coordination
 
@@ -299,11 +300,11 @@ Supported payout method types defined in code:
 - user post listing
 - follow and unfollow-style relationship flow
 
-Community posts can include tags, media, and course references, so this module goes beyond a plain text feed.
+Community posts can include tags, images, uploaded videos, external video embeds (YouTube, Vimeo, Dailymotion), and course references.
 
 ### 7. Direct Messaging and Notifications
 
-- contact list
+- contact list with batched unread message counts
 - thread-based messaging
 - unread message count
 - mark-as-read flow
@@ -376,7 +377,7 @@ Community posts can include tags, media, and course references, so this module g
 | Auth | JWT, refresh tokens, cookie-based refresh flow |
 | Uploads | Multer |
 | Real-Time Server | Socket.IO |
-| Security | Helmet, CORS, rate limiting, sanitize-html, custom security headers |
+| Security | Helmet, CORS, rate limiting, idempotent plain-text input sanitization, custom security headers |
 | Logging | Morgan + Winston |
 | Password Hashing | bcryptjs |
 | Validation | express-validator |
@@ -401,54 +402,56 @@ The frontend is a `React + Vite + TypeScript` single-page application with route
 | --- | --- |
 | `frontend/src/app` | main route configuration |
 | `frontend/src/pages` | page-level components loaded with `React.lazy()` for route-based splitting |
-| `frontend/src/components` | reusable UI components grouped by admin, auth, common, layout, student, and teacher |
-| `frontend/src/features` | larger business modules such as course editor and course management |
+| `frontend/src/components` | reusable UI components grouped by admin, auth, common, community, layout, student, and teacher |
+| `frontend/src/features` | larger business modules such as course editor, lesson editor, and course management |
 | `frontend/src/services` | API layer wrappers |
 | `frontend/src/store` | Zustand stores |
 | `frontend/src/hooks` | custom hooks |
 | `frontend/src/types` | frontend business types |
-| `frontend/src/utils` | helpers for runtime URLs, asset normalization, storage, and error handling |
+| `frontend/src/utils` | helpers for runtime URLs, asset normalization, video embeds, storage, and error handling |
 | `frontend/src/lib` | lower-level configuration such as i18n bootstrap |
 | `frontend/src/locales` | English, Chinese, and Malay translation resources |
+| `frontend/src/__tests__` | automated frontend unit and persistence-contract tests |
 
 ### Important Frontend Characteristics
 
 - routes are separated by guest, student, teacher, and admin access patterns
 - page-level lazy loading is enabled
 - `vite.config.ts` proxies `/api`, `/uploads`, and `/socket.io`
-- Axios interceptors centralize auth handling, token refresh attempts, and error handling
+- Axios interceptors centralize auth handling, token refresh attempts, and error handling across both relative `/api/v1` and split-origin `VITE_API_URL` deployments
 - auth state is stored with Zustand
 - multilingual infrastructure exists for `en`, `zh`, and `ms`
 - dashboard, checkout, live-session, and admin pages are connected to real service layers rather than static placeholders
 
 ## Backend Architecture
 
-The backend follows a layered structure that is much easier to maintain than a single-file Express app.
+The backend follows a layered structure with explicit controller-to-service boundaries.
 
 ### Backend Layers
 
-- `routes` wire URL prefixes, auth middleware, and role boundaries
-- `controllers` handle request and response shaping
-- `services` contain the main business logic
-- `middleware` handles auth, security, sanitization, uploads, rate limiting, request IDs, and error handling
+- `routes` wire URL prefixes, auth middleware, validation chains, and role boundaries
+- `controllers` handle HTTP request parsing and response shaping without direct ORM queries
+- `services` contain domain business logic and Prisma persistence
+- `middleware` handles auth, security, plain-text sanitization, uploads, rate limiting, request IDs, and error handling
 - `config` stores environment, database, and origin policy configuration
-- `utils` contains logging, errors, and shared helpers
+- `utils` contains logging, errors, sanitization, cookie policies, and shared helpers
 - `socket` contains live-session real-time behavior
+- `__tests__` contains automated backend unit and domain-logic tests
 
 ### Important Backend Characteristics
 
 - the API is mounted under `/api/v1`
 - dedicated `health` and `ready` endpoints are exposed
 - graceful shutdown is implemented
-- every request receives a request ID
-- request input is sanitized for XSS protection
+- every request receives a request ID (included in validation and error responses)
+- request input is sanitized with an idempotent plain-text markup stripper that neutralizes HTML/script tags while preserving literal characters (`&`, `<`, `>`) in technical discussions and code examples
 - API traffic is rate-limited
 - sensitive fields such as passwords, tokens, cookies, and bank details are redacted from logs
 - uploads are validated by type, extension, signature, size, and path safety rules
 
 ## Database Design Overview
 
-`backend/prisma/schema.prisma` is one of the strongest parts of the repository. The schema already models multiple real platform concerns instead of only users and courses.
+`backend/prisma/schema.prisma` models multiple real platform concerns instead of only users and courses.
 
 ### 1. User and Permission Models
 
@@ -546,7 +549,7 @@ The real-time layer is implemented in:
 
 ### Real-Time Features Already Implemented
 
-- socket authentication
+- socket authentication (enforcing account active/lock status and `tokenVersion`)
 - join session
 - leave session
 - live chat
@@ -559,12 +562,11 @@ The real-time layer is implemented in:
 
 - it is not a built-in WebRTC or native video streaming stack
 - the in-repo logic handles session coordination and chat
-- if `meetingUrl` exists, the frontend opens an external meeting room
-- the correct description is: live session coordination is implemented in-repo, while the actual meeting room is external
+- when a session is `LIVE`, the frontend opens the configured external `meetingUrl`
 
 ## Uploads and Protected Assets
 
-The upload system is folder-based, validated, and partially protected. It is not a generic "upload any file anywhere" pipeline.
+The upload system is folder-based, validated, and partially protected.
 
 ### Supported Upload Categories
 
@@ -599,24 +601,22 @@ The upload system is folder-based, validated, and partially protected. It is not
 
 ## Security and Risk Controls
 
-Based on the current implementation, the project already includes several meaningful protections:
+Based on the current implementation, the project includes several meaningful protections:
 
-- JWT access token plus refresh token model
-- refresh-token-based session recovery
-- token version invalidation
+- JWT access token plus `HttpOnly` refresh token cookie model
+- token version invalidation on password reset/change and account lock
 - failed-login tracking and temporary account locking
-- `helmet`
-- origin-based `cors` control with local-development allowances
+- `helmet` and origin-based `cors` control
 - `express-rate-limit`
-- request sanitization using `sanitize-html`
+- idempotent request sanitization stripping executable HTML/script markup without corrupting plain-text symbols
 - redaction of sensitive values in logs
-- protected upload directories
+- protected upload directories with authenticated download routes
 
 ## Internationalization and Frontend Experience
 
 ### Internationalization
 
-The frontend already includes multilingual infrastructure and these resource directories:
+The frontend includes multilingual infrastructure and these resource directories:
 
 - `frontend/src/locales/en`
 - `frontend/src/locales/zh`
@@ -624,9 +624,8 @@ The frontend already includes multilingual infrastructure and these resource dir
 
 The safest accurate statement is:
 
-- the project already has multilingual infrastructure
-- English, Chinese, and Malay resources exist in the codebase
-- it should not be described as "every screen is fully translated" unless every page is verified end-to-end
+- the project has multilingual infrastructure with English, Chinese, and Malay dictionaries
+- it should not be described as "every screen is fully translated" unless every page is localized end-to-end
 
 ### Frontend Experience Notes
 
@@ -640,13 +639,14 @@ The safest accurate statement is:
 ## Project Structure
 
 ```text
-FlexiLearnProject/
+edutech-platform/
 ├─ backend/
 │  ├─ prisma/
 │  │  ├─ migrations/
 │  │  ├─ schema.prisma
 │  │  └─ seed.js
 │  ├─ src/
+│  │  ├─ __tests__/
 │  │  ├─ config/
 │  │  ├─ controllers/
 │  │  ├─ middleware/
@@ -657,12 +657,12 @@ FlexiLearnProject/
 │  │  ├─ utils/
 │  │  ├─ validators/
 │  │  └─ index.ts
-│  ├─ uploads/
 │  ├─ package.json
 │  └─ tsconfig.json
 ├─ frontend/
 │  ├─ public/
 │  ├─ src/
+│  │  ├─ __tests__/
 │  │  ├─ app/
 │  │  ├─ components/
 │  │  ├─ config/
@@ -681,14 +681,15 @@ FlexiLearnProject/
 │  ├─ tailwind.config.js
 │  ├─ postcss.config.js
 │  └─ vite.config.ts
-├─ FlexiLearn_SRS.md
-├─ package.json
+├─ scripts/
+│  └─ run-tests.mjs
+├─ docs/
+│  └─ render-deployment.md
+├─ render.yaml
 └─ README.md
 ```
 
 ## Full Local Setup from Scratch
-
-This section is the longer version of the quick start, with a bit more context.
 
 ### 1. Prepare PostgreSQL
 
@@ -698,22 +699,9 @@ The backend example config uses:
 DATABASE_URL="postgresql://postgres:postgres@localhost:5432/edutech_platform?schema=public"
 ```
 
-So you need a local PostgreSQL database ready, for example:
-
-- database name: `edutech_platform`
-- credentials: whatever matches your local PostgreSQL setup
-
 ### 2. Install Backend Dependencies
 
-Copy `backend/.env.example` to `backend/.env`, then configure:
-
-- `DATABASE_URL`
-- `JWT_SECRET`
-- `JWT_REFRESH_SECRET`
-- `CORS_ORIGIN`
-- `SOCKET_CORS_ORIGIN`
-
-Install dependencies:
+Copy `backend/.env.example` to `backend/.env`, then configure `DATABASE_URL`, `JWT_SECRET`, `JWT_REFRESH_SECRET`, `CORS_ORIGIN`, and `SOCKET_CORS_ORIGIN`.
 
 ```bash
 cd backend
@@ -727,107 +715,31 @@ cd backend
 npm run prisma:migrate
 ```
 
-If you only want to generate Prisma Client first:
-
-```bash
-npm run prisma:generate
-```
-
-### 4. Understand the Seed Behavior
-
-```bash
-cd backend
-npm run seed
-```
-
-This command does not populate demo data. It only confirms that the project intentionally starts from an empty database baseline.
-
-### 5. Start the Backend
+### 4. Start the Backend
 
 ```bash
 cd backend
 npm run dev
 ```
 
-Default backend address:
-
-```text
-http://localhost:3000
-```
-
-Important URLs:
-
-```text
-http://localhost:3000/
-http://localhost:3000/api/v1/health
-http://localhost:3000/api/v1/ready
-```
-
-### 6. Install Frontend Dependencies
+### 5. Install and Start the Frontend
 
 Copy `frontend/.env.example` to `frontend/.env`.
-
-Install dependencies:
 
 ```bash
 cd frontend
 npm ci
-```
-
-### 7. Start the Frontend
-
-```bash
-cd frontend
 npm run dev
 ```
 
-Default frontend development address:
-
-```text
-http://localhost:5173
-```
-
-Default frontend environment values:
-
-```env
-VITE_API_URL=/api/v1
-VITE_SOCKET_URL=
-VITE_DEV_BACKEND_ORIGIN=http://localhost:3000
-```
-
-This means:
-
-- `/api` is proxied to the backend in development
-- `/uploads` is proxied to the backend in development
-- `/socket.io` is proxied with WebSocket support in development
-
 ## How to Get the First Admin on a Fresh Database
 
-This is one of the most common testing blockers in this repository.
-
-### Why It Happens
-
-- public registration only creates `STUDENT` or `TEACHER`
-- the seed does not create an admin
-- teacher approval, refund review, support handling, payout review, and other operations require admin access
-
-### Correct Approach
-
 1. Register a normal account through the frontend.
-2. Open Prisma Studio.
-
-```bash
-cd backend
-npm run prisma:studio
-```
-
-3. Open the `User` table.
-4. Change one user's `role` to `ADMIN`.
-5. Log in again with that account.
+2. Open Prisma Studio (`cd backend && npm run prisma:studio`).
+3. Open the `User` table and change one user's `role` to `ADMIN`.
+4. Log in again with that account.
 
 ## Recommended Demo Paths
-
-If you want to present the project clearly to a teacher, teammate, reviewer, or interviewer, these are the easiest truthful demo paths.
 
 ### Demo Path A: Student Purchase and Learning
 
@@ -866,6 +778,7 @@ If you want to present the project clearly to a teacher, teammate, reviewer, or 
 | `npm run dev` | start backend in development mode |
 | `npm run build` | generate Prisma Client and compile TypeScript |
 | `npm run start` | run the compiled backend |
+| `npm test` | run backend unit and contract tests |
 | `npm run typecheck` | TypeScript type check |
 | `npm run prisma:generate` | generate Prisma Client |
 | `npm run prisma:migrate` | run development migrations |
@@ -880,6 +793,7 @@ If you want to present the project clearly to a teacher, teammate, reviewer, or 
 | --- | --- |
 | `npm run dev` | start frontend in development mode |
 | `npm run build` | type check and build production assets |
+| `npm test` | run frontend unit and persistence-contract tests |
 | `npm run preview` | preview the production build |
 | `npm run typecheck` | TypeScript type check |
 | `npm run clean` | clean build and cache artifacts |
@@ -893,6 +807,7 @@ If you want to present the project clearly to a teacher, teammate, reviewer, or 
 | `NODE_ENV` | runtime environment |
 | `PORT` | backend port |
 | `API_VERSION` | API version prefix, default `v1` |
+| `FRONTEND_DIST_DIR` | built frontend directory path |
 | `LOG_LEVEL` | log level |
 | `DATABASE_URL` | PostgreSQL connection string |
 | `JWT_SECRET` | access token secret |
@@ -916,29 +831,22 @@ If you want to present the project clearly to a teacher, teammate, reviewer, or 
 
 | Variable | Purpose |
 | --- | --- |
-| `VITE_API_URL` | API base path |
+| `VITE_API_URL` | API base path or split-origin API URL |
 | `VITE_SOCKET_URL` | socket server URL, or current-origin fallback when empty |
 | `VITE_DEV_BACKEND_ORIGIN` | Vite dev proxy backend target |
-
-### Optional Frontend Public-Site Variables
-
-These are supported by the codebase even though they are not currently listed in `frontend/.env.example`:
-
-| Variable | Purpose |
-| --- | --- |
-| `VITE_SUPPORT_EMAIL` | help center or footer support email |
-| `VITE_LEGAL_EMAIL` | legal contact email |
-| `VITE_PRIVACY_EMAIL` | privacy contact email |
-| `VITE_SUPPORT_PHONE` | support phone |
-| `VITE_SUPPORT_ADDRESS` | support address |
-| `VITE_SUPPORT_HOURS` | support hours |
-| `VITE_SUPPORT_RESPONSE_WINDOW` | support response time text |
-| `VITE_SOCIAL_X_URL` | X profile URL |
-| `VITE_SOCIAL_GITHUB_URL` | GitHub URL |
-| `VITE_SOCIAL_LINKEDIN_URL` | LinkedIn URL |
-| `VITE_TERMS_LAST_UPDATED` | terms last-updated date |
-| `VITE_PRIVACY_LAST_UPDATED` | privacy last-updated date |
-| `VITE_GOVERNING_LAW` | governing law text |
+| `VITE_SUPPORT_EMAIL` | optional help center or footer support email |
+| `VITE_LEGAL_EMAIL` | optional legal contact email |
+| `VITE_PRIVACY_EMAIL` | optional privacy contact email |
+| `VITE_SUPPORT_PHONE` | optional support phone |
+| `VITE_SUPPORT_ADDRESS` | optional support address |
+| `VITE_SUPPORT_HOURS` | optional support hours |
+| `VITE_SUPPORT_RESPONSE_WINDOW` | optional support response time text |
+| `VITE_SOCIAL_X_URL` | optional X profile URL |
+| `VITE_SOCIAL_GITHUB_URL` | optional GitHub URL |
+| `VITE_SOCIAL_LINKEDIN_URL` | optional LinkedIn URL |
+| `VITE_TERMS_LAST_UPDATED` | optional terms last-updated date |
+| `VITE_PRIVACY_LAST_UPDATED` | optional privacy last-updated date |
+| `VITE_GOVERNING_LAW` | optional governing law text |
 
 ## Troubleshooting Notes
 
@@ -952,62 +860,40 @@ That is also expected on a fresh database. Promote an existing user to `ADMIN` t
 
 ### The frontend loads, but API requests fail
 
-Check:
-
-- that the backend is running on `http://localhost:3000`
-- that `frontend/.env` still points development traffic to the correct backend
-- that `CORS_ORIGIN` and `SOCKET_CORS_ORIGIN` allow the frontend origin
+Check that the backend is running on `http://localhost:3000`, `frontend/.env` points development traffic to the backend, and `CORS_ORIGIN` / `SOCKET_CORS_ORIGIN` allow the frontend origin.
 
 ### Live session opens the page, but not a built-in video room
 
-That is expected. The repository manages session state and chat, but the actual meeting room depends on `meetingUrl`.
-
-### Why are backend and frontend started separately
-
-Because the root project does not currently define a unified monorepo dev runner. Local development is intentionally split into two app processes.
+That is expected. The repository manages session state and chat, while the actual meeting room uses the configured external `meetingUrl`.
 
 ## How to Describe This Project Accurately
 
-If you want a strong but still accurate one-paragraph description, this is a safe version:
-
-> This is a full-stack online education platform built with React, Vite, TypeScript, Express, Prisma, and PostgreSQL. It is not just a course showcase frontend. The repository implements separate student, teacher, and admin flows, including teacher approval, course management, simulated checkout and orders, refunds, wallet and payout logic, community features, messaging, notifications, support tickets, admin moderation, and real-time live session state management.
-
-If you want a more conservative description:
-
-> This is a fairly complete business-oriented edtech platform prototype. The main workflows are implemented across frontend, backend, and database layers, but payments are still simulated, live sessions rely on external meeting links, the database starts empty, and automated tests are not yet included.
+> This is a full-stack online education platform built with React, Vite, TypeScript, Express, Prisma, and PostgreSQL. It implements separate student, teacher, and admin workflows, including teacher approval, course management, simulated checkout and multi-item orders, refunds, wallet and payout logic, community features, messaging, notifications, support tickets, admin moderation, and real-time live session coordination.
 
 ## Current Status Summary
 
-### What the Project Already Achieves
+### What the Project Achieves
 
-- clear frontend and backend separation
-- high-coverage business schema
-- meaningful multi-role workflow design
-- route and permission separation
-- substantial admin operations surface
-- implemented order, refund, wallet, and payout-related flows
+- clear frontend and backend separation with strict service-layer boundaries
+- high-coverage Prisma business schema
+- multi-role workflow design across student, teacher, and admin portals
+- automated unit and contract tests for critical business invariants
+- implemented order, refund, wallet, financial settlement, and payout flows
 - real-time session coordination and chat support
 
-### What the Project Does Not Yet Include
+### Current Intentional Scope Boundaries
 
-- no real payment gateway integration
-- no built-in native video conferencing stack
-- no default sample seed data
-- no project-owned automated test suite
-- no unified root-level one-command development script
+- simulated checkout rather than a live payment gateway
+- external meeting room links rather than an in-repo WebRTC media server
+- empty baseline seed by design
 
 ## Commit and Cleanup Guidance
 
-When sharing or pushing the repository, these runtime artifacts should usually stay out of source control:
+Keep runtime and build outputs out of source control:
 
 - `node_modules/`
 - `dist/`
 - `.env`
 - `uploads/`
 - `.pgdata/`
-- log files
-- build caches
-- TypeScript build info files
-- local QA screenshots
-
-These belong to local runtime, debugging, or generated output rather than the core source code of the project.
+- log files, build caches, and `*.tsbuildinfo` files

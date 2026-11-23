@@ -4,12 +4,15 @@ import { useNavigate } from 'react-router-dom';
 import { ImagePlus, Video, Tag, Link as LinkIcon, Trash2, Loader2, Star } from 'lucide-react';
 import communityService, { CreateCommunityPostInput } from '@/services/community.service';
 import { CommunityMedia, CommunityTag } from '@/types/community';
+import CommunityMediaPreview from '@/components/community/CommunityMediaPreview';
 import uploadService from '@/services/upload.service';
 import courseService from '@/services/course.service';
 import { useAuthStore } from '@/store/auth-store';
 import toast from 'react-hot-toast';
 import { extractErrorMessage } from '@/utils/error-handler';
-import { hasExactHostname, parseSafeHttpUrl } from '@/utils/safe-url';
+import { parseSafeHttpUrl } from '@/utils/safe-url';
+import { toStorableBackendAssetPath } from '@/utils/runtime';
+import { resolveExternalVideoEmbed } from '@/utils/video-embed';
 import { usePageTitle } from '@/hooks';
 
 const MIN_CONTENT = 10;
@@ -123,53 +126,9 @@ const containsRestrictedPostTerms = (...values: Array<string | undefined>): bool
   return RESTRICTED_TERMS.some((term) => combined.includes(term));
 };
 
-const hasEmbeddableYouTubeVideoId = (url: URL): boolean => {
-  const hostname = url.hostname.toLowerCase().replace(/^www\./, '');
-  const segments = url.pathname.split('/').filter(Boolean);
-
-  if (hostname === 'youtu.be') {
-    return Boolean(segments[0]);
-  }
-
-  if (url.pathname === '/watch') {
-    return Boolean(url.searchParams.get('v'));
-  }
-
-  return (segments[0] === 'embed' || segments[0] === 'shorts') && Boolean(segments[1]);
-};
-
-const hasEmbeddableVimeoVideoId = (url: URL): boolean => {
-  const hostname = url.hostname.toLowerCase().replace(/^www\./, '');
-  const segments = url.pathname.split('/').filter(Boolean);
-  const candidate =
-    hostname === 'player.vimeo.com' && segments[0] === 'video'
-      ? segments[1]
-      : segments[segments.length - 1];
-
-  return Boolean(candidate && /^\d+$/.test(candidate));
-};
-
-const hasEmbeddableDailymotionVideoId = (url: URL): boolean => {
-  const hostname = url.hostname.toLowerCase().replace(/^www\./, '');
-  const segments = url.pathname.split('/').filter(Boolean);
-  const candidate =
-    hostname === 'dai.ly'
-      ? segments[0]
-      : segments[0] === 'video'
-        ? segments[1]?.split('_')[0]
-        : '';
-
-  return Boolean(candidate);
-};
-
 const classifyMediaUrl = (value: string): 'image' | 'video' | undefined => {
   const trimmed = value.trim();
-  if (!trimmed) {
-    return undefined;
-  }
-
-  const parsedUrl = parseSafeHttpUrl(trimmed);
-  if (!parsedUrl) {
+  if (!trimmed || !parseSafeHttpUrl(trimmed)) {
     return undefined;
   }
 
@@ -179,12 +138,7 @@ const classifyMediaUrl = (value: string): 'image' | 'video' | undefined => {
 
   if (
     /\.(mp4|webm|m3u8|mov|ogg)(\?.*)?$/i.test(trimmed) ||
-    (hasExactHostname(parsedUrl, ['youtube.com', 'm.youtube.com', 'youtu.be']) &&
-      hasEmbeddableYouTubeVideoId(parsedUrl)) ||
-    (hasExactHostname(parsedUrl, ['vimeo.com', 'player.vimeo.com']) &&
-      hasEmbeddableVimeoVideoId(parsedUrl)) ||
-    (hasExactHostname(parsedUrl, ['dailymotion.com', 'dai.ly']) &&
-      hasEmbeddableDailymotionVideoId(parsedUrl))
+    Boolean(resolveExternalVideoEmbed(trimmed))
   ) {
     return 'video';
   }
@@ -385,7 +339,7 @@ const CreatePostPage = () => {
       const m: CommunityMedia = {
         id: createMediaId(),
         type: isImage ? 'image' : 'video',
-        url: uploadedUrl,
+        url: toStorableBackendAssetPath(uploadedUrl),
       };
       setMedia(prev => [...prev, m]);
     } catch (error) {
@@ -454,7 +408,10 @@ const CreatePostPage = () => {
       title: title.trim() || undefined,
       content: trimmed,
       tags: tags.map(({ name }) => ({ name })),
-      media,
+      media: media.map((item) => ({
+        ...item,
+        url: toStorableBackendAssetPath(item.url),
+      })),
       courseId: linkedCourse?.id,
       courseTitle: linkedCourse?.title,
     };
@@ -473,7 +430,7 @@ const CreatePostPage = () => {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-primary-50/10 to-indigo-50/20 py-8 relative">
       <div className="absolute inset-0 bg-[linear-gradient(rgba(0,0,0,0.015)_1px,transparent_1px),linear-gradient(90deg,rgba(0,0,0,0.015)_1px,transparent_1px)] bg-[size:32px_32px] pointer-events-none"></div>
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 max-w-3xl relative">
+      <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 relative">
         <div className="flex items-center gap-3 mb-6">
           <div className="w-12 h-12 bg-gradient-to-br from-primary-500 to-indigo-600 rounded-2xl flex items-center justify-center shadow-lg shadow-primary-500/25">
             <Star className="w-6 h-6 text-white" />
@@ -521,16 +478,18 @@ const CreatePostPage = () => {
                   <ImagePlus className="w-4 h-4" /> Upload Image
                   <input type="file" accept="image/*" hidden onChange={(e) => {
                   if (e.target.files && e.target.files[0]) {
-                    onUpload(e.target.files[0]);
+                    void onUpload(e.target.files[0]);
                   }
+                  e.target.value = '';
                 }} />
                 </label>
                 <label className="btn-outline btn-sm inline-flex items-center gap-2 cursor-pointer">
                   <Video className="w-4 h-4" /> Upload Video
                   <input type="file" accept="video/*" hidden onChange={(e) => {
                   if (e.target.files && e.target.files[0]) {
-                    onUpload(e.target.files[0]);
+                    void onUpload(e.target.files[0]);
                   }
+                  e.target.value = '';
                 }} />
                 </label>
 
@@ -561,18 +520,12 @@ const CreatePostPage = () => {
                 <div className="grid grid-cols-2 gap-3">
                   {media.map((m, idx) => (
                     <div key={m.id} className="relative group">
-                      {/* Media preview */}
-                      {m.type === 'image' ? (
-                        <img src={m.url} alt={title.trim() ? `${title.trim()} selected media ${idx + 1}` : `Selected media ${idx + 1}`} className="w-full h-44 object-cover rounded-xl border" />
-                      ) : (
-                        <video
-                          src={m.url}
-                          title={title.trim() ? `${title.trim()} selected media ${idx + 1}` : `Selected media ${idx + 1}`}
-                          aria-label={title.trim() ? `${title.trim()} selected media ${idx + 1}` : `Selected media ${idx + 1}`}
-                          className="w-full h-44 object-cover rounded-xl border"
-                          controls
-                        />
-                      )}
+                      <CommunityMediaPreview
+                        media={m}
+                        title={title.trim() ? `${title.trim()} selected media ${idx + 1}` : `Selected media ${idx + 1}`}
+                        className="w-full h-44 object-cover rounded-xl border"
+                        interactive
+                      />
 
                       {/* Remove */}
                       <button type="button" onClick={() => removeMedia(m.id)} className="absolute top-2 right-2 p-1 rounded-full bg-white shadow border hover:bg-gray-50" aria-label="remove media"><Trash2 className="w-4 h-4" /></button>
@@ -616,7 +569,7 @@ const CreatePostPage = () => {
                   className="input flex-1"
                   placeholder="#cloud-computing"
                 />
-                <button type="button" onClick={addTag} aria-label="Add topic tag" className="btn-outline">Add</button>
+                <button type="button" onClick={() => void addTag()} aria-label="Add topic tag" className="btn-outline">Add</button>
               </div>
               <div className="flex items-center gap-2 flex-wrap">
                 {tags.map(t => (
@@ -686,7 +639,7 @@ const CreatePostPage = () => {
               >
                 Cancel
               </button>
-              <button type="button" onClick={submit} disabled={!canSubmit} className="btn-primary disabled:opacity-50 disabled:cursor-not-allowed">Publish</button>
+              <button type="button" onClick={() => void submit()} disabled={!canSubmit} className="btn-primary disabled:opacity-50 disabled:cursor-not-allowed">Publish</button>
             </div>
           </div>
         </div>

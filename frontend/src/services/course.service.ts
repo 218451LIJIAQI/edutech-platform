@@ -1,21 +1,55 @@
 import api from './api';
-import { Course, Lesson, LessonPackage, Material, ApiResponse, PaginatedResponse, QuizAttempt, QuizSubmissionResult } from '@/types';
+import {
+  Course,
+  Lesson,
+  LessonPackage,
+  LessonQuiz,
+  Material,
+  ApiResponse,
+  PaginatedResponse,
+  QuizAttempt,
+  QuizSubmissionResult,
+} from '@/types';
 import { extractData, extractPaginatedData } from './response-utils';
 import {
   normalizeCourseAssets,
   normalizeLessonAssets,
+  normalizeLessonPackage,
   normalizeMaterialAssets,
 } from '@/utils/asset-normalizers';
 
-/**
- * Course Service
- * Handles all course-related API calls
- */
+export type CourseUpdatePayload = Omit<
+  Partial<Course>,
+  'thumbnail' | 'previewVideoUrl'
+> & {
+  thumbnail?: string | null;
+  previewVideoUrl?: string | null;
+};
+
+export type LessonUpdatePayload = Omit<
+  Partial<Lesson>,
+  'description' | 'duration' | 'videoUrl' | 'quiz'
+> & {
+  description?: string | null;
+  duration?: number | null;
+  videoUrl?: string | null;
+  quiz?: LessonQuiz | null;
+};
+
+export type PackageUpdatePayload = Omit<
+  Partial<LessonPackage>,
+  'description' | 'duration' | 'maxStudents'
+> & {
+  description?: string | null;
+  duration?: number | null;
+  maxStudents?: number | null;
+};
+
+export type MaterialUpdatePayload = Omit<Partial<Material>, 'description'> & {
+  description?: string | null;
+};
 
 const courseService = {
-  /**
-   * Get all published courses
-   */
   getAllCourses: async (params?: {
     category?: string;
     teacherId?: string;
@@ -41,57 +75,39 @@ const courseService = {
     };
   },
 
-  /**
-   * Get course by ID
-   */
   getCourseById: async (id: string): Promise<Course> => {
     const response = await api.get<ApiResponse<Course>>(`/courses/${id}`);
     return normalizeCourseAssets(extractData(response));
   },
 
-  /**
-   * Get course categories
-   */
   getCategories: async (): Promise<string[]> => {
     const response = await api.get<ApiResponse<string[]>>('/courses/categories/all');
     return extractData(response);
   },
 
-  /**
-   * Get teacher's own courses (Teacher only)
-   */
   getMyCourses: async (): Promise<Course[]> => {
     const response = await api.get<ApiResponse<Course[]>>('/courses/my-courses');
     return extractData(response).map((course) => normalizeCourseAssets(course));
   },
 
-  /**
-   * Create a new course (Teacher only)
-   */
   createCourse: async (data: Partial<Course>): Promise<Course> => {
     const response = await api.post<ApiResponse<Course>>('/courses', data);
     return normalizeCourseAssets(extractData(response));
   },
 
-  /**
-   * Update course (Teacher only)
-   */
-  updateCourse: async (id: string, data: Partial<Course>): Promise<Course> => {
+  updateCourse: async (id: string, data: CourseUpdatePayload): Promise<Course> => {
     const response = await api.put<ApiResponse<Course>>(`/courses/${id}`, data);
     return normalizeCourseAssets(extractData(response));
   },
 
-  /**
-   * Delete course (Teacher only)
-   */
   deleteCourse: async (id: string): Promise<void> => {
     await api.delete(`/courses/${id}`);
   },
 
-  /**
-   * Create lesson (Teacher only)
-   */
-  createLesson: async (courseId: string, data: Partial<Lesson>): Promise<Lesson> => {
+  createLesson: async (
+    courseId: string,
+    data: LessonUpdatePayload
+  ): Promise<Lesson> => {
     const response = await api.post<ApiResponse<Lesson>>(
       `/courses/${courseId}/lessons`,
       data
@@ -99,10 +115,10 @@ const courseService = {
     return normalizeLessonAssets(extractData(response));
   },
 
-  /**
-   * Update lesson (Teacher only)
-   */
-  updateLesson: async (lessonId: string, data: Partial<Lesson>): Promise<Lesson> => {
+  updateLesson: async (
+    lessonId: string,
+    data: LessonUpdatePayload
+  ): Promise<Lesson> => {
     const response = await api.put<ApiResponse<Lesson>>(
       `/courses/lessons/${lessonId}`,
       data
@@ -110,17 +126,14 @@ const courseService = {
     return normalizeLessonAssets(extractData(response));
   },
 
-  /**
-   * Delete lesson (Teacher only)
-   */
   deleteLesson: async (lessonId: string): Promise<void> => {
     await api.delete(`/courses/lessons/${lessonId}`);
   },
 
-  /**
-   * Submit quiz answers for a lesson (Student only)
-   */
-  submitLessonQuiz: async (lessonId: string, answers: number[]): Promise<QuizSubmissionResult> => {
+  submitLessonQuiz: async (
+    lessonId: string,
+    answers: number[]
+  ): Promise<QuizSubmissionResult> => {
     const response = await api.post<ApiResponse<QuizSubmissionResult>>(
       `/courses/lessons/${lessonId}/quiz/submit`,
       { answers }
@@ -128,55 +141,50 @@ const courseService = {
     return extractData(response);
   },
 
-  /**
-   * Get quiz attempts for a teacher-owned course
-   */
   getCourseQuizAttempts: async (courseId: string): Promise<QuizAttempt[]> => {
-    const response = await api.get<ApiResponse<QuizAttempt[]>>(`/courses/${courseId}/quiz-attempts`);
+    const response = await api.get<ApiResponse<QuizAttempt[]>>(
+      `/courses/${courseId}/quiz-attempts`
+    );
     return extractData(response);
   },
 
-  /**
-   * Get the authenticated student's quiz attempts for a course
-   */
   getMyCourseQuizAttempts: async (courseId: string): Promise<QuizAttempt[]> => {
-    const response = await api.get<ApiResponse<QuizAttempt[]>>(`/courses/${courseId}/my-quiz-attempts`);
+    const response = await api.get<ApiResponse<QuizAttempt[]>>(
+      `/courses/${courseId}/my-quiz-attempts`
+    );
     return extractData(response);
   },
 
-  /**
-   * Create lesson package (Teacher only)
-   */
-  createPackage: async (courseId: string, data: Partial<LessonPackage>): Promise<LessonPackage> => {
+  createPackage: async (
+    courseId: string,
+    data: PackageUpdatePayload
+  ): Promise<LessonPackage> => {
     const response = await api.post<ApiResponse<LessonPackage>>(
       `/courses/${courseId}/packages`,
       data
     );
-    return extractData(response);
+    return normalizeLessonPackage(extractData(response));
   },
 
-  /**
-   * Update lesson package (Teacher only)
-   */
-  updatePackage: async (packageId: string, data: Partial<LessonPackage>): Promise<LessonPackage> => {
+  updatePackage: async (
+    packageId: string,
+    data: PackageUpdatePayload
+  ): Promise<LessonPackage> => {
     const response = await api.put<ApiResponse<LessonPackage>>(
       `/courses/packages/${packageId}`,
       data
     );
-    return extractData(response);
+    return normalizeLessonPackage(extractData(response));
   },
 
-  /**
-   * Delete lesson package (Teacher only)
-   */
   deletePackage: async (packageId: string): Promise<void> => {
     await api.delete(`/courses/packages/${packageId}`);
   },
 
-  /**
-   * Upload material (Teacher only)
-   */
-  uploadMaterial: async (courseId: string, data: Partial<Material>): Promise<Material> => {
+  uploadMaterial: async (
+    courseId: string,
+    data: MaterialUpdatePayload
+  ): Promise<Material> => {
     const response = await api.post<ApiResponse<Material>>(
       `/courses/${courseId}/materials`,
       data
@@ -184,10 +192,10 @@ const courseService = {
     return normalizeMaterialAssets(extractData(response));
   },
 
-  /**
-   * Update material (Teacher only)
-   */
-  updateMaterial: async (materialId: string, data: Partial<Material>): Promise<Material> => {
+  updateMaterial: async (
+    materialId: string,
+    data: MaterialUpdatePayload
+  ): Promise<Material> => {
     const response = await api.put<ApiResponse<Material>>(
       `/courses/materials/${materialId}`,
       data
@@ -195,9 +203,6 @@ const courseService = {
     return normalizeMaterialAssets(extractData(response));
   },
 
-  /**
-   * Delete material (Teacher only)
-   */
   deleteMaterial: async (materialId: string): Promise<void> => {
     await api.delete(`/courses/materials/${materialId}`);
   },

@@ -1,4 +1,4 @@
-import type { LessonPackage } from '@/types';
+import type { PackageUpdatePayload } from '@/services/course.service';
 import type { PackageFormData } from './types';
 
 const DECIMAL_PLACES = 2;
@@ -13,13 +13,11 @@ const parseNumber = (value: number | string | null | undefined): number => {
 
   if (typeof value === 'string') {
     const normalizedValue = value.trim();
-
     if (!normalizedValue) {
       return 0;
     }
 
     const parsedValue = Number(normalizedValue);
-
     return Number.isFinite(parsedValue) ? parsedValue : 0;
   }
 
@@ -28,7 +26,6 @@ const parseNumber = (value: number | string | null | undefined): number => {
 
 const parseInteger = (value: number | string | null | undefined): number => {
   const parsedValue = parseNumber(value);
-
   return Number.isFinite(parsedValue) ? Math.trunc(parsedValue) : 0;
 };
 
@@ -51,11 +48,18 @@ export const calculatePackageFinalPrice = (
   return roundCurrency(Math.max(0, normalizedPrice - normalizedDiscount));
 };
 
+/**
+ * Builds a package create/update payload.
+ * Entering `0` or leaving `duration` blank means lifetime access (`undefined` on
+ * create, `null` on update so timed packages can be switched to lifetime access).
+ */
 export const buildPackageSavePayload = (
   data: PackageFormData,
-  features: string[]
-): Partial<LessonPackage> => {
+  features: string[],
+  options?: { isEditMode?: boolean }
+): PackageUpdatePayload => {
   const normalizedFeatures = normalizeFeatures(features);
+  const isEditMode = Boolean(options?.isEditMode);
 
   if (normalizedFeatures.length === 0) {
     throw new Error('Please add at least one package feature');
@@ -63,7 +67,7 @@ export const buildPackageSavePayload = (
 
   const price = roundCurrency(parseNumber(data.price));
   const discount = roundCurrency(parseNumber(data.discount));
-  const duration = parseInteger(data.duration);
+  const rawDuration = parseInteger(data.duration);
   const maxStudents = parseInteger(data.maxStudents);
   const finalPrice = calculatePackageFinalPrice(price, discount);
 
@@ -79,7 +83,7 @@ export const buildPackageSavePayload = (
     throw new Error('Discount cannot exceed price');
   }
 
-  if (duration < 0) {
+  if (rawDuration < 0) {
     throw new Error('Duration cannot be negative');
   }
 
@@ -87,12 +91,17 @@ export const buildPackageSavePayload = (
     throw new Error('Max students must be at least 1');
   }
 
+  const duration =
+    rawDuration > 0 ? rawDuration : isEditMode ? null : undefined;
+  const trimmedDescription = data.description?.trim() ?? '';
+
   return {
-    ...data,
+    name: data.name.trim(),
+    description: trimmedDescription || (isEditMode ? null : undefined),
     price,
     discount,
     finalPrice,
-    duration,
+    ...(duration !== undefined ? { duration } : {}),
     maxStudents,
     features: normalizedFeatures,
   };

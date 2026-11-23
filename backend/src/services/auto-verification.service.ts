@@ -7,15 +7,12 @@ import prisma from "../config/database";
 import logger from "../utils/logger";
 import { createTeacherNotification } from "./teacher/teacher-service-helpers";
 
-// ================================
-// ACCEPTED DOCUMENT TYPES
-// ================================
-
 const ACCEPTED_DOCUMENT_TYPES = new Set([
   "teaching license",
   "teaching certificate",
   "degree certificate",
   "professional certification",
+  "professional license",
   "bachelor degree",
   "master degree",
   "phd certificate",
@@ -43,16 +40,12 @@ const VALID_DOCUMENT_EXTENSIONS = new Set([
   ".docx",
 ]);
 
-// ================================
-// AUTO-VERIFICATION RULES
-// ================================
-
 interface VerificationCheckResult {
   passed: boolean;
   reason?: string;
 }
 
-const checkDocumentTypeAccepted = (
+export const checkDocumentTypeAccepted = (
   documentType: string,
 ): VerificationCheckResult => {
   const normalizedType = documentType
@@ -179,10 +172,6 @@ const checkTeacherProfileComplete = async (
   return { passed: true };
 };
 
-// ================================
-// AUTO-VERIFICATION ENGINE
-// ================================
-
 interface AutoVerificationResult {
   autoApproved: boolean;
   verificationMethod: VerificationMethod;
@@ -195,19 +184,16 @@ const runAutoVerificationChecks = async (
 ): Promise<AutoVerificationResult> => {
   const failedChecks: string[] = [];
 
-  // Rule 1: Document type is in accepted list
   const typeCheck = checkDocumentTypeAccepted(verification.documentType);
   if (!typeCheck.passed && typeCheck.reason) {
     failedChecks.push(typeCheck.reason);
   }
 
-  // Rule 2: Document URL is valid
   const urlCheck = checkDocumentUrlValid(verification.documentUrl);
   if (!urlCheck.passed && urlCheck.reason) {
     failedChecks.push(urlCheck.reason);
   }
 
-  // Rule 3: No duplicate approved submissions
   const duplicateCheck = await checkNoDuplicateSubmission(
     verification.teacherProfileId,
     verification.documentType,
@@ -218,7 +204,6 @@ const runAutoVerificationChecks = async (
     failedChecks.push(duplicateCheck.reason);
   }
 
-  // Rule 4: Teacher profile has required basic fields
   const profileCheck = await checkTeacherProfileComplete(
     verification.teacherProfileId,
   );
@@ -238,14 +223,12 @@ const runAutoVerificationChecks = async (
   };
 };
 
-// ================================
-// SERVICE
-// ================================
-
 class AutoVerificationService {
   /**
-   * Process a newly submitted verification through automated checks.
-   * If all checks pass, auto-approve. Otherwise, keep as PENDING with review notes.
+   * Processes a newly submitted TeacherVerification document through automated checks.
+   * Updates only `isVerified` and `verificationStatus` on `TeacherProfile` — never
+   * touching `profileReviewedAt` or `profileReviewNotes`, which belong strictly
+   * to extended profile submissions (`TeacherProfileSubmission`).
    */
   async processVerification(
     verificationId: string,
@@ -313,8 +296,6 @@ class AutoVerificationService {
           data: {
             isVerified: true,
             verificationStatus: VerificationStatus.APPROVED,
-            profileReviewedAt: reviewTimestamp,
-            profileReviewNotes: result.reviewNotes,
           },
         });
 
@@ -336,7 +317,6 @@ class AutoVerificationService {
       return updated!;
     }
 
-    // Not auto-approved: update with method=AUTO and review notes, keep status=PENDING
     await prisma.teacherVerification.update({
       where: { id: verificationId },
       data: {
@@ -350,9 +330,6 @@ class AutoVerificationService {
     }))!;
   }
 
-  /**
-   * Get auto-verification statistics for admin dashboard.
-   */
   async getAutoVerificationStats(): Promise<{
     totalProcessed: number;
     autoApproved: number;

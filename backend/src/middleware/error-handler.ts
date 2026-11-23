@@ -11,29 +11,14 @@ import { AppError } from "../utils/errors";
 import logger from "../utils/logger";
 import config from "../config/env";
 
-const getErrorMessage = (error: unknown): string => {
-  if (error instanceof Error) {
-    return error.message;
-  }
+const getErrorMessage = (error: unknown): string =>
+  error instanceof Error ? error.message : "Unexpected error occurred";
 
-  return "Unexpected error occurred";
-};
+const getErrorName = (error: unknown): string =>
+  error instanceof Error ? error.name : "UnknownError";
 
-const getErrorName = (error: unknown): string => {
-  if (error instanceof Error) {
-    return error.name;
-  }
-
-  return "UnknownError";
-};
-
-const getErrorStack = (error: unknown): string | undefined => {
-  if (error instanceof Error) {
-    return error.stack;
-  }
-
-  return undefined;
-};
+const getErrorStack = (error: unknown): string | undefined =>
+  error instanceof Error ? error.stack : undefined;
 
 type HttpParserError = Error & {
   status?: number;
@@ -87,10 +72,7 @@ const handleMulterError = (
   return res
     .status(error.code === "LIMIT_FILE_SIZE" ? 413 : 400)
     .json(
-      errorResponse(
-        req,
-        messageByCode[error.code] || "Invalid file upload",
-      ),
+      errorResponse(req, messageByCode[error.code] || "Invalid file upload"),
     );
 };
 
@@ -104,30 +86,24 @@ const handlePrismaKnownRequestError = (
       return res
         .status(400)
         .json(errorResponse(req, "Input value is too long"));
-
     case "P2002":
       return res
         .status(409)
         .json(errorResponse(req, "Resource already exists"));
-
     case "P2003":
       return res
         .status(400)
         .json(errorResponse(req, "Invalid related resource reference"));
-
     case "P2011":
       return res
         .status(400)
         .json(errorResponse(req, "Required field cannot be null"));
-
     case "P2012":
       return res
         .status(400)
         .json(errorResponse(req, "Missing required field"));
-
     case "P2025":
       return res.status(404).json(errorResponse(req, "Resource not found"));
-
     default:
       return res
         .status(400)
@@ -135,26 +111,33 @@ const handlePrismaKnownRequestError = (
   }
 };
 
-/**
- * Global error handling middleware.
- *
- * This middleware handles operational errors, Prisma errors, authentication errors,
- * and unexpected server errors in a consistent response format.
- */
 export const errorHandler: ErrorRequestHandler = (err, req, res, next) => {
   if (res.headersSent) {
     return next(err);
   }
 
-  logger.error("Unhandled error", {
+  const isClientAppError = err instanceof AppError && err.statusCode < 500;
+  const logPayload = {
     message: getErrorMessage(err),
     name: getErrorName(err),
-    stack: getErrorStack(err),
+    ...(isClientAppError ? {} : { stack: getErrorStack(err) }),
     method: req.method,
     url: req.originalUrl,
     ip: req.ip,
     requestId: req.requestId,
-  });
+  };
+
+  if (
+    isClientAppError ||
+    isHttpParserError(err) ||
+    err instanceof multer.MulterError ||
+    getErrorName(err) === "JsonWebTokenError" ||
+    getErrorName(err) === "TokenExpiredError"
+  ) {
+    logger.warn("Client request error", logPayload);
+  } else {
+    logger.error("Unhandled error", logPayload);
+  }
 
   if (err instanceof AppError) {
     return res.status(err.statusCode).json(errorResponse(req, err.message));
@@ -220,9 +203,6 @@ export const errorHandler: ErrorRequestHandler = (err, req, res, next) => {
     );
 };
 
-/**
- * Handle unmatched routes.
- */
 export const notFound = (req: Request, res: Response, _next: NextFunction) => {
   return res
     .status(404)

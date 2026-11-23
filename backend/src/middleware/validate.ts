@@ -19,8 +19,7 @@ const normalizeValidationMessage = (message: unknown): string => {
   }
 
   try {
-    const jsonMessage = JSON.stringify(message);
-    return jsonMessage || "Validation failed";
+    return JSON.stringify(message) || "Validation failed";
   } catch {
     return String(message || "Validation failed");
   }
@@ -94,17 +93,6 @@ const collectValidationError = (
   }
 };
 
-/**
- * Runs express-validator validation chains and returns a consistent error response.
- *
- * Supports:
- * - single validation chain
- * - multiple validation chains
- * - field errors
- * - global errors
- * - unknown field errors
- * - alternative validation errors
- */
 export const validate = (
   validations: ValidationChain | ValidationChain[],
 ): RequestHandler => {
@@ -115,13 +103,11 @@ export const validate = (
       await Promise.all(chains.map((validation) => validation.run(req)));
 
       const result = validationResult(req);
-
       if (result.isEmpty()) {
         return next();
       }
 
       const errors: ValidationErrorMap = {};
-
       result.array({ onlyFirstError: false }).forEach((error) => {
         collectValidationError(errors, error);
       });
@@ -130,6 +116,7 @@ export const validate = (
         status: "error",
         message: "Validation failed",
         errors,
+        ...(req.requestId ? { requestId: req.requestId } : {}),
       });
     } catch (error) {
       return next(error);

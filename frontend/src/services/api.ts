@@ -7,11 +7,15 @@ import {
   hasRecoverableAuthState,
   storeAccessToken,
 } from '@/utils/auth-storage';
-import { getApiBaseUrl } from '@/utils/runtime';
+import {
+  getApiBaseUrl,
+  normalizeRequestPath,
+  resolveApiRequestUrl,
+  shouldAttachAuthHeader,
+} from '@/utils/runtime';
 
-/**
- * Axios instance with base configuration
- */
+export { normalizeRequestPath, resolveApiRequestUrl, shouldAttachAuthHeader };
+
 const API_URL = getApiBaseUrl();
 const AUTH_REFRESH_EXEMPT_PATHS = new Set([
   '/auth/login',
@@ -21,83 +25,12 @@ const AUTH_REFRESH_EXEMPT_PATHS = new Set([
   '/auth/reset-password',
   '/auth/refresh',
 ]);
+
 let refreshAccessTokenPromise: Promise<string | null> | null = null;
 let isRedirectingToLogin = false;
-const ABSOLUTE_HTTP_URL_PATTERN = /^https?:\/\//i;
-const PROTOCOL_RELATIVE_URL_PATTERN = /^\/\//;
-
-const getRuntimeOrigin = (): string => {
-  if (typeof window !== 'undefined') {
-    return window.location.origin;
-  }
-
-  return 'http://localhost';
-};
-
-const getApiUrlParts = (): { origin: string; pathname: string } => {
-  try {
-    const parsedApiUrl = ABSOLUTE_HTTP_URL_PATTERN.test(API_URL)
-      ? new URL(API_URL)
-      : new URL(API_URL, getRuntimeOrigin());
-
-    return {
-      origin: parsedApiUrl.origin,
-      pathname: parsedApiUrl.pathname.replace(/\/+$/, '') || '/',
-    };
-  } catch {
-    return {
-      origin: getRuntimeOrigin(),
-      pathname: '/',
-    };
-  }
-};
-
-const shouldAttachAuthHeader = (url?: string): boolean => {
-  if (!url) {
-    return true;
-  }
-
-  if (PROTOCOL_RELATIVE_URL_PATTERN.test(url.trim())) {
-    return false;
-  }
-
-  try {
-    const requestUrl = ABSOLUTE_HTTP_URL_PATTERN.test(url)
-      ? new URL(url)
-      : new URL(url, API_URL);
-    const apiUrl = getApiUrlParts();
-    const apiPathname =
-      apiUrl.pathname === '/' ? '/' : `${apiUrl.pathname}/`;
-    const requestPathname = requestUrl.pathname.endsWith('/')
-      ? requestUrl.pathname
-      : `${requestUrl.pathname}/`;
-
-    return (
-      requestUrl.origin === apiUrl.origin &&
-      requestPathname.startsWith(apiPathname)
-    );
-  } catch {
-    return !ABSOLUTE_HTTP_URL_PATTERN.test(url) && !PROTOCOL_RELATIVE_URL_PATTERN.test(url);
-  }
-};
-
-const normalizeRequestPath = (url?: string): string => {
-  if (!url) {
-    return '';
-  }
-
-  try {
-    return new URL(url, API_URL).pathname;
-  } catch {
-    // Fall back to the raw request path when URL parsing fails.
-  }
-
-  const pathOnly = url.split(/[?#]/, 1)[0] || '';
-  return pathOnly.startsWith('/') ? pathOnly : `/${pathOnly}`;
-};
 
 const shouldSkipTokenRefresh = (url?: string): boolean =>
-  AUTH_REFRESH_EXEMPT_PATHS.has(normalizeRequestPath(url));
+  AUTH_REFRESH_EXEMPT_PATHS.has(normalizeRequestPath(url, API_URL));
 
 const redirectToLogin = () => {
   if (typeof window === 'undefined' || isRedirectingToLogin) {
@@ -118,6 +51,12 @@ const clearSessionAndRedirect = () => {
   redirectToLogin();
 };
 
+interface RefreshTokenResponse {
+  data?: {
+    accessToken?: string;
+  };
+}
+
 const refreshAccessToken = async (): Promise<string | null> => {
   if (!refreshAccessTokenPromise) {
     refreshAccessTokenPromise = (async () => {
@@ -125,20 +64,16 @@ const refreshAccessToken = async (): Promise<string | null> => {
         const response = await axios.post<RefreshTokenResponse>(
           `${API_URL}/auth/refresh`,
           {},
-          {
-            withCredentials: true,
-          }
+          { withCredentials: true }
         );
 
         const accessToken = response.data?.data?.accessToken;
-
         if (!accessToken) {
           clearSessionAndRedirect();
           return null;
         }
 
         storeAccessToken(accessToken);
-
         return accessToken;
       } catch (refreshError) {
         clearSessionAndRedirect();
@@ -160,58 +95,35 @@ const api: AxiosInstance = axios.create({
   },
 });
 
-/**
- * Extended request config with retry flag
- */
 interface ExtendedRequestConfig extends InternalAxiosRequestConfig {
   _retry?: boolean;
 }
 
-/**
- * Refresh token response type
- */
-interface RefreshTokenResponse {
-  data?: {
-    accessToken?: string;
-  };
-}
-
-/**
- * Error response type
- */
 interface ErrorResponse {
   message?: string;
 }
 
-/**
- * Request interceptor to add auth token
- */
 api.interceptors.request.use(
   async (config) => {
     let token = getAccessToken();
 
     if (
       !token &&
-      shouldAttachAuthHeader(config.url) &&
+      shouldAttachAuthHeader(config.url, API_URL) &&
       !shouldSkipTokenRefresh(config.url) &&
       hasRecoverableAuthState()
     ) {
       token = await refreshAccessToken().catch(() => null);
     }
 
-    if (token && config.headers && shouldAttachAuthHeader(config.url)) {
+    if (token && config.headers && shouldAttachAuthHeader(config.url, API_URL)) {
       config.headers.Authorization = `Bearer ${token}`;
     }
     return config;
   },
-  (error) => {
-    return Promise.reject(error);
-  }
+  (error) => Promise.reject(error)
 );
 
-/**
- * Response interceptor to handle errors globally
- */
 api.interceptors.response.use(
   (response) => response,
   async (error: AxiosError<ErrorResponse>) => {
@@ -221,7 +133,6 @@ api.interceptors.response.use(
       return Promise.reject(error);
     }
 
-    // Handle token expiration
     if (
       error.response?.status === 401 &&
       !originalRequest._retry &&
@@ -244,12 +155,10 @@ api.interceptors.response.use(
       }
     }
 
-    // Handle other errors
     const status = error.response?.status;
     const errorData = error.response?.data;
     let errorMessage = errorData?.message || 'An error occurred. Please try again.';
 
-    // Customize error messages based on status code
     if (status === 429) {
       errorMessage = 'Too many requests. Please wait a moment and try again.';
       toast.error(errorMessage, { duration: 4000 });
@@ -263,7 +172,6 @@ api.interceptors.response.use(
       errorMessage = 'Server error. Please try again later.';
       toast.error(errorMessage);
     } else if (status && status !== 400) {
-      // Don't show toast for validation errors (400 - they're handled in forms)
       toast.error(errorMessage);
     }
 

@@ -1,4 +1,6 @@
 import type { Material } from '@/types';
+import type { MaterialUpdatePayload } from '@/services/course.service';
+import { toStorableBackendAssetPath } from '@/utils/runtime';
 import { normalizeSafeHttpUrl, normalizeSafeInternalPath } from '@/utils/safe-url';
 import type { MaterialFormData, MaterialSourceType } from './types';
 
@@ -56,9 +58,9 @@ const inferMaterialMimeTypeFromUrl = (fileUrl: string): string => {
 };
 
 const normalizeMaterialUrl = (value: string): string => {
-  const trimmedValue = value.trim();
+  const storable = toStorableBackendAssetPath(value.trim());
   const safeUrl =
-    normalizeSafeHttpUrl(trimmedValue) || normalizeSafeInternalPath(trimmedValue);
+    normalizeSafeInternalPath(storable) || normalizeSafeHttpUrl(storable);
 
   if (!safeUrl) {
     throw new Error('Material file must be a valid http(s) URL or internal file path');
@@ -89,7 +91,7 @@ export const buildMaterialSavePayload = async (params: {
   existingMaterial?: Pick<Material, 'fileUrl' | 'fileType' | 'fileSize'>;
   uploadService: MaterialUploadServiceLike;
   toastController: MaterialToastController;
-}): Promise<Partial<Material>> => {
+}): Promise<MaterialUpdatePayload> => {
   const {
     data,
     materialType,
@@ -100,13 +102,20 @@ export const buildMaterialSavePayload = async (params: {
     toastController,
   } = params;
 
+  const isEditMode = Boolean(existingMaterial);
+  const trimmedDescription = data.description?.trim() ?? '';
+  const baseFields: MaterialUpdatePayload = {
+    title: data.title.trim(),
+    description: trimmedDescription || (isEditMode ? null : undefined),
+    isDownloadable: Boolean(data.isDownloadable),
+  };
+
   if (materialType === 'upload') {
     if (!materialFile) {
-      throw new Error(
-        existingMaterial
-          ? 'Please upload a file to replace the current material'
-          : 'Please upload a file or provide a link',
-      );
+      if (existingMaterial?.fileUrl) {
+        return baseFields;
+      }
+      throw new Error('Please upload a file or provide a link');
     }
 
     const loadingToastId = toastController.show('Uploading material...');
@@ -116,7 +125,7 @@ export const buildMaterialSavePayload = async (params: {
       const safeFileUrl = normalizeMaterialUrl(uploadResult.url);
 
       return {
-        ...data,
+        ...baseFields,
         fileUrl: safeFileUrl,
         fileType: resolveMaterialMimeType(uploadResult.mimeType, safeFileUrl),
         fileSize: validateMaterialFileSize(uploadResult.size),
@@ -133,20 +142,21 @@ export const buildMaterialSavePayload = async (params: {
       throw new Error(
         existingMaterial
           ? 'Please provide a link to replace the current material'
-          : 'Please upload a file or provide a link',
+          : 'Please upload a file or provide a link'
       );
     }
 
     const safeFileUrl = normalizeMaterialUrl(fileUrl);
+    const existingStorable = existingMaterial
+      ? toStorableBackendAssetPath(existingMaterial.fileUrl)
+      : '';
 
-    if (existingMaterial && safeFileUrl === existingMaterial.fileUrl) {
-      return {
-        ...data,
-      };
+    if (existingMaterial && safeFileUrl === existingStorable) {
+      return baseFields;
     }
 
     return {
-      ...data,
+      ...baseFields,
       fileUrl: safeFileUrl,
       fileType: inferMaterialMimeTypeFromUrl(safeFileUrl),
       fileSize: 0,

@@ -10,6 +10,29 @@ export interface SupportConversationEntry {
   readonly createdAt: string;
 }
 
+export const MAX_SUPPORT_ATTACHMENT_SIZE_BYTES = 10 * 1024 * 1024;
+
+export const ACCEPTED_SUPPORT_ATTACHMENT_TYPES = [
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+  'application/pdf',
+] as const;
+
+export const SUPPORT_ATTACHMENT_ACCEPT = ACCEPTED_SUPPORT_ATTACHMENT_TYPES.join(',');
+
+export const validateSupportAttachmentFile = (file: File): string | null => {
+  if (!(ACCEPTED_SUPPORT_ATTACHMENT_TYPES as readonly string[]).includes(file.type)) {
+    return 'Only JPG, PNG, WebP, and PDF files are supported.';
+  }
+
+  if (file.size > MAX_SUPPORT_ATTACHMENT_SIZE_BYTES) {
+    return 'Attachment must be 10MB or smaller.';
+  }
+
+  return null;
+};
+
 const trimText = (value?: string | null) => (value ?? '').trim();
 
 export const getSupportAttachmentLabel = (attachment?: string | null): string => {
