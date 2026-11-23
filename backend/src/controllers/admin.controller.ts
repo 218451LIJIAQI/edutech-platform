@@ -342,7 +342,11 @@ class AdminController {
       userIds,
       requireAuthUserId(req),
     );
-    sendSuccess(res, result, "Users deactivated successfully");
+    const message =
+      result.failed.length > 0
+        ? `Deactivated ${result.affected} user(s); ${result.failed.length} skipped`
+        : "Users deactivated successfully";
+    sendSuccess(res, result, message);
   });
 
   batchUpdateUserStatus = asyncHandler(async (req: Request, res: Response) => {
@@ -351,16 +355,17 @@ class AdminController {
       dedupe: false,
     }) as string[];
     const isActive = parseRequiredBoolean(req.body?.isActive, "isActive");
-    await adminService.batchUpdateUserStatus(
+    const result = await adminService.batchUpdateUserStatus(
       userIds,
       isActive,
       requireAuthUserId(req),
     );
-    sendSuccess(
-      res,
-      undefined,
-      `Users ${isActive ? "activated" : "deactivated"} successfully`,
-    );
+    const actionLabel = isActive ? "activated" : "deactivated";
+    const message =
+      result.failed.length > 0
+        ? `${result.affected} user(s) ${actionLabel}; ${result.failed.length} skipped`
+        : `Users ${actionLabel} successfully`;
+    sendSuccess(res, result, message);
   });
 
   getUserAuditLogs = asyncHandler(async (req: Request, res: Response) => {

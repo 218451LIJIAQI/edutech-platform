@@ -180,6 +180,7 @@ const VerificationTeachersManagement = () => {
   };
 
   const closeCertificateRejectModal = () => {
+    if (certSubmittingId) return;
     setCertificateRejectTarget(null);
     setCertificateRejectNotes('');
   };
@@ -231,6 +232,7 @@ const VerificationTeachersManagement = () => {
   };
 
   const closeRegistrationRejectModal = () => {
+    if (regSubmittingId) return;
     setRegistrationRejectTarget(null);
     setRegistrationRejectNotes('');
   };
@@ -776,7 +778,12 @@ const VerificationTeachersManagement = () => {
                                   </div>
                                 </div>
                               </td>
-                              <td className="px-6 py-4 text-sm text-gray-600">{cert.documentType}</td>
+                              <td className="px-6 py-4 text-sm text-gray-600">
+                                <p className="font-medium text-gray-900">{cert.documentType}</p>
+                                {cert.reviewNotes ? (
+                                  <p className="mt-1 text-xs text-amber-700">{cert.reviewNotes}</p>
+                                ) : null}
+                              </td>
                               <td className="px-6 py-4">
                                 {cert.verificationMethod === 'AUTO' ? (
                                   <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-green-100 text-green-700 border border-green-200">

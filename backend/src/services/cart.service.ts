@@ -18,6 +18,28 @@ type CartItemWithPackage = Prisma.CartItemGetPayload<{
 const CURRENCY = "USD" as const;
 const SINGLE_PACKAGE_CART_QUANTITY = 1;
 
+export const assertPackageHasAvailableCapacity = async (
+  client: PrismaClientOrTransaction,
+  pkg: { id: string; name?: string; maxStudents: number | null | undefined },
+  referenceDate: Date = new Date(),
+): Promise<void> => {
+  if (!pkg.maxStudents || pkg.maxStudents <= 0) {
+    return;
+  }
+
+  const activeEnrollmentsCount = await client.enrollment.count({
+    where: buildCurrentEnrollmentWhere({ packageId: pkg.id }, referenceDate),
+  });
+
+  if (activeEnrollmentsCount >= pkg.maxStudents) {
+    throw new ValidationError(
+      pkg.name
+        ? `Package "${pkg.name}" has reached its maximum student capacity`
+        : "This package has reached its maximum student capacity",
+    );
+  }
+};
+
 const ensureActiveStudent = async (
   client: PrismaClientOrTransaction,
   userId: string,
@@ -218,7 +240,7 @@ class CartService {
 
   /**
    * Add a package to the student's cart.
-   * A student may only keep one package per course in the cart.
+   * A student may only keep one package per course in the cart, and full packages are rejected.
    */
   async addItem(userId: string, packageId: string) {
     const referenceDate = new Date();
@@ -257,6 +279,8 @@ class CartService {
           "You already have active access to this course.",
         );
       }
+
+      await assertPackageHasAvailableCapacity(tx, pkg, referenceDate);
 
       await sanitizeCart(tx, userId, referenceDate);
 

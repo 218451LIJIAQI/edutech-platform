@@ -9,7 +9,6 @@ import {
 } from "@prisma/client";
 import prisma from "../config/database";
 import config from "../config/env";
-import logger from "../utils/logger";
 import { NotFoundError, ValidationError } from "../utils/errors";
 import walletService from "./wallet.service";
 import { countDistinctActiveStudentsForTeacherProfile } from "./shared/enrollment-access";
@@ -244,7 +243,7 @@ class RefundAdminService {
     );
     const note = normalizeOptionalSanitizedText(adminNotes);
 
-    const teacherAdjustments = await prisma.$transaction(async (tx) => {
+    await prisma.$transaction(async (tx) => {
       const completionTime = new Date();
 
       const refund = await tx.refund.findUnique({
@@ -407,7 +406,7 @@ class RefundAdminService {
 
       const totalItemsAmount = roundMoney(
         refund.order.items.reduce(
-          (sum, item) => sum + toNumber(item.finalPrice),
+          (sum, item) => sum + Math.max(0, toNumber(item.finalPrice)),
           0,
         ),
       );
@@ -416,19 +415,22 @@ class RefundAdminService {
 
       const adjustments: TeacherRefundAdjustment[] = [];
       const teacherEarningsAdjustments = new Map<string, number>();
+      const affectedTeacherProfileIds = new Set<string>();
       let allocatedRefundAmount = 0;
 
       refund.order.items.forEach((item, index) => {
-        const teacherProfile = item.package?.course?.teacherProfile;
-        if (!teacherProfile) return;
-
         const isLastItem = index === refund.order.items.length - 1;
-        const itemPrice = roundMoney(item.finalPrice);
+        const itemPrice = roundMoney(Math.max(0, toNumber(item.finalPrice)));
         const itemPortion = isLastItem
           ? roundMoney(refundAmount - allocatedRefundAmount)
           : roundMoney((itemPrice / proportionalBase) * refundAmount);
 
         allocatedRefundAmount = roundMoney(allocatedRefundAmount + itemPortion);
+
+        const teacherProfile = item.package?.course?.teacherProfile;
+        if (!teacherProfile) return;
+
+        affectedTeacherProfileIds.add(teacherProfile.id);
 
         const teacherNet = roundMoney(
           calculateTeacherNetEarning(
@@ -456,14 +458,37 @@ class RefundAdminService {
         );
       });
 
+      for (const adjustment of adjustments) {
+        await walletService.debitForRefundInTransaction(
+          tx,
+          adjustment.teacherUserId,
+          adjustment.amount,
+          {
+            orderItemId: adjustment.orderItemId,
+            refundId: refund.id,
+          },
+        );
+      }
+
       for (const [
         teacherProfileId,
         amount,
       ] of teacherEarningsAdjustments.entries()) {
-        await tx.teacherProfile.update({
+        const currentProfile = await tx.teacherProfile.findUnique({
           where: { id: teacherProfileId },
-          data: { totalEarnings: { decrement: amount } },
+          select: { totalEarnings: true },
         });
+
+        if (currentProfile) {
+          const nextEarnings = Math.max(
+            0,
+            roundMoney(toNumber(currentProfile.totalEarnings) - amount),
+          );
+          await tx.teacherProfile.update({
+            where: { id: teacherProfileId },
+            data: { totalEarnings: nextEarnings },
+          });
+        }
       }
 
       if (fullyRefunded) {
@@ -479,9 +504,7 @@ class RefundAdminService {
           });
         }
 
-        for (const teacherProfileId of new Set(
-          adjustments.map((adjustment) => adjustment.teacherProfileId),
-        )) {
+        for (const teacherProfileId of affectedTeacherProfileIds) {
           const activeStudentCount =
             await countDistinctActiveStudentsForTeacherProfile(
               tx,
@@ -495,33 +518,9 @@ class RefundAdminService {
           });
         }
       }
-
-      return adjustments;
     });
 
-    const updated = await fetchRefundWithOrderUser(normalizedRefundId);
-
-    if (teacherAdjustments.length > 0) {
-      try {
-        for (const adjustment of teacherAdjustments) {
-          await walletService.debitForRefund(
-            adjustment.teacherUserId,
-            adjustment.amount,
-            {
-              orderItemId: adjustment.orderItemId,
-              refundId: updated.id,
-            },
-          );
-        }
-      } catch (error) {
-        logger.error(
-          "Non-blocking wallet adjustment failed for completed refund",
-          { refundId: updated.id, error },
-        );
-      }
-    }
-
-    return updated;
+    return fetchRefundWithOrderUser(normalizedRefundId);
   }
 
   async getRefundStats(): Promise<{

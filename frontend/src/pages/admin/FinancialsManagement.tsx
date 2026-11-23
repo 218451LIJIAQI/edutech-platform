@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import clientLogger from '@/utils/logger';
 import adminService, { FinancialStats, PaginationMeta, SettlementSummaryRow, TeacherCommissionListItem, FinancialReportSummaryData, TeacherSettlementsData, TeacherSettlementItem } from '@/services/admin.service';
 import { DollarSign, TrendingUp, PieChart, Receipt, Calendar, RefreshCcw, Percent, Search, Download, Zap, FileText } from 'lucide-react';
-import { RevenueAnalytics } from '@/components/admin';
+import { AdminPayoutsPanel, RevenueAnalytics } from '@/components/admin';
 import toast from 'react-hot-toast';
 import { extractErrorMessage } from '@/utils/error-handler';
 import { buildCsvContent, downloadCsvFile } from '@/utils/download';
@@ -42,7 +42,8 @@ const getPaymentStatusClass = (status?: string): string => {
 
 const FinancialsManagement = () => {
   usePageTitle('Financial Management');
-  const [tab, setTab] = useState<'payments' | 'commissions' | 'settlements' | 'analytics' | 'auto-reports'>('payments');
+  const [tab, setTab] = useState<'payments' | 'commissions' | 'settlements' | 'payouts' | 'analytics' | 'auto-reports'>('payments');
+  const [payoutRequestKey, setPayoutRequestKey] = useState(0);
 
   // Financial overview & payments
   const [stats, setStats] = useState<FinancialStats | null>(null);
@@ -332,6 +333,15 @@ const FinancialsManagement = () => {
             >
               <RefreshCcw className="w-4 h-4" /> Refresh
             </button>
+          ) : tab === 'payouts' ? (
+            <button
+              type="button"
+              onClick={() => setPayoutRequestKey((currentKey) => currentKey + 1)}
+              className="btn btn-outline flex items-center gap-2"
+              title="Refresh"
+            >
+              <RefreshCcw className="w-4 h-4" /> Refresh
+            </button>
           ) : tab === 'auto-reports' ? (
             <div className="flex items-center gap-2">
               <button
@@ -377,6 +387,13 @@ const FinancialsManagement = () => {
             onClick={() => setTab('settlements')}
           >
             Settlements
+          </button>
+          <button
+            type="button"
+            className={`px-4 py-2 rounded-lg font-semibold ${tab === 'payouts' ? 'bg-primary-600 text-white' : 'bg-gray-100 text-gray-600'}`}
+            onClick={() => setTab('payouts')}
+          >
+            Payouts
           </button>
           <button
             type="button"
@@ -885,6 +902,8 @@ const FinancialsManagement = () => {
               )}
             </div>
           </div>
+        ) : tab === 'payouts' ? (
+          <AdminPayoutsPanel refreshKey={payoutRequestKey} />
         ) : tab === 'analytics' ? (
           <RevenueAnalytics />
         ) : (

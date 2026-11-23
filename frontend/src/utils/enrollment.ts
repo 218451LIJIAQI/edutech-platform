@@ -18,7 +18,33 @@ const toExpiryRank = (value?: string) => {
   return Number.isFinite(timestamp) ? timestamp : Number.NEGATIVE_INFINITY;
 };
 
-const compareEnrollments = (left: Enrollment, right: Enrollment) => {
+export const isEnrollmentActiveNow = (
+  enrollment: Pick<Enrollment, 'isActive' | 'expiresAt'>,
+  referenceTimestamp = Date.now()
+): boolean => {
+  if (!enrollment.isActive) {
+    return false;
+  }
+
+  if (!enrollment.expiresAt) {
+    return true;
+  }
+
+  const expiry = new Date(enrollment.expiresAt).getTime();
+  return Number.isFinite(expiry) && expiry > referenceTimestamp;
+};
+
+const compareEnrollments = (
+  left: Enrollment,
+  right: Enrollment,
+  referenceTimestamp: number
+) => {
+  const leftActive = isEnrollmentActiveNow(left, referenceTimestamp) ? 1 : 0;
+  const rightActive = isEnrollmentActiveNow(right, referenceTimestamp) ? 1 : 0;
+  if (rightActive !== leftActive) {
+    return rightActive - leftActive;
+  }
+
   if (right.progress !== left.progress) {
     return right.progress - left.progress;
   }
@@ -38,13 +64,17 @@ const compareEnrollments = (left: Enrollment, right: Enrollment) => {
 
 export const selectPreferredCourseEnrollment = (
   enrollments: Enrollment[],
-  courseId: string
+  courseId: string,
+  referenceTimestamp = Date.now()
 ): Enrollment | null =>
   [...enrollments]
     .filter((enrollment) => enrollment.package?.course?.id === courseId)
-    .sort(compareEnrollments)[0] ?? null;
+    .sort((left, right) => compareEnrollments(left, right, referenceTimestamp))[0] ?? null;
 
-export const getPreferredCourseEnrollments = (enrollments: Enrollment[]): Enrollment[] => {
+export const getPreferredCourseEnrollments = (
+  enrollments: Enrollment[],
+  referenceTimestamp = Date.now()
+): Enrollment[] => {
   const byCourseId = new Map<string, Enrollment>();
 
   for (const enrollment of enrollments) {
@@ -54,10 +84,12 @@ export const getPreferredCourseEnrollments = (enrollments: Enrollment[]): Enroll
     }
 
     const current = byCourseId.get(courseId);
-    if (!current || compareEnrollments(enrollment, current) < 0) {
+    if (!current || compareEnrollments(enrollment, current, referenceTimestamp) < 0) {
       byCourseId.set(courseId, enrollment);
     }
   }
 
-  return [...byCourseId.values()].sort((left, right) => compareEnrollments(left, right));
+  return [...byCourseId.values()].sort((left, right) =>
+    compareEnrollments(left, right, referenceTimestamp)
+  );
 };

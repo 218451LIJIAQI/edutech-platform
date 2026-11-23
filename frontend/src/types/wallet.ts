@@ -4,12 +4,15 @@ import {
   WalletTransactionSource,
   WalletTransactionType,
 } from './enums';
+import type { User } from './user';
 
 export interface WalletSummary {
   readonly id: string;
   readonly userId: string;
   readonly availableBalance: number;
   readonly pendingPayout: number;
+  readonly activeRefundHold?: number;
+  readonly withdrawableBalance?: number;
   readonly currency: string;
   readonly createdAt: string;
   readonly updatedAt: string;
@@ -48,4 +51,10 @@ export interface PayoutRequest {
   readonly externalReference?: string;
   readonly requestedAt: string;
   readonly processedAt?: string;
+  readonly method?: PayoutMethod;
+  readonly wallet?: {
+    readonly id: string;
+    readonly userId: string;
+    readonly user?: Pick<User, 'id' | 'email' | 'firstName' | 'lastName'>;
+  };
 }

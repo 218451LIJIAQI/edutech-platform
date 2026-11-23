@@ -1,6 +1,10 @@
-import { PaymentStatus, Prisma } from "@prisma/client";
+import { PaymentStatus, Prisma, RefundStatus } from "@prisma/client";
 import type { Course, LessonPackage, TeacherProfile } from "@prisma/client";
-import { calculateTeacherNetEarning, roundMoney } from "../shared/payment-utils";
+import {
+  calculateTeacherNetEarning,
+  roundMoney,
+  toNumber,
+} from "../shared/payment-utils";
 
 const teacherEarningsUserSelect = {
   id: true,
@@ -21,6 +25,10 @@ export const teacherEarningsPaymentInclude = {
   },
   order: {
     include: {
+      refunds: {
+        where: { status: RefundStatus.COMPLETED },
+        select: { amount: true },
+      },
       items: {
         include: {
           package: {
@@ -128,11 +136,17 @@ const collectTeacherPaymentSlices = (
   const slices: ResolvedTeacherPaymentSlice[] = [];
 
   for (const payment of payments) {
-    if (payment.status !== PaymentStatus.COMPLETED) {
+    if (
+      payment.status !== PaymentStatus.COMPLETED &&
+      payment.status !== PaymentStatus.REFUNDED
+    ) {
       continue;
     }
 
     if (payment.packageId) {
+      if (payment.status === PaymentStatus.REFUNDED) {
+        continue;
+      }
       const lessonPackage = payment.package;
       if (lessonPackage?.course?.teacherProfileId === teacherProfileId) {
         slices.push({
@@ -148,28 +162,81 @@ const collectTeacherPaymentSlices = (
       continue;
     }
 
-    for (const item of payment.order?.items ?? []) {
+    const items = payment.order?.items ?? [];
+    if (items.length === 0) {
+      continue;
+    }
+
+    const orderItemsTotal = roundMoney(
+      items.reduce((sum, item) => sum + Math.max(0, toNumber(item.finalPrice)), 0),
+    );
+    const completedRefundTotal = roundMoney(
+      (payment.order?.refunds ?? []).reduce(
+        (sum, refund) => sum + Math.max(0, toNumber(refund.amount)),
+        0,
+      ),
+    );
+
+    if (
+      payment.status === PaymentStatus.REFUNDED ||
+      (orderItemsTotal > 0 && completedRefundTotal >= orderItemsTotal)
+    ) {
+      continue;
+    }
+
+    let allocatedRefund = 0;
+    items.forEach((item, index) => {
+      const isLastItem = index === items.length - 1;
+      const itemPrice = roundMoney(Math.max(0, toNumber(item.finalPrice)));
+      const itemRefundPortion =
+        completedRefundTotal > 0 && orderItemsTotal > 0
+          ? isLastItem
+            ? roundMoney(completedRefundTotal - allocatedRefund)
+            : roundMoney((itemPrice / orderItemsTotal) * completedRefundTotal)
+          : 0;
+      allocatedRefund = roundMoney(allocatedRefund + itemRefundPortion);
+
       const lessonPackage = item.package;
       if (lessonPackage?.course?.teacherProfileId !== teacherProfileId) {
-        continue;
+        return;
       }
+
+      const netItemAmount = Math.max(
+        0,
+        roundMoney(itemPrice - itemRefundPortion),
+      );
+      const grossTeacherEarning = roundMoney(
+        calculateTeacherNetEarning(
+          itemPrice,
+          lessonPackage.course.teacherProfile,
+          defaultCommissionRate,
+        ),
+      );
+      const refundedTeacherEarning =
+        itemRefundPortion > 0
+          ? roundMoney(
+              calculateTeacherNetEarning(
+                itemRefundPortion,
+                lessonPackage.course.teacherProfile,
+                defaultCommissionRate,
+              ),
+            )
+          : 0;
+      const netTeacherEarning = Math.max(
+        0,
+        roundMoney(grossTeacherEarning - refundedTeacherEarning),
+      );
 
       slices.push({
         id: `${payment.id}:${item.id}`,
-        amount: roundMoney(item.finalPrice),
-        teacherEarning: roundMoney(
-          calculateTeacherNetEarning(
-            item.finalPrice,
-            lessonPackage.course.teacherProfile,
-            defaultCommissionRate,
-          ),
-        ),
+        amount: netItemAmount,
+        teacherEarning: netTeacherEarning,
         paidAt: payment.paidAt,
         status: payment.status,
         lessonPackage,
         user: payment.user,
       });
-    }
+    });
   }
 
   return sortByPaidAtDescending(slices);

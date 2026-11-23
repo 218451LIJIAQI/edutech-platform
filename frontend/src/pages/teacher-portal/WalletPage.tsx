@@ -94,7 +94,11 @@ const WalletPage = () => {
   const payoutModalRef = useRef<HTMLDivElement | null>(null);
   const payoutAmountInputRef = useRef<HTMLInputElement | null>(null);
   const hasLoadedWalletRef = useRef(false);
-  const hasAvailableBalance = (summary?.availableBalance || 0) > 0;
+  const activeRefundHold = summary?.activeRefundHold || 0;
+  const withdrawableBalance =
+    summary?.withdrawableBalance ??
+    Math.max(0, (summary?.availableBalance || 0) - activeRefundHold);
+  const hasAvailableBalance = withdrawableBalance > 0;
 
   const updateMethodDetails = (field: string, value: string) => {
     setMethodDetails((details) => ({ ...details, [field]: value }));
@@ -118,6 +122,7 @@ const WalletPage = () => {
   };
 
   const closeMethodModal = () => {
+    if (isSubmitting) return;
     resetMethodForm();
     setMethodModalOpen(false);
   };
@@ -134,6 +139,7 @@ const WalletPage = () => {
   };
 
   const closePayoutModal = () => {
+    if (isSubmitting) return;
     resetPayoutForm();
     setPayoutModalOpen(false);
   };
@@ -248,7 +254,8 @@ const WalletPage = () => {
     try {
       await walletService.requestPayout({ amount: payoutAmount, methodId: payoutMethodId || undefined, note: payoutNote || undefined });
       toast.success('Payout requested');
-      closePayoutModal();
+      resetPayoutForm();
+      setPayoutModalOpen(false);
       setReloadKey((currentKey) => currentKey + 1);
     } catch (error: unknown) {
       clientLogger.error('Failed to request payout:', error);
@@ -259,17 +266,21 @@ const WalletPage = () => {
   };
 
   const addMethod = async () => {
-    if (!validateMethodForm()) {
+    if (isSubmitting || !validateMethodForm()) {
       return;
     }
+    setIsSubmitting(true);
     try {
       await walletService.addPayoutMethod({ type: methodType, label: methodLabel, details: methodDetails, isDefault: methodIsDefault });
       toast.success('Payout method added');
-      closeMethodModal();
+      resetMethodForm();
+      setMethodModalOpen(false);
       setReloadKey((currentKey) => currentKey + 1);
     } catch (error: unknown) {
       clientLogger.error('Failed to add payout method:', error);
       toast.error(extractErrorMessage(error, 'Failed to add method'));
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -349,6 +360,11 @@ const WalletPage = () => {
             </div>
             <p className="text-green-100 text-sm font-bold uppercase mb-2">Available Balance</p>
             <div className="text-4xl font-bold">{currency(summary?.availableBalance || 0, summary?.currency)}</div>
+            {activeRefundHold > 0 && (
+              <p className="mt-2 text-xs text-green-100">
+                Withdrawable now: {currency(withdrawableBalance, summary?.currency)} ({currency(activeRefundHold, summary?.currency)} held for pending refunds)
+              </p>
+            )}
           </div>
 
           <div className="card bg-gradient-to-br from-blue-500 to-blue-600 text-white shadow-xl">

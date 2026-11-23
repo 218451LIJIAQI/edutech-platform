@@ -5,6 +5,8 @@ import {
   ValidationError,
 } from "../utils/errors";
 import { buildCurrentEnrollmentWhere } from "./shared/enrollment-access";
+import { normalizeLessonQuiz } from "./course/course-helpers";
+import { sanitizeStudentEnrollmentCourse } from "./course/course-service-helpers";
 
 const MAX_PROGRESS = 100;
 const MAX_COMPLETED_LESSONS = 10000;
@@ -55,7 +57,7 @@ const normalizeOptionalProgress = (value?: number): number | undefined => {
   return Math.round(value);
 };
 
-const calculateProgressFromLessons = (
+export const calculateProgressFromLessons = (
   completedLessons: number,
   totalLessons: number,
 ): number => {
@@ -79,6 +81,62 @@ const normalizeCompletedLessonIds = (lessonIds: string[]): string[] => {
   }
 
   return normalizedLessonIds;
+};
+
+export const assertQuizGateForLessonCompletion = (params: {
+  courseLessons: Array<{ id: string; quiz: unknown }>;
+  passedQuizLessonIds: ReadonlySet<string>;
+  requestedCompletedLessonIds?: string[];
+  requestedCompletedLessonCount?: number;
+}): number => {
+  const {
+    courseLessons,
+    passedQuizLessonIds,
+    requestedCompletedLessonIds,
+    requestedCompletedLessonCount,
+  } = params;
+
+  const lessonById = new Map(courseLessons.map((lesson) => [lesson.id, lesson]));
+  const quizLessonIds = new Set(
+    courseLessons
+      .filter((lesson) => normalizeLessonQuiz(lesson.quiz) !== null)
+      .map((lesson) => lesson.id),
+  );
+
+  if (requestedCompletedLessonIds !== undefined) {
+    for (const lessonId of requestedCompletedLessonIds) {
+      if (!lessonById.has(lessonId)) {
+        throw new ValidationError(
+          "completedLessons contains lessons that do not belong to this course",
+        );
+      }
+      if (quizLessonIds.has(lessonId) && !passedQuizLessonIds.has(lessonId)) {
+        throw new ValidationError(
+          "You must pass the lesson quiz before marking this lesson as complete",
+        );
+      }
+    }
+
+    return Math.min(requestedCompletedLessonIds.length, courseLessons.length);
+  }
+
+  const maxAllowedByQuizzes =
+    courseLessons.length -
+    quizLessonIds.size +
+    Array.from(quizLessonIds).filter((id) => passedQuizLessonIds.has(id)).length;
+
+  const requestedCount = Math.min(
+    requestedCompletedLessonCount ?? 0,
+    courseLessons.length,
+  );
+
+  if (requestedCount > maxAllowedByQuizzes) {
+    throw new ValidationError(
+      "You must pass all required lesson quizzes before completing those lessons",
+    );
+  }
+
+  return requestedCount;
 };
 
 const requireTeacherOwnedCourse = async (userId: string, courseId: string) => {
@@ -118,7 +176,7 @@ const requireTeacherOwnedCourse = async (userId: string, courseId: string) => {
  */
 class EnrollmentService {
   /**
-   * Get current active enrollments for a user.
+   * Get current active enrollments for a user, stripping quiz answer keys.
    */
   async getUserEnrollments(userId: string) {
     const normalizedUserId = normalizeRequiredId(userId, "User ID");
@@ -155,12 +213,17 @@ class EnrollmentService {
       orderBy: { enrolledAt: "desc" },
     });
 
-    return enrollments;
+    return enrollments.map((enrollment) => ({
+      ...enrollment,
+      package: {
+        ...enrollment.package,
+        course: sanitizeStudentEnrollmentCourse(enrollment.package.course),
+      },
+    }));
   }
 
   /**
-   * Get one active enrollment by ID, scoped to the requesting user.
-   * NotFoundError is used intentionally to avoid leaking another user's enrollment existence.
+   * Get one active enrollment by ID, scoped to the requesting user, with sanitized quizzes and material access URLs.
    */
   async getEnrollmentById(enrollmentId: string, userId: string) {
     const normalizedEnrollmentId = normalizeRequiredId(
@@ -212,12 +275,18 @@ class EnrollmentService {
       throw new NotFoundError("Enrollment not found");
     }
 
-    return enrollment;
+    return {
+      ...enrollment,
+      package: {
+        ...enrollment.package,
+        course: sanitizeStudentEnrollmentCourse(enrollment.package.course),
+      },
+    };
   }
 
   /**
    * Update enrollment progress for the enrolled student.
-   * Progress is calculated server-side from completed lessons to prevent client-side manipulation.
+   * Enforces server-side quiz pass verification and calculates progress from verified completed lessons.
    */
   async updateProgress(
     enrollmentId: string,
@@ -237,7 +306,6 @@ class EnrollmentService {
       ? normalizeCompletedLessonIds(completedLessons)
       : undefined;
 
-    // Validate optional legacy/client progress input, but calculate the stored progress server-side.
     normalizeOptionalProgress(progress);
 
     const enrollment = await prisma.enrollment.findFirst({
@@ -258,51 +326,51 @@ class EnrollmentService {
       throw new NotFoundError("Enrollment not found");
     }
 
-    const [totalLessons, matchingCompletedLessons] = await Promise.all([
-      prisma.lesson.count({
+    const [courseLessons, passedAttempts] = await Promise.all([
+      prisma.lesson.findMany({
         where: {
           courseId: enrollment.package.courseId,
         },
+        select: {
+          id: true,
+          quiz: true,
+        },
       }),
-      requestedCompletedLessonIds === undefined
-        ? Promise.resolve(0)
-        : prisma.lesson.count({
-            where: {
-              courseId: enrollment.package.courseId,
-              id: {
-                in: requestedCompletedLessonIds,
-              },
-            },
-          }),
+      prisma.quizAttempt.findMany({
+        where: {
+          studentId: normalizedUserId,
+          passed: true,
+          lesson: {
+            courseId: enrollment.package.courseId,
+          },
+        },
+        select: {
+          lessonId: true,
+        },
+      }),
     ]);
 
-    if (
-      requestedCompletedLessonIds !== undefined &&
-      matchingCompletedLessons !== requestedCompletedLessonIds.length
-    ) {
-      throw new ValidationError(
-        "completedLessons contains lessons that do not belong to this course",
-      );
-    }
-
-    const boundedCompletedLessons = Math.min(
-      requestedCompletedLessonIds?.length ?? requestedCompletedLessonCount ?? 0,
-      totalLessons,
+    const passedQuizLessonIds = new Set(
+      passedAttempts.map((attempt) => attempt.lessonId),
     );
+    const boundedCompletedLessons = assertQuizGateForLessonCompletion({
+      courseLessons,
+      passedQuizLessonIds,
+      requestedCompletedLessonIds,
+      requestedCompletedLessonCount,
+    });
     const calculatedProgress = calculateProgressFromLessons(
       boundedCompletedLessons,
-      totalLessons,
+      courseLessons.length,
     );
 
-    const updated = await prisma.enrollment.update({
+    return prisma.enrollment.update({
       where: { id: enrollment.id },
       data: {
         completedLessons: boundedCompletedLessons,
         progress: calculatedProgress,
       },
     });
-
-    return updated;
   }
 
   /**
@@ -336,7 +404,7 @@ class EnrollmentService {
   async getCourseStudents(userId: string, courseId: string) {
     const course = await requireTeacherOwnedCourse(userId, courseId);
 
-    const enrollments = await prisma.enrollment.findMany({
+    return prisma.enrollment.findMany({
       where: buildCurrentEnrollmentWhere(
         {
           package: {
@@ -365,8 +433,6 @@ class EnrollmentService {
       },
       orderBy: { enrolledAt: "desc" },
     });
-
-    return enrollments;
   }
 
   /**

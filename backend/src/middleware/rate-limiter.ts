@@ -61,3 +61,21 @@ export const authLimiter = rateLimit({
   ),
   skip: (req) => shouldSkipLocalDevRequest(req.ip),
 });
+
+/**
+ * Session refresh rate limiter.
+ *
+ * Allows legitimate browser reloads and multi-tab access token renewals
+ * without tripping the strict 5-attempt credential brute-force limiter.
+ */
+export const refreshLimiter = rateLimit({
+  windowMs: FIFTEEN_MINUTES_IN_MS,
+  max: isDev ? 300 : 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+  statusCode: 429,
+  message: createRateLimitMessage(
+    "Too many session refresh requests, please try again later.",
+  ),
+  skip: (req) => shouldSkipLocalDevRequest(req.ip),
+});

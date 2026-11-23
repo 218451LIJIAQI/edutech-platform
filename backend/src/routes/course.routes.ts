@@ -24,6 +24,7 @@ const courseIdParam = uuidParam("id", "course ID");
 const lessonIdParam = uuidParam("id", "lesson ID");
 const packageIdParam = uuidParam("id", "package ID");
 const materialIdParam = uuidParam("id", "material ID");
+const liveSessionIdParam = uuidParam("id", "live session ID");
 
 const submitQuizValidation = [
   lessonIdParam,
@@ -52,6 +53,27 @@ router.get(
   studentOnly,
   validate(courseIdParam),
   courseController.getMyCourseQuizAttempts,
+);
+
+router.get(
+  "/:id/live-sessions",
+  authenticate,
+  validate(courseIdParam),
+  courseController.getCourseLiveSessions,
+);
+
+router.post(
+  "/lessons/:id/live-sessions",
+  approvedTeacherOnly,
+  validate(lessonIdParam),
+  courseController.createLiveSession,
+);
+
+router.patch(
+  "/live-sessions/:id/status",
+  approvedTeacherOnly,
+  validate(liveSessionIdParam),
+  courseController.updateLiveSessionStatus,
 );
 
 router.post(

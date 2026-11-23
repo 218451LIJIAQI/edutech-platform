@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef } from 'react';
 import clientLogger from '@/utils/logger';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Send, Users, Hand, ExternalLink } from 'lucide-react';
+import { Send, Users, Hand, ExternalLink, Play, Square, ArrowLeft } from 'lucide-react';
 import { io, Socket } from 'socket.io-client';
 import toast from 'react-hot-toast';
 import { extractErrorMessage } from '@/utils/error-handler';
@@ -47,6 +47,7 @@ interface SessionInfo {
   scheduledAt?: string;
   status: SessionStatus;
   meetingUrl?: string;
+  isTeacher?: boolean;
 }
 
 const generateMessageId = () => {
@@ -85,6 +86,7 @@ const LiveSessionPage = () => {
   const [socket, setSocket] = useState<Socket | null>(null);
   const [session, setSession] = useState<SessionInfo | null>(null);
   const [isJoined, setIsJoined] = useState(false);
+  const [connectionError, setConnectionError] = useState<string | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [message, setMessage] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -94,6 +96,7 @@ const LiveSessionPage = () => {
     meetingUrl &&
     (session?.status === 'SCHEDULED' || session?.status === 'ONGOING')
   );
+  const isHostTeacher = Boolean(session?.isTeacher && user?.role === UserRole.TEACHER);
 
   useEffect(() => {
     if (!sessionId) {
@@ -112,24 +115,36 @@ const LiveSessionPage = () => {
     };
     const newSocket = socketUrl ? io(socketUrl, socketOptions) : io(socketOptions);
 
-    newSocket.on('connect', () => {
+    const handleConnect = () => {
       isRecoveringSocketSessionRef.current = false;
+      setConnectionError(null);
       newSocket.emit('join-session', { sessionId });
-    });
+    };
+
+    newSocket.on('connect', handleConnect);
 
     newSocket.on('session-joined', (data: { session?: SessionInfo }) => {
       setSession(data.session || null);
       setIsJoined(true);
+      setConnectionError(null);
       toast.success('Joined live session');
     });
 
     newSocket.on('session-started', (data: { session?: SessionInfo }) => {
-      setSession(data.session || null);
+      setSession((prev) =>
+        data.session
+          ? { ...data.session, isTeacher: data.session.isTeacher ?? prev?.isTeacher }
+          : prev
+      );
       toast.success('Live session has started');
     });
 
     newSocket.on('session-ended', (data: { session?: SessionInfo }) => {
-      setSession(data.session || null);
+      setSession((prev) =>
+        data.session
+          ? { ...data.session, isTeacher: data.session.isTeacher ?? prev?.isTeacher }
+          : prev
+      );
       toast('This live session has ended');
     });
 
@@ -139,7 +154,7 @@ const LiveSessionPage = () => {
       }
       const userName = data.user?.firstName
         ? `${data.user.firstName}${data.user.lastName ? ` ${data.user.lastName}` : ''}`
-        : 'A user';
+        : 'A participant';
       toast(`${userName} joined the session`);
     });
 
@@ -147,7 +162,10 @@ const LiveSessionPage = () => {
       if (data.userId && data.userId === user?.id) {
         return;
       }
-      toast('A participant left the session');
+      const userName = data.user?.firstName
+        ? `${data.user.firstName}${data.user.lastName ? ` ${data.user.lastName}` : ''}`
+        : 'A participant';
+      toast(`${userName} left the session`);
     });
 
     newSocket.on('chat-message', (data: ChatMessage) => {
@@ -160,13 +178,17 @@ const LiveSessionPage = () => {
     });
 
     newSocket.on('hand-raised', (data: SessionParticipantEvent) => {
-      if (data.userId && data.userId === user?.id) {
+      const raisedId = data.user?.id || data.userId;
+      if (raisedId && raisedId === user?.id) {
         toast.success('Your hand was raised');
         return;
       }
 
       if (user?.role === UserRole.TEACHER) {
-        toast('A participant raised their hand');
+        const studentName = data.user?.firstName
+          ? `${data.user.firstName}${data.user.lastName ? ` ${data.user.lastName}` : ''}`
+          : 'A participant';
+        toast(`${studentName} raised their hand`);
       }
     });
 
@@ -200,7 +222,9 @@ const LiveSessionPage = () => {
         }
       }
 
-      toast.error(extractErrorMessage(errorMessage, 'Connection error occurred'));
+      const resolvedMessage = extractErrorMessage(errorMessage, 'Connection error occurred');
+      setConnectionError(resolvedMessage);
+      toast.error(resolvedMessage);
     };
 
     newSocket.on('error', handleSocketError);
@@ -214,6 +238,7 @@ const LiveSessionPage = () => {
       if (sessionId) {
         newSocket.emit('leave-session', { sessionId });
       }
+      newSocket.off('connect', handleConnect);
       newSocket.off('session-joined');
       newSocket.off('session-started');
       newSocket.off('session-ended');
@@ -230,6 +255,16 @@ const LiveSessionPage = () => {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
+
+  const handleStartSession = () => {
+    if (!socket || !sessionId || !isHostTeacher) return;
+    socket.emit('start-session', { sessionId });
+  };
+
+  const handleEndSession = () => {
+    if (!socket || !sessionId || !isHostTeacher) return;
+    socket.emit('end-session', { sessionId });
+  };
 
   const sendMessage = () => {
     const trimmedMessage = message.trim();
@@ -258,15 +293,70 @@ const LiveSessionPage = () => {
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-primary-50/10 to-indigo-50/20 relative">
       <div className="absolute inset-0 bg-[linear-gradient(rgba(0,0,0,0.015)_1px,transparent_1px),linear-gradient(90deg,rgba(0,0,0,0.015)_1px,transparent_1px)] bg-[size:32px_32px] pointer-events-none"></div>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 relative">
+        <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
+          <button
+            type="button"
+            onClick={() => navigate(-1)}
+            className="btn-outline inline-flex items-center gap-2"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            Back
+          </button>
+
+          {isHostTeacher && session && (
+            <div className="flex items-center gap-3">
+              {session.status === 'SCHEDULED' && (
+                <button
+                  type="button"
+                  onClick={handleStartSession}
+                  className="btn-primary inline-flex items-center gap-2"
+                >
+                  <Play className="w-4 h-4" />
+                  Start Live Session
+                </button>
+              )}
+              {session.status === 'ONGOING' && (
+                <button
+                  type="button"
+                  onClick={handleEndSession}
+                  className="inline-flex items-center gap-2 rounded-xl bg-red-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-red-700"
+                >
+                  <Square className="w-4 h-4" />
+                  End Live Session
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+
+        {connectionError && !isJoined && (
+          <div
+            role="alert"
+            className="mb-6 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800 flex items-center justify-between gap-4"
+          >
+            <span>{connectionError}</span>
+            <button
+              type="button"
+              onClick={() => socket?.connect()}
+              className="btn-outline btn-sm shrink-0"
+            >
+              Reconnect
+            </button>
+          </div>
+        )}
+
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           {/* Video Area */}
           <div className="lg:col-span-2">
             <div className="card bg-black aspect-video flex items-center justify-center shadow-2xl border border-gray-800 rounded-2xl overflow-hidden">
-              <div className="text-center">
+              <div className="text-center px-6">
                 <div className="w-20 h-20 bg-red-600 rounded-full flex items-center justify-center mx-auto mb-4 animate-pulse">
                   <span className="text-white text-2xl font-bold">LIVE</span>
                 </div>
                 <p className="text-white text-xl font-semibold">{session?.title || 'Live Session Video'}</p>
+                {session?.description ? (
+                  <p className="text-gray-300 text-sm mt-2 max-w-xl mx-auto">{session.description}</p>
+                ) : null}
                 <p className="text-gray-400 text-sm mt-2">
                   {session?.status === 'ONGOING'
                     ? 'Session is live now. Use the chat to participate.'
@@ -274,7 +364,9 @@ const LiveSessionPage = () => {
                       ? 'This live session has already ended.'
                       : session?.status === 'CANCELLED'
                         ? 'This live session was cancelled.'
-                        : 'Live video will appear here when the session starts.'}
+                        : isHostTeacher
+                          ? 'Click "Start Live Session" above when you are ready to open live chat and interaction.'
+                          : 'Live video will appear here when the instructor starts the session.'}
                 </p>
                 {session?.status ? (
                   <div className="mt-4 inline-flex rounded-full border border-white/20 bg-white/10 px-4 py-1 text-xs font-semibold text-white">

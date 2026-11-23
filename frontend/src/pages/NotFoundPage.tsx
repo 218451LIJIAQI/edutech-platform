@@ -9,7 +9,7 @@ const NotFoundPage = () => {
   const navigate = useNavigate();
   usePageTitle('Page Not Found');
   return (
-    <main className="min-h-[calc(100vh-4rem)] flex items-center justify-center bg-gradient-to-br from-slate-50 via-primary-50/10 to-indigo-50/20 relative overflow-hidden">
+    <div className="min-h-[calc(100vh-4rem)] flex items-center justify-center bg-gradient-to-br from-slate-50 via-primary-50/10 to-indigo-50/20 relative overflow-hidden">
       {/* Background Pattern */}
       <div className="absolute inset-0 bg-[linear-gradient(rgba(0,0,0,0.02)_1px,transparent_1px),linear-gradient(90deg,rgba(0,0,0,0.02)_1px,transparent_1px)] bg-[size:32px_32px] pointer-events-none"></div>
 
@@ -42,7 +42,7 @@ const NotFoundPage = () => {
           Oops! Page Not Found
         </h2>
         <p className="text-gray-500 mb-10 text-lg max-w-md mx-auto leading-relaxed">
-          The page you're looking for doesn't exist or has been moved. Let's get you back on track.
+          The page you&apos;re looking for doesn&apos;t exist or has been moved. Let&apos;s get you back on track.
         </p>
 
         {/* Action Buttons */}
@@ -85,7 +85,7 @@ const NotFoundPage = () => {
           </div>
         </div>
       </div>
-    </main>
+    </div>
   );
 };
 

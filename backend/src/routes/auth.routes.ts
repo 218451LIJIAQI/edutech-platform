@@ -3,7 +3,7 @@ import { Router } from "express";
 import authController from "../controllers/auth.controller";
 import { authenticate, optionalAuth } from "../middleware/auth";
 import { validate } from "../middleware/validate";
-import { authLimiter } from "../middleware/rate-limiter";
+import { authLimiter, refreshLimiter } from "../middleware/rate-limiter";
 
 import {
   registerValidation,
@@ -66,7 +66,7 @@ router.post(
 
 router.post(
   "/refresh",
-  authLimiter,
+  refreshLimiter,
   validate(refreshTokenValidation),
   authController.refreshToken,
 );

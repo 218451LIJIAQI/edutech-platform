@@ -1,13 +1,21 @@
+import { Prisma, RefundStatus } from "@prisma/client";
 import prisma from "../config/database";
+import config from "../config/env";
 import { NotFoundError, ValidationError } from "../utils/errors";
 import { sanitizeUserPlainText } from "../utils/sanitize-user-content";
 import { normalizeOffsetPagination } from "./shared/pagination";
-import { roundMoney } from "./shared/payment-utils";
+import {
+  calculateTeacherNetEarning,
+  roundMoney,
+  toNumber,
+} from "./shared/payment-utils";
 import {
   isUniqueConstraintError,
   normalizeOptionalSanitizedText,
   normalizeRequiredSanitizedText,
 } from "./shared/service-helpers";
+
+type PrismaClientOrTransaction = Prisma.TransactionClient | typeof prisma;
 
 type TransactionType =
   | "CREDIT"
@@ -37,7 +45,7 @@ type PayoutMethodTypeValue =
 
 type JsonPrimitive = string | number | boolean | null;
 type JsonValue = JsonPrimitive | JsonValue[] | { [key: string]: JsonValue };
-type JsonObject = { [key: string]: JsonValue };
+export type JsonObject = { [key: string]: JsonValue };
 
 type PayoutAction = "approve" | "reject" | "processing" | "paid";
 
@@ -80,6 +88,14 @@ const ACTIVE_PAYOUT_STATUSES: PayoutStatus[] = [
   "PROCESSING",
 ];
 
+const RELEASABLE_PAYOUT_STATUSES: PayoutStatus[] = ["PENDING", "APPROVED"];
+
+const ACTIVE_REFUND_HOLD_STATUSES: RefundStatus[] = [
+  RefundStatus.PENDING,
+  RefundStatus.APPROVED,
+  RefundStatus.PROCESSING,
+];
+
 const BLOCKED_JSON_KEYS = new Set([
   "__definegetter__",
   "__definesetter__",
@@ -90,9 +106,9 @@ const BLOCKED_JSON_KEYS = new Set([
   "prototype",
 ]);
 
-const MAX_LABEL_LENGTH = 80;
-const MAX_NOTE_LENGTH = 1000;
-const MAX_EXTERNAL_REFERENCE_LENGTH = 150;
+const MAX_LABEL_LENGTH = 100;
+const MAX_NOTE_LENGTH = 2000;
+const MAX_EXTERNAL_REFERENCE_LENGTH = 255;
 const MAX_MONEY_AMOUNT = 99999999.99;
 
 const parseOptionalUppercaseEnum = <T extends string>(
@@ -226,7 +242,7 @@ const getStringMetadataValue = (
   return typeof value === "string" && value.trim() ? value.trim() : undefined;
 };
 
-const buildWalletReferenceId = (
+export const buildWalletReferenceId = (
   source: TransactionSource,
   metadata?: JsonObject,
 ): string | undefined => {
@@ -252,11 +268,98 @@ const buildWalletReferenceId = (
   return undefined;
 };
 
+const calculateActiveRefundHoldForTeacher = async (
+  client: PrismaClientOrTransaction,
+  userId: string,
+): Promise<number> => {
+  const activeRefunds = await client.refund.findMany({
+    where: {
+      status: { in: ACTIVE_REFUND_HOLD_STATUSES },
+      order: {
+        items: {
+          some: {
+            package: {
+              course: {
+                teacherProfile: { userId },
+              },
+            },
+          },
+        },
+      },
+    },
+    include: {
+      order: {
+        include: {
+          items: {
+            include: {
+              package: {
+                include: {
+                  course: {
+                    include: { teacherProfile: true },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+  });
+
+  let totalHold = 0;
+
+  for (const refund of activeRefunds) {
+    const refundAmount = roundMoney(refund.amount);
+    if (refundAmount <= 0 || !refund.order?.items?.length) continue;
+
+    const totalItemsAmount = roundMoney(
+      refund.order.items.reduce(
+        (sum, item) => sum + Math.max(0, toNumber(item.finalPrice)),
+        0,
+      ),
+    );
+    const proportionalBase =
+      totalItemsAmount > 0
+        ? totalItemsAmount
+        : roundMoney(refund.order.totalAmount);
+    if (proportionalBase <= 0) continue;
+
+    let allocatedRefundAmount = 0;
+    refund.order.items.forEach((item, index) => {
+      const isLastItem = index === refund.order.items.length - 1;
+      const itemPrice = roundMoney(Math.max(0, toNumber(item.finalPrice)));
+      const itemPortion = isLastItem
+        ? roundMoney(refundAmount - allocatedRefundAmount)
+        : roundMoney((itemPrice / proportionalBase) * refundAmount);
+      allocatedRefundAmount = roundMoney(allocatedRefundAmount + itemPortion);
+
+      const teacherProfile = item.package?.course?.teacherProfile;
+      if (!teacherProfile || teacherProfile.userId !== userId) return;
+
+      const teacherShare = roundMoney(
+        calculateTeacherNetEarning(
+          itemPortion,
+          teacherProfile,
+          config.PLATFORM_COMMISSION_RATE,
+        ),
+      );
+      if (teacherShare > 0) {
+        totalHold = roundMoney(totalHold + teacherShare);
+      }
+    });
+  }
+
+  return totalHold;
+};
+
 class WalletService {
-  async ensureWallet(userId: string) {
+  async ensureWalletInTransaction(
+    client: PrismaClientOrTransaction,
+    userId: string,
+  ) {
     const normalizedUserId = normalizeRequiredSanitizedText(userId, "User ID");
 
-    const user = await prisma.user.findUnique({
+    const user = await client.user.findUnique({
       where: { id: normalizedUserId },
       select: { id: true },
     });
@@ -266,14 +369,14 @@ class WalletService {
     }
 
     try {
-      return await prisma.wallet.upsert({
+      return await client.wallet.upsert({
         where: { userId: normalizedUserId },
         update: {},
         create: { userId: normalizedUserId },
       });
     } catch (error: unknown) {
       if (isUniqueConstraintError(error)) {
-        const existing = await prisma.wallet.findUnique({
+        const existing = await client.wallet.findUnique({
           where: { userId: normalizedUserId },
         });
         if (existing) return existing;
@@ -282,8 +385,26 @@ class WalletService {
     }
   }
 
+  async ensureWallet(userId: string) {
+    return this.ensureWalletInTransaction(prisma, userId);
+  }
+
   async getSummary(userId: string) {
-    return this.ensureWallet(userId);
+    const wallet = await this.ensureWallet(userId);
+    const activeRefundHold = await calculateActiveRefundHoldForTeacher(
+      prisma,
+      wallet.userId,
+    );
+    const availableBalance = roundMoney(wallet.availableBalance);
+
+    return {
+      ...wallet,
+      activeRefundHold,
+      withdrawableBalance: Math.max(
+        0,
+        roundMoney(availableBalance - activeRefundHold),
+      ),
+    };
   }
 
   async listTransactions(
@@ -542,7 +663,10 @@ class WalletService {
             where: { walletId: wallet.id, isDefault: true },
           });
 
-      if (requestedMethodId && (!selectedMethod || selectedMethod.walletId !== wallet.id)) {
+      if (
+        requestedMethodId &&
+        (!selectedMethod || selectedMethod.walletId !== wallet.id)
+      ) {
         throw new ValidationError("Invalid payout method");
       }
 
@@ -555,8 +679,17 @@ class WalletService {
       const methodType = parsePayoutMethodType(selectedMethod.type);
       normalizePayoutMethodDetails(methodType, selectedMethod.details);
 
+      const activeRefundHold = await calculateActiveRefundHoldForTeacher(
+        tx,
+        wallet.userId,
+      );
+      const minimumRequiredAvailable = roundMoney(amount + activeRefundHold);
+
       const balanceUpdate = await tx.wallet.updateMany({
-        where: { id: wallet.id, availableBalance: { gte: amount } },
+        where: {
+          id: wallet.id,
+          availableBalance: { gte: minimumRequiredAvailable },
+        },
         data: {
           availableBalance: { decrement: amount },
           pendingPayout: { increment: amount },
@@ -564,6 +697,11 @@ class WalletService {
       });
 
       if (balanceUpdate.count !== 1) {
+        if (activeRefundHold > 0) {
+          throw new ValidationError(
+            `Insufficient withdrawable balance ($${activeRefundHold.toFixed(2)} is currently held for pending refunds)`,
+          );
+        }
         throw new ValidationError("Insufficient balance");
       }
 
@@ -801,78 +939,166 @@ class WalletService {
     });
   }
 
-  private async recordCommerceWalletEntry(
+  async creditForTeacherInTransaction(
+    tx: PrismaClientOrTransaction,
     userId: string,
     amount: number,
-    options: {
-      type: "CREDIT" | "DEBIT";
-      source: "COURSE_SALE" | "REFUND";
-      metadata?: JsonObject;
-    },
+    metadata?: JsonObject,
   ) {
     const normalizedAmount = roundMoney(amount);
     if (!Number.isFinite(normalizedAmount) || normalizedAmount <= 0) {
       return;
     }
 
-    const wallet = await this.ensureWallet(userId);
-    const referenceId = buildWalletReferenceId(
-      options.source,
-      options.metadata,
-    );
+    const wallet = await this.ensureWalletInTransaction(tx, userId);
+    const referenceId = buildWalletReferenceId("COURSE_SALE", metadata);
 
-    try {
-      await prisma.$transaction(async (tx) => {
-        if (referenceId) {
-          const existingTransaction = await tx.walletTransaction.findFirst({
-            where: {
-              walletId: wallet.id,
-              source: options.source,
-              referenceId,
-            },
-            select: { id: true },
-          });
+    if (referenceId) {
+      const existingTransaction = await tx.walletTransaction.findFirst({
+        where: {
+          walletId: wallet.id,
+          source: "COURSE_SALE",
+          referenceId,
+        },
+        select: { id: true },
+      });
 
-          if (existingTransaction) return;
-        }
+      if (existingTransaction) return;
+    }
 
-        if (options.type === "CREDIT") {
-          await tx.wallet.update({
-            where: { id: wallet.id },
-            data: { availableBalance: { increment: normalizedAmount } },
-          });
-        } else {
-          const walletUpdate = await tx.wallet.updateMany({
-            where: {
-              id: wallet.id,
-              availableBalance: { gte: normalizedAmount },
-            },
-            data: { availableBalance: { decrement: normalizedAmount } },
-          });
+    await tx.wallet.update({
+      where: { id: wallet.id },
+      data: { availableBalance: { increment: normalizedAmount } },
+    });
 
-          if (walletUpdate.count !== 1) {
-            throw new ValidationError(
-              "Teacher wallet balance is insufficient for refund debit",
-            );
-          }
-        }
+    await tx.walletTransaction.create({
+      data: {
+        walletId: wallet.id,
+        amount: normalizedAmount,
+        type: "CREDIT",
+        source: "COURSE_SALE",
+        referenceId: referenceId || null,
+        metadata,
+      },
+    });
+  }
 
-        await tx.walletTransaction.create({
+  async debitForRefundInTransaction(
+    tx: PrismaClientOrTransaction,
+    userId: string,
+    amount: number,
+    metadata?: JsonObject,
+  ) {
+    const normalizedAmount = roundMoney(amount);
+    if (!Number.isFinite(normalizedAmount) || normalizedAmount <= 0) {
+      return;
+    }
+
+    const wallet = await this.ensureWalletInTransaction(tx, userId);
+    const referenceId = buildWalletReferenceId("REFUND", metadata);
+
+    if (referenceId) {
+      const existingTransaction = await tx.walletTransaction.findFirst({
+        where: {
+          walletId: wallet.id,
+          source: "REFUND",
+          referenceId,
+        },
+        select: { id: true },
+      });
+
+      if (existingTransaction) return;
+    }
+
+    let currentAvailable = roundMoney(wallet.availableBalance);
+    if (currentAvailable < normalizedAmount) {
+      const releasablePayouts = await tx.payoutRequest.findMany({
+        where: {
+          walletId: wallet.id,
+          status: { in: RELEASABLE_PAYOUT_STATUSES },
+        },
+        orderBy: { requestedAt: "desc" },
+      });
+
+      for (const payout of releasablePayouts) {
+        if (currentAvailable >= normalizedAmount) break;
+        const payoutAmount = roundMoney(payout.amount);
+        if (payoutAmount <= 0) continue;
+
+        const cancelled = await tx.payoutRequest.updateMany({
+          where: {
+            id: payout.id,
+            status: { in: RELEASABLE_PAYOUT_STATUSES },
+          },
           data: {
-            walletId: wallet.id,
-            amount: normalizedAmount,
-            type: options.type,
-            source: options.source,
-            referenceId: referenceId || null,
-            metadata: options.metadata,
+            status: "CANCELLED",
+            processedAt: new Date(),
+            adminNote:
+              "Automatically cancelled and unfrozen to cover an approved refund",
           },
         });
-      });
-    } catch (error) {
-      if (!(referenceId && isUniqueConstraintError(error))) {
-        throw error;
+
+        if (cancelled.count === 1) {
+          const unfrozen = await tx.wallet.updateMany({
+            where: {
+              id: wallet.id,
+              pendingPayout: { gte: payoutAmount },
+            },
+            data: {
+              availableBalance: { increment: payoutAmount },
+              pendingPayout: { decrement: payoutAmount },
+            },
+          });
+
+          if (unfrozen.count !== 1) {
+            throw new ValidationError(
+              "Failed to release pending payout balance for refund debit",
+            );
+          }
+
+          await tx.walletTransaction.create({
+            data: {
+              walletId: wallet.id,
+              amount: payoutAmount,
+              type: "UNFREEZE",
+              source: "REVERSAL",
+              referenceId: `${payout.id}:refund-cancel`,
+              metadata: {
+                reason: "Payout cancelled to cover order refund",
+                ...(metadata ?? {}),
+              },
+            },
+          });
+
+          currentAvailable = roundMoney(currentAvailable + payoutAmount);
+        }
       }
     }
+
+    const walletUpdate = await tx.wallet.updateMany({
+      where: {
+        id: wallet.id,
+        availableBalance: { gte: normalizedAmount },
+      },
+      data: { availableBalance: { decrement: normalizedAmount } },
+    });
+
+    if (walletUpdate.count !== 1) {
+      throw new ValidationError(
+        "Teacher wallet balance is insufficient for refund debit because funds have already been paid out",
+      );
+    }
+
+    await tx.walletTransaction.create({
+      data: {
+        walletId: wallet.id,
+        amount: normalizedAmount,
+        type: "DEBIT",
+        source: "REFUND",
+        referenceId: referenceId || null,
+        metadata,
+      },
+    });
   }
 
   async creditForTeacher(
@@ -880,19 +1106,29 @@ class WalletService {
     amount: number,
     metadata?: JsonObject,
   ) {
-    await this.recordCommerceWalletEntry(userId, amount, {
-      type: "CREDIT",
-      source: "COURSE_SALE",
-      metadata,
-    });
+    const referenceId = buildWalletReferenceId("COURSE_SALE", metadata);
+    try {
+      await prisma.$transaction((tx) =>
+        this.creditForTeacherInTransaction(tx, userId, amount, metadata),
+      );
+    } catch (error) {
+      if (!(referenceId && isUniqueConstraintError(error))) {
+        throw error;
+      }
+    }
   }
 
   async debitForRefund(userId: string, amount: number, metadata?: JsonObject) {
-    await this.recordCommerceWalletEntry(userId, amount, {
-      type: "DEBIT",
-      source: "REFUND",
-      metadata,
-    });
+    const referenceId = buildWalletReferenceId("REFUND", metadata);
+    try {
+      await prisma.$transaction((tx) =>
+        this.debitForRefundInTransaction(tx, userId, amount, metadata),
+      );
+    } catch (error) {
+      if (!(referenceId && isUniqueConstraintError(error))) {
+        throw error;
+      }
+    }
   }
 }
 

@@ -9,8 +9,8 @@ const MAX_LIMIT = 100;
 const MAX_BULK_NOTIFICATION_USERS = 1000;
 
 const MAX_NOTIFICATION_TITLE_LENGTH = 150;
-const MAX_NOTIFICATION_MESSAGE_LENGTH = 1000;
-const MAX_NOTIFICATION_TYPE_LENGTH = 50;
+const MAX_NOTIFICATION_MESSAGE_LENGTH = 2000;
+const MAX_NOTIFICATION_TYPE_LENGTH = 80;
 
 const DEFAULT_NOTIFICATION_TYPE = "general";
 const NOTIFICATION_TYPE_PATTERN = /^[a-z0-9_-]+$/i;
@@ -59,8 +59,12 @@ const normalizeRequiredText = (
   value: string,
   fieldName: string,
   maxLength: number,
+  preserveLineBreaks = false,
 ): string => {
-  const normalized = sanitizeUserPlainText(value).replace(/\s+/g, " ");
+  const sanitized = sanitizeUserPlainText(value);
+  const normalized = preserveLineBreaks
+    ? sanitized
+    : sanitized.replace(/\s+/g, " ");
 
   if (!normalized) {
     throw new ValidationError(`${fieldName} is required`);
@@ -273,6 +277,7 @@ class NotificationService {
       message,
       "Notification message",
       MAX_NOTIFICATION_MESSAGE_LENGTH,
+      true,
     );
     const normalizedType = normalizeNotificationType(type);
 

@@ -1,23 +1,26 @@
 import {
   PaymentStatus,
   PayoutRequestStatus,
+  Prisma,
   RefundStatus,
 } from "@prisma/client";
 import prisma from "../config/database";
 import config from "../config/env";
 import { ValidationError } from "../utils/errors";
 import { parseOptionalDate } from "../utils/http";
-import { toNumber } from "./shared/payment-utils";
 import {
   computeTeacherSettlementsSummary,
   resolvePaymentCommissionBreakdown,
+  resolveRefundCommissionBreakdown,
   roundCurrency,
+  type SettlementRefundRecord,
   type TeacherSettlement,
 } from "./shared/settlement-calculator";
 
 export {
   computeTeacherSettlementsSummary,
   resolvePaymentCommissionBreakdown,
+  resolveRefundCommissionBreakdown,
   type SettlementPaymentRecord,
   type SettlementPendingPayoutRecord,
   type SettlementRefundRecord,
@@ -47,6 +50,11 @@ export interface FinancialReportSummary {
   monthly: FinancialSummary;
   allTime: FinancialSummary;
 }
+
+const PAID_GROSS_STATUSES: PaymentStatus[] = [
+  PaymentStatus.COMPLETED,
+  PaymentStatus.REFUNDED,
+];
 
 const resolveDefaultCommissionRate = (): number =>
   config.PLATFORM_COMMISSION_RATE ?? 10;
@@ -95,6 +103,38 @@ const buildDateFilter = (
   };
 };
 
+const buildPaidGrossPaymentWhere = (dateFilter?: {
+  gte?: Date;
+  lte?: Date;
+}): Prisma.PaymentWhereInput => ({
+  status: { in: PAID_GROSS_STATUSES },
+  paidAt: dateFilter ? { ...dateFilter, not: null } : { not: null },
+});
+
+const refundBreakdownOrderInclude = {
+  order: {
+    select: {
+      items: {
+        select: {
+          finalPrice: true,
+          package: {
+            select: {
+              course: {
+                select: {
+                  teacherProfileId: true,
+                  teacherProfile: {
+                    select: { commissionRate: true },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+  },
+} satisfies Prisma.RefundSelect;
+
 class FinancialReportService {
   async getFinancialSummary(): Promise<FinancialReportSummary> {
     const now = new Date();
@@ -127,96 +167,107 @@ class FinancialReportService {
     const dateFilter = buildDateFilter(filter);
     const defaultCommissionRate = resolveDefaultCommissionRate();
 
-    const [teacherProfiles, completedPayments, completedRefunds, activePayouts] =
-      await Promise.all([
-        prisma.teacherProfile.findMany({
-          where: { registrationStatus: "APPROVED" },
-          select: {
-            id: true,
-            userId: true,
-            commissionRate: true,
-            totalStudents: true,
-            user: {
-              select: {
-                firstName: true,
-                lastName: true,
-                email: true,
-              },
-            },
-            _count: {
-              select: { courses: true },
+    const [
+      teacherProfiles,
+      paidGrossPayments,
+      completedOrderRefunds,
+      directRefundedPayments,
+      activePayouts,
+    ] = await Promise.all([
+      prisma.teacherProfile.findMany({
+        where: { registrationStatus: "APPROVED" },
+        select: {
+          id: true,
+          userId: true,
+          commissionRate: true,
+          totalStudents: true,
+          user: {
+            select: {
+              firstName: true,
+              lastName: true,
+              email: true,
             },
           },
-          orderBy: { totalEarnings: "desc" },
-        }),
-        prisma.payment.findMany({
-          where: {
-            status: PaymentStatus.COMPLETED,
-            ...(dateFilter ? { paidAt: dateFilter } : {}),
+          _count: {
+            select: { courses: true },
           },
-          select: {
-            amount: true,
-            teacherEarning: true,
-            package: {
-              select: {
-                course: { select: { teacherProfileId: true } },
-              },
+        },
+        orderBy: { totalEarnings: "desc" },
+      }),
+      prisma.payment.findMany({
+        where: buildPaidGrossPaymentWhere(dateFilter),
+        select: {
+          amount: true,
+          teacherEarning: true,
+          package: {
+            select: {
+              course: { select: { teacherProfileId: true } },
             },
-            order: {
-              select: {
-                items: {
-                  select: {
-                    finalPrice: true,
-                    package: {
-                      select: {
-                        course: { select: { teacherProfileId: true } },
-                      },
+          },
+          order: {
+            select: {
+              items: {
+                select: {
+                  finalPrice: true,
+                  package: {
+                    select: {
+                      course: { select: { teacherProfileId: true } },
                     },
                   },
                 },
               },
             },
           },
-        }),
-        prisma.refund.findMany({
-          where: {
-            status: RefundStatus.COMPLETED,
-            ...(dateFilter ? { completedAt: dateFilter } : {}),
-          },
-          select: {
-            amount: true,
-            order: {
-              select: {
-                items: {
-                  select: {
-                    finalPrice: true,
-                    package: {
-                      select: {
-                        course: { select: { teacherProfileId: true } },
-                      },
-                    },
-                  },
-                },
-              },
+        },
+      }),
+      prisma.refund.findMany({
+        where: {
+          status: RefundStatus.COMPLETED,
+          ...(dateFilter ? { completedAt: dateFilter } : {}),
+        },
+        select: {
+          amount: true,
+          ...refundBreakdownOrderInclude,
+        },
+      }),
+      prisma.payment.findMany({
+        where: {
+          status: PaymentStatus.REFUNDED,
+          orderId: null,
+          paidAt: { not: null },
+          ...(dateFilter ? { updatedAt: dateFilter } : {}),
+        },
+        select: {
+          amount: true,
+          teacherEarning: true,
+          package: {
+            select: {
+              course: { select: { teacherProfileId: true } },
             },
           },
-        }),
-        prisma.payoutRequest.findMany({
-          where: {
-            status: {
-              in: [
-                PayoutRequestStatus.PENDING,
-                PayoutRequestStatus.APPROVED,
-                PayoutRequestStatus.PROCESSING,
-              ],
-            },
+        },
+      }),
+      prisma.payoutRequest.findMany({
+        where: {
+          status: {
+            in: [
+              PayoutRequestStatus.PENDING,
+              PayoutRequestStatus.APPROVED,
+              PayoutRequestStatus.PROCESSING,
+            ],
           },
-          select: {
-            amount: true,
-            wallet: { select: { userId: true } },
-          },
-        }),
-      ]);
+        },
+        select: {
+          amount: true,
+          wallet: { select: { userId: true } },
+        },
+      }),
+    ]);
+
+    const allRefunds: SettlementRefundRecord[] = [
+      ...completedOrderRefunds,
+      ...directRefundedPayments,
+    ];
 
     return computeTeacherSettlementsSummary({
       teachers: teacherProfiles.map((profile) => ({
@@ -227,8 +278,8 @@ class FinancialReportService {
         courseCount: profile._count.courses,
         user: profile.user,
       })),
-      payments: completedPayments,
-      refunds: completedRefunds,
+      payments: paidGrossPayments,
+      refunds: allRefunds,
       pendingPayouts: activePayouts.map((payout) => ({
         userId: payout.wallet.userId,
         amount: payout.amount,
@@ -263,44 +314,73 @@ class FinancialReportService {
     const dateFilter = buildDateFilter(filter);
     const defaultCommissionRate = resolveDefaultCommissionRate();
 
-    const [payments, refunds] = await Promise.all([
-      prisma.payment.findMany({
-        where: {
-          status: PaymentStatus.COMPLETED,
-          ...(dateFilter ? { paidAt: dateFilter } : {}),
-        },
-        include: {
-          user: { select: { firstName: true, lastName: true } },
-          package: { include: { course: { select: { title: true } } } },
-          order: {
-            include: {
-              items: {
-                include: {
-                  package: { include: { course: { select: { title: true } } } },
+    const [payments, completedOrderRefunds, directRefundedPayments] =
+      await Promise.all([
+        prisma.payment.findMany({
+          where: buildPaidGrossPaymentWhere(dateFilter),
+          include: {
+            user: { select: { firstName: true, lastName: true } },
+            package: { include: { course: { select: { title: true } } } },
+            order: {
+              include: {
+                items: {
+                  include: {
+                    package: {
+                      include: { course: { select: { title: true } } },
+                    },
+                  },
                 },
               },
             },
           },
-        },
-        orderBy: { paidAt: "desc" },
-        take: 1000,
-      }),
-      prisma.refund.findMany({
-        where: {
-          status: { in: [RefundStatus.COMPLETED, RefundStatus.APPROVED] },
-          ...(dateFilter ? { processedAt: dateFilter } : {}),
-        },
-        include: {
-          order: {
-            include: {
-              user: { select: { firstName: true, lastName: true } },
+          orderBy: { paidAt: "desc" },
+          take: 1000,
+        }),
+        prisma.refund.findMany({
+          where: {
+            status: RefundStatus.COMPLETED,
+            ...(dateFilter ? { completedAt: dateFilter } : {}),
+          },
+          include: {
+            order: {
+              include: {
+                user: { select: { firstName: true, lastName: true } },
+                items: {
+                  include: {
+                    package: {
+                      include: {
+                        course: {
+                          select: {
+                            teacherProfileId: true,
+                            teacherProfile: {
+                              select: { commissionRate: true },
+                            },
+                          },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
             },
           },
-        },
-        orderBy: { processedAt: "desc" },
-        take: 500,
-      }),
-    ]);
+          orderBy: { completedAt: "desc" },
+          take: 500,
+        }),
+        prisma.payment.findMany({
+          where: {
+            status: PaymentStatus.REFUNDED,
+            orderId: null,
+            paidAt: { not: null },
+            ...(dateFilter ? { updatedAt: dateFilter } : {}),
+          },
+          include: {
+            user: { select: { firstName: true, lastName: true } },
+          },
+          orderBy: { updatedAt: "desc" },
+          take: 500,
+        }),
+      ]);
 
     const exportPayments = payments.map((p) => {
       const breakdown = resolvePaymentCommissionBreakdown(
@@ -327,27 +407,52 @@ class FinancialReportService {
       };
     });
 
-    const exportRefunds = refunds.map((r) => ({
-      id: r.id,
-      date: r.processedAt?.toISOString() || "",
-      userName:
-        `${r.order?.user?.firstName || ""} ${r.order?.user?.lastName || ""}`.trim(),
-      amount: roundCurrency(toNumber(r.amount)),
-      status: r.status,
-      method: r.refundMethod,
-    }));
+    const exportRefunds = [
+      ...completedOrderRefunds.map((r) => ({
+        id: r.id,
+        date: (r.completedAt ?? r.processedAt)?.toISOString() || "",
+        userName:
+          `${r.order?.user?.firstName || ""} ${r.order?.user?.lastName || ""}`.trim(),
+        amount: roundCurrency(Number(r.amount)),
+        status: r.status,
+        method: r.refundMethod,
+      })),
+      ...directRefundedPayments.map((p) => ({
+        id: p.id,
+        date: p.updatedAt.toISOString(),
+        userName: `${p.user?.firstName || ""} ${p.user?.lastName || ""}`.trim(),
+        amount: roundCurrency(Number(p.amount)),
+        status: RefundStatus.COMPLETED,
+        method: "ORIGINAL_PAYMENT",
+      })),
+    ];
 
     const totalRevenue = roundCurrency(
       exportPayments.reduce((sum, item) => sum + item.amount, 0),
     );
-    const platformEarnings = roundCurrency(
+    const grossPlatformEarnings = roundCurrency(
       exportPayments.reduce((sum, item) => sum + item.platformCommission, 0),
     );
-    const teacherEarnings = roundCurrency(
+    const grossTeacherEarnings = roundCurrency(
       exportPayments.reduce((sum, item) => sum + item.teacherEarning, 0),
     );
+
+    const refundBreakdowns = [
+      ...completedOrderRefunds.map((r) =>
+        resolveRefundCommissionBreakdown(r, defaultCommissionRate),
+      ),
+      ...directRefundedPayments.map((p) =>
+        resolveRefundCommissionBreakdown(p, defaultCommissionRate),
+      ),
+    ];
     const totalRefunds = roundCurrency(
-      exportRefunds.reduce((sum, item) => sum + item.amount, 0),
+      refundBreakdowns.reduce((sum, item) => sum + item.amount, 0),
+    );
+    const refundedPlatformEarnings = roundCurrency(
+      refundBreakdowns.reduce((sum, item) => sum + item.platformCommission, 0),
+    );
+    const refundedTeacherEarnings = roundCurrency(
+      refundBreakdowns.reduce((sum, item) => sum + item.teacherEarning, 0),
     );
 
     return {
@@ -358,8 +463,12 @@ class FinancialReportService {
           ? `${filter.startDate} to ${filter.endDate || "now"}`
           : "All Time",
         totalRevenue,
-        platformEarnings,
-        teacherEarnings,
+        platformEarnings: roundCurrency(
+          grossPlatformEarnings - refundedPlatformEarnings,
+        ),
+        teacherEarnings: roundCurrency(
+          grossTeacherEarnings - refundedTeacherEarnings,
+        ),
         totalRefunds,
         netRevenue: roundCurrency(totalRevenue - totalRefunds),
         transactionCount: exportPayments.length,
@@ -374,42 +483,49 @@ class FinancialReportService {
   ): Promise<FinancialSummary> {
     const dateFilter = since ? { gte: since } : undefined;
     const defaultCommissionRate = resolveDefaultCommissionRate();
+    const paidWhere = buildPaidGrossPaymentWhere(dateFilter);
 
-    const [paymentAgg, paymentCount, refundAgg, refundCount] =
-      await Promise.all([
-        prisma.payment.aggregate({
-          where: {
-            status: PaymentStatus.COMPLETED,
-            ...(dateFilter ? { paidAt: dateFilter } : {}),
-          },
-          _sum: {
-            amount: true,
-            platformCommission: true,
-            teacherEarning: true,
-          },
-        }),
-        prisma.payment.count({
-          where: {
-            status: PaymentStatus.COMPLETED,
-            ...(dateFilter ? { paidAt: dateFilter } : {}),
-          },
-        }),
-        prisma.refund.aggregate({
-          where: {
-            status: RefundStatus.COMPLETED,
-            ...(dateFilter ? { completedAt: dateFilter } : {}),
-          },
-          _sum: { amount: true },
-        }),
-        prisma.refund.count({
-          where: {
-            status: RefundStatus.COMPLETED,
-            ...(dateFilter ? { completedAt: dateFilter } : {}),
-          },
-        }),
-      ]);
+    const [
+      paymentAgg,
+      paymentCount,
+      completedOrderRefunds,
+      directRefundedPayments,
+    ] = await Promise.all([
+      prisma.payment.aggregate({
+        where: paidWhere,
+        _sum: {
+          amount: true,
+          platformCommission: true,
+          teacherEarning: true,
+        },
+      }),
+      prisma.payment.count({ where: paidWhere }),
+      prisma.refund.findMany({
+        where: {
+          status: RefundStatus.COMPLETED,
+          ...(dateFilter ? { completedAt: dateFilter } : {}),
+        },
+        select: {
+          amount: true,
+          ...refundBreakdownOrderInclude,
+        },
+      }),
+      prisma.payment.findMany({
+        where: {
+          status: PaymentStatus.REFUNDED,
+          orderId: null,
+          paidAt: { not: null },
+          ...(dateFilter ? { updatedAt: dateFilter } : {}),
+        },
+        select: {
+          amount: true,
+          platformCommission: true,
+          teacherEarning: true,
+        },
+      }),
+    ]);
 
-    const breakdown = resolvePaymentCommissionBreakdown(
+    const grossBreakdown = resolvePaymentCommissionBreakdown(
       {
         amount: paymentAgg._sum.amount,
         platformCommission: paymentAgg._sum.platformCommission,
@@ -417,17 +533,39 @@ class FinancialReportService {
       },
       defaultCommissionRate,
     );
-    const totalRefunds = roundCurrency(toNumber(refundAgg._sum.amount));
+
+    const refundBreakdowns = [
+      ...completedOrderRefunds.map((r) =>
+        resolveRefundCommissionBreakdown(r, defaultCommissionRate),
+      ),
+      ...directRefundedPayments.map((p) =>
+        resolveRefundCommissionBreakdown(p, defaultCommissionRate),
+      ),
+    ];
+
+    const totalRefunds = roundCurrency(
+      refundBreakdowns.reduce((sum, item) => sum + item.amount, 0),
+    );
+    const refundedPlatformCommission = roundCurrency(
+      refundBreakdowns.reduce((sum, item) => sum + item.platformCommission, 0),
+    );
+    const refundedTeacherEarning = roundCurrency(
+      refundBreakdowns.reduce((sum, item) => sum + item.teacherEarning, 0),
+    );
 
     return {
       period: label,
-      totalRevenue: breakdown.amount,
-      platformEarnings: breakdown.platformCommission,
-      teacherEarnings: breakdown.teacherEarning,
+      totalRevenue: grossBreakdown.amount,
+      platformEarnings: roundCurrency(
+        grossBreakdown.platformCommission - refundedPlatformCommission,
+      ),
+      teacherEarnings: roundCurrency(
+        grossBreakdown.teacherEarning - refundedTeacherEarning,
+      ),
       totalRefunds,
-      netRevenue: roundCurrency(breakdown.amount - totalRefunds),
+      netRevenue: roundCurrency(grossBreakdown.amount - totalRefunds),
       transactionCount: paymentCount,
-      refundCount,
+      refundCount: completedOrderRefunds.length + directRefundedPayments.length,
     };
   }
 }

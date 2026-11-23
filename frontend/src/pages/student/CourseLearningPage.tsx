@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import clientLogger from '@/utils/logger';
-import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Play,
   CheckCircle,
@@ -10,14 +10,11 @@ import {
   ChevronRight,
   Star,
   Clock,
-  MessageSquare,
-  Smile,
-  Hand,
-  Mic,
-  MicOff,
-  Send,
+  Radio,
+  ExternalLink,
+  AlertCircle,
 } from 'lucide-react';
-import { Course, Lesson, Enrollment, QuizAttempt } from '@/types';
+import { Course, Lesson, Enrollment, LiveSession } from '@/types';
 import courseService from '@/services/course.service';
 import enrollmentService from '@/services/enrollment.service';
 import toast from 'react-hot-toast';
@@ -28,25 +25,84 @@ import { selectPreferredCourseEnrollment } from '@/utils/enrollment';
 import { useOverlayAccessibility, usePageTitle } from '@/hooks';
 import { downloadProtectedAsset } from '@/utils/protected-assets';
 
-const REACTION_OPTIONS = [
-  { symbol: '\u{1F44D}', label: 'Thumbs up' },
-  { symbol: '\u{1F44F}', label: 'Clap' },
-  { symbol: '\u{2764}\u{FE0F}', label: 'Heart' },
-  { symbol: '\u{1F389}', label: 'Celebrate' },
-  { symbol: '\u{1F525}', label: 'Fire' },
-  { symbol: '\u{1F60A}', label: 'Smile' },
-  { symbol: '\u{1F92F}', label: 'Mind blown' },
-  { symbol: '\u{1F64C}', label: 'Hands raised' },
-  { symbol: '\u{1F62E}', label: 'Surprised' },
-  { symbol: '\u{1F600}', label: 'Happy' },
-  { symbol: '\u{1F605}', label: 'Relieved' },
-  { symbol: '\u{1F60E}', label: 'Cool' },
-  { symbol: '\u{1F4AF}', label: 'One hundred' },
-  { symbol: '\u{2705}', label: 'Check mark' },
-  { symbol: '\u{1F4A1}', label: 'Idea' },
-  { symbol: '\u{1F680}', label: 'Rocket' },
-] as const;
+const COMPLETED_LESSONS_STORAGE_PREFIX = 'flexilearn:completed-lessons:';
 
+const readStoredCompletedLessonIds = (enrollmentId: string): string[] | null => {
+  if (typeof localStorage === 'undefined') {
+    return null;
+  }
+
+  try {
+    const raw = localStorage.getItem(`${COMPLETED_LESSONS_STORAGE_PREFIX}${enrollmentId}`);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as unknown;
+    return Array.isArray(parsed)
+      ? parsed.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
+      : null;
+  } catch {
+    return null;
+  }
+};
+
+const writeStoredCompletedLessonIds = (enrollmentId: string, lessonIds: Iterable<string>) => {
+  if (typeof localStorage === 'undefined') {
+    return;
+  }
+
+  try {
+    localStorage.setItem(
+      `${COMPLETED_LESSONS_STORAGE_PREFIX}${enrollmentId}`,
+      JSON.stringify(Array.from(lessonIds))
+    );
+  } catch {
+    // Ignore storage quota errors
+  }
+};
+
+const deriveInitialCompletedLessonIds = (
+  lessons: Lesson[],
+  enrollment: Enrollment | null,
+  passedLessonIds: ReadonlySet<string>
+): Set<string> => {
+  const validLessonIds = new Set(lessons.map((lesson) => lesson.id));
+  const completed = new Set<string>();
+
+  for (const lessonId of passedLessonIds) {
+    if (validLessonIds.has(lessonId)) {
+      completed.add(lessonId);
+    }
+  }
+
+  if (!enrollment) {
+    return completed;
+  }
+
+  const stored = readStoredCompletedLessonIds(enrollment.id);
+  if (stored) {
+    for (const lessonId of stored) {
+      const lesson = lessons.find((item) => item.id === lessonId);
+      if (!lesson) continue;
+      const requiresQuiz = Boolean(lesson.quiz?.questions?.length);
+      if (!requiresQuiz || passedLessonIds.has(lessonId)) {
+        completed.add(lessonId);
+      }
+    }
+  }
+
+  // Reconcile if backend count is higher than locally stored IDs (e.g. different browser)
+  const targetCount = Math.min(enrollment.completedLessons, lessons.length);
+  if (completed.size < targetCount) {
+    for (const lesson of lessons) {
+      if (completed.size >= targetCount) break;
+      const requiresQuiz = Boolean(lesson.quiz?.questions?.length);
+      if (!requiresQuiz || passedLessonIds.has(lesson.id)) {
+        completed.add(lesson.id);
+      }
+    }
+  }
+
+  return completed;
+};
 
 const CourseLearningPage = () => {
   const { courseId } = useParams<{ courseId: string }>();
@@ -58,71 +114,16 @@ const CourseLearningPage = () => {
   const [currentLesson, setCurrentLesson] = useState<Lesson | null>(null);
   const [completedLessons, setCompletedLessons] = useState<Set<string>>(new Set());
   const [passedQuizLessons, setPassedQuizLessons] = useState<Set<string>>(new Set());
+  const [liveSessions, setLiveSessions] = useState<LiveSession[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [isCompletingLesson, setIsCompletingLesson] = useState(false);
   const [showReviewModal, setShowReviewModal] = useState(false);
 
-  interface ChatMessage {
-    id: string;
-    user: string;
-    type: 'text' | 'reaction' | 'system';
-    text: string;
-    timestamp: number;
-  }
-
-  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
-  const [chatInput, setChatInput] = useState('');
-  const [showEmojis, setShowEmojis] = useState(false);
-  const [handRaised, setHandRaised] = useState(false);
-  const [micEnabled, setMicEnabled] = useState(false);
   const reviewModalRef = useRef<HTMLDivElement | null>(null);
   const leaveReviewButtonRef = useRef<HTMLButtonElement | null>(null);
   const requestedLessonId = searchParams.get('lessonId');
   usePageTitle(course ? `Learning ${course.title}` : 'Course Learning');
-
-  const generateId = (): string => {
-    if (typeof crypto !== 'undefined' && crypto.randomUUID) {
-      return crypto.randomUUID();
-    }
-    if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
-      const bytes = crypto.getRandomValues(new Uint8Array(8));
-      const token = Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
-      return `${Date.now()}-${token}`;
-    }
-    return `${Date.now()}-${performance.now().toString(36).replace('.', '')}`;
-  };
-
-  const handleSendMessage = () => {
-    if (!chatInput.trim()) return;
-    setChatMessages((prev) => [
-      ...prev,
-      { id: generateId(), user: 'You', type: 'text' as const, text: chatInput.trim(), timestamp: Date.now() },
-    ]);
-    setChatInput('');
-    setShowEmojis(false);
-  };
-
-  const addReaction = (emoji: string) => {
-    setChatMessages((prev) => [
-      ...prev,
-      { id: generateId(), user: 'You', type: 'reaction' as const, text: emoji, timestamp: Date.now() },
-    ]);
-  };
-
-  const toggleHand = () => {
-    const nowRaised = !handRaised;
-    setHandRaised(nowRaised);
-    setChatMessages((messages) => [
-      ...messages,
-      { id: generateId(), user: 'System', type: 'system' as const, text: nowRaised ? 'You raised your hand' : 'You lowered your hand', timestamp: Date.now() },
-    ]);
-    toast.success(nowRaised ? 'Hand raised' : 'Hand lowered');
-  };
-
-  const toggleMic = () => {
-    const nowEnabled = !micEnabled;
-    setMicEnabled(nowEnabled);
-    toast.success(nowEnabled ? "Microphone enabled successfully" : "Microphone disabled successfully");
-  };
 
   useOverlayAccessibility({
     isOpen: showReviewModal,
@@ -133,124 +134,93 @@ const CourseLearningPage = () => {
     lockBodyScroll: true,
   });
 
-  useEffect(() => {
+  const loadCourseData = useCallback(async () => {
     if (!courseId) {
       return;
     }
 
-    let isActive = true;
+    setIsLoading(true);
+    setLoadError(null);
 
-    const loadCourseData = async () => {
-      setIsLoading(true);
-      try {
-        const hasAccess = await enrollmentService.checkAccess(courseId);
-        if (!hasAccess) {
-          toast.error('You need to enroll in this course first');
-          navigate(`/courses/${courseId}`);
-          return;
-        }
+    try {
+      const hasAccess = await enrollmentService.checkAccess(courseId);
+      if (!hasAccess) {
+        toast.error('You need to enroll in this course first');
+        navigate(`/courses/${courseId}`);
+        return;
+      }
 
-        const courseData = await courseService.getCourseById(courseId);
-        const enrollments = await enrollmentService.getMyCourses();
-        const quizAttempts: QuizAttempt[] = await courseService.getMyCourseQuizAttempts(courseId);
-        const currentEnrollment = selectPreferredCourseEnrollment(enrollments, courseId);
+      const [courseData, enrollments, quizAttempts, sessions] = await Promise.all([
+        courseService.getCourseById(courseId),
+        enrollmentService.getMyCourses(),
+        courseService.getMyCourseQuizAttempts(courseId),
+        courseService.getCourseLiveSessions(courseId).catch(() => [] as LiveSession[]),
+      ]);
 
-        if (!isActive) {
-          return;
-        }
+      const currentEnrollment = selectPreferredCourseEnrollment(enrollments, courseId);
+      setCourse(courseData);
+      setLiveSessions(sessions);
 
-        setCourse(courseData);
-        if (currentEnrollment) {
-          setEnrollment(currentEnrollment);
-          const initialCompletedCount = Math.min(
-            currentEnrollment.completedLessons,
-            courseData.lessons?.length || 0
-          );
-          setCompletedLessons(
-            new Set((courseData.lessons || []).slice(0, initialCompletedCount).map((lesson) => lesson.id))
-          );
-        }
+      const passedLessonIds = new Set<string>(
+        quizAttempts.filter((attempt) => attempt.passed).map((attempt) => attempt.lessonId)
+      );
+      setPassedQuizLessons(passedLessonIds);
 
-        const passedLessonIds = new Set<string>(
-          quizAttempts
-            .filter((attempt) => attempt.passed)
-            .map((attempt) => attempt.lessonId)
-        );
-        setPassedQuizLessons(passedLessonIds);
+      const lessons = courseData.lessons || [];
+      const derivedCompleted = deriveInitialCompletedLessonIds(
+        lessons,
+        currentEnrollment,
+        passedLessonIds
+      );
+      setCompletedLessons(derivedCompleted);
 
-        if (courseData.lessons?.length) {
-          const completedLessonIds = new Set(
-            (courseData.lessons || [])
-              .slice(0, currentEnrollment?.completedLessons || 0)
-              .map((lesson) => lesson.id)
-          );
+      if (currentEnrollment) {
+        writeStoredCompletedLessonIds(currentEnrollment.id, derivedCompleted);
+        const completedCount = derivedCompleted.size;
+        const derivedProgress =
+          lessons.length > 0 ? Math.round((completedCount / lessons.length) * 100) : 0;
 
-          for (const lesson of courseData.lessons || []) {
-            if (passedLessonIds.has(lesson.id)) {
-              completedLessonIds.add(lesson.id);
-            }
-          }
-
-          setCompletedLessons(completedLessonIds);
-
-          if (currentEnrollment) {
-            const completedCount = completedLessonIds.size;
-            const derivedProgress = Math.round(
-              (completedCount / (courseData.lessons.length || 1)) * 100
+        if (
+          lessons.length > 0 &&
+          (completedCount !== currentEnrollment.completedLessons ||
+            derivedProgress !== currentEnrollment.progress)
+        ) {
+          try {
+            const updatedEnrollment = await enrollmentService.updateProgress(
+              currentEnrollment.id,
+              Array.from(derivedCompleted),
+              derivedProgress
             );
-
-            const shouldPersistRecoveredProgress =
-              completedCount !== currentEnrollment.completedLessons ||
-              derivedProgress !== currentEnrollment.progress;
-
-            if (shouldPersistRecoveredProgress) {
-              try {
-                const updatedEnrollment = await enrollmentService.updateProgress(
-                  currentEnrollment.id,
-                  completedCount,
-                  derivedProgress
-                );
-
-                if (!isActive) {
-                  return;
-                }
-
-                setEnrollment(updatedEnrollment);
-              } catch (syncError) {
-                clientLogger.error('Failed to sync recovered course progress:', syncError);
-                setEnrollment({
-                  ...currentEnrollment,
-                  completedLessons: completedCount,
-                  progress: derivedProgress,
-                });
-              }
-            } else {
-              setEnrollment({
-                ...currentEnrollment,
-                completedLessons: completedCount,
-                progress: derivedProgress,
-              });
-            }
+            setEnrollment(updatedEnrollment);
+          } catch (syncError) {
+            clientLogger.error('Failed to sync recovered course progress:', syncError);
+            setEnrollment({
+              ...currentEnrollment,
+              completedLessons: completedCount,
+              progress: derivedProgress,
+            });
           }
-        }
-      } catch (error) {
-        if (isActive) {
-          clientLogger.error('Failed to fetch course data:', error);
-          toast.error(extractErrorMessage(error, 'Failed to load course'));
-        }
-      } finally {
-        if (isActive) {
-          setIsLoading(false);
+        } else {
+          setEnrollment({
+            ...currentEnrollment,
+            completedLessons: completedCount,
+            progress: derivedProgress,
+          });
         }
       }
-    };
-
-    void loadCourseData();
-
-    return () => {
-      isActive = false;
-    };
+    } catch (error) {
+      clientLogger.error('Failed to fetch course data:', error);
+      const message = extractErrorMessage(error, 'Failed to load course');
+      setLoadError(message);
+      toast.error(message);
+    } finally {
+      setIsLoading(false);
+    }
   }, [courseId, navigate]);
+
+  useEffect(() => {
+    void loadCourseData();
+  }, [loadCourseData]);
 
   useEffect(() => {
     if (!course?.lessons?.length) {
@@ -287,9 +257,13 @@ const CourseLearningPage = () => {
   };
 
   const handleLessonComplete = async (bypassQuizGate = false) => {
-    if (!currentLesson || !enrollment) return;
+    if (!currentLesson || !enrollment || isCompletingLesson) return;
     if (completedLessons.has(currentLesson.id)) return;
-    if (!bypassQuizGate && currentLesson.quiz?.questions?.length && !passedQuizLessons.has(currentLesson.id)) {
+    if (
+      !bypassQuizGate &&
+      currentLesson.quiz?.questions?.length &&
+      !passedQuizLessons.has(currentLesson.id)
+    ) {
       toast.error('Please pass the lesson quiz before marking this lesson complete.');
       return;
     }
@@ -298,30 +272,30 @@ const CourseLearningPage = () => {
     const newCompleted = new Set(previousCompleted);
     newCompleted.add(currentLesson.id);
     setCompletedLessons(newCompleted);
+    setIsCompletingLesson(true);
 
     const totalLessons = course?.lessons?.length || 1;
     const progress = Math.round((newCompleted.size / totalLessons) * 100);
 
     try {
-      await enrollmentService.updateProgress(enrollment.id, newCompleted.size, progress);
-      setEnrollment((currentEnrollment) =>
-        currentEnrollment
-          ? {
-              ...currentEnrollment,
-              progress,
-              completedLessons: newCompleted.size,
-            }
-          : currentEnrollment
+      const updated = await enrollmentService.updateProgress(
+        enrollment.id,
+        Array.from(newCompleted),
+        progress
       );
+      writeStoredCompletedLessonIds(enrollment.id, newCompleted);
+      setEnrollment(updated);
       toast.success('Lesson completed!');
 
-      if (progress === 100) {
+      if (updated.progress === 100) {
         setShowReviewModal(true);
       }
     } catch (error) {
       clientLogger.error('Failed to update progress:', error);
       setCompletedLessons(previousCompleted);
       toast.error(extractErrorMessage(error, 'Failed to update progress'));
+    } finally {
+      setIsCompletingLesson(false);
     }
   };
 
@@ -354,9 +328,7 @@ const CourseLearningPage = () => {
     }
   };
 
-  const isLessonCompleted = (lessonId: string) => {
-    return completedLessons.has(lessonId);
-  };
+  const isLessonCompleted = (lessonId: string) => completedLessons.has(lessonId);
 
   if (isLoading) {
     return (
@@ -374,42 +346,83 @@ const CourseLearningPage = () => {
     );
   }
 
+  if (loadError) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-primary-50/10 to-indigo-50/20 px-4">
+        <div className="card max-w-md w-full text-center space-y-4">
+          <AlertCircle className="w-12 h-12 text-red-500 mx-auto" />
+          <h2 className="text-xl font-bold text-gray-900">Unable to load course</h2>
+          <p className="text-sm text-gray-600">{loadError}</p>
+          <div className="flex items-center justify-center gap-3">
+            <button
+              type="button"
+              onClick={() => void loadCourseData()}
+              className="btn-primary"
+            >
+              Retry
+            </button>
+            <button
+              type="button"
+              onClick={() => navigate('/student/courses')}
+              className="btn-outline"
+            >
+              My Courses
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   if (!course || !currentLesson) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-primary-50/10 to-indigo-50/20">
         <div className="text-center">
-          <p className="text-gray-600 mb-4">Course not found</p>
-          <button type="button" className="btn-primary" onClick={() => navigate('/courses')}>Browse Courses</button>
+          <p className="text-gray-600 mb-4">
+            {course && (!course.lessons || course.lessons.length === 0)
+              ? 'No lessons have been published for this course yet.'
+              : 'Course not found'}
+          </p>
+          <button
+            type="button"
+            className="btn-primary"
+            onClick={() => navigate('/student/courses')}
+          >
+            Back to My Courses
+          </button>
         </div>
       </div>
     );
   }
 
   const currentLessonHasQuiz = !!currentLesson.quiz?.questions?.length;
+  const activeOrUpcomingSessions = liveSessions.filter(
+    (s) => s.status === 'ONGOING' || s.status === 'SCHEDULED'
+  );
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-primary-50/10 to-indigo-50/20 relative">
       <div className="absolute inset-0 bg-[linear-gradient(rgba(0,0,0,0.015)_1px,transparent_1px),linear-gradient(90deg,rgba(0,0,0,0.015)_1px,transparent_1px)] bg-[size:32px_32px] pointer-events-none"></div>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-6 relative">
         <div className="max-w-5xl mx-auto">
-            {currentLesson.videoUrl ? (
+          {currentLesson.videoUrl ? (
             <div className="rounded-xl overflow-hidden shadow-xl">
               <UniversalVideoPlayer
                 key={currentLesson.id}
                 src={currentLesson.videoUrl}
                 title={currentLesson.title}
-                onComplete={currentLessonHasQuiz ? undefined : handleLessonComplete}
+                onComplete={currentLessonHasQuiz ? undefined : () => void handleLessonComplete()}
                 autoPlay={false}
               />
             </div>
-            ) : (
+          ) : (
             <div className="aspect-video bg-gray-900 flex items-center justify-center rounded-xl text-white">
               <div className="text-center p-8">
                 <Play className="w-16 h-16 mx-auto mb-4 opacity-50" />
                 <p>No video available for this lesson</p>
               </div>
-              </div>
-            )}
+            </div>
+          )}
         </div>
       </div>
 
@@ -417,7 +430,7 @@ const CourseLearningPage = () => {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           <div className="lg:col-span-2 space-y-6">
             <div className="card shadow-xl border border-gray-100 rounded-2xl">
-              <div className="flex items-start justify-between mb-6">
+              <div className="flex items-start justify-between mb-6 gap-4">
                 <div className="flex-1">
                   <h1 className="text-3xl font-bold mb-3 text-gray-900">{currentLesson.title}</h1>
                   <div className="flex items-center space-x-4 text-sm">
@@ -431,9 +444,14 @@ const CourseLearningPage = () => {
                   </div>
                 </div>
                 {!isLessonCompleted(currentLesson.id) && !currentLessonHasQuiz && (
-                  <button type="button" onClick={() => void handleLessonComplete()} className="btn-primary">
+                  <button
+                    type="button"
+                    disabled={isCompletingLesson}
+                    onClick={() => void handleLessonComplete()}
+                    className="btn-primary disabled:opacity-50"
+                  >
                     <CheckCircle className="w-4 h-4 mr-2" />
-                    Mark Complete
+                    {isCompletingLesson ? 'Saving...' : 'Mark Complete'}
                   </button>
                 )}
               </div>
@@ -466,7 +484,11 @@ const CourseLearningPage = () => {
               <button
                 type="button"
                 onClick={handlePreviousLesson}
-                disabled={!course.lessons || course.lessons.length === 0 || course.lessons[0]?.id === currentLesson.id}
+                disabled={
+                  !course.lessons ||
+                  course.lessons.length === 0 ||
+                  course.lessons[0]?.id === currentLesson.id
+                }
                 className="btn-outline disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Previous Lesson
@@ -475,7 +497,9 @@ const CourseLearningPage = () => {
                 type="button"
                 onClick={handleNextLesson}
                 disabled={
-                  !course.lessons || course.lessons.length === 0 || course.lessons[course.lessons.length - 1]?.id === currentLesson.id
+                  !course.lessons ||
+                  course.lessons.length === 0 ||
+                  course.lessons[course.lessons.length - 1]?.id === currentLesson.id
                 }
                 className="btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
               >
@@ -493,53 +517,47 @@ const CourseLearningPage = () => {
                   Course Materials
                 </h2>
                 <div className="space-y-3">
-                  {course.materials.map((material) => (
-                    (() => {
-                      const materialAccessUrl =
-                        material.accessUrl ?? material.fileUrl;
+                  {course.materials.map((material) => {
+                    const materialAccessUrl = material.accessUrl ?? material.fileUrl;
 
-                      return (
-                        <div
-                          key={material.id}
-                          className="flex items-center justify-between p-4 bg-gradient-to-r from-gray-50 to-gray-100 rounded-xl border border-gray-200 hover:border-gray-300 transition-all"
-                        >
-                          <div className="flex items-center space-x-4">
-                            <div className="p-2 bg-primary-100 rounded-lg">
-                              <FileText className="w-5 h-5 text-primary-600" />
-                            </div>
-                            <div>
-                              <p className="font-bold text-gray-900">{material.title}</p>
-                              {material.description && (
-                                <p className="text-sm text-gray-600 mt-1">{material.description}</p>
-                              )}
-                              <p className="text-xs text-gray-500 mt-1">
-                                {material.fileType} | {(material.fileSize / 1024).toFixed(0)} KB
-                              </p>
-                            </div>
+                    return (
+                      <div
+                        key={material.id}
+                        className="flex items-center justify-between p-4 bg-gradient-to-r from-gray-50 to-gray-100 rounded-xl border border-gray-200 hover:border-gray-300 transition-all"
+                      >
+                        <div className="flex items-center space-x-4">
+                          <div className="p-2 bg-primary-100 rounded-lg">
+                            <FileText className="w-5 h-5 text-primary-600" />
                           </div>
-                          {material.isDownloadable && materialAccessUrl ? (
-                            <button
-                              type="button"
-                              onClick={() =>
-                                void handleMaterialDownload(
-                                  materialAccessUrl,
-                                  material.title
-                                )
-                              }
-                              className="btn-sm btn-outline"
-                            >
-                              <Download className="w-4 h-4 mr-1" />
-                              Download
-                            </button>
-                          ) : material.isDownloadable ? (
-                            <span className="text-xs font-medium text-amber-700">
-                              Download unavailable
-                            </span>
-                          ) : null}
+                          <div>
+                            <p className="font-bold text-gray-900">{material.title}</p>
+                            {material.description && (
+                              <p className="text-sm text-gray-600 mt-1">{material.description}</p>
+                            )}
+                            <p className="text-xs text-gray-500 mt-1">
+                              {material.fileType} | {(material.fileSize / 1024).toFixed(0)} KB
+                            </p>
+                          </div>
                         </div>
-                      );
-                    })()
-                  ))}
+                        {material.isDownloadable && materialAccessUrl ? (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              void handleMaterialDownload(materialAccessUrl, material.title)
+                            }
+                            className="btn-sm btn-outline"
+                          >
+                            <Download className="w-4 h-4 mr-1" />
+                            Download
+                          </button>
+                        ) : material.isDownloadable ? (
+                          <span className="text-xs font-medium text-amber-700">
+                            Download unavailable
+                          </span>
+                        ) : null}
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             )}
@@ -622,104 +640,52 @@ const CourseLearningPage = () => {
               <hr className="my-6 border-gray-200" />
 
               <h3 className="font-bold text-lg mb-4 flex items-center text-gray-900">
-                <MessageSquare className="w-5 h-5 mr-2 text-primary-600" />
-                Live Interactions
+                <Radio className="w-5 h-5 mr-2 text-red-600" />
+                Live Classroom Sessions
               </h3>
 
-              <div className="mb-4 flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={toggleHand}
-                  aria-pressed={handRaised}
-                  aria-label={handRaised ? 'Lower raised hand' : 'Raise hand'}
-                  className={`${handRaised ? 'btn-primary' : 'btn-outline'} btn-sm flex items-center gap-2`}
-                >
-                  <Hand className="w-4 h-4" /> {handRaised ? 'Lower Hand' : 'Raise Hand'}
-                </button>
-                <button
-                  type="button"
-                  onClick={toggleMic}
-                  aria-pressed={micEnabled}
-                  aria-label={micEnabled ? 'Turn microphone off' : 'Turn microphone on'}
-                  className={`${micEnabled ? 'btn-primary' : 'btn-outline'} btn-sm flex items-center gap-2`}
-                >
-                  {micEnabled ? <Mic className="w-4 h-4" /> : <MicOff className="w-4 h-4" />}
-                  {micEnabled ? 'Mic On' : 'Mic Off'}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setShowEmojis((v) => !v)}
-                  aria-expanded={showEmojis}
-                  className="btn-outline btn-sm flex items-center gap-2"
-                >
-                  <Smile className="w-4 h-4" /> Emojis
-                </button>
-              </div>
-
-              {showEmojis && (
-                <div className="grid grid-cols-8 gap-2 mb-4">
-                  {REACTION_OPTIONS.map((reaction) => (
-                    <button
-                      key={reaction.label}
-                      type="button"
-                      onClick={() => addReaction(reaction.symbol)}
-                      className="text-xl p-2 hover:scale-110 transition-transform"
-                      aria-label={`Send ${reaction.label} reaction`}
-                      title={reaction.label}
+              {activeOrUpcomingSessions.length === 0 ? (
+                <p className="text-sm text-gray-500">
+                  No active or upcoming live classroom sessions are scheduled right now.
+                </p>
+              ) : (
+                <div className="space-y-3">
+                  {activeOrUpcomingSessions.map((session) => (
+                    <div
+                      key={session.id}
+                      className="rounded-xl border border-gray-200 bg-gray-50 p-3 space-y-2"
                     >
-                      {reaction.symbol}
-                    </button>
+                      <div className="flex items-center justify-between gap-2">
+                        <span
+                          className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${
+                            session.status === 'ONGOING'
+                              ? 'bg-red-100 text-red-700'
+                              : 'bg-blue-100 text-blue-700'
+                          }`}
+                        >
+                          {session.status === 'ONGOING' ? 'LIVE NOW' : 'SCHEDULED'}
+                        </span>
+                        <span className="text-xs text-gray-500">
+                          {session.duration} min
+                        </span>
+                      </div>
+                      <p className="text-sm font-bold text-gray-900">{session.title}</p>
+                      <p className="text-xs text-gray-600">
+                        {new Date(session.scheduledAt).toLocaleString()}
+                      </p>
+                      <Link
+                        to={`/live/${session.id}`}
+                        className="btn-primary btn-sm w-full inline-flex items-center justify-center gap-1.5"
+                      >
+                        <ExternalLink className="w-3.5 h-3.5" />
+                        {session.status === 'ONGOING'
+                          ? 'Join Live Classroom'
+                          : 'Open Waiting Room'}
+                      </Link>
+                    </div>
                   ))}
                 </div>
               )}
-
-              <div className="bg-gray-50 border border-gray-200 rounded-xl p-3 max-h-60 overflow-y-auto mb-3 space-y-2">
-                {chatMessages.length === 0 ? (
-                  <p className="text-sm text-gray-500">No messages yet. Say hi!</p>
-                ) : (
-                  chatMessages.map((m) => (
-                    <div key={m.id} className={`${m.type === 'system' ? 'text-xs text-gray-500 italic' : 'text-sm'} `}>
-                      {m.type === 'reaction' ? (
-                        <div className="inline-flex items-center gap-2 px-2 py-1 bg-white border border-gray-200 rounded-lg">
-                          <span className="text-lg">{m.text}</span>
-                          <span className="text-xs text-gray-500">{new Date(m.timestamp).toLocaleTimeString()}</span>
-                        </div>
-                      ) : m.type === 'system' ? (
-                        <span>System: {m.text}</span>
-                      ) : (
-                        <div className="px-3 py-2 bg-white border border-gray-200 rounded-lg">
-                          <span className="font-semibold mr-1">{m.user}:</span>
-                          <span>{m.text}</span>
-                        </div>
-                      )}
-                    </div>
-                  ))
-                )}
-              </div>
-
-              <div className="flex items-center gap-2">
-                <input
-                  value={chatInput}
-                  onChange={(e) => setChatInput(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && !e.shiftKey) {
-                      e.preventDefault();
-                      handleSendMessage();
-                    }
-                  }}
-                  className="input flex-1"
-                  placeholder="Message the class..."
-                />
-                <button
-                  type="button"
-                  onClick={handleSendMessage}
-                  aria-label="Send chat message"
-                  className="btn-primary btn-sm inline-flex items-center gap-1"
-                >
-                  <Send className="w-4 h-4" />
-                  Send
-                </button>
-              </div>
             </div>
           </div>
         </div>
@@ -740,8 +706,12 @@ const CourseLearningPage = () => {
               <div className="inline-flex items-center justify-center w-20 h-20 bg-gradient-to-br from-green-500 to-green-600 rounded-full mb-4 shadow-lg">
                 <CheckCircle className="w-10 h-10 text-white" />
               </div>
-              <h3 id="course-review-modal-title" className="text-3xl font-bold mb-2 text-gray-900">Congratulations!</h3>
-              <p id="course-review-modal-description" className="text-gray-600">You've completed this course!</p>
+              <h3 id="course-review-modal-title" className="text-3xl font-bold mb-2 text-gray-900">
+                Congratulations!
+              </h3>
+              <p id="course-review-modal-description" className="text-gray-600">
+                You&apos;ve completed this course!
+              </p>
             </div>
             <div className="space-y-3">
               <button

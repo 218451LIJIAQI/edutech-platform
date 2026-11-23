@@ -1,5 +1,6 @@
 import {
   PaymentStatus,
+  RefundStatus,
   RegistrationStatus,
   ReportStatus,
   UserRole,
@@ -14,8 +15,9 @@ import {
   recentReportSelect,
   recentUserSelect,
 } from "./admin-metrics";
+import { buildCurrentEnrollmentWhere } from "../shared/enrollment-access";
 import { normalizePagination } from "../shared/pagination";
-import { toNumber } from "../shared/payment-utils";
+import { roundMoney, toNumber } from "../shared/payment-utils";
 
 const getUtcMonthKey = (date: Date): string =>
   `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}`;
@@ -44,7 +46,9 @@ export const getAdminPlatformStats = async () => {
     totalCourses,
     publishedCourses,
     totalEnrollments,
-    totalRevenue,
+    grossRevenue,
+    completedOrderRefunds,
+    directRefundedRevenue,
     pendingCertificates,
     pendingRegistrations,
     pendingProfiles,
@@ -53,15 +57,32 @@ export const getAdminPlatformStats = async () => {
     newCoursesThisMonth,
     enrollmentsThisMonth,
     paymentsLast12,
+    refundsLast12,
+    directRefundedLast12,
   ] = await Promise.all([
     prisma.user.count(),
     prisma.user.count({ where: { role: UserRole.TEACHER } }),
     prisma.user.count({ where: { role: UserRole.STUDENT } }),
     prisma.course.count(),
     prisma.course.count({ where: { isPublished: true } }),
-    prisma.enrollment.count(),
+    prisma.enrollment.count({ where: buildCurrentEnrollmentWhere({}, now) }),
     prisma.payment.aggregate({
-      where: { status: PaymentStatus.COMPLETED, paidAt: { not: null } },
+      where: {
+        status: { in: [PaymentStatus.COMPLETED, PaymentStatus.REFUNDED] },
+        paidAt: { not: null },
+      },
+      _sum: { amount: true },
+    }),
+    prisma.refund.aggregate({
+      where: { status: RefundStatus.COMPLETED },
+      _sum: { amount: true },
+    }),
+    prisma.payment.aggregate({
+      where: {
+        status: PaymentStatus.REFUNDED,
+        orderId: null,
+        paidAt: { not: null },
+      },
       _sum: { amount: true },
     }),
     prisma.teacherVerification.count({
@@ -79,15 +100,34 @@ export const getAdminPlatformStats = async () => {
     prisma.user.count({ where: { createdAt: { gte: currentMonthStart } } }),
     prisma.course.count({ where: { createdAt: { gte: currentMonthStart } } }),
     prisma.enrollment.count({
-      where: { enrolledAt: { gte: currentMonthStart } },
+      where: buildCurrentEnrollmentWhere(
+        { enrolledAt: { gte: currentMonthStart } },
+        now,
+      ),
     }),
     prisma.payment.findMany({
       where: {
-        status: PaymentStatus.COMPLETED,
+        status: { in: [PaymentStatus.COMPLETED, PaymentStatus.REFUNDED] },
         paidAt: { not: null, gte: revenueStartDate },
       },
       select: { amount: true, paidAt: true },
       orderBy: { paidAt: "asc" },
+    }),
+    prisma.refund.findMany({
+      where: {
+        status: RefundStatus.COMPLETED,
+        completedAt: { not: null, gte: revenueStartDate },
+      },
+      select: { amount: true, completedAt: true },
+    }),
+    prisma.payment.findMany({
+      where: {
+        status: PaymentStatus.REFUNDED,
+        orderId: null,
+        paidAt: { not: null },
+        updatedAt: { gte: revenueStartDate },
+      },
+      select: { amount: true, updatedAt: true },
     }),
   ]);
 
@@ -97,13 +137,45 @@ export const getAdminPlatformStats = async () => {
   for (const payment of paymentsLast12) {
     if (!payment.paidAt) continue;
     const month = getUtcMonthKey(payment.paidAt);
-    monthlyMap.set(
-      month,
-      (monthlyMap.get(month) || 0) + toNumber(payment.amount),
-    );
+    if (monthlyMap.has(month)) {
+      monthlyMap.set(
+        month,
+        roundMoney((monthlyMap.get(month) || 0) + toNumber(payment.amount)),
+      );
+    }
   }
 
-  const revenueTotal = toNumber(totalRevenue._sum.amount);
+  for (const refund of refundsLast12) {
+    if (!refund.completedAt) continue;
+    const month = getUtcMonthKey(refund.completedAt);
+    if (monthlyMap.has(month)) {
+      monthlyMap.set(
+        month,
+        roundMoney((monthlyMap.get(month) || 0) - toNumber(refund.amount)),
+      );
+    }
+  }
+
+  for (const refundedPayment of directRefundedLast12) {
+    const month = getUtcMonthKey(refundedPayment.updatedAt);
+    if (monthlyMap.has(month)) {
+      monthlyMap.set(
+        month,
+        roundMoney(
+          (monthlyMap.get(month) || 0) - toNumber(refundedPayment.amount),
+        ),
+      );
+    }
+  }
+
+  const revenueTotal = Math.max(
+    0,
+    roundMoney(
+      toNumber(grossRevenue._sum.amount) -
+        toNumber(completedOrderRefunds._sum.amount) -
+        toNumber(directRefundedRevenue._sum.amount),
+    ),
+  );
 
   return {
     overview: {
@@ -132,7 +204,7 @@ export const getAdminPlatformStats = async () => {
       total: revenueTotal,
       monthly: months.map((month) => ({
         month,
-        revenue: monthlyMap.get(month) || 0,
+        revenue: Math.max(0, roundMoney(monthlyMap.get(month) || 0)),
       })),
     },
   };

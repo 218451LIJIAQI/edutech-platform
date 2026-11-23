@@ -66,6 +66,12 @@ export const courseDetailInclude = {
       uploadedAt: true,
     },
   },
+  _count: {
+    select: {
+      lessons: true,
+      materials: true,
+    },
+  },
 } satisfies Prisma.CourseInclude;
 
 export const courseQuizAttemptInclude = {
@@ -445,6 +451,117 @@ export const resequenceCourseLessons = async (
   }
 };
 
+export const recalculateCourseEnrollmentsProgress = async (
+  tx: Prisma.TransactionClient,
+  courseId: string,
+  totalLessons: number,
+) => {
+  const enrollments = await tx.enrollment.findMany({
+    where: {
+      isActive: true,
+      package: { courseId },
+    },
+    select: {
+      id: true,
+      completedLessons: true,
+      progress: true,
+    },
+  });
+
+  for (const enrollment of enrollments) {
+    const clampedCompleted = Math.min(
+      Math.max(0, enrollment.completedLessons),
+      totalLessons,
+    );
+    const nextProgress =
+      totalLessons > 0
+        ? Math.min(
+            100,
+            Math.max(0, Math.round((clampedCompleted / totalLessons) * 100)),
+          )
+        : 0;
+
+    if (
+      clampedCompleted !== enrollment.completedLessons ||
+      nextProgress !== enrollment.progress
+    ) {
+      await tx.enrollment.update({
+        where: { id: enrollment.id },
+        data: {
+          completedLessons: clampedCompleted,
+          progress: nextProgress,
+        },
+      });
+    }
+  }
+};
+
+export const mapMaterialAccessForViewer = <
+  T extends {
+    id: string;
+    fileUrl: string;
+    isDownloadable: boolean;
+  },
+>(
+  material: T,
+  options: {
+    canAccessPaidContent: boolean;
+    canManageMaterials: boolean;
+  },
+) => {
+  const internalUploadPath = extractUploadPathFromUrlOrPath(material.fileUrl);
+  const canAccessMaterial =
+    material.isDownloadable && options.canAccessPaidContent;
+
+  return {
+    ...material,
+    fileUrl: options.canManageMaterials ? material.fileUrl : undefined,
+    accessUrl: canAccessMaterial
+      ? internalUploadPath
+        ? `/api/${config.API_VERSION}/courses/materials/${material.id}/download`
+        : material.fileUrl
+      : undefined,
+  };
+};
+
+export const sanitizeStudentEnrollmentCourse = <
+  TCourse extends {
+    lessons?: Array<{
+      id: string;
+      isFree: boolean;
+      videoUrl: string | null;
+      quiz: Prisma.JsonValue;
+    }>;
+    materials?: Array<{
+      id: string;
+      fileUrl: string;
+      isDownloadable: boolean;
+    }>;
+  },
+>(
+  course: TCourse,
+): TCourse => ({
+  ...course,
+  ...(course.lessons
+    ? {
+        lessons: course.lessons.map((lesson) => ({
+          ...lesson,
+          quiz: sanitizeLessonQuiz(normalizeLessonQuiz(lesson.quiz)),
+        })),
+      }
+    : {}),
+  ...(course.materials
+    ? {
+        materials: course.materials.map((material) =>
+          mapMaterialAccessForViewer(material, {
+            canAccessPaidContent: true,
+            canManageMaterials: false,
+          }),
+        ),
+      }
+    : {}),
+});
+
 export const mapCourseDetailResponse = (
   course: CourseDetailRecord,
   options: {
@@ -470,23 +587,12 @@ export const mapCourseDetailResponse = (
             : undefined,
       };
     }),
-    materials: course.materials.map((material) => {
-      const internalUploadPath = extractUploadPathFromUrlOrPath(
-        material.fileUrl,
-      );
-
-      const canAccessMaterial = material.isDownloadable && canAccessPaidContent;
-
-      return {
-        ...material,
-        fileUrl: options.canManageMaterials ? material.fileUrl : undefined,
-        accessUrl: canAccessMaterial
-          ? internalUploadPath
-            ? `/api/${config.API_VERSION}/courses/materials/${material.id}/download`
-            : material.fileUrl
-          : undefined,
-      };
-    }),
+    materials: course.materials.map((material) =>
+      mapMaterialAccessForViewer(material, {
+        canAccessPaidContent,
+        canManageMaterials: options.canManageMaterials,
+      }),
+    ),
     isEnrolled: options.isEnrolled,
   };
 };
@@ -505,12 +611,23 @@ export const mapCourseQuizAttempt = (attempt: CourseQuizAttemptRecord) => ({
   results: normalizeQuizAttemptResults(attempt.results),
 });
 
-export const attachEnrollmentCountsToTeacherCourses = async (
-  courses: TeacherCourseRecord[],
+export const attachEnrollmentCountsToCourses = async <
+  T extends {
+    id: string;
+    _count?: Record<string, number>;
+  },
+>(
+  courses: T[],
   client: PrismaClientLike = prisma,
 ) => {
   if (!courses.length) {
-    return courses;
+    return courses.map((course) => ({
+      ...course,
+      _count: {
+        ...(course._count ?? {}),
+        enrollments: 0,
+      },
+    }));
   }
 
   const courseIds = Array.from(new Set(courses.map((course) => course.id)));
@@ -555,8 +672,13 @@ export const attachEnrollmentCountsToTeacherCourses = async (
   return courses.map((course) => ({
     ...course,
     _count: {
-      ...course._count,
+      ...(course._count ?? {}),
       enrollments: enrolledStudentIdsByCourseId.get(course.id)?.size ?? 0,
     },
   }));
 };
+
+export const attachEnrollmentCountsToTeacherCourses = (
+  courses: TeacherCourseRecord[],
+  client: PrismaClientLike = prisma,
+) => attachEnrollmentCountsToCourses(courses, client);

@@ -3,6 +3,8 @@ import toast from 'react-hot-toast';
 import {
   broadcastClearedAuthSession,
   clearAuthStorage,
+  createTokenRefreshCoordinator,
+  extractBearerToken,
   getAccessToken,
   hasRecoverableAuthState,
   storeAccessToken,
@@ -20,13 +22,13 @@ const API_URL = getApiBaseUrl();
 const AUTH_REFRESH_EXEMPT_PATHS = new Set([
   '/auth/login',
   '/auth/register',
+  '/auth/logout',
   '/auth/forgot-password',
   '/auth/verify-reset-code',
   '/auth/reset-password',
   '/auth/refresh',
 ]);
 
-let refreshAccessTokenPromise: Promise<string | null> | null = null;
 let isRedirectingToLogin = false;
 
 const shouldSkipTokenRefresh = (url?: string): boolean =>
@@ -57,35 +59,21 @@ interface RefreshTokenResponse {
   };
 }
 
-const refreshAccessToken = async (): Promise<string | null> => {
-  if (!refreshAccessTokenPromise) {
-    refreshAccessTokenPromise = (async () => {
-      try {
-        const response = await axios.post<RefreshTokenResponse>(
-          `${API_URL}/auth/refresh`,
-          {},
-          { withCredentials: true }
-        );
-
-        const accessToken = response.data?.data?.accessToken;
-        if (!accessToken) {
-          clearSessionAndRedirect();
-          return null;
-        }
-
-        storeAccessToken(accessToken);
-        return accessToken;
-      } catch (refreshError) {
-        clearSessionAndRedirect();
-        throw refreshError;
-      } finally {
-        refreshAccessTokenPromise = null;
-      }
-    })();
-  }
-
-  return refreshAccessTokenPromise;
-};
+const refreshCoordinator = createTokenRefreshCoordinator({
+  getCurrentToken: getAccessToken,
+  setCurrentToken: storeAccessToken,
+  performRefreshRequest: async () => {
+    const response = await axios.post<RefreshTokenResponse>(
+      `${API_URL}/auth/refresh`,
+      {},
+      { withCredentials: true }
+    );
+    return response.data?.data?.accessToken ?? null;
+  },
+  onTerminalAuthFailure: clearSessionAndRedirect,
+  extractHttpStatus: (error) =>
+    axios.isAxiosError(error) ? error.response?.status : undefined,
+});
 
 const api: AxiosInstance = axios.create({
   baseURL: API_URL,
@@ -103,6 +91,32 @@ interface ErrorResponse {
   message?: string;
 }
 
+const resolveErrorPayloadMessage = async (data: unknown): Promise<string | undefined> => {
+  if (!data) {
+    return undefined;
+  }
+
+  if (
+    typeof Blob !== 'undefined' &&
+    data instanceof Blob &&
+    data.type.toLowerCase().includes('application/json')
+  ) {
+    try {
+      const parsed = JSON.parse(await data.text()) as ErrorResponse;
+      return typeof parsed?.message === 'string' ? parsed.message : undefined;
+    } catch {
+      return undefined;
+    }
+  }
+
+  if (typeof data === 'object' && 'message' in data) {
+    const message = (data as ErrorResponse).message;
+    return typeof message === 'string' ? message : undefined;
+  }
+
+  return undefined;
+};
+
 api.interceptors.request.use(
   async (config) => {
     let token = getAccessToken();
@@ -113,7 +127,7 @@ api.interceptors.request.use(
       !shouldSkipTokenRefresh(config.url) &&
       hasRecoverableAuthState()
     ) {
-      token = await refreshAccessToken().catch(() => null);
+      token = await refreshCoordinator.acquireFreshToken(null).catch(() => null);
     }
 
     if (token && config.headers && shouldAttachAuthHeader(config.url, API_URL)) {
@@ -136,42 +150,52 @@ api.interceptors.response.use(
     if (
       error.response?.status === 401 &&
       !originalRequest._retry &&
-      !shouldSkipTokenRefresh(originalRequest.url)
+      !shouldSkipTokenRefresh(originalRequest.url) &&
+      hasRecoverableAuthState()
     ) {
       originalRequest._retry = true;
+      const failedBearerToken = extractBearerToken(
+        originalRequest.headers?.Authorization
+      );
 
       try {
-        const accessToken = await refreshAccessToken();
+        const accessToken = await refreshCoordinator.acquireFreshToken(
+          failedBearerToken
+        );
         if (!accessToken) {
           return Promise.reject(error);
         }
 
         if (originalRequest.headers) {
           originalRequest.headers.Authorization = `Bearer ${accessToken}`;
-          return api(originalRequest);
         }
+        return api(originalRequest);
       } catch (refreshError) {
         return Promise.reject(refreshError);
       }
     }
 
     const status = error.response?.status;
-    const errorData = error.response?.data;
-    let errorMessage = errorData?.message || 'An error occurred. Please try again.';
+    const extractedMessage = await resolveErrorPayloadMessage(error.response?.data);
+    let errorMessage = extractedMessage || 'An error occurred. Please try again.';
+
+    if (error.response && extractedMessage && typeof error.response.data === 'object') {
+      (error.response as { data: unknown }).data = { message: extractedMessage };
+    }
 
     if (status === 429) {
       errorMessage = 'Too many requests. Please wait a moment and try again.';
       toast.error(errorMessage, { duration: 4000 });
     } else if (status === 403) {
-      errorMessage = 'You do not have permission to perform this action.';
+      errorMessage = extractedMessage || 'You do not have permission to perform this action.';
       toast.error(errorMessage);
     } else if (status === 404) {
-      errorMessage = 'The requested resource was not found.';
+      errorMessage = extractedMessage || 'The requested resource was not found.';
       toast.error(errorMessage);
     } else if (status === 500) {
       errorMessage = 'Server error. Please try again later.';
       toast.error(errorMessage);
-    } else if (status && status !== 400) {
+    } else if (status && status !== 400 && status !== 401) {
       toast.error(errorMessage);
     }
 

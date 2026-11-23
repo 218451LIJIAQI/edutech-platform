@@ -194,6 +194,13 @@ export interface FinancialExportData {
   summary: FinancialPeriodSummary;
 }
 
+export interface BatchUserOperationResult {
+  affected?: number;
+  count?: number;
+  succeeded?: string[];
+  failed?: Array<{ id: string; reason: string }>;
+}
+
 export interface AutoVerificationStats {
   totalProcessed: number;
   autoApproved: number;
@@ -386,12 +393,23 @@ const adminService = {
     return normalizeUserAssets(extractData(response)) as User;
   },
 
-  batchDeleteUsers: async (userIds: string[]): Promise<void> => {
-    await api.post('/admin/users/batch/delete', { userIds });
+  batchDeleteUsers: async (userIds: string[]): Promise<BatchUserOperationResult> => {
+    const response = await api.post<ApiResponse<BatchUserOperationResult>>(
+      '/admin/users/batch/delete',
+      { userIds }
+    );
+    return extractData(response);
   },
 
-  batchUpdateUserStatus: async (userIds: string[], isActive: boolean): Promise<void> => {
-    await api.post('/admin/users/batch/status', { userIds, isActive });
+  batchUpdateUserStatus: async (
+    userIds: string[],
+    isActive: boolean
+  ): Promise<BatchUserOperationResult> => {
+    const response = await api.post<ApiResponse<BatchUserOperationResult>>(
+      '/admin/users/batch/status',
+      { userIds, isActive }
+    );
+    return extractData(response);
   },
 
   getTeacherCommissions: async (params?: {

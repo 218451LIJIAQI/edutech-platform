@@ -2,6 +2,28 @@ import { CourseType, LessonType } from './enums';
 import type { TeacherProfile } from './teacher';
 import type { User } from './user';
 
+export type LiveSessionStatus = 'SCHEDULED' | 'ONGOING' | 'COMPLETED' | 'CANCELLED';
+
+export interface LiveSession {
+  readonly id: string;
+  readonly lessonId: string;
+  readonly title: string;
+  readonly description?: string;
+  readonly scheduledAt: string;
+  readonly startedAt?: string;
+  readonly endedAt?: string;
+  readonly duration: number;
+  readonly roomId?: string;
+  readonly recordingUrl?: string;
+  readonly maxParticipants?: number;
+  readonly status: LiveSessionStatus;
+  readonly createdAt?: string;
+  readonly updatedAt?: string;
+  readonly lesson?: Pick<Lesson, 'id' | 'title' | 'orderIndex' | 'type' | 'isFree'> & {
+    readonly course?: Pick<Course, 'id' | 'title'>;
+  };
+}
+
 export interface Course {
   readonly id: string;
   readonly teacherProfileId: string;
@@ -11,6 +33,9 @@ export interface Course {
   readonly courseType: CourseType;
   readonly thumbnail?: string;
   readonly previewVideoUrl?: string;
+  readonly rating?: number;
+  readonly totalStudents?: number;
+  readonly totalRevenue?: number;
   readonly isPublished: boolean;
   readonly createdAt: string;
   readonly updatedAt: string;
@@ -96,6 +121,8 @@ export interface LessonPackage {
   readonly maxStudents?: number;
   readonly features?: string[];
   readonly isActive: boolean;
+  readonly createdAt?: string;
+  readonly updatedAt?: string;
 }
 
 export interface Enrollment {
@@ -107,6 +134,7 @@ export interface Enrollment {
   readonly progress: number;
   readonly completedLessons: number;
   readonly isActive: boolean;
+  readonly user?: User;
   readonly package?: LessonPackage & { course?: Course };
 }
 

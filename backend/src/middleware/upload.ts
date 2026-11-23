@@ -13,10 +13,6 @@ const FILE_SIGNATURE_READ_BYTES = 64;
 
 const uploadRootDir = path.resolve(config.UPLOAD_DIR);
 
-if (!fs.existsSync(uploadRootDir)) {
-  fs.mkdirSync(uploadRootDir, { recursive: true });
-}
-
 export type UploadCategory =
   | "general"
   | "support-attachments"
@@ -38,6 +34,43 @@ type UploadCategoryConfig = {
 
 type CategorizedMulterFile = Express.Multer.File & {
   resolvedUploadCategory?: UploadCategory;
+};
+
+const EXTENSION_COMPATIBLE_MIMES: Record<string, ReadonlySet<string>> = {
+  ".jpg": new Set(["image/jpeg"]),
+  ".jpeg": new Set(["image/jpeg"]),
+  ".png": new Set(["image/png"]),
+  ".webp": new Set(["image/webp"]),
+  ".gif": new Set(["image/gif"]),
+  ".avif": new Set(["image/avif"]),
+  ".pdf": new Set(["application/pdf"]),
+  ".doc": new Set(["application/msword", "application/octet-stream"]),
+  ".docx": new Set([
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "application/octet-stream",
+    "application/zip",
+  ]),
+  ".xls": new Set(["application/vnd.ms-excel", "application/octet-stream"]),
+  ".xlsx": new Set([
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    "application/octet-stream",
+    "application/zip",
+  ]),
+  ".ppt": new Set(["application/vnd.ms-powerpoint", "application/octet-stream"]),
+  ".pptx": new Set([
+    "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    "application/octet-stream",
+    "application/zip",
+  ]),
+  ".zip": new Set([
+    "application/zip",
+    "application/x-zip-compressed",
+    "application/octet-stream",
+  ]),
+  ".txt": new Set(["text/plain", "application/octet-stream"]),
+  ".mp4": new Set(["video/mp4"]),
+  ".webm": new Set(["video/webm"]),
+  ".mov": new Set(["video/quicktime"]),
 };
 
 const uploadCategoryConfigs: Record<UploadCategory, UploadCategoryConfig> = {
@@ -352,13 +385,24 @@ const createStoredFileName = (originalName: string): string => {
   return `${baseName}-${uniqueId}${extension}`;
 };
 
+export const isMimeCompatibleWithExtension = (
+  extension: string,
+  mimeType: string,
+): boolean => {
+  const normalizedExt = extension.trim().toLowerCase();
+  const normalizedMime = mimeType.trim().toLowerCase();
+  const compatibleMimes = EXTENSION_COMPATIBLE_MIMES[normalizedExt];
+  return compatibleMimes ? compatibleMimes.has(normalizedMime) : false;
+};
+
 const validateFileType = (
   file: Express.Multer.File,
   uploadConfig: UploadCategoryConfig,
 ): void => {
   const extension = getSafeExtension(file.originalname);
+  const normalizedMime = (file.mimetype || "").trim().toLowerCase();
 
-  const isAllowedMimeType = uploadConfig.allowedMimeTypes.has(file.mimetype);
+  const isAllowedMimeType = uploadConfig.allowedMimeTypes.has(normalizedMime);
   const isAllowedExtension = uploadConfig.allowedExtensions.has(extension);
 
   if (!isAllowedMimeType || !isAllowedExtension) {
@@ -366,6 +410,12 @@ const validateFileType = (
       `Unsupported file type for ${uploadConfig.directory}. Allowed formats: ${Array.from(
         uploadConfig.allowedExtensions,
       ).join(", ")}`,
+    );
+  }
+
+  if (!isMimeCompatibleWithExtension(extension, normalizedMime)) {
+    throw new ValidationError(
+      `File extension ${extension} does not match declared MIME type ${normalizedMime}`,
     );
   }
 };
@@ -542,6 +592,52 @@ export const validateStoredUpload = (file: Express.Multer.File) => {
   };
 };
 
+export const cleanupRequestUploadedFiles = async (req: Request): Promise<void> => {
+  const collectedPaths = new Set<string>();
+  const recordFile = (candidate?: Express.Multer.File) => {
+    if (candidate?.path) {
+      collectedPaths.add(candidate.path);
+    }
+  };
+
+  recordFile(req.file);
+  if (Array.isArray(req.files)) {
+    req.files.forEach(recordFile);
+  } else if (req.files && typeof req.files === "object") {
+    Object.values(req.files).flat().forEach(recordFile);
+  }
+
+  await Promise.allSettled(
+    Array.from(collectedPaths).map((filePath) => fs.promises.unlink(filePath)),
+  );
+};
+
+const trackUploadedFileOnRequest = (
+  req: Request,
+  filePath: string,
+): void => {
+  const tracked = (
+    req as Request & { __trackedUploadPaths?: string[] }
+  );
+  if (!tracked.__trackedUploadPaths) {
+    tracked.__trackedUploadPaths = [];
+  }
+  tracked.__trackedUploadPaths.push(filePath);
+};
+
+export const cleanupTrackedRequestUploads = async (
+  req: Request,
+): Promise<void> => {
+  const tracked = (req as Request & { __trackedUploadPaths?: string[] })
+    .__trackedUploadPaths;
+  await cleanupRequestUploadedFiles(req);
+  if (Array.isArray(tracked) && tracked.length > 0) {
+    await Promise.allSettled(
+      tracked.map((filePath) => fs.promises.unlink(filePath)),
+    );
+  }
+};
+
 const storage = multer.diskStorage({
   destination: (req, file, callback) => {
     try {
@@ -554,8 +650,18 @@ const storage = multer.diskStorage({
     }
   },
 
-  filename: (_req, file, callback) => {
-    callback(null, createStoredFileName(file.originalname));
+  filename: (req, file, callback) => {
+    const filename = createStoredFileName(file.originalname);
+    try {
+      const category =
+        getResolvedUploadCategory(file) ||
+        resolveUploadCategory(getUploadCategoryInput(req, file));
+      const destinationPath = path.resolve(uploadRootDir, category, filename);
+      trackUploadedFileOnRequest(req, destinationPath);
+    } catch {
+      // Destination validation will reject invalid categories before writing.
+    }
+    callback(null, filename);
   },
 });
 

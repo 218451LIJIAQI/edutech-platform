@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useCourseStore } from '@/store/course-store';
 import { useAuthStore } from '@/store/auth-store';
 import { formatCurrency, formatDuration } from '@/utils/helpers';
-import { CourseType, Lesson } from '@/types';
+import { CourseType, Lesson, UserRole } from '@/types';
 import { BookOpen, Clock, Star, Users, CheckCircle, PlayCircle, Video, Radio, AlertCircle, X } from 'lucide-react';
 import toast from 'react-hot-toast';
 import UniversalVideoPlayer from '@/components/common/UniversalVideoPlayer';
@@ -20,6 +20,7 @@ import { getAccessToken, hasRecoverableAuthState } from '@/utils/auth-storage';
 const CourseDetailPage = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
   const { currentCourse, isLoading, fetchCourseById } = useCourseStore();
   const { isAuthenticated, user } = useAuthStore();
   const hasAccessToken = Boolean(getAccessToken());
@@ -83,7 +84,12 @@ const CourseDetailPage = () => {
 
     if (!isSessionReady) {
       toast.error('Please login to purchase courses');
-      navigate('/login');
+      navigate('/login', { state: { from: location } });
+      return;
+    }
+
+    if (user?.role !== UserRole.STUDENT) {
+      toast.error('Only student accounts can purchase courses');
       return;
     }
 
@@ -116,7 +122,12 @@ const CourseDetailPage = () => {
 
     if (!isSessionReady) {
       toast.error('Please login to add courses to your cart');
-      navigate('/login');
+      navigate('/login', { state: { from: location } });
+      return;
+    }
+
+    if (user?.role !== UserRole.STUDENT) {
+      toast.error('Only student accounts can add courses to the cart');
       return;
     }
 

@@ -5,6 +5,7 @@
  * to keep imports clean and maintainable across the application.
  */
 
+export { default as AdminPayoutsPanel } from './AdminPayoutsPanel';
 export { default as BatchOperationsModal } from './BatchOperationsModal';
 export { default as RevenueAnalytics } from './RevenueAnalytics';
 export { default as UserActionsMenu } from './UserActionsMenu';

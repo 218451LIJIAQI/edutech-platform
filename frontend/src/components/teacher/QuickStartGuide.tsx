@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Zap,
@@ -19,6 +19,7 @@ import toast from 'react-hot-toast';
 import { extractErrorMessage } from '@/utils/error-handler';
 import clientLogger from '@/utils/logger';
 import { courseCategories } from '@/features/course-editor/constants';
+import { useOverlayAccessibility } from '@/hooks';
 
 const COURSE_TYPES = [
   {
@@ -48,6 +49,8 @@ interface QuickStartGuideProps {
 
 const QuickStartGuide = ({ isOpen, onClose }: QuickStartGuideProps) => {
   const navigate = useNavigate();
+  const modalRef = useRef<HTMLDivElement | null>(null);
+  const titleInputRef = useRef<HTMLInputElement | null>(null);
   const [step, setStep] = useState(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -73,9 +76,19 @@ const QuickStartGuide = ({ isOpen, onClose }: QuickStartGuideProps) => {
   };
 
   const handleClose = () => {
+    if (isSubmitting) return;
     resetForm();
     onClose();
   };
+
+  useOverlayAccessibility({
+    isOpen,
+    containerRef: modalRef,
+    initialFocusRef: titleInputRef,
+    onClose: handleClose,
+    trapFocus: true,
+    lockBodyScroll: true,
+  });
 
   const isStep1Valid =
     title.trim().length >= 3 &&
@@ -84,20 +97,30 @@ const QuickStartGuide = ({ isOpen, onClose }: QuickStartGuideProps) => {
   const isStep2Valid = lessonTitle.trim().length >= 2;
 
   const handleCreateCourseAndLesson = async () => {
-    if (!isStep1Valid || !isStep2Valid) return;
+    if (!isStep1Valid || !isStep2Valid || isSubmitting) return;
 
     setIsSubmitting(true);
     try {
-      const course = await courseService.createCourse({
-        title: title.trim(),
-        description: description.trim(),
-        category,
-        courseType,
-      });
+      let targetCourseId = createdCourseId;
+      if (!targetCourseId) {
+        const course = await courseService.createCourse({
+          title: title.trim(),
+          description: description.trim(),
+          category,
+          courseType,
+        });
+        targetCourseId = course.id;
+        setCreatedCourseId(course.id);
+      } else {
+        await courseService.updateCourse(targetCourseId, {
+          title: title.trim(),
+          description: description.trim(),
+          category,
+          courseType,
+        });
+      }
 
-      setCreatedCourseId(course.id);
-
-      await courseService.createLesson(course.id, {
+      await courseService.createLesson(targetCourseId, {
         title: lessonTitle.trim(),
         type: courseType === CourseType.LIVE ? LessonType.LIVE : LessonType.RECORDED,
         isFree: true,
@@ -130,21 +153,31 @@ const QuickStartGuide = ({ isOpen, onClose }: QuickStartGuideProps) => {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl mx-4 max-h-[90vh] overflow-y-auto">
+      <div
+        ref={modalRef}
+        tabIndex={-1}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="quick-start-guide-title"
+        className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl mx-4 max-h-[90vh] overflow-y-auto"
+      >
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 bg-gradient-to-r from-primary-50 to-indigo-50 rounded-t-2xl">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 bg-gradient-to-br from-primary-500 to-indigo-600 rounded-xl flex items-center justify-center shadow-lg">
               <Zap className="w-5 h-5 text-white" />
             </div>
             <div>
-              <h2 className="text-lg font-bold text-gray-900">Quick Start Guide</h2>
+              <h2 id="quick-start-guide-title" className="text-lg font-bold text-gray-900">
+                Quick Start Guide
+              </h2>
               <p className="text-sm text-gray-500">Create your first course in minutes</p>
             </div>
           </div>
           <button
             type="button"
             onClick={handleClose}
-            className="p-2 text-gray-400 hover:text-gray-600 hover:bg-white/50 rounded-lg transition-colors"
+            disabled={isSubmitting}
+            className="p-2 text-gray-400 hover:text-gray-600 hover:bg-white/50 rounded-lg transition-colors disabled:opacity-50"
             aria-label="Close quick start guide"
           >
             <X className="w-5 h-5" />
@@ -209,6 +242,7 @@ const QuickStartGuide = ({ isOpen, onClose }: QuickStartGuideProps) => {
                   Course Title <span className="text-red-500">*</span>
                 </label>
                 <input
+                  ref={titleInputRef}
                   id="qs-title"
                   type="text"
                   value={title}
@@ -384,7 +418,8 @@ const QuickStartGuide = ({ isOpen, onClose }: QuickStartGuideProps) => {
               <button
                 type="button"
                 onClick={handleClose}
-                className="px-4 py-2 text-gray-500 hover:text-gray-700 text-sm font-medium transition-colors"
+                disabled={isSubmitting}
+                className="px-4 py-2 text-gray-500 hover:text-gray-700 text-sm font-medium transition-colors disabled:opacity-50"
               >
                 Cancel
               </button>
@@ -425,7 +460,7 @@ const QuickStartGuide = ({ isOpen, onClose }: QuickStartGuideProps) => {
                 ) : (
                   <>
                     <Zap className="w-4 h-4" />
-                    Create Course & Lesson
+                    Create Course &amp; Lesson
                   </>
                 )}
               </button>

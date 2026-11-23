@@ -35,6 +35,7 @@ type NavItem = {
   label: string;
   icon: LucideIcon;
   highlight?: boolean;
+  exact?: boolean;
 };
 
 /**
@@ -144,7 +145,7 @@ const Navbar = () => {
 
     if (user?.role === UserRole.ADMIN) {
       return [
-        { to: '/admin', label: 'Overview', icon: LayoutDashboard },
+        { to: '/admin', label: 'Overview', icon: LayoutDashboard, exact: true },
         { to: '/admin/users', label: 'Users', icon: Users },
         { to: '/admin/ads', label: 'Ads', icon: Megaphone },
         { to: '/admin/financials', label: 'Finance', icon: DollarSign },
@@ -179,7 +180,15 @@ const Navbar = () => {
   }, [isApprovedTeacher, teacherRegistrationStatus, user?.role]);
 
   const isActive = useCallback(
-    (path: string) => location.pathname === path || location.pathname.startsWith(`${path}/`),
+    (path: string, exact = false) => {
+      if (exact) {
+        return location.pathname === path;
+      }
+      if (path === '/teacher/courses' && location.pathname === '/teacher/courses/new') {
+        return false;
+      }
+      return location.pathname === path || location.pathname.startsWith(`${path}/`);
+    },
     [location.pathname]
   );
 
@@ -292,7 +301,7 @@ const Navbar = () => {
               >
                 {navItems.map((item) => {
                   const Icon = item.icon;
-                  const active = isActive(item.to);
+                  const active = isActive(item.to, item.exact);
 
                   return (
                     <Link

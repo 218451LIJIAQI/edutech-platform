@@ -13,6 +13,7 @@ import {
   AuthorizationError,
 } from "../utils/errors";
 import { sanitizeUserPlainText } from "../utils/sanitize-user-content";
+import { assertPackageHasAvailableCapacity } from "./cart.service";
 import { buildCurrentEnrollmentWhere } from "./shared/enrollment-access";
 
 const ORDER_NO_RETRY_ATTEMPTS = 5;
@@ -161,7 +162,7 @@ const getCompletedRefundAmount = (
     ),
   );
 
-const normalizeOrderRefundState = <
+export const normalizeOrderRefundState = <
   T extends {
     totalAmount: unknown;
     status: OrderStatus;
@@ -275,6 +276,7 @@ class OrdersService {
    */
   async createOrderFromCart(userId: string) {
     const normalizedUserId = normalizeRequiredId(userId, "User ID");
+    const referenceDate = new Date();
 
     await prisma.cartItem.updateMany({
       where: {
@@ -320,7 +322,7 @@ class OrdersService {
             courseId: { in: cartCourseIds },
           },
         },
-        new Date(),
+        referenceDate,
       ),
       select: { id: true },
     });
@@ -338,6 +340,14 @@ class OrdersService {
     if (unavailableItem) {
       throw new ValidationError(
         "Some items are no longer available. Please update your cart.",
+      );
+    }
+
+    for (const item of cartItems) {
+      await assertPackageHasAvailableCapacity(
+        prisma,
+        item.package,
+        referenceDate,
       );
     }
 
@@ -382,6 +392,14 @@ class OrdersService {
 
     const order = await createOrderNoWithRetry((orderNo) =>
       prisma.$transaction(async (tx) => {
+        for (const item of cartItems) {
+          await assertPackageHasAvailableCapacity(
+            tx,
+            item.package,
+            referenceDate,
+          );
+        }
+
         const createdOrder = await tx.order.create({
           data: {
             orderNo,
@@ -434,6 +452,7 @@ class OrdersService {
   async createOrderForPackage(userId: string, packageId: string) {
     const normalizedUserId = normalizeRequiredId(userId, "User ID");
     const normalizedPackageId = normalizeRequiredId(packageId, "Package ID");
+    const referenceDate = new Date();
 
     const lessonPackage = await prisma.lessonPackage.findUnique({
       where: { id: normalizedPackageId },
@@ -463,7 +482,7 @@ class OrdersService {
             courseId: lessonPackage.course.id,
           },
         },
-        new Date(),
+        referenceDate,
       ),
       select: { id: true },
     });
@@ -471,6 +490,12 @@ class OrdersService {
     if (activeEnrollment) {
       throw new ValidationError("You are already enrolled in this package");
     }
+
+    await assertPackageHasAvailableCapacity(
+      prisma,
+      lessonPackage,
+      referenceDate,
+    );
 
     const price = normalizeNonNegativeCurrency(
       lessonPackage.price,
@@ -585,6 +610,17 @@ class OrdersService {
       );
     }
 
+    const orderTotal = roundCurrency(order.totalAmount);
+    if (orderTotal <= 0) {
+      throw new ValidationError("Free orders cannot be refunded");
+    }
+
+    if (refundMethod === RefundMethod.WALLET) {
+      throw new ValidationError(
+        "Platform wallet refunds are unavailable; please choose original payment or bank transfer",
+      );
+    }
+
     const normalizedBankDetails = normalizeOptionalText(
       bankDetails,
       "Bank details",
@@ -597,7 +633,6 @@ class OrdersService {
       );
     }
 
-    const orderTotal = roundCurrency(order.totalAmount);
     const completedRefundAmount = getCompletedRefundAmount(order.refunds);
     const remainingRefundAmount = Math.max(
       0,
@@ -689,9 +724,9 @@ class OrdersService {
   }
 
   /**
-   * Get all refund records for the current user.
+   * Get all refund records across all orders owned by the current user.
    */
-  async getUserRefunds(userId: string) {
+  async getMyRefunds(userId: string) {
     const normalizedUserId = normalizeRequiredId(userId, "User ID");
 
     return prisma.refund.findMany({
@@ -700,8 +735,8 @@ class OrdersService {
           userId: normalizedUserId,
         },
       },
-      include: refundDetailInclude,
       orderBy: { createdAt: "desc" },
+      include: refundDetailInclude,
     });
   }
 }

@@ -19,11 +19,15 @@ const enrollmentService = {
 
   updateProgress: async (
     id: string,
-    completedLessons: number,
+    completedLessons: number | string[],
     progress: number
   ): Promise<Enrollment> => {
     const enrollmentId = requireNonEmptyId(id, 'Enrollment ID');
-    if (completedLessons < 0) {
+    if (Array.isArray(completedLessons)) {
+      if (completedLessons.some((lessonId) => typeof lessonId !== 'string' || !lessonId.trim())) {
+        throw new Error('Completed lesson IDs must be non-empty strings');
+      }
+    } else if (completedLessons < 0) {
       throw new Error('Completed lessons cannot be negative');
     }
     if (progress < 0 || progress > 100) {

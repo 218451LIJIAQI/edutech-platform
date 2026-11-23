@@ -19,7 +19,7 @@ interface OperationDetails {
   title: string;
   description: string;
   confirmText: string;
-  successMessage: string;
+  actionPastTense: string;
   tone: 'primary' | 'warning' | 'danger';
 }
 
@@ -43,7 +43,7 @@ const BatchOperationsModal = ({
           title: 'Activate Users',
           description: `You are about to activate ${selectedCount} user(s).`,
           confirmText: 'ACTIVATE',
-          successMessage: `${selectedCount} user(s) activated successfully`,
+          actionPastTense: 'activated',
           tone: 'primary',
         };
       case 'deactivate':
@@ -51,7 +51,7 @@ const BatchOperationsModal = ({
           title: 'Deactivate Users',
           description: `You are about to deactivate ${selectedCount} user(s).`,
           confirmText: 'DEACTIVATE',
-          successMessage: `${selectedCount} user(s) deactivated successfully`,
+          actionPastTense: 'deactivated',
           tone: 'warning',
         };
       case 'delete':
@@ -59,7 +59,7 @@ const BatchOperationsModal = ({
           title: 'Safe Delete Users',
           description: `You are about to safely remove ${selectedCount} user(s) by deactivating their accounts while preserving audit, financial, support, and learning records.`,
           confirmText: 'SAFE DELETE',
-          successMessage: `${selectedCount} user(s) safely deactivated`,
+          actionPastTense: 'safely deactivated',
           tone: 'warning',
         };
       default:
@@ -98,16 +98,37 @@ const BatchOperationsModal = ({
 
     setIsLoading(true);
     try {
-      if (operation === 'delete') {
-        await adminService.batchDeleteUsers(selectedUserIds);
-      } else {
-        await adminService.batchUpdateUserStatus(
-          selectedUserIds,
-          operation === 'activate'
+      const result =
+        operation === 'delete'
+          ? await adminService.batchDeleteUsers(selectedUserIds)
+          : await adminService.batchUpdateUserStatus(
+              selectedUserIds,
+              operation === 'activate'
+            );
+
+      const succeededCount =
+        result?.succeeded?.length ??
+        result?.affected ??
+        result?.count ??
+        selectedCount;
+      const failedItems = result?.failed ?? [];
+
+      if (failedItems.length > 0 && succeededCount === 0) {
+        toast.error(
+          `No users were ${details.actionPastTense}: ${failedItems[0].reason}`
         );
+        return;
       }
 
-      toast.success(details.successMessage);
+      if (failedItems.length > 0) {
+        toast(
+          `${succeededCount} user(s) ${details.actionPastTense}; ${failedItems.length} skipped (${failedItems[0].reason})`,
+          { duration: 5000 }
+        );
+      } else {
+        toast.success(`${succeededCount} user(s) ${details.actionPastTense} successfully`);
+      }
+
       onSuccess();
       onClose();
     } catch (error: unknown) {

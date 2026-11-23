@@ -1,4 +1,12 @@
-import { PaymentStatus, type Prisma } from "@prisma/client";
+import {
+  PaymentStatus,
+  RefundStatus,
+  type Prisma,
+} from "@prisma/client";
+import {
+  calculatePlatformCommission,
+  calculateTeacherNetEarning,
+} from "../shared/payment-utils";
 
 export const recentUserSelect = {
   id: true,
@@ -117,6 +125,10 @@ export const settlementPaymentInclude = {
   },
   order: {
     include: {
+      refunds: {
+        where: { status: RefundStatus.COMPLETED },
+        select: { amount: true },
+      },
       items: {
         include: {
           package: {
@@ -158,7 +170,7 @@ type RecentPaymentRecord = Prisma.PaymentGetPayload<{
   select: typeof recentPaymentSelect;
 }>;
 
-type SettlementPaymentRecord = Prisma.PaymentGetPayload<{
+export type SettlementPaymentRecord = Prisma.PaymentGetPayload<{
   include: typeof settlementPaymentInclude;
 }>;
 
@@ -259,6 +271,28 @@ export const createCompletedPaymentWhere = (
 
   return {
     status: PaymentStatus.COMPLETED,
+    paidAt,
+  };
+};
+
+export const createPaidOrRefundedPaymentWhere = (
+  startDate?: Date,
+  endDate?: Date,
+): Prisma.PaymentWhereInput => {
+  const paidAt: Prisma.DateTimeNullableFilter = {
+    not: null,
+  };
+
+  if (startDate) {
+    paidAt.gte = startDate;
+  }
+
+  if (endDate) {
+    paidAt.lte = endDate;
+  }
+
+  return {
+    status: { in: [PaymentStatus.COMPLETED, PaymentStatus.REFUNDED] },
     paidAt,
   };
 };
@@ -462,6 +496,67 @@ const normalizeSettlementRows = (rows: SettlementRow[]): SettlementRow[] => {
   }));
 };
 
+const getNetOrderItemsWithSplits = (
+  payment: SettlementPaymentRecord,
+  defaultCommissionRate: number,
+) => {
+  const items = payment.order?.items ?? [];
+  if (items.length === 0) return [];
+
+  const orderItemsTotal = roundMoney(
+    items.reduce(
+      (sum, item) => sum + Math.max(0, decimalToNumber(item.finalPrice)),
+      0,
+    ),
+  );
+  const completedRefundTotal = roundMoney(
+    (payment.order?.refunds ?? []).reduce(
+      (sum, refund) => sum + Math.max(0, decimalToNumber(refund.amount)),
+      0,
+    ),
+  );
+
+  if (
+    payment.status === PaymentStatus.REFUNDED ||
+    (orderItemsTotal > 0 && completedRefundTotal >= orderItemsTotal)
+  ) {
+    return [];
+  }
+
+  let allocatedRefund = 0;
+  return items.map((item, index) => {
+    const isLastItem = index === items.length - 1;
+    const itemPrice = roundMoney(Math.max(0, decimalToNumber(item.finalPrice)));
+    const itemRefundPortion =
+      completedRefundTotal > 0 && orderItemsTotal > 0
+        ? isLastItem
+          ? roundMoney(completedRefundTotal - allocatedRefund)
+          : roundMoney((itemPrice / orderItemsTotal) * completedRefundTotal)
+        : 0;
+    allocatedRefund = roundMoney(allocatedRefund + itemRefundPortion);
+
+    const netGross = Math.max(0, roundMoney(itemPrice - itemRefundPortion));
+    const teacherProfile = item.package.course?.teacherProfile ?? null;
+    const platformCommission = calculatePlatformCommission(
+      netGross,
+      teacherProfile,
+      defaultCommissionRate,
+    );
+    const teacherEarning = calculateTeacherNetEarning(
+      netGross,
+      teacherProfile,
+      defaultCommissionRate,
+    );
+
+    return {
+      item,
+      netGross,
+      platformCommission,
+      teacherEarning,
+    };
+  });
+};
+
 export const buildSettlementRows = ({
   payments,
   defaultCommissionRate,
@@ -476,19 +571,27 @@ export const buildSettlementRows = ({
   const rows = new Map<string, SettlementRow>();
 
   for (const payment of payments) {
+    if (payment.status === PaymentStatus.REFUNDED) {
+      continue;
+    }
+
     if (payment.orderId && payment.order) {
-      for (const item of payment.order.items) {
+      const netItems = getNetOrderItemsWithSplits(
+        payment,
+        defaultCommissionRate,
+      );
+      for (const {
+        item,
+        netGross,
+        platformCommission,
+        teacherEarning,
+      } of netItems) {
         const course = item.package.course;
         const teacherProfile = course?.teacherProfile;
 
         if (!teacherProfile) {
           continue;
         }
-
-        const finalPrice = decimalToNumber(item.finalPrice);
-        const rate = decimalToNumber(
-          teacherProfile.commissionRate ?? defaultCommissionRate,
-        );
 
         const settlementRow = getOrCreateSettlementRow(
           rows,
@@ -501,9 +604,9 @@ export const buildSettlementRows = ({
           teacherProfile.user.email || undefined,
         );
 
-        settlementRow.totalGross += finalPrice;
-        settlementRow.platformCommission += (finalPrice * rate) / 100;
-        settlementRow.teacherEarning += finalPrice * (1 - rate / 100);
+        settlementRow.totalGross += netGross;
+        settlementRow.platformCommission += platformCommission;
+        settlementRow.teacherEarning += teacherEarning;
         settlementRow.transactions += 1;
       }
 
@@ -625,12 +728,17 @@ export const buildRevenueAnalytics = ({
   const courseMap = new Map<string, CourseRevenueRow>();
   const breakdownMap = new Map<string, RevenueBreakdownRow>();
 
-  const accumulateTrend = (payment: SettlementPaymentRecord) => {
-    if (!payment.paidAt) {
+  const accumulateTrend = (
+    paidAt: Date | null,
+    totalRevenue: number,
+    platformEarnings: number,
+    teacherEarnings: number,
+  ) => {
+    if (!paidAt) {
       return;
     }
 
-    const trendKey = getRevenueGroupKey(payment.paidAt, groupBy);
+    const trendKey = getRevenueGroupKey(paidAt, groupBy);
 
     if (!trendMap.has(trendKey)) {
       trendMap.set(trendKey, {
@@ -642,9 +750,9 @@ export const buildRevenueAnalytics = ({
     }
 
     const trend = trendMap.get(trendKey)!;
-    trend.totalRevenue += decimalToNumber(payment.amount);
-    trend.platformEarnings += decimalToNumber(payment.platformCommission);
-    trend.teacherEarnings += decimalToNumber(payment.teacherEarning);
+    trend.totalRevenue += totalRevenue;
+    trend.platformEarnings += platformEarnings;
+    trend.teacherEarnings += teacherEarnings;
   };
 
   const accumulateCourseRevenue = ({
@@ -664,12 +772,13 @@ export const buildRevenueAnalytics = ({
     const teacher = teacherProfile.user;
     const teacherId = teacher.id;
 
-    const rate = decimalToNumber(
-      teacherProfile.commissionRate ?? defaultCommissionRate,
-    );
-
     const calculatedTeacherEarning =
-      teacherEarning ?? finalPrice * (1 - rate / 100);
+      teacherEarning ??
+      calculateTeacherNetEarning(
+        finalPrice,
+        teacherProfile,
+        defaultCommissionRate,
+      );
 
     if (!teacherMap.has(teacherId)) {
       teacherMap.set(teacherId, {
@@ -706,23 +815,65 @@ export const buildRevenueAnalytics = ({
   };
 
   for (const payment of payments) {
-    accumulateTrend(payment);
+    if (payment.status === PaymentStatus.REFUNDED) {
+      continue;
+    }
 
     if (payment.order) {
-      for (const item of payment.order.items) {
+      const netItems = getNetOrderItemsWithSplits(
+        payment,
+        defaultCommissionRate,
+      );
+      if (netItems.length === 0) {
+        continue;
+      }
+
+      const netOrderTotal = netItems.reduce(
+        (sum, entry) => sum + entry.netGross,
+        0,
+      );
+      const netPlatformTotal = netItems.reduce(
+        (sum, entry) => sum + entry.platformCommission,
+        0,
+      );
+      const netTeacherTotal = netItems.reduce(
+        (sum, entry) => sum + entry.teacherEarning,
+        0,
+      );
+
+      accumulateTrend(
+        payment.paidAt,
+        netOrderTotal,
+        netPlatformTotal,
+        netTeacherTotal,
+      );
+
+      for (const entry of netItems) {
         accumulateCourseRevenue({
-          finalPrice: decimalToNumber(item.finalPrice),
-          course: item.package.course,
+          finalPrice: entry.netGross,
+          teacherEarning: entry.teacherEarning,
+          course: entry.item.package.course,
         });
       }
 
       continue;
     }
 
+    const directRevenue = decimalToNumber(payment.amount);
+    const directPlatform = decimalToNumber(payment.platformCommission);
+    const directTeacher = decimalToNumber(payment.teacherEarning);
+
+    accumulateTrend(
+      payment.paidAt,
+      directRevenue,
+      directPlatform,
+      directTeacher,
+    );
+
     if (payment.package?.course) {
       accumulateCourseRevenue({
-        finalPrice: decimalToNumber(payment.amount),
-        teacherEarning: decimalToNumber(payment.teacherEarning),
+        finalPrice: directRevenue,
+        teacherEarning: directTeacher,
         course: payment.package.course,
       });
     }

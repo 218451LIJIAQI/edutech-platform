@@ -415,15 +415,20 @@ const queryHydratedPosts = async (params: {
     maxLimit: MAX_LIMIT,
   });
 
+  const activeAuthorWhere: Prisma.CommunityPostWhereInput = {
+    ...params.where,
+    author: { isActive: true },
+  };
+
   const [items, total] = await Promise.all([
     prisma.communityPost.findMany({
-      where: params.where,
+      where: activeAuthorWhere,
       include: communityPostInclude,
       orderBy: params.orderBy,
       skip,
       take: limit,
     }),
-    prisma.communityPost.count({ where: params.where }),
+    prisma.communityPost.count({ where: activeAuthorWhere }),
   ]);
 
   const postIds = items.map((item) => item.id);
@@ -497,8 +502,8 @@ const togglePostReaction = async <K extends "likes" | "bookmarks">(
 
   try {
     return await prisma.$transaction(async (tx) => {
-      const post = await tx.communityPost.findUnique({
-        where: { id: normalizedPostId },
+      const post = await tx.communityPost.findFirst({
+        where: { id: normalizedPostId, author: { isActive: true } },
         select: { id: true },
       });
 
@@ -725,8 +730,8 @@ const communityService = {
       throw new BadRequestError("Post ID is required");
     }
 
-    const post = await prisma.communityPost.findUnique({
-      where: { id: postId },
+    const post = await prisma.communityPost.findFirst({
+      where: { id: postId, author: { isActive: true } },
       include: communityPostInclude,
     });
 
@@ -777,8 +782,8 @@ const communityService = {
       maxLimit: MAX_LIMIT,
     });
 
-    const post = await prisma.communityPost.findUnique({
-      where: { id: normalizedPostId },
+    const post = await prisma.communityPost.findFirst({
+      where: { id: normalizedPostId, author: { isActive: true } },
       select: { id: true },
     });
 
@@ -786,15 +791,20 @@ const communityService = {
       throw new NotFoundError("Post not found");
     }
 
+    const commentWhere: Prisma.CommunityCommentWhereInput = {
+      postId: normalizedPostId,
+      author: { isActive: true },
+    };
+
     const [items, total] = await Promise.all([
       prisma.communityComment.findMany({
-        where: { postId: normalizedPostId },
+        where: commentWhere,
         include: { author: { select: communityAuthorSelect } },
         orderBy: { createdAt: "asc" },
         skip,
         take: safeLimit,
       }),
-      prisma.communityComment.count({ where: { postId: normalizedPostId } }),
+      prisma.communityComment.count({ where: commentWhere }),
     ]);
 
     return {
@@ -834,8 +844,8 @@ const communityService = {
     }
 
     return prisma.$transaction(async (tx) => {
-      const post = await tx.communityPost.findUnique({
-        where: { id: normalizedPostId },
+      const post = await tx.communityPost.findFirst({
+        where: { id: normalizedPostId, author: { isActive: true } },
         select: { id: true },
       });
 
@@ -883,10 +893,10 @@ const communityService = {
 
     const [followers, following, isFollowing] = await Promise.all([
       prisma.communityFollowing.count({
-        where: { followingId: normalizedUserId },
+        where: { followingId: normalizedUserId, follower: { isActive: true } },
       }),
       prisma.communityFollowing.count({
-        where: { followerId: normalizedUserId },
+        where: { followerId: normalizedUserId, following: { isActive: true } },
       }),
       normalizedCurrentUserId
         ? prisma.communityFollowing.findUnique({
@@ -957,7 +967,7 @@ const communityService = {
       client: Prisma.TransactionClient | typeof prisma = prisma,
     ) =>
       client.communityFollowing.count({
-        where: { followingId: normalizedTargetUserId },
+        where: { followingId: normalizedTargetUserId, follower: { isActive: true } },
       });
 
     try {

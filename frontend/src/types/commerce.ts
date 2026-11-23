@@ -115,5 +115,6 @@ export interface Review {
   readonly isPublished: boolean;
   readonly createdAt: string;
   readonly reviewer?: User;
+  readonly teacher?: User;
   readonly enrollment?: Enrollment;
 }

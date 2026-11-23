@@ -289,6 +289,7 @@ const CreatePostPage = () => {
           return;
         }
         setCourseOptions([]);
+        toast.error(extractErrorMessage(error, 'Failed to search courses'));
       }
     }, 300);
 

@@ -1,14 +1,32 @@
-import { Router } from "express";
+import { NextFunction, Request, RequestHandler, Response, Router } from "express";
 
 import uploadController from "../controllers/upload.controller";
 import { authenticate } from "../middleware/auth";
-import { uploadAny } from "../middleware/upload";
+import {
+  cleanupTrackedRequestUploads,
+  uploadAny,
+} from "../middleware/upload";
 
 const router = Router();
 
 const SINGLE_FILE_FIELD = "file";
 const MULTIPLE_FILES_FIELD = "files";
 const MAX_FILES_PER_REQUEST = 10;
+
+const withUploadCleanupOnError =
+  (multerHandler: RequestHandler): RequestHandler =>
+  (req: Request, res: Response, next: NextFunction) => {
+    multerHandler(req, res, (error?: unknown) => {
+      if (!error) {
+        next();
+        return;
+      }
+
+      void cleanupTrackedRequestUploads(req).finally(() => {
+        next(error);
+      });
+    });
+  };
 
 /**
  * Upload routes.
@@ -24,13 +42,15 @@ router.use(authenticate);
 
 router.post(
   "/",
-  uploadAny.single(SINGLE_FILE_FIELD),
+  withUploadCleanupOnError(uploadAny.single(SINGLE_FILE_FIELD)),
   uploadController.uploadFile,
 );
 
 router.post(
   "/multiple",
-  uploadAny.array(MULTIPLE_FILES_FIELD, MAX_FILES_PER_REQUEST),
+  withUploadCleanupOnError(
+    uploadAny.array(MULTIPLE_FILES_FIELD, MAX_FILES_PER_REQUEST),
+  ),
   uploadController.uploadMultipleFiles,
 );
 

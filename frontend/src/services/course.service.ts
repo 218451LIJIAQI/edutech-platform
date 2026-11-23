@@ -4,6 +4,8 @@ import {
   Lesson,
   LessonPackage,
   LessonQuiz,
+  LiveSession,
+  LiveSessionStatus,
   Material,
   ApiResponse,
   PaginatedResponse,
@@ -48,6 +50,14 @@ export type PackageUpdatePayload = Omit<
 export type MaterialUpdatePayload = Omit<Partial<Material>, 'description'> & {
   description?: string | null;
 };
+
+export interface CreateLiveSessionPayload {
+  title: string;
+  description?: string;
+  scheduledAt: string;
+  duration: number;
+  maxParticipants?: number;
+}
 
 const courseService = {
   getAllCourses: async (params?: {
@@ -151,6 +161,39 @@ const courseService = {
   getMyCourseQuizAttempts: async (courseId: string): Promise<QuizAttempt[]> => {
     const response = await api.get<ApiResponse<QuizAttempt[]>>(
       `/courses/${courseId}/my-quiz-attempts`
+    );
+    return extractData(response);
+  },
+
+  getCourseLiveSessions: async (courseId: string): Promise<LiveSession[]> => {
+    const response = await api.get<ApiResponse<LiveSession[]>>(
+      `/courses/${courseId}/live-sessions`
+    );
+    return extractData(response);
+  },
+
+  createLiveSession: async (
+    lessonId: string,
+    data: CreateLiveSessionPayload
+  ): Promise<LiveSession> => {
+    const response = await api.post<ApiResponse<LiveSession>>(
+      `/courses/lessons/${lessonId}/live-sessions`,
+      data
+    );
+    return extractData(response);
+  },
+
+  updateLiveSessionStatus: async (
+    sessionId: string,
+    status: Extract<LiveSessionStatus, 'ONGOING' | 'COMPLETED' | 'CANCELLED'>,
+    recordingUrl?: string
+  ): Promise<LiveSession> => {
+    const response = await api.patch<ApiResponse<LiveSession>>(
+      `/courses/live-sessions/${sessionId}/status`,
+      {
+        status,
+        ...(recordingUrl ? { recordingUrl } : {}),
+      }
     );
     return extractData(response);
   },

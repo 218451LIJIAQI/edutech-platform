@@ -14,6 +14,7 @@ export const buildCurrentEnrollmentWhere = (
   AND: [
     scope,
     { isActive: true },
+    { user: { isActive: true } },
     {
       OR: [{ expiresAt: null }, { expiresAt: { gt: referenceDate } }],
     },

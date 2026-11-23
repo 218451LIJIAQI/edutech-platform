@@ -249,7 +249,7 @@ export const normalizeLessonPackage = <
 export const normalizeMaterialAssets = (material: Material): Material => ({
   ...material,
   fileSize: toFiniteNumber(material.fileSize),
-  fileUrl: material.fileUrl,
+  fileUrl: normalizeAssetUrl(material.fileUrl),
   accessUrl: normalizeAssetUrl(material.accessUrl),
 });
 

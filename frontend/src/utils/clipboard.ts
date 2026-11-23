@@ -54,3 +54,33 @@ export async function copyTextToClipboard(text: string): Promise<boolean> {
 
   return fallbackCopyTextToClipboard(text);
 }
+
+export type ShareLinkResult = 'shared' | 'copied' | 'cancelled' | 'unavailable';
+
+export async function shareLink(
+  url: string,
+  options?: { title?: string; text?: string }
+): Promise<ShareLinkResult> {
+  const normalizedUrl = url.trim();
+  if (!normalizedUrl) {
+    return 'unavailable';
+  }
+
+  if (typeof navigator !== 'undefined' && typeof navigator.share === 'function') {
+    try {
+      await navigator.share({
+        title: options?.title,
+        text: options?.text,
+        url: normalizedUrl,
+      });
+      return 'shared';
+    } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') {
+        return 'cancelled';
+      }
+    }
+  }
+
+  const copied = await copyTextToClipboard(normalizedUrl);
+  return copied ? 'copied' : 'unavailable';
+}

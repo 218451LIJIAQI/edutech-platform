@@ -52,6 +52,7 @@ export const calculatePackageFinalPrice = (
  * Builds a package create/update payload.
  * Entering `0` or leaving `duration` blank means lifetime access (`undefined` on
  * create, `null` on update so timed packages can be switched to lifetime access).
+ * Entering `0` for `price` creates a free ($0.00) package aligned with backend validation.
  */
 export const buildPackageSavePayload = (
   data: PackageFormData,
@@ -71,8 +72,8 @@ export const buildPackageSavePayload = (
   const maxStudents = parseInteger(data.maxStudents);
   const finalPrice = calculatePackageFinalPrice(price, discount);
 
-  if (price <= 0) {
-    throw new Error('Package price must be greater than 0');
+  if (price < 0) {
+    throw new Error('Package price cannot be negative');
   }
 
   if (discount < 0) {

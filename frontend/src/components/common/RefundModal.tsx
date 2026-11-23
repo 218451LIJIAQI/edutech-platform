@@ -35,11 +35,6 @@ const REFUND_METHOD_OPTIONS = [
     description: 'Refund will be credited back to your original payment method.',
   },
   {
-    value: RefundMethod.WALLET,
-    label: 'Wallet',
-    description: 'Refund will be credited to your platform wallet balance.',
-  },
-  {
     value: RefundMethod.BANK_TRANSFER,
     label: 'Bank Transfer',
     description: 'Refund will be transferred directly to your bank account.',
@@ -116,7 +111,11 @@ const RefundModal = ({
     isOpen,
     containerRef: modalRef,
     initialFocusRef: amountInputRef,
-    onClose,
+    onClose: () => {
+      if (!working) {
+        onClose();
+      }
+    },
     trapFocus: true,
     lockBodyScroll: true,
   });

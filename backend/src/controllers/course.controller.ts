@@ -1,5 +1,5 @@
 import { Request, Response } from "express";
-import { CourseType, LessonType } from "@prisma/client";
+import { CourseType, LessonType, LiveSessionStatus } from "@prisma/client";
 import courseService, {
   COURSE_FIELD_LIMITS,
 } from "../services/course.service";
@@ -46,6 +46,11 @@ const ALLOWED_SORT_BY: readonly SortBy[] = [
   "PRICE_DESC",
 ] as const;
 const SORT_ORDERS: readonly SortOrder[] = ["asc", "desc"] as const;
+const MUTABLE_LIVE_SESSION_STATUSES = [
+  LiveSessionStatus.ONGOING,
+  LiveSessionStatus.COMPLETED,
+  LiveSessionStatus.CANCELLED,
+] as const;
 
 const MAX_PAGE_LIMIT = 100;
 const MAX_FEATURES = 30;
@@ -129,8 +134,13 @@ const parseQuizAnswers = (value: unknown): number[] => {
   );
 };
 
-const validateDiscount = (price?: number, discount?: number): void => {
-  if (discount !== undefined && price !== undefined && discount > price) {
+const validateDiscount = (price?: number, discount?: number | null): void => {
+  if (
+    discount !== undefined &&
+    discount !== null &&
+    price !== undefined &&
+    discount > price
+  ) {
     throw new BadRequestError("discount cannot be greater than price");
   }
 };
@@ -369,6 +379,62 @@ class CourseController {
     sendSuccess(res, attempts);
   });
 
+  getCourseLiveSessions = asyncHandler(async (req: Request, res: Response) => {
+    const sessions = await courseService.getCourseLiveSessions(
+      requireAuthUserId(req),
+      parseRequiredParam(req.params.id, "Course ID"),
+    );
+    sendSuccess(res, sessions);
+  });
+
+  createLiveSession = asyncHandler(async (req: Request, res: Response) => {
+    const session = await courseService.createLiveSession(
+      requireAuthUserId(req),
+      parseRequiredParam(req.params.id, "Lesson ID"),
+      {
+        title: parseRequiredString(req.body?.title, "title", {
+          maxLength: COURSE_FIELD_LIMITS.LIVE_SESSION_TITLE_MAX,
+        }),
+        description: parseOptionalString(
+          req.body?.description,
+          "description",
+          COURSE_FIELD_LIMITS.LIVE_SESSION_DESCRIPTION_MAX,
+        ),
+        scheduledAt: parseRequiredString(req.body?.scheduledAt, "scheduledAt"),
+        duration: parseNumber(req.body?.duration, "duration", {
+          min: 1,
+          integer: true,
+        }),
+        meetingUrl: parseOptionalString(
+          req.body?.meetingUrl,
+          "meetingUrl",
+          MAX_URL_OR_PATH_LENGTH,
+        ),
+        maxParticipants: parseNumber(
+          req.body?.maxParticipants,
+          "maxParticipants",
+          { min: 1, integer: true },
+        ),
+      },
+    );
+    sendCreated(res, session, "Live session scheduled successfully");
+  });
+
+  updateLiveSessionStatus = asyncHandler(
+    async (req: Request, res: Response) => {
+      const session = await courseService.updateLiveSessionStatus(
+        requireAuthUserId(req),
+        parseRequiredParam(req.params.id, "Session ID"),
+        parseRequiredEnum(
+          req.body?.status,
+          MUTABLE_LIVE_SESSION_STATUSES,
+          "status",
+        ),
+      );
+      sendSuccess(res, session, "Live session status updated successfully");
+    },
+  );
+
   createPackage = asyncHandler(async (req: Request, res: Response) => {
     const price = parseRequiredNumber(req.body?.price, "price", { min: 0 });
     const discount = parseNumber(req.body?.discount, "discount", { min: 0 });
@@ -407,7 +473,9 @@ class CourseController {
 
   updatePackage = asyncHandler(async (req: Request, res: Response) => {
     const price = parseNumber(req.body?.price, "price", { min: 0 });
-    const discount = parseNumber(req.body?.discount, "discount", { min: 0 });
+    const discount = parseNullableNumber(req.body?.discount, "discount", {
+      min: 0,
+    });
     validateDiscount(price, discount);
 
     const lessonPackage = await courseService.updatePackage(

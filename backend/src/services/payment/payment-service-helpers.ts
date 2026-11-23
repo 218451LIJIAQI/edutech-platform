@@ -166,7 +166,7 @@ export const findCompletedTeacherPayments = async (
 
   return client.payment.findMany({
     where: {
-      status: PaymentStatus.COMPLETED,
+      status: { in: [PaymentStatus.COMPLETED, PaymentStatus.REFUNDED] },
       paidAt: { not: null },
       OR: [
         {
