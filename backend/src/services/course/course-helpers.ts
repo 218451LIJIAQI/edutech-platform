@@ -2,7 +2,7 @@ import { CourseType, LessonType, Prisma } from "@prisma/client";
 import { BadRequestError } from "../../utils/errors";
 import { sanitizeUserPlainText } from "../../utils/sanitize-user-content";
 
-export interface LessonQuizQuestion {
+interface LessonQuizQuestion {
   question: string;
   options: string[];
   correctOptionIndex: number;
@@ -13,17 +13,17 @@ export interface LessonQuiz {
   questions: LessonQuizQuestion[];
 }
 
-export interface SanitizedLessonQuizQuestion {
+interface SanitizedLessonQuizQuestion {
   question: string;
   options: string[];
   explanation?: string;
 }
 
-export interface SanitizedLessonQuiz {
+interface SanitizedLessonQuiz {
   questions: SanitizedLessonQuizQuestion[];
 }
 
-export interface QuizResultItem {
+interface QuizResultItem {
   question: string;
   options: string[];
   selectedOptionIndex: number;
@@ -227,27 +227,25 @@ export const buildPublishedCourseWhere = (
 export const buildCourseListOrderBy = (
   sortBy: "NEWEST" | "RATING" | "POPULARITY" | "PRICE_ASC" | "PRICE_DESC",
   sortOrder: "asc" | "desc",
-): Prisma.CourseOrderByWithRelationInput | undefined => {
+): Prisma.CourseOrderByWithRelationInput[] | undefined => {
   if (sortBy === "NEWEST") {
-    return {
-      createdAt: sortOrder,
-    };
+    return [{ createdAt: sortOrder }, { id: sortOrder }];
   }
 
   if (sortBy === "RATING") {
-    return {
-      teacherProfile: {
-        averageRating: "desc",
-      },
-    };
+    return [
+      { teacherProfile: { averageRating: "desc" } },
+      { createdAt: "desc" },
+      { id: "desc" },
+    ];
   }
 
   if (sortBy === "POPULARITY") {
-    return {
-      teacherProfile: {
-        totalStudents: "desc",
-      },
-    };
+    return [
+      { teacherProfile: { totalStudents: "desc" } },
+      { createdAt: "desc" },
+      { id: "desc" },
+    ];
   }
 
   return undefined;

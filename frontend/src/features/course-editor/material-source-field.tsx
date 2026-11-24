@@ -1,6 +1,7 @@
 import { useId, type ChangeEvent } from 'react';
 import { CheckCircle, Link, UploadCloud } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { formatFileSize } from '@/utils/helpers';
 import type { MaterialSourceType } from './types';
 
 interface MaterialSourceFieldProps {
@@ -27,20 +28,6 @@ const ACCEPTED_MATERIAL_EXTENSIONS = [
 ] as const;
 
 const ACCEPTED_MATERIAL_FILE_TYPES = ACCEPTED_MATERIAL_EXTENSIONS.join(',');
-
-const formatFileSize = (sizeInBytes: number): string => {
-  if (!Number.isFinite(sizeInBytes) || sizeInBytes <= 0) {
-    return '0 KB';
-  }
-
-  const sizeInMb = sizeInBytes / (1024 * 1024);
-
-  if (sizeInMb >= 1) {
-    return `${sizeInMb.toFixed(sizeInMb >= 10 ? 0 : 1)} MB`;
-  }
-
-  return `${Math.ceil(sizeInBytes / 1024)} KB`;
-};
 
 const getFileExtension = (fileName: string): string => {
   const lastDotIndex = fileName.lastIndexOf('.');

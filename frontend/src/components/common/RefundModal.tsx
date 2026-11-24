@@ -6,6 +6,7 @@ import ordersService from '@/services/orders.service';
 import { Order, RefundMethod } from '@/types';
 import { useOverlayAccessibility } from '@/hooks';
 import { extractErrorMessage } from '@/utils/error-handler';
+import { roundCurrency } from '@/utils/helpers';
 import clientLogger from '@/utils/logger';
 
 interface RefundModalProps {
@@ -41,13 +42,8 @@ const REFUND_METHOD_OPTIONS = [
   },
 ];
 
-const toMoneyNumber = (value: unknown): number => {
-  const amount = Number(value);
-  return Number.isFinite(amount) ? amount : 0;
-};
-
-const formatCurrency = (value: unknown): string => {
-  return toMoneyNumber(value).toFixed(2);
+const formatMoneyValue = (value: unknown): string => {
+  return roundCurrency(value).toFixed(2);
 };
 
 /**
@@ -70,11 +66,11 @@ const RefundModal = ({
   const modalRef = useRef<HTMLDivElement | null>(null);
   const amountInputRef = useRef<HTMLInputElement | null>(null);
 
-  const orderTotal = toMoneyNumber(order.totalAmount);
+  const orderTotal = roundCurrency(order.totalAmount);
 
   const refundableAmount = useMemo(() => {
     if (typeof maxRefundAmount === 'number' && Number.isFinite(maxRefundAmount)) {
-      return Math.min(Math.max(0, maxRefundAmount), orderTotal);
+      return roundCurrency(Math.min(Math.max(0, maxRefundAmount), orderTotal));
     }
 
     return Math.max(0, orderTotal);
@@ -83,7 +79,7 @@ const RefundModal = ({
   const [step, setStep] = useState<RefundStep>('amount');
   const [working, setWorking] = useState(false);
 
-  const [refundAmount, setRefundAmount] = useState(formatCurrency(refundableAmount));
+  const [refundAmount, setRefundAmount] = useState(formatMoneyValue(refundableAmount));
   const [reasonCategory, setReasonCategory] = useState('QUALITY_ISSUE');
   const [reason, setReason] = useState('');
   const [refundMethod, setRefundMethod] = useState<RefundMethod>(
@@ -98,7 +94,7 @@ const RefundModal = ({
     if (!isOpen) return;
 
     setStep('amount');
-    setRefundAmount(formatCurrency(refundableAmount));
+    setRefundAmount(formatMoneyValue(refundableAmount));
     setReasonCategory('QUALITY_ISSUE');
     setReason('');
     setRefundMethod(RefundMethod.ORIGINAL_PAYMENT);
@@ -121,10 +117,15 @@ const RefundModal = ({
   });
 
   const validateAmount = (): boolean => {
-    const amount = Number(refundAmount);
-
-    if (!Number.isFinite(amount) || amount <= 0) {
+    const parsed = Number(refundAmount);
+    if (!Number.isFinite(parsed)) {
       toast.error('Please enter a valid refund amount.');
+      return false;
+    }
+    const amount = roundCurrency(parsed);
+
+    if (amount < 0.01) {
+      toast.error('Refund amount must be at least $0.01.');
       return false;
     }
 
@@ -188,7 +189,7 @@ const RefundModal = ({
 
     if (!validateAmount() || !validateReason() || !validateMethod()) return;
 
-    const normalizedAmount = Number(refundAmount);
+    const normalizedAmount = roundCurrency(refundAmount);
     const normalizedReason = reason.trim();
     const normalizedBankDetails =
       refundMethod === RefundMethod.BANK_TRANSFER ? bankDetails.trim() : undefined;
@@ -295,15 +296,15 @@ const RefundModal = ({
             <div className="space-y-4">
               <h3 className="text-xl font-bold text-gray-900">Refund Amount</h3>
 
-              <p className="text-gray-600">
+              <p className="text-gray-600 tabular-nums">
                 Order Total:{' '}
-                <span className="text-lg font-bold">${formatCurrency(orderTotal)}</span>
+                <span className="text-lg font-bold">${formatMoneyValue(orderTotal)}</span>
               </p>
 
-              <p className="text-gray-600">
+              <p className="text-gray-600 tabular-nums">
                 Remaining Refundable:{' '}
                 <span className="text-lg font-bold text-blue-600">
-                  ${formatCurrency(refundableAmount)}
+                  ${formatMoneyValue(refundableAmount)}
                 </span>
               </p>
 
@@ -340,7 +341,7 @@ const RefundModal = ({
                 <p className="text-sm text-gray-700">
                   <span className="font-semibold">Note:</span> You can request a
                   partial or full refund. The maximum refund amount is $
-                  {formatCurrency(refundableAmount)}.
+                  {formatMoneyValue(refundableAmount)}.
                 </p>
               </div>
 
@@ -356,7 +357,7 @@ const RefundModal = ({
 
                 <button
                   type="button"
-                  onClick={() => setRefundAmount((refundableAmount / 2).toFixed(2))}
+                  onClick={() => setRefundAmount(Math.max(0.01, roundCurrency(refundableAmount / 2)).toFixed(2))}
                   disabled={working || refundableAmount <= 0}
                   className="flex-1 rounded-lg bg-gray-100 px-3 py-2 text-sm font-semibold transition-colors hover:bg-gray-200 disabled:cursor-not-allowed disabled:opacity-60"
                 >
@@ -487,8 +488,8 @@ const RefundModal = ({
               <div className="space-y-3 rounded-lg border border-blue-200 bg-gradient-to-r from-blue-50 to-blue-100 p-4">
                 <div className="flex items-center justify-between gap-4">
                   <span className="text-gray-700">Refund Amount:</span>
-                  <span className="text-lg font-bold text-blue-600">
-                    ${formatCurrency(refundAmount)}
+                  <span className="text-lg font-bold text-blue-600 tabular-nums">
+                    ${formatMoneyValue(refundAmount)}
                   </span>
                 </div>
 

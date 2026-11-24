@@ -40,7 +40,7 @@ const isUniqueConstraintError = (error: unknown): boolean =>
  * Generates a canonical participant key for one-to-one message threads.
  * Sorting ensures `(A, B)` and `(B, A)` always resolve to the same unique key.
  */
-export const buildCanonicalParticipantKey = (
+const buildCanonicalParticipantKey = (
   userId: string,
   otherUserId: string,
 ): string => {
@@ -55,7 +55,7 @@ export const buildCanonicalParticipantKey = (
   return JSON.stringify(ids);
 };
 
-export const canMessageRole = (
+const canMessageRole = (
   initiatorRole: UserRole,
   recipientRole: UserRole,
 ): boolean => {

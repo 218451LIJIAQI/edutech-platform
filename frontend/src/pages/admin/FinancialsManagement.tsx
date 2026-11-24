@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import clientLogger from '@/utils/logger';
 import adminService, { FinancialStats, PaginationMeta, SettlementSummaryRow, TeacherCommissionListItem, FinancialReportSummaryData, TeacherSettlementsData, TeacherSettlementItem } from '@/services/admin.service';
-import { DollarSign, TrendingUp, PieChart, Receipt, Calendar, RefreshCcw, Percent, Search, Download, Zap, FileText } from 'lucide-react';
+import { AlertCircle, DollarSign, TrendingUp, PieChart, Receipt, Calendar, RefreshCcw, Percent, Search, Download, Zap, FileText } from 'lucide-react';
 import { AdminPayoutsPanel, RevenueAnalytics } from '@/components/admin';
 import toast from 'react-hot-toast';
 import { extractErrorMessage } from '@/utils/error-handler';
@@ -49,6 +49,7 @@ const FinancialsManagement = () => {
   // Financial overview & payments
   const [stats, setStats] = useState<FinancialStats | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [paymentsError, setPaymentsError] = useState<string | null>(null);
   const [startDate, setStartDate] = useState<string>('');
   const [endDate, setEndDate] = useState<string>('');
   const [appliedStartDate, setAppliedStartDate] = useState<string>('');
@@ -84,6 +85,7 @@ const FinancialsManagement = () => {
 
     const loadPayments = async () => {
       setIsLoading(true);
+      setPaymentsError(null);
       try {
         const params: { startDate?: string; endDate?: string } = {};
         if (appliedStartDate) params.startDate = appliedStartDate;
@@ -96,6 +98,7 @@ const FinancialsManagement = () => {
         if (isActive) {
           clientLogger.error('Failed to load financial stats:', error);
           const errorMessage = extractErrorMessage(error, 'Failed to load financial stats');
+          setPaymentsError(errorMessage);
           toast.error(errorMessage);
         }
       } finally {
@@ -119,6 +122,8 @@ const FinancialsManagement = () => {
   const [commissionRows, setCommissionRows] = useState<TeacherCommissionListItem[]>([]);
   const [commissionPagination, setCommissionPagination] = useState<PaginationMeta | null>(null);
   const [commissionLoading, setCommissionLoading] = useState(false);
+  const [commissionsError, setCommissionsError] = useState<string | null>(null);
+  const [savingTeacherId, setSavingTeacherId] = useState<string | null>(null);
   const [editing, setEditing] = useState<Record<string, number | null>>({});
   const [appliedCommissionSearch, setAppliedCommissionSearch] = useState('');
   const [commissionRequestKey, setCommissionRequestKey] = useState(0);
@@ -132,6 +137,7 @@ const FinancialsManagement = () => {
 
     const loadCommissions = async () => {
       setCommissionLoading(true);
+      setCommissionsError(null);
       try {
         const data = await adminService.getTeacherCommissions({
           search: appliedCommissionSearch || undefined,
@@ -146,6 +152,7 @@ const FinancialsManagement = () => {
         if (isActive) {
           clientLogger.error('Failed to load commissions:', error);
           const errorMessage = extractErrorMessage(error, 'Failed to load commissions');
+          setCommissionsError(errorMessage);
           toast.error(errorMessage);
         }
       } finally {
@@ -172,6 +179,7 @@ const FinancialsManagement = () => {
   const [settRows, setSettRows] = useState<SettlementSummaryRow[]>([]);
   const [settPagination, setSettPagination] = useState<PaginationMeta | null>(null);
   const [settLoading, setSettLoading] = useState(false);
+  const [settlementsError, setSettlementsError] = useState<string | null>(null);
   const [settlementRequestKey, setSettlementRequestKey] = useState(0);
 
   // Auto-Reports state
@@ -179,6 +187,7 @@ const FinancialsManagement = () => {
   const [autoReportSettlements, setAutoReportSettlements] = useState<TeacherSettlementItem[]>([]);
   const [autoReportSettlementsTotals, setAutoReportSettlementsTotals] = useState<TeacherSettlementsData['totals'] | null>(null);
   const [autoReportLoading, setAutoReportLoading] = useState(false);
+  const [autoReportError, setAutoReportError] = useState<string | null>(null);
   const [autoReportExporting, setAutoReportExporting] = useState(false);
   const [autoReportRequestKey, setAutoReportRequestKey] = useState(0);
 
@@ -196,6 +205,7 @@ const FinancialsManagement = () => {
 
     const loadSettlements = async () => {
       setSettLoading(true);
+      setSettlementsError(null);
       try {
         const data = await adminService.getSettlements({
           startDate: appliedSettStart || undefined,
@@ -211,6 +221,7 @@ const FinancialsManagement = () => {
         if (isActive) {
           clientLogger.error('Failed to load settlements:', error);
           const errorMessage = extractErrorMessage(error, 'Failed to load settlements');
+          setSettlementsError(errorMessage);
           toast.error(errorMessage);
         }
       } finally {
@@ -233,6 +244,7 @@ const FinancialsManagement = () => {
     let isActive = true;
     const loadAutoReports = async () => {
       setAutoReportLoading(true);
+      setAutoReportError(null);
       try {
         const [summary, settlements] = await Promise.all([
           adminService.getFinancialReportSummary(),
@@ -246,7 +258,9 @@ const FinancialsManagement = () => {
       } catch (error: unknown) {
         if (isActive) {
           clientLogger.error('Failed to load auto-reports:', error);
-          toast.error(extractErrorMessage(error, 'Failed to load auto-reports'));
+          const message = extractErrorMessage(error, 'Failed to load auto-reports');
+          setAutoReportError(message);
+          toast.error(message);
         }
       } finally {
         if (isActive) setAutoReportLoading(false);
@@ -486,6 +500,20 @@ const FinancialsManagement = () => {
               <div className="flex items-center justify-center py-20">
                 <div className="spinner" />
               </div>
+            ) : paymentsError ? (
+              <div className="card text-center py-12 space-y-3">
+                <AlertCircle className="w-10 h-10 text-red-500 mx-auto" />
+                <p className="font-bold text-gray-900">Unable to load payment records</p>
+                <p className="text-sm text-gray-600">{paymentsError}</p>
+                <button
+                  type="button"
+                  onClick={() => setPaymentsRequestKey((k) => k + 1)}
+                  className="btn-primary btn-sm inline-flex items-center gap-1.5"
+                >
+                  <RefreshCcw className="w-4 h-4" />
+                  Retry
+                </button>
+              </div>
             ) : (
               <>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
@@ -525,7 +553,7 @@ const FinancialsManagement = () => {
                     <button
                       type="button"
                       className="btn btn-outline flex items-center gap-2"
-                      onClick={() => exportCSV(visiblePayments,
+                      onClick={() => exportCSV(stats?.recentPayments || [],
                         ['Paid At','User','Course','Amount','Platform','Teacher','Status'],
                         (payment) => [
                           payment.paidAt ? new Date(payment.paidAt).toLocaleString() : '-',
@@ -624,6 +652,14 @@ const FinancialsManagement = () => {
                   placeholder="Search by name or email"
                   value={commissionSearch}
                   onChange={(e) => setCommissionSearch(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      setCommissionPage(1);
+                      setAppliedCommissionSearch(commissionSearch.trim());
+                      setCommissionRequestKey((currentKey) => currentKey + 1);
+                    }
+                  }}
                   className="input py-2"
                 />
                 <button
@@ -631,12 +667,26 @@ const FinancialsManagement = () => {
                   className="btn btn-primary"
                   onClick={() => {
                     setCommissionPage(1);
-                    setAppliedCommissionSearch(commissionSearch);
+                    setAppliedCommissionSearch(commissionSearch.trim());
                     setCommissionRequestKey((currentKey) => currentKey + 1);
                   }}
                 >
                   Search
                 </button>
+                {(commissionSearch || appliedCommissionSearch) && (
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    onClick={() => {
+                      setCommissionSearch('');
+                      setAppliedCommissionSearch('');
+                      setCommissionPage(1);
+                      setCommissionRequestKey((currentKey) => currentKey + 1);
+                    }}
+                  >
+                    Clear
+                  </button>
+                )}
               </div>
               <div className="flex items-center gap-2">
                 <label className="text-sm text-gray-600">Per page</label>
@@ -672,6 +722,19 @@ const FinancialsManagement = () => {
                     <tr>
                       <td colSpan={7} className="px-6 py-10 text-center">
                         <div className="spinner mx-auto" />
+                      </td>
+                    </tr>
+                  ) : commissionsError ? (
+                    <tr>
+                      <td colSpan={7} className="px-6 py-10 text-center space-y-2">
+                        <p className="text-sm font-medium text-red-700">{commissionsError}</p>
+                        <button
+                          type="button"
+                          onClick={() => setCommissionRequestKey((k) => k + 1)}
+                          className="btn-outline btn-sm"
+                        >
+                          Retry
+                        </button>
                       </td>
                     </tr>
                   ) : commissionRows.length === 0 ? (
@@ -719,20 +782,23 @@ const FinancialsManagement = () => {
                           <td className="px-6 py-4 whitespace-nowrap text-right text-sm">
                             <button
                               type="button"
+                              disabled={savingTeacherId === t.id}
                               className="btn btn-primary btn-sm"
                               onClick={async () => {
+                                if (savingTeacherId) return;
+                                const value: number | null =
+                                  editing[key] !== undefined
+                                    ? editing[key]
+                                    : (t.teacherProfile?.commissionRate ?? null);
+                                if (
+                                  value !== null &&
+                                  (!Number.isFinite(value) || value < 0 || value > 100)
+                                ) {
+                                  toast.error('Commission rate must be between 0 and 100');
+                                  return;
+                                }
+                                setSavingTeacherId(t.id);
                                 try {
-                                  const value: number | null =
-                                    editing[key] !== undefined
-                                      ? editing[key]
-                                      : (t.teacherProfile?.commissionRate ?? null);
-                                  if (
-                                    value !== null &&
-                                    (!Number.isFinite(value) || value < 0 || value > 100)
-                                  ) {
-                                    toast.error('Commission rate must be between 0 and 100');
-                                    return;
-                                  }
                                   await adminService.updateTeacherCommission(t.id, value);
                                   toast.success('Commission saved');
                                   setEditing((prev) => {
@@ -745,10 +811,12 @@ const FinancialsManagement = () => {
                                   clientLogger.error('Failed to save commission:', error);
                                   const errorMessage = extractErrorMessage(error, 'Failed to save commission');
                                   toast.error(errorMessage);
+                                } finally {
+                                  setSavingTeacherId(null);
                                 }
                               }}
                             >
-                              Save
+                              {savingTeacherId === t.id ? 'Saving...' : 'Save'}
                             </button>
                           </td>
                         </tr>
@@ -872,6 +940,19 @@ const FinancialsManagement = () => {
                 <tbody className="divide-y divide-gray-100">
                   {settLoading ? (
                     <tr><td colSpan={6} className="px-6 py-10 text-center"><div className="spinner mx-auto" /></td></tr>
+                  ) : settlementsError ? (
+                    <tr>
+                      <td colSpan={6} className="px-6 py-10 text-center space-y-2">
+                        <p className="text-sm font-medium text-red-700">{settlementsError}</p>
+                        <button
+                          type="button"
+                          onClick={() => setSettlementRequestKey((k) => k + 1)}
+                          className="btn-outline btn-sm"
+                        >
+                          Retry
+                        </button>
+                      </td>
+                    </tr>
                   ) : settRows.length === 0 ? (
                     <tr><td colSpan={6} className="px-6 py-8 text-center text-gray-500">No data</td></tr>
                   ) : (
@@ -919,6 +1000,20 @@ const FinancialsManagement = () => {
                   <div className="spinner" />
                   <p className="text-gray-600 font-medium">Generating automated reports...</p>
                 </div>
+              </div>
+            ) : autoReportError ? (
+              <div className="card text-center py-12 space-y-3">
+                <AlertCircle className="w-10 h-10 text-red-500 mx-auto" />
+                <p className="font-bold text-gray-900">Unable to load automated financial reports</p>
+                <p className="text-sm text-gray-600">{autoReportError}</p>
+                <button
+                  type="button"
+                  onClick={() => setAutoReportRequestKey((k) => k + 1)}
+                  className="btn-primary btn-sm inline-flex items-center gap-1.5"
+                >
+                  <RefreshCcw className="w-4 h-4" />
+                  Retry
+                </button>
               </div>
             ) : (
               <>

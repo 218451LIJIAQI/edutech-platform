@@ -97,7 +97,11 @@ const PackageModal: FC<PackageModalProps> = ({
     isOpen: true,
     containerRef: modalRef,
     initialFocusRef: nameInputRef,
-    onClose,
+    onClose: () => {
+      if (!isSubmitting) {
+        onClose();
+      }
+    },
     trapFocus: true,
     lockBodyScroll: true,
   });

@@ -5,7 +5,7 @@ export type CourseEditorTabId = 'basic' | 'lessons' | 'packages' | 'materials';
 export type MediaSourceType = 'upload' | 'link';
 export type MaterialSourceType = MediaSourceType;
 
-export type NumericFormValue = number | string;
+type NumericFormValue = number | string;
 
 export interface CourseFormData {
   title: string;
@@ -31,9 +31,9 @@ export interface MaterialFormData {
   isDownloadable: boolean;
 }
 
-export type PendingDeleteKind = 'lesson' | 'package' | 'material';
+type PendingDeleteKind = 'lesson' | 'package' | 'material';
 
-export interface PendingDeleteTarget {
+interface PendingDeleteTarget {
   kind: PendingDeleteKind;
   id: string;
   label: string;

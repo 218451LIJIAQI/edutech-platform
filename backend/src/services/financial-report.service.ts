@@ -28,12 +28,12 @@ export {
   type TeacherSettlement,
 } from "./shared/settlement-calculator";
 
-export interface DateRangeFilter {
+interface DateRangeFilter {
   startDate?: string;
   endDate?: string;
 }
 
-export interface FinancialSummary {
+interface FinancialSummary {
   period: string;
   totalRevenue: number;
   platformEarnings: number;
@@ -44,7 +44,7 @@ export interface FinancialSummary {
   refundCount: number;
 }
 
-export interface FinancialReportSummary {
+interface FinancialReportSummary {
   daily: FinancialSummary;
   weekly: FinancialSummary;
   monthly: FinancialSummary;

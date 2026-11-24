@@ -5,11 +5,13 @@ import {
   parseNullableString,
   parseOptionalBoolean,
   parseOptionalEnum,
+  parsePositiveAmount,
   parseQueryNonNegativeInt,
   parseQueryPositiveInt,
   parseRequiredString,
   parseStringArray,
 } from "../utils/http";
+import { extractUploadPathFromUrlOrPath } from "../utils/url-or-path";
 import {
   buildPaginationMeta,
   normalizeOffsetPagination,
@@ -47,6 +49,20 @@ describe("HTTP parsing and shared service utilities", () => {
     );
     assert.throws(() => parseQueryPositiveInt("0", "page"));
     assert.throws(() => parseQueryNonNegativeInt("-1", "offset"));
+  });
+
+  it("rounds positive currency amounts to cents before enforcing min 0.01 and max bounds", () => {
+    assert.equal(parsePositiveAmount("12.345", "amount"), 12.35);
+    assert.throws(
+      () => parsePositiveAmount("0.004", "amount"),
+      /must be at least 0\.01/i,
+    );
+    assert.throws(
+      () => parsePositiveAmount(100.006, "amount", { max: 100 }),
+      /must not exceed 100/i,
+    );
+    assert.equal(parsePositiveAmount(100.004, "amount", { max: 100 }), 100);
+    assert.equal(parsePositiveAmount(99.995, "amount", { max: 100 }), 100);
   });
 
   it("parses booleans, enums, string arrays, and date-only end-of-day ranges", () => {
@@ -93,5 +109,46 @@ describe("HTTP parsing and shared service utilities", () => {
     assert.equal(toNumber(fakeDecimal), 19.995);
     assert.equal(roundMoney(fakeDecimal), 20);
     assert.equal(toNullableNumber(null), null);
+  });
+
+  it("extracts upload paths safely while stripping query/hash and preserving third-party origins", () => {
+    const prevApiUrl = process.env.API_URL;
+    process.env.API_URL = "https://api.flexilearn.example.com/api/v1";
+    try {
+      assert.equal(
+        extractUploadPathFromUrlOrPath(
+          "/uploads/materials/syllabus%20v1.pdf?download=1#page=2",
+        ),
+        "materials/syllabus v1.pdf",
+      );
+      assert.equal(
+        extractUploadPathFromUrlOrPath(
+          "http://localhost:3000/uploads/avatars/teacher.png?v=2",
+        ),
+        "avatars/teacher.png",
+      );
+      assert.equal(
+        extractUploadPathFromUrlOrPath(
+          "https://api.flexilearn.example.com/uploads/thumbnails/course.webp",
+        ),
+        "thumbnails/course.webp",
+      );
+      assert.equal(
+        extractUploadPathFromUrlOrPath(
+          "https://cdn.thirdparty.org/uploads/thumbnails/course.webp",
+        ),
+        null,
+      );
+      assert.equal(
+        extractUploadPathFromUrlOrPath("/uploads/materials/../secrets.txt"),
+        null,
+      );
+    } finally {
+      if (prevApiUrl === undefined) {
+        delete process.env.API_URL;
+      } else {
+        process.env.API_URL = prevApiUrl;
+      }
+    }
   });
 });

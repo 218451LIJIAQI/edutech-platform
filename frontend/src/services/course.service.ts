@@ -52,11 +52,12 @@ export type MaterialUpdatePayload = Omit<Partial<Material>, 'description'> & {
   description?: string | null;
 };
 
-export interface CreateLiveSessionPayload {
+interface CreateLiveSessionPayload {
   title: string;
   description?: string;
   scheduledAt: string;
   duration: number;
+  meetingUrl?: string;
   maxParticipants?: number;
 }
 

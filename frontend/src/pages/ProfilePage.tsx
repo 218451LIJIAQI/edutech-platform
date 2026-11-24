@@ -10,6 +10,7 @@ import { useOverlayAccessibility, usePageTitle } from '@/hooks';
 import { extractErrorMessage } from '@/utils/error-handler';
 import ConfirmationModal from '@/components/common/ConfirmationModal';
 import { normalizeSafeHttpUrl } from '@/utils/safe-url';
+import { toStorableBackendAssetPath } from '@/utils/runtime';
 
 const PASSWORD_COMPLEXITY = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).+$/;
 
@@ -116,14 +117,19 @@ const ProfilePage = () => {
   };
 
   const handleSave = async () => {
-    if (!formData.firstName.trim() || !formData.lastName.trim()) {
+    const trimmedFirstName = formData.firstName.trim();
+    const trimmedLastName = formData.lastName.trim();
+    if (!trimmedFirstName || !trimmedLastName) {
       toast.error('First name and last name are required');
       return;
     }
 
     setIsSaving(true);
     try {
-      await updateProfile(formData);
+      await updateProfile({
+        firstName: trimmedFirstName,
+        lastName: trimmedLastName,
+      });
       setIsEditing(false);
       toast.success('Profile updated successfully');
     } catch (error) {
@@ -261,11 +267,13 @@ const ProfilePage = () => {
                         accept="image/*"
                         hidden
                         onChange={async (e) => {
-                          if (!e.target.files || !e.target.files[0]) return;
+                          const file = e.target.files?.[0];
+                          e.target.value = '';
+                          if (!file) return;
                           setIsUploadingAvatar(true);
                           try {
-                            const url = await uploadService.uploadAvatar(e.target.files[0]);
-                            await updateProfile({ avatar: url });
+                            const url = await uploadService.uploadAvatar(file);
+                            await updateProfile({ avatar: toStorableBackendAssetPath(url) });
                             setAvatarUrlInput('');
                             toast.success('Avatar updated');
                           } catch (error) {
@@ -457,27 +465,29 @@ const ProfilePage = () => {
           </div>
         </div>
 
-        {/* Danger Zone */}
-          <div className="card border-2 border-red-200 mt-6 bg-gradient-to-r from-red-50 to-red-100">
-            <h2 className="text-2xl font-bold text-red-700 mb-6">Danger Zone</h2>
-          <div className="space-y-4">
-              <div className="flex items-center justify-between p-4 bg-red-100 rounded-xl border border-red-300">
-              <div>
-                  <p className="font-bold text-red-900">Delete Account</p>
-                  <p className="text-sm text-red-700 mt-1">
-                  Permanently delete your account and all associated data
-                </p>
-              </div>
-              <button
-                type="button"
-                className="btn-danger btn-sm inline-flex items-center gap-2"
-                onClick={() => setShowDeleteAccountModal(true)}
-              >
-                <Trash2 className="w-4 h-4" /> Delete Account
-              </button>
+        {/* Danger Zone (hidden for protected Admin accounts) */}
+          {user?.role !== 'ADMIN' && (
+            <div className="card border-2 border-red-200 mt-6 bg-gradient-to-r from-red-50 to-red-100">
+              <h2 className="text-2xl font-bold text-red-700 mb-6">Danger Zone</h2>
+              <div className="space-y-4">
+                <div className="flex items-center justify-between gap-4 p-4 bg-red-100 rounded-xl border border-red-300">
+                  <div>
+                    <p className="font-bold text-red-900">Delete Account</p>
+                    <p className="text-sm text-red-700 mt-1">
+                      Permanently delete your account and all associated data
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    className="btn-danger btn-sm inline-flex items-center gap-2 shrink-0"
+                    onClick={() => setShowDeleteAccountModal(true)}
+                  >
+                    <Trash2 className="w-4 h-4" /> Delete Account
+                  </button>
+                </div>
               </div>
             </div>
-          </div>
+          )}
         </div>
       </div>
     </div>
@@ -487,8 +497,8 @@ const ProfilePage = () => {
       <div
         className="fixed inset-0 bg-slate-950/55 backdrop-blur-sm flex items-center justify-center z-50 p-4"
         onMouseDown={(event) => {
-          if (event.target === event.currentTarget && !pwdSaving) {
-            setShowPwdModal(false);
+          if (event.target === event.currentTarget) {
+            closePasswordModal();
           }
         }}
       >

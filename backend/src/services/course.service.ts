@@ -15,6 +15,7 @@ import { buildProtectedAssetDescriptor } from "../utils/protected-asset";
 import { sanitizeUserPlainText } from "../utils/sanitize-user-content";
 import { ensureUrlOrUploadPathForFolders } from "../utils/url-or-path";
 import notificationService from "./notification.service";
+import { broadcastLiveSessionStatusChange } from "../socket/live-session.handler";
 import { buildPaginationMeta, normalizePagination } from "./shared/pagination";
 import { buildCurrentEnrollmentWhere } from "./shared/enrollment-access";
 import {
@@ -533,7 +534,7 @@ const normalizePackageCreateData = (data: {
   };
 };
 
-export const normalizePackageUpdateData = (
+const normalizePackageUpdateData = (
   currentPackage: {
     price: unknown;
     discount: unknown | null;
@@ -915,8 +916,12 @@ class CourseService {
     const isCourseOwnerOrAdmin =
       requester?.role === "ADMIN" ||
       requester?.teacherProfile?.id === course.teacherProfileId;
+    const isPubliclyAccessible =
+      course.isPublished &&
+      course.teacherProfile.registrationStatus === "APPROVED" &&
+      course.teacherProfile.user.isActive;
 
-    if (!course.isPublished && !isCourseOwnerOrAdmin && !isEnrolled) {
+    if (!isPubliclyAccessible && !isCourseOwnerOrAdmin && !isEnrolled) {
       throw new NotFoundError("Course not found");
     }
 
@@ -931,11 +936,15 @@ class CourseService {
       canManageMaterials: isCourseOwnerOrAdmin,
     });
 
+    const { isActive: _teacherUserActive, ...publicTeacherUser } =
+      mappedCourse.teacherProfile.user;
+
     return {
       ...mappedCourse,
       _count: courseWithCount._count,
       teacherProfile: {
         ...mappedCourse.teacherProfile,
+        user: publicTeacherUser,
         totalStudents: actualTeacherStudentCount,
       },
     };
@@ -1214,6 +1223,12 @@ class CourseService {
           select: {
             id: true,
             isPublished: true,
+            teacherProfile: {
+              select: {
+                registrationStatus: true,
+                user: { select: { isActive: true } },
+              },
+            },
           },
         },
       },
@@ -1234,7 +1249,13 @@ class CourseService {
       select: { id: true },
     });
 
-    if (!enrollment && (!lesson.isFree || !lesson.course.isPublished)) {
+    const canAccessFreePublishedLesson =
+      lesson.isFree &&
+      lesson.course.isPublished &&
+      lesson.course.teacherProfile.registrationStatus === "APPROVED" &&
+      lesson.course.teacherProfile.user.isActive;
+
+    if (!enrollment && !canAccessFreePublishedLesson) {
       throw new AuthorizationError(
         "You must be enrolled in this course to take the quiz",
       );
@@ -1303,7 +1324,16 @@ class CourseService {
     const [course, activeEnrollment] = await Promise.all([
       prisma.course.findUnique({
         where: { id: normalizedCourseId },
-        select: { id: true, isPublished: true },
+        select: {
+          id: true,
+          isPublished: true,
+          teacherProfile: {
+            select: {
+              registrationStatus: true,
+              user: { select: { isActive: true } },
+            },
+          },
+        },
       }),
       prisma.enrollment.findFirst({
         where: buildCurrentEnrollmentWhere(
@@ -1321,7 +1351,12 @@ class CourseService {
       throw new NotFoundError("Course not found");
     }
 
-    if (!activeEnrollment && !course.isPublished) {
+    const isCoursePublic =
+      course.isPublished &&
+      course.teacherProfile.registrationStatus === "APPROVED" &&
+      course.teacherProfile.user.isActive;
+
+    if (!activeEnrollment && !isCoursePublic) {
       throw new AuthorizationError(
         "You do not have active access to this course",
       );
@@ -1355,6 +1390,12 @@ class CourseService {
           id: true,
           isPublished: true,
           teacherProfileId: true,
+          teacherProfile: {
+            select: {
+              registrationStatus: true,
+              user: { select: { isActive: true } },
+            },
+          },
         },
       }),
       prisma.user.findUnique({
@@ -1385,7 +1426,12 @@ class CourseService {
       requester?.teacherProfile?.id === course.teacherProfileId;
     const isEnrolled = Boolean(activeEnrollment);
 
-    if (!isOwnerOrAdmin && !isEnrolled && !course.isPublished) {
+    const isCoursePublic =
+      course.isPublished &&
+      course.teacherProfile.registrationStatus === "APPROVED" &&
+      course.teacherProfile.user.isActive;
+
+    if (!isOwnerOrAdmin && !isEnrolled && !isCoursePublic) {
       throw new NotFoundError("Course not found");
     }
 
@@ -1585,9 +1631,13 @@ class CourseService {
       );
     }
 
-    return prisma.liveSession.findUniqueOrThrow({
+    const updatedSession = await prisma.liveSession.findUniqueOrThrow({
       where: { id: normalizedSessionId },
     });
+
+    broadcastLiveSessionStatusChange(updatedSession, userId.trim());
+
+    return updatedSession;
   }
 
   async createPackage(
@@ -1797,7 +1847,7 @@ class CourseService {
 
   async getCategories() {
     const courses = await prisma.course.findMany({
-      where: { isPublished: true },
+      where: buildPublishedCourseWhere(),
       select: { category: true },
       distinct: ["category"],
       orderBy: { category: "asc" },

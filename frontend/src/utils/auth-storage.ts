@@ -256,11 +256,11 @@ export function extractBearerToken(authorizationHeader?: unknown): string | null
   return match?.[1]?.trim() || null;
 }
 
-export function shouldClearSessionOnRefreshFailure(httpStatus?: number): boolean {
+function shouldClearSessionOnRefreshFailure(httpStatus?: number): boolean {
   return httpStatus === 401 || httpStatus === 403;
 }
 
-export interface TokenRefreshCoordinatorDeps {
+interface TokenRefreshCoordinatorDeps {
   getCurrentToken: () => string | null;
   setCurrentToken: (token: string) => void;
   performRefreshRequest: () => Promise<string | null>;

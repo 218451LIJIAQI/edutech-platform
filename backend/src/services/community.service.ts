@@ -2,7 +2,7 @@ import { Prisma } from "@prisma/client";
 import prisma from "../config/database";
 import { BadRequestError, NotFoundError } from "../utils/errors";
 import { sanitizeUserPlainText } from "../utils/sanitize-user-content";
-import { normalizePagination } from "./shared/pagination";
+import { buildPaginationMeta, normalizePagination } from "./shared/pagination";
 import { isPrismaErrorCode } from "./shared/service-helpers";
 
 type CommunityFeedTab = "hot" | "new" | "weekly";
@@ -457,12 +457,7 @@ const queryHydratedPosts = async (params: {
         bookmarkedPostIds.has(post.id),
       ),
     ),
-    pagination: {
-      total,
-      page,
-      limit,
-      totalPages: Math.ceil(total / limit) || 1,
-    },
+    pagination: buildPaginationMeta(total, page, limit),
   };
 };
 
@@ -609,16 +604,12 @@ const communityService = {
         !TAG_NAME_PATTERN.test(normalizedTag)
       ) {
         const pagination = normalizePagination(params.page, params.limit, {
-          defaultPage: DEFAULT_PAGE,
           defaultLimit: DEFAULT_LIMIT,
           maxLimit: MAX_LIMIT,
         });
         return {
           items: [],
-          total: 0,
-          page: pagination.page,
-          limit: pagination.limit,
-          totalPages: 0,
+          pagination: buildPaginationMeta(0, pagination.page, pagination.limit),
         };
       }
       where.tags = {

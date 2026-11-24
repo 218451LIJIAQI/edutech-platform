@@ -33,10 +33,11 @@ import type {
 } from '@/services/wallet.service';
 import { extractErrorMessage } from '@/utils/error-handler';
 import { resolveWalletDisputeSummary } from '@/utils/enrollment';
+import { formatCurrency, roundCurrency } from '@/utils/helpers';
 import ConfirmationModal from '@/components/common/ConfirmationModal';
 
-const currency = (v: number, ccy = 'USD') =>
-  new Intl.NumberFormat(undefined, { style: 'currency', currency: ccy }).format(v || 0);
+const currency = (v: number, ccy = 'USD') => formatCurrency(v, ccy);
+const PAGE_LIMIT = 20;
 const emptyTransactions: WalletTransactionListResponse = {
   items: [],
   total: 0,
@@ -127,6 +128,8 @@ const WalletPage = () => {
 
   const [txnType, setTxnType] = useState<string>('');
   const [txnSource, setTxnSource] = useState<string>('');
+  const [txnOffset, setTxnOffset] = useState<number>(0);
+  const [payoutOffset, setPayoutOffset] = useState<number>(0);
 
   const [methodModalOpen, setMethodModalOpen] = useState(false);
   const [payoutModalOpen, setPayoutModalOpen] = useState(false);
@@ -263,12 +266,13 @@ const WalletPage = () => {
           await Promise.all([
             walletService.getMySummary(),
             walletService.getMyTransactions({
-              limit: 20,
+              limit: PAGE_LIMIT,
+              offset: txnOffset,
               type: txnType ? (txnType as WalletTransactionType) : undefined,
               source: txnSource ? (txnSource as WalletTransactionSource) : undefined,
             }),
             walletService.listPayoutMethods(),
-            walletService.listMyPayouts({ limit: 20 }),
+            walletService.listMyPayouts({ limit: PAGE_LIMIT, offset: payoutOffset }),
           ]);
 
         if (!isActive) {
@@ -302,7 +306,7 @@ const WalletPage = () => {
     return () => {
       isActive = false;
     };
-  }, [reloadKey, txnType, txnSource]);
+  }, [reloadKey, txnType, txnSource, txnOffset, payoutOffset]);
 
   const submitPayout = async () => {
     if (!summary) return;
@@ -312,11 +316,15 @@ const WalletPage = () => {
     }
 
     const parsedAmount = Number(payoutAmountInput);
-    if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
+    if (!Number.isFinite(parsedAmount)) {
       toast.error('Enter a valid payout amount greater than $0.00');
       return;
     }
-    const roundedAmount = Math.round(parsedAmount * 100) / 100;
+    const roundedAmount = roundCurrency(parsedAmount);
+    if (roundedAmount < 0.01) {
+      toast.error('Minimum payout amount is $0.01');
+      return;
+    }
 
     if (roundedAmount > withdrawableBalance) {
       if (reservedForRefunds > 0) {
@@ -359,11 +367,24 @@ const WalletPage = () => {
       return;
     }
     setIsSubmitting(true);
+    const cleanedDetails: PayoutMethodDetails =
+      methodType === PayoutMethodType.BANK_TRANSFER
+        ? {
+            bankName: getMethodDetailValue('bankName').trim(),
+            accountName: getMethodDetailValue('accountName').trim(),
+            accountNo: getMethodDetailValue('accountNo').trim(),
+          }
+        : {
+            walletId: getMethodDetailValue('walletId').trim(),
+            ...(getMethodDetailValue('holder').trim()
+              ? { holder: getMethodDetailValue('holder').trim() }
+              : {}),
+          };
     try {
       await walletService.addPayoutMethod({
         type: methodType,
-        label: methodLabel,
-        details: methodDetails,
+        label: methodLabel.trim(),
+        details: cleanedDetails,
         isDefault: methodIsDefault,
       });
       toast.success('Payout method added');
@@ -478,7 +499,7 @@ const WalletPage = () => {
         )}
 
         {/* Summary KPI Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5 mb-8">
+        <div className="grid grid-cols-1 sm:grid-cols-2 2xl:grid-cols-4 gap-5 mb-8">
           <div className="card bg-gradient-to-br from-emerald-600 to-teal-700 text-white border-0">
             <div className="flex items-center justify-between mb-3">
               <span className="text-emerald-100 text-xs font-bold uppercase tracking-wider">
@@ -488,7 +509,7 @@ const WalletPage = () => {
                 <DollarSign className="w-5 h-5" />
               </div>
             </div>
-            <div className="text-3xl font-bold tabular-nums">
+            <div className="text-2xl xl:text-3xl font-bold tabular-nums">
               {currency(withdrawableBalance, summary?.currency)}
             </div>
             <p className="mt-2 text-xs text-emerald-100 tabular-nums">
@@ -679,6 +700,38 @@ const WalletPage = () => {
                     ))}
                   </tbody>
                 </table>
+                {payouts.total > PAGE_LIMIT && (
+                  <div className="mt-4 pt-3 border-t border-slate-200 flex items-center justify-between text-xs text-slate-600 tabular-nums">
+                    <span>
+                      Showing {payoutOffset + 1}&ndash;
+                      {Math.min(payoutOffset + payouts.items.length, payouts.total)} of{' '}
+                      {payouts.total}
+                    </span>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        disabled={payoutOffset <= 0 || isTransactionsRefreshing}
+                        onClick={() =>
+                          setPayoutOffset((prev) => Math.max(0, prev - PAGE_LIMIT))
+                        }
+                        className="btn-secondary btn-sm"
+                      >
+                        Previous
+                      </button>
+                      <button
+                        type="button"
+                        disabled={
+                          payoutOffset + PAGE_LIMIT >= payouts.total ||
+                          isTransactionsRefreshing
+                        }
+                        onClick={() => setPayoutOffset((prev) => prev + PAGE_LIMIT)}
+                        className="btn-primary btn-sm"
+                      >
+                        Next
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             ) : (
               <div className="text-sm text-slate-600 py-6 text-center">
@@ -698,7 +751,10 @@ const WalletPage = () => {
               ) : null}
               <select
                 value={txnType}
-                onChange={(e) => setTxnType(e.target.value)}
+                onChange={(e) => {
+                  setTxnType(e.target.value);
+                  setTxnOffset(0);
+                }}
                 className="input py-2 w-40"
                 aria-label="Filter by transaction type"
               >
@@ -711,7 +767,10 @@ const WalletPage = () => {
               </select>
               <select
                 value={txnSource}
-                onChange={(e) => setTxnSource(e.target.value)}
+                onChange={(e) => {
+                  setTxnSource(e.target.value);
+                  setTxnOffset(0);
+                }}
                 className="input py-2 w-44"
                 aria-label="Filter by source"
               >
@@ -729,6 +788,7 @@ const WalletPage = () => {
                   onClick={() => {
                     setTxnType('');
                     setTxnSource('');
+                    setTxnOffset(0);
                   }}
                 >
                   Clear
@@ -775,6 +835,36 @@ const WalletPage = () => {
                   })}
                 </tbody>
               </table>
+              {txns.total > PAGE_LIMIT && (
+                <div className="mt-4 pt-3 border-t border-slate-200 flex items-center justify-between text-xs text-slate-600 tabular-nums">
+                  <span>
+                    Showing {txnOffset + 1}&ndash;
+                    {Math.min(txnOffset + txns.items.length, txns.total)} of {txns.total}
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      disabled={txnOffset <= 0 || isTransactionsRefreshing}
+                      onClick={() =>
+                        setTxnOffset((prev) => Math.max(0, prev - PAGE_LIMIT))
+                      }
+                      className="btn-secondary btn-sm"
+                    >
+                      Previous
+                    </button>
+                    <button
+                      type="button"
+                      disabled={
+                        txnOffset + PAGE_LIMIT >= txns.total || isTransactionsRefreshing
+                      }
+                      onClick={() => setTxnOffset((prev) => prev + PAGE_LIMIT)}
+                      className="btn-primary btn-sm"
+                    >
+                      Next
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -816,7 +906,10 @@ const WalletPage = () => {
                 <label className="block text-sm font-semibold text-slate-700 mb-1.5">Type</label>
                 <select
                   value={methodType}
-                  onChange={(e) => setMethodType(e.target.value as PayoutMethodType)}
+                  onChange={(e) => {
+                    setMethodType(e.target.value as PayoutMethodType);
+                    setMethodDetails(emptyMethodDetails);
+                  }}
                   className="input"
                   aria-label="Payout method type"
                 >

@@ -41,6 +41,58 @@ const isRootRelativePath = (value: string): boolean => {
   return value.startsWith("/") && !value.startsWith("//");
 };
 
+const stripQueryAndHash = (value: string): string => {
+  const queryIndex = value.indexOf("?");
+  const hashIndex = value.indexOf("#");
+  const cutIndex =
+    queryIndex >= 0 && hashIndex >= 0
+      ? Math.min(queryIndex, hashIndex)
+      : queryIndex >= 0
+        ? queryIndex
+        : hashIndex;
+
+  return cutIndex >= 0 ? value.slice(0, cutIndex) : value;
+};
+
+const resolveTrustedLocalUploadOrigins = (): Set<string> => {
+  const origins = new Set<string>();
+  const rawCandidates = [
+    process.env.API_URL,
+    process.env.BACKEND_URL,
+    process.env.FRONTEND_URL,
+    process.env.PUBLIC_URL,
+    process.env.RENDER_EXTERNAL_URL,
+    ...(process.env.ALLOWED_ORIGINS?.split(",") ?? []),
+    ...(process.env.CORS_ORIGIN?.split(",") ?? []),
+  ];
+
+  for (const candidate of rawCandidates) {
+    const trimmed = candidate?.trim();
+    if (!trimmed) continue;
+    try {
+      origins.add(new URL(trimmed).origin.toLowerCase());
+    } catch {
+      // Ignore malformed env origin entries.
+    }
+  }
+
+  return origins;
+};
+
+const isTrustedUploadUrlOrigin = (url: URL): boolean => {
+  const hostname = url.hostname.toLowerCase();
+  if (
+    hostname === "localhost" ||
+    hostname === "127.0.0.1" ||
+    hostname === "[::1]"
+  ) {
+    return true;
+  }
+
+  const trustedOrigins = resolveTrustedLocalUploadOrigins();
+  return trustedOrigins.has(url.origin.toLowerCase());
+};
+
 export const extractUploadPathFromUrlOrPath = (
   value: string,
 ): string | null => {
@@ -53,9 +105,13 @@ export const extractUploadPathFromUrlOrPath = (
   let pathname: string;
 
   if (isHttpUrl(trimmedValue)) {
-    pathname = new URL(trimmedValue).pathname;
+    const parsedUrl = new URL(trimmedValue);
+    if (!isTrustedUploadUrlOrigin(parsedUrl)) {
+      return null;
+    }
+    pathname = parsedUrl.pathname;
   } else if (isRootRelativePath(trimmedValue)) {
-    pathname = trimmedValue;
+    pathname = stripQueryAndHash(trimmedValue);
   } else {
     return null;
   }

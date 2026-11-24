@@ -5,74 +5,59 @@ const API_BASE_URL = getApiBaseUrl().replace(/\/$/, '');
 const HEALTH_CHECK_URL = `${API_BASE_URL}/health`;
 const HEALTH_CHECK_TIMEOUT_MS = 4000;
 
-interface OnlineStatus {
-  /** Whether the browser is online */
+interface OnlineStatusState {
   isOnline: boolean;
-  /** Whether the status is being determined */
   isLoading: boolean;
-  /** Whether an active connectivity check is running */
   isChecking: boolean;
-  /** Timestamp of the last status change */
   lastChanged: Date | null;
-  /** Time since last online (in ms), null if currently online */
   offlineDuration: number | null;
+}
+
+interface OnlineStatus extends OnlineStatusState {
   /** Re-check browser and API connectivity */
   checkConnection: () => Promise<boolean>;
 }
 
 /**
- * useOnlineStatus Hook
- * Monitors the browser's online/offline status with additional metadata
- *
- * @returns OnlineStatus object with isOnline, isLoading, isChecking, lastChanged,
- * offlineDuration, and checkConnection()
- *
- * @example
- * const { isOnline, offlineDuration } = useOnlineStatus();
- *
- * if (!isOnline) {
- *   return <OfflineBanner duration={offlineDuration} />;
- * }
+ * Monitors browser and backend API reachability without false-offline lockups on LAN/localhost setups.
  */
 function useOnlineStatus(): OnlineStatus {
-  const [status, setStatus] = useState<OnlineStatus>({
-    isOnline: typeof navigator !== 'undefined' ? navigator.onLine : true,
+  const [status, setStatus] = useState<OnlineStatusState>(() => ({
+    isOnline: true,
     isLoading: true,
     isChecking: false,
     lastChanged: null,
     offlineDuration: null,
-    checkConnection: async () => true,
-  });
+  }));
 
   const updateOnlineStatus = useCallback((online: boolean, isChecking = false) => {
-    setStatus(prev => ({
-      isOnline: online,
-      isLoading: false,
-      isChecking,
-      lastChanged: prev.isOnline === online ? prev.lastChanged : new Date(),
-      offlineDuration: online
-        ? null
-        : (prev.lastChanged ? Date.now() - prev.lastChanged.getTime() : 0),
-      checkConnection: prev.checkConnection,
-    }));
+    setStatus((prev) => {
+      const changedAt = prev.isOnline === online ? prev.lastChanged : new Date();
+      return {
+        isOnline: online,
+        isLoading: false,
+        isChecking,
+        lastChanged: changedAt,
+        offlineDuration: online
+          ? null
+          : changedAt
+            ? Math.max(0, Date.now() - changedAt.getTime())
+            : 0,
+      };
+    });
   }, []);
 
   const checkConnection = useCallback(async (): Promise<boolean> => {
-    if (typeof navigator !== 'undefined' && !navigator.onLine) {
-      updateOnlineStatus(false);
-      return false;
-    }
-
-    setStatus(prev => ({
-      ...prev,
-      isLoading: false,
-      isChecking: true,
-    }));
-
     if (typeof window === 'undefined') {
       updateOnlineStatus(true);
       return true;
     }
+
+    setStatus((prev) => ({
+      ...prev,
+      isLoading: false,
+      isChecking: true,
+    }));
 
     const controller = new AbortController();
     const timeoutId = window.setTimeout(() => controller.abort(), HEALTH_CHECK_TIMEOUT_MS);
@@ -98,15 +83,6 @@ function useOnlineStatus(): OnlineStatus {
   }, [updateOnlineStatus]);
 
   useEffect(() => {
-    // Set initial state
-    setStatus(prev => ({
-      ...prev,
-      isOnline: navigator.onLine,
-      isLoading: false,
-      isChecking: false,
-      checkConnection,
-    }));
-
     const handleOnline = () => {
       void checkConnection();
     };
@@ -115,11 +91,7 @@ function useOnlineStatus(): OnlineStatus {
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
 
-    if (navigator.onLine) {
-      void checkConnection();
-    } else {
-      updateOnlineStatus(false);
-    }
+    void checkConnection();
 
     return () => {
       window.removeEventListener('online', handleOnline);
@@ -127,17 +99,18 @@ function useOnlineStatus(): OnlineStatus {
     };
   }, [checkConnection, updateOnlineStatus]);
 
-  // Update offline duration periodically when offline
   useEffect(() => {
     if (!status.isOnline && status.lastChanged) {
-      const interval = setInterval(() => {
-        setStatus(prev => ({
+      const interval = window.setInterval(() => {
+        setStatus((prev) => ({
           ...prev,
-          offlineDuration: prev.lastChanged ? Date.now() - prev.lastChanged.getTime() : null,
+          offlineDuration: prev.lastChanged
+            ? Math.max(0, Date.now() - prev.lastChanged.getTime())
+            : null,
         }));
       }, 1000);
 
-      return () => clearInterval(interval);
+      return () => window.clearInterval(interval);
     }
   }, [status.isOnline, status.lastChanged]);
 

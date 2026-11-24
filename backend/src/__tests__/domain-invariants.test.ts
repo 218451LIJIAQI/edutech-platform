@@ -2,173 +2,30 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { createRequire } from "node:module";
 import { describe, it } from "node:test";
 import type { Request } from "express";
 
 process.env.UPLOAD_DIR ||= path.join(os.tmpdir(), "flexilearn-test-uploads");
 
-const nodeRequire = createRequire(__filename);
-const Module = nodeRequire("node:module") as {
-  _load: (request: string, parent: unknown, isMain: boolean) => unknown;
-};
-
-// Provide lightweight offline enum/module shims ONLY when node_modules is absent in sandbox CI.
-// In environments where `npm ci` has run (e.g. Render), real packages load normally.
-const originalModuleLoad = Module._load;
-Module._load = function loadWithSandboxShims(
-  request: string,
-  parent: unknown,
-  isMain: boolean,
-) {
-  try {
-    return originalModuleLoad.call(this, request, parent, isMain);
-  } catch (error) {
-    const err = error as { code?: string };
-    if (err?.code !== "MODULE_NOT_FOUND") {
-      throw error;
-    }
-
-    if (request === "@prisma/client") {
-      const makeEnum = <T extends string>(values: readonly T[]) =>
-        Object.freeze(
-          Object.fromEntries(values.map((v) => [v, v])) as { [K in T]: K },
-        );
-      class MockPrismaClient {
-        $on() {}
-        async $disconnect() {}
-      }
-      class Decimal {
-        private val: number;
-        constructor(v: number | string) {
-          this.val = Number(v);
-        }
-        toNumber() {
-          return this.val;
-        }
-        toString() {
-          return String(this.val);
-        }
-      }
-      return {
-        PrismaClient: MockPrismaClient,
-        Prisma: { Decimal },
-        PaymentStatus: makeEnum(["PENDING", "COMPLETED", "FAILED", "REFUNDED"]),
-        OrderStatus: makeEnum(["PENDING", "PAID", "CANCELLED", "REFUNDED", "FAILED"]),
-        RefundStatus: makeEnum(["PENDING", "APPROVED", "PROCESSING", "COMPLETED", "REJECTED"]),
-        RefundMethod: makeEnum(["ORIGINAL_PAYMENT", "BANK_TRANSFER", "WALLET"]),
-        PayoutRequestStatus: makeEnum([
-          "PENDING",
-          "APPROVED",
-          "PROCESSING",
-          "REJECTED",
-          "PAID",
-          "CANCELLED",
-        ]),
-        PayoutMethodType: makeEnum([
-          "BANK_TRANSFER",
-          "GRABPAY",
-          "TOUCH_N_GO",
-          "PAYPAL",
-          "OTHER",
-        ]),
-        WalletTransactionType: makeEnum([
-          "CREDIT",
-          "DEBIT",
-          "FREEZE",
-          "UNFREEZE",
-          "ADJUSTMENT",
-        ]),
-        WalletTransactionSource: makeEnum([
-          "COURSE_SALE",
-          "REFUND",
-          "REVERSAL",
-          "ADMIN_ADJUSTMENT",
-          "PAYOUT",
-        ]),
-        UserRole: makeEnum(["STUDENT", "TEACHER", "ADMIN"]),
-        CourseType: makeEnum(["LIVE", "RECORDED", "HYBRID"]),
-        LessonType: makeEnum(["LIVE", "RECORDED", "HYBRID"]),
-        LiveSessionStatus: makeEnum(["SCHEDULED", "ONGOING", "COMPLETED", "CANCELLED"]),
-      };
-    }
-
-    if (request === "multer") {
-      const multerShim = Object.assign(
-        () => ({
-          single: () => (_req: unknown, _res: unknown, next: () => void) => next(),
-          array: () => (_req: unknown, _res: unknown, next: () => void) => next(),
-        }),
-        { diskStorage: (opts: unknown) => opts },
-      );
-      return { __esModule: true, default: multerShim };
-    }
-
-    if (request === "winston") {
-      const noopLogger = {
-        info: () => undefined,
-        warn: () => undefined,
-        error: () => undefined,
-        debug: () => undefined,
-        add: () => undefined,
-      };
-      const winstonShim = {
-        createLogger: () => noopLogger,
-        format: Object.assign(
-          (fn: unknown) => () => fn,
-          {
-            combine: () => ({}),
-            timestamp: () => ({}),
-            errors: () => ({}),
-            splat: () => ({}),
-            json: () => ({}),
-            colorize: () => ({}),
-            printf: () => ({}),
-          },
-        ),
-        transports: {
-          File: class {},
-          Console: class {},
-        },
-      };
-      return { __esModule: true, ...winstonShim, default: winstonShim };
-    }
-
-    throw error;
-  }
-};
-
-const { buildCurrentEnrollmentWhere } = nodeRequire(
-  "../services/shared/enrollment-access",
-) as typeof import("../services/shared/enrollment-access");
-const {
+import { buildCurrentEnrollmentWhere } from "../services/shared/enrollment-access";
+import {
   assertQuizGateForLessonCompletion,
   calculateProgressFromLessons,
-} = nodeRequire(
-  "../services/enrollment.service",
-) as typeof import("../services/enrollment.service");
-const { sanitizeStudentEnrollmentCourse } = nodeRequire(
-  "../services/course/course-service-helpers",
-) as typeof import("../services/course/course-service-helpers");
-const {
+} from "../services/enrollment.service";
+import { sanitizeStudentEnrollmentCourse } from "../services/course/course-service-helpers";
+import {
   cleanupTrackedRequestUploads,
   isMimeCompatibleWithExtension,
-} = nodeRequire(
-  "../middleware/upload",
-) as typeof import("../middleware/upload");
-const {
+} from "../middleware/upload";
+import {
   buildTeacherCourseEarningsSummary,
   buildTeacherEarningsTimeline,
-} = nodeRequire(
-  "../services/payment/payment-helpers",
-) as typeof import("../services/payment/payment-helpers");
-const { buildRevenueAnalytics, buildSettlementRows } = nodeRequire(
-  "../services/admin/admin-metrics",
-) as typeof import("../services/admin/admin-metrics");
-const walletModule = nodeRequire(
-  "../services/wallet.service",
-) as typeof import("../services/wallet.service");
-const walletService = walletModule.default;
+} from "../services/payment/payment-helpers";
+import {
+  buildRevenueAnalytics,
+  buildSettlementRows,
+} from "../services/admin/admin-metrics";
+import walletService from "../services/wallet.service";
 
 describe("enrollment access, quiz gate, and student course sanitization", () => {
   it("requires active user status and unexpired enrollment in buildCurrentEnrollmentWhere", () => {
@@ -202,7 +59,6 @@ describe("enrollment access, quiz gate, and student course sanitization", () => 
       },
     ];
 
-    // Video lesson alone succeeds
     assert.equal(
       assertQuizGateForLessonCompletion({
         courseLessons,
@@ -212,7 +68,6 @@ describe("enrollment access, quiz gate, and student course sanitization", () => 
       1,
     );
 
-    // Quiz lesson without passed attempt throws ValidationError
     assert.throws(
       () =>
         assertQuizGateForLessonCompletion({
@@ -223,7 +78,6 @@ describe("enrollment access, quiz gate, and student course sanitization", () => 
       /must pass the lesson quiz/i,
     );
 
-    // Numeric count bypassing quiz gate also throws ValidationError
     assert.throws(
       () =>
         assertQuizGateForLessonCompletion({
@@ -234,7 +88,6 @@ describe("enrollment access, quiz gate, and student course sanitization", () => 
       /must pass all required lesson quizzes/i,
     );
 
-    // Once passed, completion succeeds and yields 100% progress
     const completedCount = assertQuizGateForLessonCompletion({
       courseLessons,
       passedQuizLessonIds: new Set(["lesson-quiz"]),
@@ -335,7 +188,6 @@ describe("post-refund net teacher earnings, admin settlements, and wallet refund
     };
 
     const payments = [
-      // Order 1: $100 with a $40 partial refund -> $60 net gross, $54 net teacher, $6 net platform
       {
         id: "pay-partial",
         orderId: "ord-partial",
@@ -363,7 +215,6 @@ describe("post-refund net teacher earnings, admin settlements, and wallet refund
           ],
         },
       },
-      // Order 2: $200 fully refunded -> $0 net everywhere
       {
         id: "pay-full-refund",
         orderId: "ord-full",
@@ -494,7 +345,6 @@ describe("post-refund net teacher earnings, admin settlements, and wallet refund
       },
     };
 
-    // Teacher has $10 available + $80 frozen in PENDING payout = $90 total; $90 refund debit succeeds!
     await walletService.debitForRefundInTransaction(
       mockTx as never,
       "u-teacher",
@@ -505,9 +355,8 @@ describe("post-refund net teacher earnings, admin settlements, and wallet refund
     assert.equal(payoutStatus, "CANCELLED");
     assert.equal(pendingPayout, 0);
     assert.equal(availableBalance, 0);
-    assert.equal(walletTransactions.length, 2); // UNFREEZE + DEBIT
+    assert.equal(walletTransactions.length, 2);
 
-    // Idempotent retry with same refundId + orderItemId does not double-debit
     await walletService.debitForRefundInTransaction(
       mockTx as never,
       "u-teacher",
@@ -516,7 +365,6 @@ describe("post-refund net teacher earnings, admin settlements, and wallet refund
     );
     assert.equal(walletTransactions.length, 2);
 
-    // Another refund when wallet has $0 and no releasable payouts throws ValidationError atomically
     await assert.rejects(
       () =>
         walletService.debitForRefundInTransaction(

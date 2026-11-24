@@ -55,7 +55,7 @@ export async function copyTextToClipboard(text: string): Promise<boolean> {
   return fallbackCopyTextToClipboard(text);
 }
 
-export type ShareLinkResult = 'shared' | 'copied' | 'cancelled' | 'unavailable';
+type ShareLinkResult = 'shared' | 'copied' | 'cancelled' | 'unavailable';
 
 export async function shareLink(
   url: string,

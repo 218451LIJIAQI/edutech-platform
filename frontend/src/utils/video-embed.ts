@@ -1,8 +1,8 @@
 import { getNormalizedHostname, hasExactHostname, parseSafeHttpUrl } from './safe-url';
 
-export type ExternalVideoProvider = 'youtube' | 'vimeo' | 'dailymotion';
+type ExternalVideoProvider = 'youtube' | 'vimeo' | 'dailymotion';
 
-export interface ExternalVideoEmbed {
+interface ExternalVideoEmbed {
   provider: ExternalVideoProvider;
   videoId: string;
   embedUrl: string;

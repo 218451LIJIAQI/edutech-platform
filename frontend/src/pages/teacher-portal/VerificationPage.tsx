@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import clientLogger from '@/utils/logger';
 import { useNavigate } from 'react-router-dom';
-import { Shield, Upload, CheckCircle, Clock, XCircle, ArrowLeft, FileText } from 'lucide-react';
+import { AlertCircle, Shield, Upload, CheckCircle, Clock, RefreshCcw, XCircle, ArrowLeft, FileText } from 'lucide-react';
 import { TeacherVerification, VerificationStatus } from '@/types';
 import teacherService from '@/services/teacher.service';
 import uploadService from '@/services/upload.service';
@@ -19,10 +19,11 @@ import { useAuthStore } from '@/store/auth-store';
 const VerificationPage = () => {
   const navigate = useNavigate();
   usePageTitle('Teacher Verification');
-  const { user } = useAuthStore();
+  const { user, fetchProfile } = useAuthStore();
 
   const [verifications, setVerifications] = useState<TeacherVerification[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showForm, setShowForm] = useState(false);
 
@@ -64,12 +65,15 @@ const VerificationPage = () => {
 
   const fetchVerifications = useCallback(async () => {
     setIsLoading(true);
+    setLoadError(null);
     try {
       const data = await teacherService.getMyVerifications();
       setVerifications(data);
     } catch (error) {
       clientLogger.error('Failed to fetch verifications:', error);
-      toast.error(extractErrorMessage(error, 'Failed to load verifications'));
+      const message = extractErrorMessage(error, 'Failed to load verifications');
+      setLoadError(message);
+      toast.error(message);
     } finally {
       setIsLoading(false);
     }
@@ -107,8 +111,11 @@ const VerificationPage = () => {
       setDocumentType('');
       setDocumentFile(null);
 
-      // Refresh verifications
-      await fetchVerifications();
+      // Refresh verifications and global auth profile (in case auto-verification updated badge)
+      await Promise.all([
+        fetchVerifications(),
+        fetchProfile().catch(() => undefined),
+      ]);
     } catch (error) {
       toast.dismiss(loadingToast);
       clientLogger.error('Failed to submit verification:', error);
@@ -195,6 +202,23 @@ const VerificationPage = () => {
               <p className="text-gray-500 font-medium">Verify your credentials to build trust with students</p>
             </div>
           </div>
+
+          {loadError && (
+            <div className="card mb-8 bg-red-50 border border-red-200 flex items-center justify-between gap-4 text-sm text-red-800">
+              <div className="flex items-center gap-2">
+                <AlertCircle className="w-5 h-5 text-red-600 shrink-0" />
+                <span>{loadError}</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => void fetchVerifications()}
+                className="btn-outline btn-sm inline-flex items-center gap-1.5"
+              >
+                <RefreshCcw className="w-4 h-4" />
+                Retry
+              </button>
+            </div>
+          )}
 
           {/* Benefits Section */}
           <div className="card mb-8 bg-gradient-to-br from-primary-50 to-blue-50 border-2 border-primary-200 shadow-xl rounded-2xl">

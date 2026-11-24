@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useMemo, useState, useCallback, useRef } from 'react';
 import toast from 'react-hot-toast';
 import {
   RefreshCcw,
@@ -12,6 +12,7 @@ import {
   Loader2,
   Eye,
   AlertCircle,
+  Search,
 } from 'lucide-react';
 import adminRefundService from '@/services/admin-refund.service';
 import { Refund } from '@/types';
@@ -26,8 +27,10 @@ const RefundsManagement = () => {
   usePageTitle('Refund Management');
   const [refunds, setRefunds] = useState<Refund[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [working, setWorking] = useState(false);
   const [filter, setFilter] = useState<string>('ALL');
+  const [searchQuery, setSearchQuery] = useState<string>('');
   const [selectedRefund, setSelectedRefund] = useState<Refund | null>(null);
   const [stats, setStats] = useState<{
     pending: number;
@@ -56,6 +59,7 @@ const RefundsManagement = () => {
    */
   const loadData = useCallback(async () => {
     setLoading(true);
+    setLoadError(null);
     try {
       const [refundsData, statsData] = await Promise.all([
         adminRefundService.getAllRefunds(filter === 'ALL' ? undefined : filter),
@@ -64,11 +68,30 @@ const RefundsManagement = () => {
       setRefunds(refundsData.refunds);
       setStats(statsData);
     } catch (e) {
-      toast.error(extractErrorMessage(e, 'Failed to load refunds'));
+      const message = extractErrorMessage(e, 'Failed to load refunds');
+      setLoadError(message);
+      toast.error(message);
     } finally {
       setLoading(false);
     }
   }, [filter]);
+
+  const filteredRefunds = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return refunds;
+    return refunds.filter((r) => {
+      const orderNo = r.order?.orderNo?.toLowerCase() || '';
+      const customer = `${r.order?.user?.firstName || ''} ${r.order?.user?.lastName || ''}`.toLowerCase();
+      const email = r.order?.user?.email?.toLowerCase() || '';
+      const category = r.reasonCategory?.toLowerCase() || '';
+      return (
+        orderNo.includes(q) ||
+        customer.includes(q) ||
+        email.includes(q) ||
+        category.includes(q)
+      );
+    });
+  }, [refunds, searchQuery]);
 
   useEffect(() => {
     loadData();
@@ -374,9 +397,21 @@ const RefundsManagement = () => {
               </button>
             ))}
           </div>
-          <p className="mt-3 text-sm text-gray-500">
-            Showing {getFilterLabel(filter)} refund requests.
-          </p>
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+            <div className="relative flex-1 min-w-[240px] max-w-md">
+              <Search className="w-4 h-4 text-gray-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search by order no, customer, email, or category..."
+                className="input pl-10 py-2 text-sm"
+              />
+            </div>
+            <p className="text-sm text-gray-500 tabular-nums">
+              Showing {filteredRefunds.length} {getFilterLabel(filter)} refund request(s).
+            </p>
+          </div>
         </div>
 
         {/* Refunds Table */}
@@ -388,7 +423,21 @@ const RefundsManagement = () => {
               </div>
               <p className="text-gray-500 font-medium">Loading refunds...</p>
             </div>
-          ) : refunds.length === 0 ? (
+          ) : loadError ? (
+            <div className="p-12 text-center space-y-3">
+              <AlertCircle className="w-12 h-12 text-red-500 mx-auto" />
+              <p className="text-gray-900 font-bold">Unable to load refund requests</p>
+              <p className="text-sm text-gray-600">{loadError}</p>
+              <button
+                type="button"
+                onClick={() => void loadData()}
+                className="btn-primary btn-sm inline-flex items-center gap-1.5"
+              >
+                <RefreshCcw className="w-4 h-4" />
+                Retry
+              </button>
+            </div>
+          ) : filteredRefunds.length === 0 ? (
             <div className="p-12 text-center">
               <div className="w-16 h-16 bg-gray-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
                 <AlertCircle className="w-8 h-8 text-gray-400" />
@@ -426,7 +475,7 @@ const RefundsManagement = () => {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
-                  {refunds.map((refund) => (
+                  {filteredRefunds.map((refund) => (
                     <tr
                       key={refund.id}
                       className="hover:bg-gradient-to-r hover:from-gray-50 hover:to-transparent cursor-pointer transition-all duration-200"
@@ -503,7 +552,8 @@ const RefundsManagement = () => {
             ref={refundDetailModalRef}
             tabIndex={-1}
             role="dialog"
-            aria-modal="true"
+            aria-modal={!showApproveModal && !showRejectModal}
+            aria-hidden={showApproveModal || showRejectModal}
             aria-labelledby="refund-detail-modal-title"
             aria-describedby="refund-detail-modal-description"
             className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto"
@@ -726,6 +776,7 @@ const RefundsManagement = () => {
                 value={approvalNotes}
                 onChange={(e) => setApprovalNotes(e.target.value)}
                 placeholder="Optional notes for approval..."
+                maxLength={500}
                 className="w-full h-24 px-4 py-3 border border-gray-200 rounded-xl resize-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all"
                 disabled={working}
               />
@@ -787,6 +838,7 @@ const RefundsManagement = () => {
                 value={rejectionReason}
                 onChange={(e) => setRejectionReason(e.target.value)}
                 placeholder="Please provide a reason for rejection..."
+                maxLength={500}
                 className="w-full h-24 px-4 py-3 border border-gray-200 rounded-xl resize-none focus:ring-2 focus:ring-red-500 focus:border-transparent transition-all"
                 disabled={working}
               />

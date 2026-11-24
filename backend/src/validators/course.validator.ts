@@ -311,10 +311,15 @@ const optionalMaxStringField = (
 const optionalPositiveIntField = (
   field: string,
   msg: string,
-  checkFalsy = true,
+  allowEmptyString = true,
 ): ValidationChain =>
   body(field)
-    .optional({ nullable: true, checkFalsy })
+    .customSanitizer((value: unknown) =>
+      allowEmptyString && typeof value === "string" && value.trim() === ""
+        ? null
+        : value,
+    )
+    .optional({ nullable: true })
     .isInt({ min: 1 })
     .withMessage(msg)
     .bail()

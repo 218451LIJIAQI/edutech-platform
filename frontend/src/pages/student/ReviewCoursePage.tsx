@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import clientLogger from '@/utils/logger';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Star, ArrowLeft, Send, CheckCircle } from 'lucide-react';
+import { AlertCircle, Star, ArrowLeft, RefreshCcw, Send, CheckCircle } from 'lucide-react';
 import { Course, Enrollment, Review } from '@/types';
 import courseService from '@/services/course.service';
 import enrollmentService from '@/services/enrollment.service';
@@ -26,6 +26,7 @@ const ReviewCoursePage = () => {
   const [hoverRating, setHoverRating] = useState(0);
   const [comment, setComment] = useState('');
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   usePageTitle(course ? `Review ${course.title}` : 'Review Course');
 
@@ -37,6 +38,7 @@ const ReviewCoursePage = () => {
     }
 
     setIsLoading(true);
+    setLoadError(null);
     try {
       const courseData = await courseService.getCourseById(courseId);
       setCourse(courseData);
@@ -73,8 +75,9 @@ const ReviewCoursePage = () => {
       setCourseReviews(teacherReviews.reviews.filter((item) => item.isPublished));
     } catch (error) {
       clientLogger.error('Failed to fetch data:', error);
-      toast.error(extractErrorMessage(error, 'Failed to load course'));
-      navigate('/courses');
+      const message = extractErrorMessage(error, 'Failed to load course');
+      setLoadError(message);
+      toast.error(message);
     } finally {
       setIsLoading(false);
     }
@@ -162,14 +165,36 @@ const ReviewCoursePage = () => {
     );
   }
 
-  if (!course || !enrollment) {
+  if (loadError || !course || !enrollment) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-primary-50/10 to-indigo-50/20">
-        <div className="text-center">
-          <p className="text-gray-600 mb-4">Course not found</p>
-          <button type="button" className="btn-primary" onClick={() => navigate('/courses')}>
-            Browse Courses
-          </button>
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-primary-50/10 to-indigo-50/20 px-4">
+        <div className="card max-w-md w-full text-center space-y-4">
+          <AlertCircle className="w-12 h-12 text-red-500 mx-auto" />
+          <h2 className="text-xl font-bold text-slate-900">
+            {loadError ? 'Unable to load review workspace' : 'Course not found'}
+          </h2>
+          <p className="text-slate-600 text-sm">
+            {loadError || 'We could not verify an eligible completed enrollment for this course.'}
+          </p>
+          <div className="flex items-center justify-center gap-3">
+            {loadError && (
+              <button
+                type="button"
+                className="btn-primary inline-flex items-center gap-2"
+                onClick={() => void fetchData()}
+              >
+                <RefreshCcw className="w-4 h-4" />
+                Retry
+              </button>
+            )}
+            <button
+              type="button"
+              className={loadError ? 'btn-outline' : 'btn-primary'}
+              onClick={() => navigate('/student/courses')}
+            >
+              Back to My Courses
+            </button>
+          </div>
         </div>
       </div>
     );
@@ -231,7 +256,7 @@ const ReviewCoursePage = () => {
                       onClick={() => setRating(starValue)}
                       onMouseEnter={() => setHoverRating(starValue)}
                       onMouseLeave={() => setHoverRating(0)}
-                      className="focus:outline-none transition-transform hover:scale-125 active:scale-95"
+                      className="rounded-lg p-1 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-600 transition-transform hover:scale-110 active:scale-95"
                       aria-label={`Rate ${starValue} star${starValue > 1 ? 's' : ''}`}
                     >
                       <Star
@@ -262,6 +287,7 @@ const ReviewCoursePage = () => {
                   rows={8}
                   className="input"
                   placeholder="What did you like or dislike about this course? What did you learn? Would you recommend it to others?"
+                  maxLength={2000}
                   required
                 />
                 <p

@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback, useMemo } from 'react';
 import clientLogger from '@/utils/logger';
 import { Link } from 'react-router-dom';
-import { BookOpen, Clock, Award, TrendingUp, ArrowRight, PlayCircle, Sparkles, Target, GraduationCap } from 'lucide-react';
+import { AlertCircle, BookOpen, Clock, Award, TrendingUp, ArrowRight, PlayCircle, RefreshCcw, Sparkles, Target, GraduationCap } from 'lucide-react';
 import { Enrollment } from '@/types';
 import enrollmentService from '@/services/enrollment.service';
 import toast from 'react-hot-toast';
@@ -19,6 +19,7 @@ const StudentDashboard = () => {
   usePageTitle('My Learning Dashboard');
   const [enrollments, setEnrollments] = useState<Enrollment[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const { user } = useAuthStore();
 
   // Smooth loading transition
@@ -52,12 +53,14 @@ const StudentDashboard = () => {
 
   const fetchDashboardData = useCallback(async () => {
     setIsLoading(true);
+    setLoadError(null);
     try {
       const enrollmentsData = await enrollmentService.getMyCourses();
       setEnrollments(enrollmentsData);
     } catch (error) {
       const errorMessage = extractErrorMessage(error, 'Failed to load dashboard data');
       clientLogger.error('Failed to fetch dashboard data:', error);
+      setLoadError(errorMessage);
       toast.error(errorMessage);
     } finally {
       setIsLoading(false);
@@ -126,6 +129,23 @@ const StudentDashboard = () => {
             </div>
           </div>
         </div>
+
+        {loadError && (
+          <div className="mb-8 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-800 flex items-center justify-between gap-4">
+            <div className="flex items-center gap-2.5">
+              <AlertCircle className="w-5 h-5 text-red-600 shrink-0" />
+              <span>{loadError}</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => void fetchDashboardData()}
+              className="btn-outline btn-sm inline-flex items-center gap-1.5"
+            >
+              <RefreshCcw className="w-4 h-4" />
+              Retry
+            </button>
+          </div>
+        )}
 
         {/* Stats Cards */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 mb-10">

@@ -1,10 +1,10 @@
-export interface PaginationWindow {
+interface PaginationWindow {
   page: number;
   limit: number;
   skip: number;
 }
 
-export interface OffsetPaginationWindow {
+interface OffsetPaginationWindow {
   limit: number;
   offset: number;
 }

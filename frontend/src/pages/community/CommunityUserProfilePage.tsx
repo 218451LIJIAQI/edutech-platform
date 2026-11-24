@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import clientLogger from '@/utils/logger';
 import { Link, useParams } from 'react-router-dom';
-import { User as UserIcon, Flame, Bookmark, Heart, Share2 } from 'lucide-react';
+import { AlertCircle, RefreshCcw, User as UserIcon, Flame, Bookmark, Heart, Share2 } from 'lucide-react';
 import communityService from '@/services/community.service';
 import { CommunityPost, CommunityUserProfile } from '@/types/community';
 import CommunityMediaPreview from '@/components/community/CommunityMediaPreview';
@@ -18,34 +18,40 @@ const CommunityUserProfilePage = () => {
   const [profile, setProfile] = useState<CommunityUserProfile | null>(null);
   const [posts, setPosts] = useState<CommunityPost[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [isFollowPending, setIsFollowPending] = useState(false);
   const isMe = user?.id === userId;
 
   usePageTitle(isMe ? 'My Community Profile' : 'Community Profile');
 
-  useEffect(() => {
-    const loadProfile = async () => {
-      if (!userId) return;
-      setIsLoading(true);
-      try {
-        const [profileResult, postsResult] = await Promise.all([
-          communityService.getUserProfile(userId),
-          communityService.getUserPosts(userId, 1, 20),
-        ]);
-        setProfile(profileResult);
-        setPosts(postsResult.items);
-      } catch (error) {
-        clientLogger.error('Failed to load profile:', error);
-        toast.error(extractErrorMessage(error, 'Failed to load profile'));
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    void loadProfile();
+  const loadProfile = useCallback(async () => {
+    if (!userId) return;
+    setIsLoading(true);
+    setLoadError(null);
+    try {
+      const [profileResult, postsResult] = await Promise.all([
+        communityService.getUserProfile(userId),
+        communityService.getUserPosts(userId, 1, 20),
+      ]);
+      setProfile(profileResult);
+      setPosts(postsResult.items);
+    } catch (error) {
+      clientLogger.error('Failed to load profile:', error);
+      const message = extractErrorMessage(error, 'Failed to load profile');
+      setLoadError(message);
+      toast.error(message);
+    } finally {
+      setIsLoading(false);
+    }
   }, [userId]);
 
+  useEffect(() => {
+    void loadProfile();
+  }, [loadProfile]);
+
   const toggleFollow = async () => {
-    if (!userId) return;
+    if (!userId || isFollowPending) return;
+    setIsFollowPending(true);
     try {
       const result = await communityService.followUser(userId);
       setProfile((currentProfile) =>
@@ -60,6 +66,8 @@ const CommunityUserProfilePage = () => {
     } catch (error) {
       clientLogger.error('Failed to follow user:', error);
       toast.error(extractErrorMessage(error, 'Failed to follow user'));
+    } finally {
+      setIsFollowPending(false);
     }
   };
 
@@ -129,9 +137,30 @@ const CommunityUserProfilePage = () => {
 
   if (!profile) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-primary-50/10 to-indigo-50/20">
-        <div className="text-center">
-          <p className="text-gray-600 mb-4">User not found</p>
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-primary-50/10 to-indigo-50/20 px-4">
+        <div className="card max-w-md w-full text-center space-y-4">
+          <AlertCircle className="w-12 h-12 text-red-500 mx-auto" />
+          <h2 className="text-xl font-bold text-slate-900">
+            {loadError ? 'Unable to load profile' : 'User not found'}
+          </h2>
+          <p className="text-sm text-slate-600">
+            {loadError || 'The community member profile could not be found.'}
+          </p>
+          <div className="flex items-center justify-center gap-3">
+            {loadError && (
+              <button
+                type="button"
+                onClick={() => void loadProfile()}
+                className="btn-primary inline-flex items-center gap-2"
+              >
+                <RefreshCcw className="w-4 h-4" />
+                Retry
+              </button>
+            )}
+            <Link to="/community" className={loadError ? 'btn-outline' : 'btn-primary'}>
+              Back to Community
+            </Link>
+          </div>
         </div>
       </div>
     );
@@ -176,7 +205,8 @@ const CommunityUserProfilePage = () => {
             {!isMe && (
               <button
                 type="button"
-                onClick={toggleFollow}
+                onClick={() => void toggleFollow()}
+                disabled={isFollowPending}
                 className={`btn ${profile.isFollowing ? 'btn-outline' : 'btn-primary'}`}
               >
                 {profile.isFollowing ? 'Following' : 'Follow'}
@@ -201,7 +231,7 @@ const CommunityUserProfilePage = () => {
             {posts.map((post) => (
               <div
                 key={post.id}
-                className="card shadow-xl border border-gray-100 rounded-2xl hover:shadow-2xl transition-all duration-300 transform hover:scale-105 flex flex-col"
+                className="card card-smooth flex flex-col"
               >
                 {post.media && post.media[0] && (
                   <CommunityMediaPreview

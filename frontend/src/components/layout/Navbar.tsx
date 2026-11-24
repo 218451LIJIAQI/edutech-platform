@@ -65,7 +65,7 @@ const Navbar = () => {
           shadow: 'shadow-emerald-500/20',
           hoverShadow: 'hover:shadow-emerald-500/30',
           bg: 'bg-emerald-50',
-          text: 'text-emerald-600',
+          text: 'text-emerald-700',
           badge: 'Teacher',
         };
 
@@ -75,7 +75,7 @@ const Navbar = () => {
           shadow: 'shadow-violet-500/20',
           hoverShadow: 'hover:shadow-violet-500/30',
           bg: 'bg-violet-50',
-          text: 'text-violet-600',
+          text: 'text-violet-700',
           badge: 'Admin',
         };
 
@@ -85,7 +85,7 @@ const Navbar = () => {
           shadow: 'shadow-primary-500/20',
           hoverShadow: 'hover:shadow-primary-500/30',
           bg: 'bg-primary-50',
-          text: 'text-primary-600',
+          text: 'text-primary-700',
           badge: 'Student',
         };
     }
@@ -147,9 +147,12 @@ const Navbar = () => {
       return [
         { to: '/admin', label: 'Overview', icon: LayoutDashboard, exact: true },
         { to: '/admin/users', label: 'Users', icon: Users },
-        { to: '/admin/ads', label: 'Ads', icon: Megaphone },
+        { to: '/admin/courses', label: 'Courses', icon: BookOpen },
         { to: '/admin/financials', label: 'Finance', icon: DollarSign },
+        { to: '/admin/refunds', label: 'Refunds', icon: Receipt },
+        { to: '/admin/support', label: 'Support', icon: HelpCircle },
         { to: '/admin/verification-teachers', label: 'Verify', icon: UserCheck },
+        { to: '/admin/ads', label: 'Ads', icon: Megaphone },
       ];
     }
 
@@ -258,7 +261,7 @@ const Navbar = () => {
     <nav
       aria-label="Main navigation"
       className={clsx(
-        'sticky top-0 z-50 transition-all duration-300',
+        'relative z-50 transition-all duration-300',
         isScrolled
           ? 'bg-white/95 backdrop-blur-xl shadow-lg border-b border-gray-100/50'
           : 'bg-white/80 backdrop-blur-lg border-b border-transparent'
@@ -309,7 +312,7 @@ const Navbar = () => {
                       to={item.to}
                       aria-current={active ? 'page' : undefined}
                       className={clsx(
-                        'flex items-center gap-2 rounded-xl px-3.5 py-2 text-sm font-medium transition-all duration-200 whitespace-nowrap',
+                        'flex items-center gap-1.5 rounded-xl px-2.5 py-1.5 text-xs xl:text-sm font-medium transition-all duration-200 whitespace-nowrap',
                         active
                           ? `bg-white shadow-sm ${theme.text}`
                           : 'text-gray-600 hover:bg-white/60 hover:text-gray-900',
@@ -429,7 +432,7 @@ const Navbar = () => {
                     type="button"
                     onClick={handleLogout}
                     aria-label="Logout"
-                    className="rounded-xl p-2 text-gray-400 transition-all duration-200 hover:bg-red-50 hover:text-red-500"
+                    className="rounded-xl p-2 text-slate-500 transition-all duration-200 hover:bg-red-50 hover:text-red-600"
                     title="Logout"
                   >
                     <LogOut className="h-5 w-5" aria-hidden="true" />
@@ -447,7 +450,7 @@ const Navbar = () => {
 
                 <Link
                   to="/register"
-                  className="rounded-xl bg-gradient-to-r from-primary-500 to-primary-600 px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-primary-500/25 transition-all duration-300 hover:from-primary-600 hover:to-primary-700 hover:shadow-xl"
+                  className="rounded-xl bg-gradient-to-r from-primary-600 to-indigo-700 px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-primary-600/25 transition-all duration-300 hover:from-primary-700 hover:to-indigo-800 hover:shadow-xl"
                 >
                   Get Started
                 </Link>

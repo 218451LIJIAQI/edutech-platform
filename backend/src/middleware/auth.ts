@@ -17,7 +17,7 @@ interface AuthTokenPayload extends JwtPayload {
   tokenVersion?: number;
 }
 
-export interface AuthenticatedUser {
+interface AuthenticatedUser {
   id: string;
   email: string;
   role: UserRole;

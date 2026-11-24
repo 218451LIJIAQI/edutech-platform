@@ -88,12 +88,16 @@ interface ExtendedRequestConfig extends InternalAxiosRequestConfig {
 }
 
 interface ErrorResponse {
+  status?: string;
   message?: string;
+  errors?: Record<string, string[]>;
 }
 
-const resolveErrorPayloadMessage = async (data: unknown): Promise<string | undefined> => {
+export const normalizeErrorResponseData = async (
+  data: unknown
+): Promise<{ normalizedData: unknown; message?: string }> => {
   if (!data) {
-    return undefined;
+    return { normalizedData: data };
   }
 
   if (
@@ -103,18 +107,24 @@ const resolveErrorPayloadMessage = async (data: unknown): Promise<string | undef
   ) {
     try {
       const parsed = JSON.parse(await data.text()) as ErrorResponse;
-      return typeof parsed?.message === 'string' ? parsed.message : undefined;
+      return {
+        normalizedData: parsed,
+        message: typeof parsed?.message === 'string' ? parsed.message : undefined,
+      };
     } catch {
-      return undefined;
+      return { normalizedData: data };
     }
   }
 
-  if (typeof data === 'object' && 'message' in data) {
-    const message = (data as ErrorResponse).message;
-    return typeof message === 'string' ? message : undefined;
+  if (typeof data === 'object') {
+    const record = data as ErrorResponse;
+    return {
+      normalizedData: data,
+      message: typeof record.message === 'string' ? record.message : undefined,
+    };
   }
 
-  return undefined;
+  return { normalizedData: data };
 };
 
 api.interceptors.request.use(
@@ -176,27 +186,21 @@ api.interceptors.response.use(
     }
 
     const status = error.response?.status;
-    const extractedMessage = await resolveErrorPayloadMessage(error.response?.data);
-    let errorMessage = extractedMessage || 'An error occurred. Please try again.';
+    const { normalizedData, message: extractedMessage } =
+      await normalizeErrorResponseData(error.response?.data);
 
-    if (error.response && extractedMessage && typeof error.response.data === 'object') {
-      (error.response as { data: unknown }).data = { message: extractedMessage };
+    if (error.response && normalizedData && typeof normalizedData === 'object') {
+      (error.response as { data: unknown }).data = {
+        ...(normalizedData as Record<string, unknown>),
+        ...(extractedMessage ? { message: extractedMessage } : {}),
+      };
     }
 
     if (status === 429) {
-      errorMessage = 'Too many requests. Please wait a moment and try again.';
-      toast.error(errorMessage, { duration: 4000 });
-    } else if (status === 403) {
-      errorMessage = extractedMessage || 'You do not have permission to perform this action.';
-      toast.error(errorMessage);
-    } else if (status === 404) {
-      errorMessage = extractedMessage || 'The requested resource was not found.';
-      toast.error(errorMessage);
-    } else if (status === 500) {
-      errorMessage = 'Server error. Please try again later.';
-      toast.error(errorMessage);
-    } else if (status && status !== 400 && status !== 401) {
-      toast.error(errorMessage);
+      toast.error(
+        extractedMessage || 'Too many requests. Please wait a moment and try again.',
+        { id: 'api-rate-limit', duration: 4000 }
+      );
     }
 
     return Promise.reject(error);

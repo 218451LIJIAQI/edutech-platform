@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import clientLogger from '@/utils/logger';
 import { Link } from 'react-router-dom';
-import { BookOpen, Clock, Calendar, CheckCircle, Star } from 'lucide-react';
+import { AlertCircle, BookOpen, Clock, Calendar, CheckCircle, RefreshCcw, Star } from 'lucide-react';
 import { Enrollment } from '@/types';
 import { formatDate } from '@/utils/helpers';
 import enrollmentService from '@/services/enrollment.service';
@@ -20,47 +20,39 @@ const MyCoursesPage = () => {
   const [enrollments, setEnrollments] = useState<Enrollment[]>([]);
   const [reviewedCourseIds, setReviewedCourseIds] = useState<Set<string>>(new Set());
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [filter, setFilter] = useState<'all' | 'active' | 'completed'>('all');
 
-  useEffect(() => {
-    let isActive = true;
+  const loadEnrollments = useCallback(async () => {
+    setIsLoading(true);
+    setLoadError(null);
+    try {
+      const [enrollmentItems, reviews] = await Promise.all([
+        enrollmentService.getMyCourses(),
+        reviewService.getMyReviews(),
+      ]);
 
-    const loadEnrollments = async () => {
-      setIsLoading(true);
-      try {
-        const [enrollmentItems, reviews] = await Promise.all([
-          enrollmentService.getMyCourses(),
-          reviewService.getMyReviews(),
-        ]);
-
-        if (isActive) {
-          setEnrollments(enrollmentItems);
-          setReviewedCourseIds(
-            new Set(
-              reviews
-                .map((review) => review.enrollment?.package?.course?.id)
-                .filter((courseId): courseId is string => Boolean(courseId))
-            )
-          );
-        }
-      } catch (error) {
-        if (isActive) {
-          clientLogger.error('Failed to fetch enrollments:', error);
-          toast.error(extractErrorMessage(error, 'Failed to load courses'));
-        }
-      } finally {
-        if (isActive) {
-          setIsLoading(false);
-        }
-      }
-    };
-
-    void loadEnrollments();
-
-    return () => {
-      isActive = false;
-    };
+      setEnrollments(enrollmentItems);
+      setReviewedCourseIds(
+        new Set(
+          reviews
+            .map((review) => review.enrollment?.package?.course?.id)
+            .filter((courseId): courseId is string => Boolean(courseId))
+        )
+      );
+    } catch (error) {
+      clientLogger.error('Failed to fetch enrollments:', error);
+      const message = extractErrorMessage(error, 'Failed to load courses');
+      setLoadError(message);
+      toast.error(message);
+    } finally {
+      setIsLoading(false);
+    }
   }, []);
+
+  useEffect(() => {
+    void loadEnrollments();
+  }, [loadEnrollments]);
 
   const courseEnrollments = getPreferredCourseEnrollments(enrollments);
 
@@ -150,7 +142,21 @@ const MyCoursesPage = () => {
       </div>
 
       {/* Courses List */}
-      {filteredEnrollments.length > 0 ? (
+      {loadError ? (
+        <div className="card max-w-lg mx-auto text-center space-y-4 py-12">
+          <AlertCircle className="w-12 h-12 text-red-500 mx-auto" />
+          <h2 className="text-xl font-bold text-slate-900">Unable to load your courses</h2>
+          <p className="text-sm text-slate-600">{loadError}</p>
+          <button
+            type="button"
+            onClick={() => void loadEnrollments()}
+            className="btn-primary inline-flex items-center gap-2"
+          >
+            <RefreshCcw className="w-4 h-4" />
+            Retry
+          </button>
+        </div>
+      ) : filteredEnrollments.length > 0 ? (
         <div className="space-y-6">
           {filteredEnrollments.map((enrollment) => {
             const course = enrollment.package?.course;
@@ -172,7 +178,7 @@ const MyCoursesPage = () => {
               : `/courses/${course.id}/learn`;
 
             return (
-              <div key={enrollment.id} className="card shadow-xl hover:shadow-2xl transition-all duration-300 transform hover:scale-[1.02] border border-gray-100 hover:border-primary-200 rounded-2xl">
+              <div key={enrollment.id} className="card card-smooth border border-slate-200/80 rounded-2xl">
                 <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
                   {/* Course Info */}
                   <div className="lg:col-span-2">

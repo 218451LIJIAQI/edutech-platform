@@ -1,17 +1,23 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
 import clientLogger from '@/utils/logger';
 import { Course } from '@/types';
 import adminService from '@/services/admin.service';
 import SearchFilter from '@/components/common/SearchFilter';
-import { BookOpen } from 'lucide-react';
+import { AlertCircle, BookOpen, ExternalLink, RefreshCcw } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { extractErrorMessage } from '@/utils/error-handler';
-import { usePageTitle } from '@/hooks';
+import { useDebounce, usePageTitle } from '@/hooks';
 
 const CoursesManagement = () => {
   usePageTitle('Course Management');
   const [courses, setCourses] = useState<Course[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [togglingCourseId, setTogglingCourseId] = useState<string | null>(null);
+  const [searchInput, setSearchInput] = useState('');
+  const debouncedSearch = useDebounce(searchInput.trim(), 300);
+  const requestIdRef = useRef(0);
   const [pagination, setPagination] = useState<{
     total: number;
     page: number;
@@ -21,7 +27,6 @@ const CoursesManagement = () => {
   const [filters, setFilters] = useState<{
     isPublished?: boolean;
     category?: string;
-    search?: string;
     page?: number;
     limit?: number;
   }>({
@@ -29,50 +34,54 @@ const CoursesManagement = () => {
     limit: 10,
   });
 
-  useEffect(() => {
-    let isActive = true;
-
-    const loadCourses = async () => {
-      setIsLoading(true);
-      try {
-        const data = await adminService.getAllCourses(filters);
-        if (!isActive) {
-          return;
-        }
-
-        setCourses(data.items || data.courses || []);
-        setPagination(data.pagination ?? null);
-      } catch (error: unknown) {
-        if (!isActive) {
-          return;
-        }
-
-        clientLogger.error('Failed to fetch courses:', error);
-        const errorMessage = extractErrorMessage(error, 'Failed to load courses');
-        toast.error(errorMessage);
-      } finally {
-        if (isActive) {
-          setIsLoading(false);
-        }
+  const loadCourses = useCallback(async () => {
+    const requestId = ++requestIdRef.current;
+    setIsLoading(true);
+    setLoadError(null);
+    try {
+      const data = await adminService.getAllCourses({
+        ...filters,
+        search: debouncedSearch || undefined,
+      });
+      if (requestId !== requestIdRef.current) {
+        return;
       }
-    };
 
+      setCourses(data.items || data.courses || []);
+      setPagination(data.pagination ?? null);
+    } catch (error: unknown) {
+      if (requestId !== requestIdRef.current) {
+        return;
+      }
+
+      clientLogger.error('Failed to fetch courses:', error);
+      const errorMessage = extractErrorMessage(error, 'Failed to load courses');
+      setLoadError(errorMessage);
+      toast.error(errorMessage);
+    } finally {
+      if (requestId === requestIdRef.current) {
+        setIsLoading(false);
+      }
+    }
+  }, [filters, debouncedSearch]);
+
+  useEffect(() => {
     void loadCourses();
-
-    return () => {
-      isActive = false;
-    };
-  }, [filters]);
+  }, [loadCourses]);
 
   const handleTogglePublish = async (id: string, currentStatus: boolean) => {
+    if (togglingCourseId) return;
+    setTogglingCourseId(id);
     try {
       await adminService.updateCourseStatus(id, !currentStatus);
       toast.success(`Course ${!currentStatus ? 'published' : 'unpublished'}`);
-      setFilters((currentFilters) => ({ ...currentFilters }));
+      await loadCourses();
     } catch (error: unknown) {
       clientLogger.error('Failed to update course status:', error);
       const errorMessage = extractErrorMessage(error, 'Failed to update course');
       toast.error(errorMessage);
+    } finally {
+      setTogglingCourseId(null);
     }
   };
 
@@ -122,7 +131,12 @@ const CoursesManagement = () => {
         <div className="card mb-8 shadow-xl border border-gray-100 rounded-2xl">
           <SearchFilter
             placeholder="Search courses..."
-            onSearch={(q) => setFilters((currentFilters) => ({ ...currentFilters, search: q || undefined, page: 1 }))}
+            onSearch={(q) => {
+              setSearchInput(q);
+              setFilters((currentFilters) =>
+                currentFilters.page === 1 ? currentFilters : { ...currentFilters, page: 1 }
+              );
+            }}
             filters={[{
               name: 'isPublished',
               label: 'Status',
@@ -147,6 +161,20 @@ const CoursesManagement = () => {
                 </div>
                 <p className="text-gray-600 font-medium">Loading courses...</p>
               </div>
+            </div>
+          ) : loadError ? (
+            <div className="text-center py-14 space-y-3 px-6">
+              <AlertCircle className="w-12 h-12 text-red-500 mx-auto" />
+              <h3 className="text-lg font-bold text-gray-900">Unable to load courses</h3>
+              <p className="text-sm text-gray-600">{loadError}</p>
+              <button
+                type="button"
+                onClick={() => void loadCourses()}
+                className="btn-primary btn-sm inline-flex items-center gap-1.5"
+              >
+                <RefreshCcw className="w-4 h-4" />
+                Retry
+              </button>
             </div>
           ) : courses.length === 0 ? (
             <div className="text-center py-16">
@@ -174,7 +202,13 @@ const CoursesManagement = () => {
                           {course.thumbnail && (
                             <img src={course.thumbnail} className="w-20 h-12 object-cover rounded-lg shadow-md" alt={course.title} />
                           )}
-                          <span className="font-bold text-gray-900">{course.title}</span>
+                          <Link
+                            to={`/courses/${course.id}`}
+                            className="font-bold text-gray-900 hover:text-primary-700 hover:underline inline-flex items-center gap-1.5"
+                          >
+                            <span>{course.title}</span>
+                            <ExternalLink className="w-3.5 h-3.5 text-slate-400" />
+                          </Link>
                         </div>
                       </td>
                       <td className="px-6 py-5">
@@ -195,12 +229,17 @@ const CoursesManagement = () => {
                       <td className="px-6 py-5 text-right">
                         <button
                           type="button"
-                          onClick={() => handleTogglePublish(course.id, course.isPublished)}
+                          disabled={togglingCourseId === course.id}
+                          onClick={() => void handleTogglePublish(course.id, course.isPublished)}
                           className={`btn-sm ${
                             course.isPublished ? 'btn-outline' : 'btn-primary'
                           }`}
                         >
-                          {course.isPublished ? 'Unpublish' : 'Publish'}
+                          {togglingCourseId === course.id
+                            ? 'Updating...'
+                            : course.isPublished
+                              ? 'Unpublish'
+                              : 'Publish'}
                         </button>
                       </td>
                     </tr>

@@ -20,7 +20,7 @@ const toExpiryRank = (value?: string) => {
   return Number.isFinite(timestamp) ? timestamp : Number.NEGATIVE_INFINITY;
 };
 
-export const isEnrollmentActiveNow = (
+const isEnrollmentActiveNow = (
   enrollment: Pick<Enrollment, 'isActive' | 'expiresAt'>,
   referenceTimestamp = Date.now()
 ): boolean => {
@@ -96,7 +96,7 @@ export const getPreferredCourseEnrollments = (
   );
 };
 
-export const readStoredCompletedLessonIds = (enrollmentId: string): string[] | null => {
+const readStoredCompletedLessonIds = (enrollmentId: string): string[] | null => {
   if (typeof localStorage === 'undefined') {
     return null;
   }

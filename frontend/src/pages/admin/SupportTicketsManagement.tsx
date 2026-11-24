@@ -1,4 +1,4 @@
-import { type ChangeEvent, useEffect, useState, useCallback, useRef } from 'react';
+import { type ChangeEvent, useEffect, useMemo, useState, useCallback, useRef } from 'react';
 import toast from 'react-hot-toast';
 import clientLogger from '@/utils/logger';
 import {
@@ -15,6 +15,8 @@ import {
   UserCheck,
   Paperclip,
   ExternalLink,
+  RefreshCcw,
+  Search,
 } from 'lucide-react';
 import adminSupportService from '@/services/admin-support.service';
 import uploadService from '@/services/upload.service';
@@ -44,9 +46,11 @@ const SupportTicketsManagement = () => {
   usePageTitle('Support Tickets');
   const [tickets, setTickets] = useState<SupportTicket[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [working, setWorking] = useState(false);
   const [filterStatus, setFilterStatus] = useState<string>('ALL');
   const [filterPriority, setFilterPriority] = useState<string>('');
+  const [searchQuery, setSearchQuery] = useState<string>('');
   const [selectedTicket, setSelectedTicket] = useState<SupportTicket | null>(null);
   const [selectedTicketId, setSelectedTicketId] = useState<string | null>(null);
   const [isTicketModalOpen, setIsTicketModalOpen] = useState(false);
@@ -71,6 +75,7 @@ const SupportTicketsManagement = () => {
 
   const loadData = useCallback(async () => {
     setLoading(true);
+    setLoadError(null);
     try {
       const [ticketsData, statsData] = await Promise.all([
         adminSupportService.getAllTickets(
@@ -83,7 +88,9 @@ const SupportTicketsManagement = () => {
       setStats(statsData);
     } catch (error) {
       clientLogger.error('Failed to load support tickets:', error);
-      toast.error(extractErrorMessage(error, 'Failed to load tickets'));
+      const message = extractErrorMessage(error, 'Failed to load tickets');
+      setLoadError(message);
+      toast.error(message);
     } finally {
       setLoading(false);
     }
@@ -93,9 +100,22 @@ const SupportTicketsManagement = () => {
     void loadData();
   }, [loadData]);
 
-  useEffect(() => {
-    setResponseAttachment(null);
-  }, [selectedTicket?.id]);
+  const filteredTickets = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return tickets;
+    return tickets.filter((t) => {
+      const ticketNo = t.ticketNo.toLowerCase();
+      const subject = t.subject.toLowerCase();
+      const customer = `${t.user?.firstName || ''} ${t.user?.lastName || ''}`.toLowerCase();
+      const email = t.user?.email?.toLowerCase() || '';
+      return (
+        ticketNo.includes(q) ||
+        subject.includes(q) ||
+        customer.includes(q) ||
+        email.includes(q)
+      );
+    });
+  }, [tickets, searchQuery]);
 
   const closeTicketModal = useCallback(() => {
     if (working || isUploadingResponseAttachment) {
@@ -111,7 +131,7 @@ const SupportTicketsManagement = () => {
   }, [isUploadingResponseAttachment, working]);
 
   useOverlayAccessibility({
-    isOpen: isTicketModalOpen,
+    isOpen: isTicketModalOpen && !showCloseTicketModal,
     containerRef: ticketModalRef,
     initialFocusRef: ticketModalCloseButtonRef,
     onClose: closeTicketModal,
@@ -125,6 +145,7 @@ const SupportTicketsManagement = () => {
     setTicketLoadError(null);
     setSelectedTicket(null);
     setSelectedTicketId(ticketId);
+    setResponseAttachment(null);
 
     try {
       const ticket = await adminSupportService.getTicketById(ticketId);
@@ -409,6 +430,19 @@ const SupportTicketsManagement = () => {
                 <option value="URGENT">Urgent</option>
               </select>
             </div>
+            <div className="flex-1 min-w-[240px]">
+              <label className="text-xs font-bold text-gray-600 uppercase block mb-2">Search</label>
+              <div className="relative">
+                <Search className="w-4 h-4 text-gray-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Search by ticket no, subject, or customer..."
+                  className="input pl-10 py-2.5 text-sm"
+                />
+              </div>
+            </div>
           </div>
         </div>
 
@@ -421,7 +455,21 @@ const SupportTicketsManagement = () => {
               </div>
               <p className="text-gray-500 font-medium">Loading tickets...</p>
             </div>
-          ) : tickets.length === 0 ? (
+          ) : loadError ? (
+            <div className="p-12 text-center space-y-3">
+              <AlertCircle className="w-12 h-12 text-red-500 mx-auto" />
+              <p className="text-gray-900 font-bold">Unable to load support tickets</p>
+              <p className="text-sm text-gray-600">{loadError}</p>
+              <button
+                type="button"
+                onClick={() => void loadData()}
+                className="btn-primary btn-sm inline-flex items-center gap-1.5"
+              >
+                <RefreshCcw className="w-4 h-4" />
+                Retry
+              </button>
+            </div>
+          ) : filteredTickets.length === 0 ? (
             <div className="p-12 text-center">
               <div className="w-16 h-16 bg-gray-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
                 <AlertCircle className="w-8 h-8 text-gray-400" />
@@ -454,7 +502,7 @@ const SupportTicketsManagement = () => {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
-                  {tickets.map((ticket) => (
+                  {filteredTickets.map((ticket) => (
                     <tr
                       key={ticket.id}
                       className="hover:bg-gradient-to-r hover:from-gray-50 hover:to-transparent cursor-pointer transition-all duration-200"
@@ -495,7 +543,7 @@ const SupportTicketsManagement = () => {
                       </td>
                       <td className="px-6 py-4">
                         <span className={`px-3 py-1.5 rounded-lg text-xs font-bold ${getStatusColor(ticket.status)}`}>
-                          {ticket.status.replace('_', ' ')}
+                          {ticket.status.replace(/_/g, ' ')}
                         </span>
                       </td>
                       <td className="px-6 py-4">
@@ -616,7 +664,7 @@ const SupportTicketsManagement = () => {
                     <div className="bg-gray-50 p-4 rounded-lg">
                       <div className="text-sm text-gray-600 mb-1">Status</div>
                       <span className={`px-3 py-1 rounded-full text-sm font-semibold ${getStatusColor(selectedTicket.status)}`}>
-                        {selectedTicket.status}
+                        {selectedTicket.status.replace(/_/g, ' ')}
                       </span>
                     </div>
                     <div className="bg-gray-50 p-4 rounded-lg">

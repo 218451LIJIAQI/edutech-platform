@@ -5,6 +5,7 @@ import toast from 'react-hot-toast';
 
 import clientLogger from '@/utils/logger';
 import { extractErrorMessage } from '@/utils/error-handler';
+import { formatFileSize } from '@/utils/helpers';
 
 interface FileUploadProps {
   accept?: string;
@@ -44,14 +45,6 @@ const isAcceptedFileType = (file: globalThis.File, accept: string): boolean => {
 
     return fileType === acceptedType;
   });
-};
-
-const formatFileSize = (bytes: number): string => {
-  if (bytes < 1024 * 1024) {
-    return `${(bytes / 1024).toFixed(1)} KB`;
-  }
-
-  return `${(bytes / 1024 / 1024).toFixed(2)} MB`;
 };
 
 /**

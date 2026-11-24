@@ -1,7 +1,7 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import clientLogger from '@/utils/logger';
-import { useParams, useNavigate } from 'react-router-dom';
-import { Users, Mail, Calendar, TrendingUp, Download, ArrowLeft, Search } from 'lucide-react';
+import { Link, useParams, useNavigate } from 'react-router-dom';
+import { AlertCircle, Users, Mail, MessageSquare, Calendar, RefreshCcw, TrendingUp, Download, ArrowLeft, Search } from 'lucide-react';
 import { Enrollment, Course, User } from '@/types';
 import courseService from '@/services/course.service';
 import enrollmentService from '@/services/enrollment.service';
@@ -34,62 +34,61 @@ const StudentsPage = () => {
     completionRate: 0,
   });
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const courseRosterRequestRef = useRef(0);
 
   const fetchTeacherCourses = useCallback(async () => {
     setIsLoading(true);
+    setLoadError(null);
     try {
       const coursesList = await courseService.getMyCourses();
       setCourses(coursesList);
 
       if (courseId) {
         const course = coursesList.find((c: Course) => c.id === courseId);
-        if (course) setSelectedCourse(course);
+        setSelectedCourse(course || coursesList[0] || null);
       } else if (coursesList.length > 0) {
         setSelectedCourse(coursesList[0]);
+      } else {
+        setSelectedCourse(null);
       }
     } catch (error) {
       clientLogger.error('Failed to fetch courses:', error);
-      toast.error(extractErrorMessage(error, 'Failed to load courses'));
+      const message = extractErrorMessage(error, 'Failed to load courses');
+      setLoadError(message);
+      toast.error(message);
     } finally {
       setIsLoading(false);
     }
   }, [courseId]);
 
-  const fetchCourseStudents = useCallback(async () => {
-    if (!selectedCourse) return;
-
+  const loadSelectedCourseRoster = useCallback(async (targetCourseId: string) => {
+    const requestId = ++courseRosterRequestRef.current;
     try {
-      const data = await enrollmentService.getCourseStudents(selectedCourse.id);
-      setStudents(data);
+      const [studentItems, courseStats] = await Promise.all([
+        enrollmentService.getCourseStudents(targetCourseId),
+        enrollmentService.getCourseStats(targetCourseId),
+      ]);
+      if (requestId !== courseRosterRequestRef.current) return;
+      setStudents(studentItems);
+      setStats(courseStats);
     } catch (error) {
-      clientLogger.error('Failed to fetch students:', error);
-      toast.error(extractErrorMessage(error, 'Failed to load students'));
+      if (requestId !== courseRosterRequestRef.current) return;
+      clientLogger.error('Failed to fetch course roster:', error);
+      toast.error(extractErrorMessage(error, 'Failed to load course roster'));
     }
-  }, [selectedCourse]);
-
-  const fetchCourseStats = useCallback(async () => {
-    if (!selectedCourse) return;
-
-    try {
-      const data = await enrollmentService.getCourseStats(selectedCourse.id);
-      setStats(data);
-    } catch (error) {
-      clientLogger.error('Failed to fetch stats:', error);
-      toast.error(extractErrorMessage(error, 'Failed to load course statistics'));
-    }
-  }, [selectedCourse]);
+  }, []);
 
   useEffect(() => {
-    fetchTeacherCourses();
+    void fetchTeacherCourses();
   }, [fetchTeacherCourses]);
 
   useEffect(() => {
-    if (selectedCourse) {
-      fetchCourseStudents();
-      fetchCourseStats();
+    if (selectedCourse?.id) {
+      void loadSelectedCourseRoster(selectedCourse.id);
     }
-  }, [selectedCourse, fetchCourseStudents, fetchCourseStats]);
+  }, [selectedCourse?.id, loadSelectedCourseRoster]);
 
   const filteredStudents = useMemo(() => {
     const query = searchQuery.toLowerCase();
@@ -150,10 +149,16 @@ const StudentsPage = () => {
       <div className="absolute inset-0 bg-[linear-gradient(rgba(0,0,0,0.015)_1px,transparent_1px),linear-gradient(90deg,rgba(0,0,0,0.015)_1px,transparent_1px)] bg-[size:32px_32px] pointer-events-none"></div>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative">
         {/* Header */}
-        <button type="button" onClick={() => navigate('/teacher')} className="btn-outline mb-8">
-          <ArrowLeft className="w-4 h-4 mr-2" />
-          Back to Dashboard
-        </button>
+        <div className="mb-8 flex flex-wrap items-center justify-between gap-3">
+          <button type="button" onClick={() => navigate('/teacher')} className="btn-outline">
+            <ArrowLeft className="w-4 h-4 mr-2" />
+            Back to Dashboard
+          </button>
+          <Link to="/teacher/students-management" className="btn-secondary btn-sm">
+            <Users className="w-4 h-4" />
+            All-Courses Student Directory
+          </Link>
+        </div>
 
         <div className="mb-8 flex items-center gap-3">
           <div className="w-12 h-12 bg-gradient-to-br from-primary-500 to-indigo-600 rounded-2xl flex items-center justify-center shadow-lg shadow-primary-500/25">
@@ -161,11 +166,28 @@ const StudentsPage = () => {
           </div>
           <div>
             <h1 className="text-3xl font-extrabold text-gray-900">
-              Student <span className="bg-gradient-to-r from-primary-600 to-indigo-600 bg-clip-text text-transparent">Management</span>
+              Course <span className="bg-gradient-to-r from-primary-600 to-indigo-600 bg-clip-text text-transparent">Students</span>
             </h1>
-            <p className="text-gray-500 font-medium">View and manage your course students</p>
+            <p className="text-gray-500 font-medium">Inspect enrolled learners and completion metrics per course</p>
           </div>
         </div>
+
+        {loadError && (
+          <div className="card mb-8 bg-red-50 border border-red-200 flex items-center justify-between gap-4 text-sm text-red-800">
+            <div className="flex items-center gap-2">
+              <AlertCircle className="w-5 h-5 text-red-600 shrink-0" />
+              <span>{loadError}</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => void fetchTeacherCourses()}
+              className="btn-outline btn-sm inline-flex items-center gap-1.5"
+            >
+              <RefreshCcw className="w-4 h-4" />
+              Retry
+            </button>
+          </div>
+        )}
 
         {/* Course Selector */}
         {courses.length > 0 && (
@@ -352,21 +374,32 @@ const StudentsPage = () => {
                             </span>
                           </td>
                           <td className="py-5 px-4">
-                            {enrollment.user?.email ? (
-                              <a
-                                href={`mailto:${enrollment.user.email}`}
-                                className="btn-sm btn-outline inline-flex items-center"
-                                aria-label={`Email ${enrollment.user.firstName || 'student'} ${enrollment.user.lastName || ''}`.trim()}
-                              >
-                                <Mail className="w-4 h-4 mr-1" />
-                                Contact
-                              </a>
-                            ) : (
-                              <span className="btn-sm btn-outline inline-flex items-center opacity-50 cursor-not-allowed">
-                                <Mail className="w-4 h-4 mr-1" />
-                                Contact
-                              </span>
-                            )}
+                            <div className="flex flex-wrap items-center gap-2">
+                              {enrollment.user?.id && (
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    navigate(
+                                      `/messages?contactId=${encodeURIComponent(enrollment.user!.id)}`
+                                    )
+                                  }
+                                  className="btn-sm btn-outline inline-flex items-center"
+                                >
+                                  <MessageSquare className="w-3.5 h-3.5 mr-1" />
+                                  Message
+                                </button>
+                              )}
+                              {enrollment.user?.email && (
+                                <a
+                                  href={`mailto:${enrollment.user.email}`}
+                                  className="btn-sm btn-secondary inline-flex items-center"
+                                  aria-label={`Email ${enrollment.user.firstName || 'student'} ${enrollment.user.lastName || ''}`.trim()}
+                                >
+                                  <Mail className="w-3.5 h-3.5 mr-1" />
+                                  Email
+                                </a>
+                              )}
+                            </div>
                           </td>
                         </tr>
                       ))}

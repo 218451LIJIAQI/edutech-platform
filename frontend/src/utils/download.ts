@@ -32,7 +32,7 @@ type CsvCellValue = string | number | boolean | null | undefined;
 
 const CSV_FORMULA_PATTERN = /^[=+\-@]/;
 
-export function sanitizeCsvCellValue(value: CsvCellValue): string {
+function sanitizeCsvCellValue(value: CsvCellValue): string {
   if (value === null || value === undefined) {
     return '';
   }
@@ -54,7 +54,7 @@ export function sanitizeCsvCellValue(value: CsvCellValue): string {
   return normalized;
 }
 
-export function escapeCsvCell(value: CsvCellValue): string {
+function escapeCsvCell(value: CsvCellValue): string {
   return `"${sanitizeCsvCellValue(value).replace(/"/g, '""')}"`;
 }
 

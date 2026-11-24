@@ -3,11 +3,11 @@ import { User, AuthTokens, LoginCredentials, RegisterData, ApiResponse } from '@
 import { extractData } from './response-utils';
 import { normalizeUserAssets } from '@/utils/asset-normalizers';
 
-export interface PasswordResetRequestResult {
+interface PasswordResetRequestResult {
   devCode?: string;
 }
 
-export interface PasswordResetVerificationResult {
+interface PasswordResetVerificationResult {
   resetToken: string;
 }
 

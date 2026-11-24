@@ -4,6 +4,7 @@ import { extractData, extractPaginatedData } from './response-utils';
 import {
   normalizeCourseAssets,
   normalizePayment,
+  normalizeReportAssets,
   normalizeUserAssets,
   toFiniteNumber,
   toOptionalFiniteNumber,
@@ -62,7 +63,7 @@ interface AdminPaginatedData<T> {
 
 type AdminUsersResponseData = AdminPaginatedData<User>;
 
-export interface AdminUpdateUserPayload {
+interface AdminUpdateUserPayload {
   firstName?: string;
   lastName?: string;
   email?: string;
@@ -100,20 +101,20 @@ export interface SettlementSummaryRow {
   transactions: number;
 }
 
-export interface RevenueTrendPoint {
+interface RevenueTrendPoint {
   date: string;
   totalRevenue: number;
   platformEarnings: number;
   teacherEarnings: number;
 }
 
-export interface TopTeacherEarningsPoint {
+interface TopTeacherEarningsPoint {
   id: string;
   name: string;
   earnings: number;
 }
 
-export interface TopCourseRevenuePoint {
+interface TopCourseRevenuePoint {
   id: string;
   title: string;
   revenue: number;
@@ -131,7 +132,7 @@ export interface RevenueAnalyticsData {
   revenueBreakdown: RevenueBreakdownPoint[];
 }
 
-export interface FinancialPeriodSummary {
+interface FinancialPeriodSummary {
   period: string;
   totalRevenue: number;
   platformEarnings: number;
@@ -172,7 +173,7 @@ export interface TeacherSettlementsData {
   pagination: PaginationMeta;
 }
 
-export interface FinancialExportData {
+interface FinancialExportData {
   payments: Array<{
     id: string;
     date: string;
@@ -194,7 +195,7 @@ export interface FinancialExportData {
   summary: FinancialPeriodSummary;
 }
 
-export interface BatchUserOperationResult {
+interface BatchUserOperationResult {
   affected?: number;
   count?: number;
   succeeded?: string[];
@@ -296,7 +297,15 @@ const adminService = {
     limit?: number;
   }): Promise<PaginatedResponse<Report>['data']> => {
     const response = await api.get<PaginatedResponse<Report>>('/admin/reports', { params });
-    return extractPaginatedData(response);
+    const data = extractPaginatedData(response);
+    const normalizedReports = ((data.items || data.reports || []) as Report[]).map(
+      normalizeReportAssets
+    );
+    return {
+      ...data,
+      items: normalizedReports,
+      reports: normalizedReports,
+    };
   },
 
   updateReportStatus: async (
@@ -308,7 +317,7 @@ const adminService = {
       status,
       resolution,
     });
-    return extractData(response);
+    return normalizeReportAssets(extractData(response));
   },
 
   getFinancials: async (params?: {

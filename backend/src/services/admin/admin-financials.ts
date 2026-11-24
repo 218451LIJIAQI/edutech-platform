@@ -209,8 +209,36 @@ export const getAdminInvoices = async (
 
   const baseWhere = createPaidOrRefundedPaymentWhere(startDate, endDate);
   const userRelationFilter = createPaymentUserRelationFilter(search);
-  const where: Prisma.PaymentWhereInput = userRelationFilter
-    ? { ...baseWhere, user: userRelationFilter }
+  const where: Prisma.PaymentWhereInput = search
+    ? {
+        AND: [
+          baseWhere,
+          {
+            OR: [
+              ...(userRelationFilter ? [{ user: userRelationFilter }] : []),
+              { order: { orderNo: { contains: search, mode: "insensitive" } } },
+              {
+                package: {
+                  course: { title: { contains: search, mode: "insensitive" } },
+                },
+              },
+              {
+                order: {
+                  items: {
+                    some: {
+                      package: {
+                        course: {
+                          title: { contains: search, mode: "insensitive" },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            ],
+          },
+        ],
+      }
     : baseWhere;
 
   const pagination = normalizePagination(page, limit, {

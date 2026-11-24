@@ -14,6 +14,7 @@ import { extractErrorMessage } from '@/utils/error-handler';
 import { useDebounce } from '@/hooks';
 import toast from 'react-hot-toast';
 import {
+  AlertCircle,
   ArrowDown,
   ArrowUp,
   ExternalLink,
@@ -22,6 +23,7 @@ import {
   PauseCircle,
   Pencil,
   Plus,
+  RefreshCcw,
   Trash2,
 } from 'lucide-react';
 import { usePageTitle } from '@/hooks';
@@ -81,6 +83,8 @@ export default function AdsManagement() {
   const [statusFilter, setStatusFilter] = useState<AdStatus | ''>('');
   const [roleFilter, setRoleFilter] = useState<UserRole | ''>('');
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [busyAdId, setBusyAdId] = useState<string | null>(null);
   const [isEditorOpen, setIsEditorOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [selectedAd, setSelectedAd] = useState<AdCampaign | null>(null);
@@ -94,6 +98,7 @@ export default function AdsManagement() {
     const fetchId = latestFetchIdRef.current + 1;
     latestFetchIdRef.current = fetchId;
     setIsLoading(true);
+    setLoadError(null);
     try {
       const data = await adsService.getAdminAds({
         search: debouncedSearch || undefined,
@@ -114,7 +119,9 @@ export default function AdsManagement() {
       }
 
       clientLogger.error('Failed to fetch ads:', error);
-      toast.error(extractErrorMessage(error, 'Failed to load ads'));
+      const message = extractErrorMessage(error, 'Failed to load ads');
+      setLoadError(message);
+      toast.error(message);
     } finally {
       if (latestFetchIdRef.current === fetchId) {
         setIsLoading(false);
@@ -186,18 +193,23 @@ export default function AdsManagement() {
   };
 
   const handleMove = async (adId: string, direction: 'up' | 'down') => {
+    if (busyAdId) return;
+    setBusyAdId(adId);
     try {
       await adsService.moveAd(adId, direction);
       await fetchAds();
     } catch (error) {
       toast.error(extractErrorMessage(error, 'Failed to reorder ad'));
+    } finally {
+      setBusyAdId(null);
     }
   };
 
   const handleToggleStatus = async (ad: AdCampaign) => {
+    if (busyAdId) return;
     const nextStatus =
       ad.status === AdStatus.ACTIVE ? AdStatus.PAUSED : AdStatus.ACTIVE;
-
+    setBusyAdId(ad.id);
     try {
       await adsService.updateAd(
         ad.id,
@@ -209,6 +221,8 @@ export default function AdsManagement() {
       await fetchAds();
     } catch (error) {
       toast.error(extractErrorMessage(error, 'Failed to update ad status'));
+    } finally {
+      setBusyAdId(null);
     }
   };
 
@@ -306,11 +320,44 @@ export default function AdsManagement() {
         <div className="card shadow-xl border border-gray-100 rounded-2xl overflow-hidden">
           {isLoading ? (
             <div className="py-16 text-center text-gray-600">Loading ads...</div>
+          ) : loadError ? (
+            <div className="py-14 text-center space-y-3 px-6">
+              <AlertCircle className="mx-auto h-12 w-12 text-red-500" />
+              <h3 className="text-lg font-bold text-gray-900">Unable to load ad campaigns</h3>
+              <p className="text-sm text-gray-600">{loadError}</p>
+              <button
+                type="button"
+                onClick={() => void fetchAds()}
+                className="btn-primary btn-sm inline-flex items-center gap-1.5"
+              >
+                <RefreshCcw className="h-4 w-4" />
+                Retry
+              </button>
+            </div>
           ) : ads.length === 0 ? (
-            <div className="py-16 text-center">
+            <div className="py-16 text-center px-6">
               <Megaphone className="mx-auto h-16 w-16 text-gray-300" />
-              <h3 className="mt-4 text-xl font-bold text-gray-900">No ads yet</h3>
-              <p className="mt-2 text-gray-600">Create the first campaign to power the login popup.</p>
+              <h3 className="mt-4 text-xl font-bold text-gray-900">
+                {hasActiveScopedFilters ? 'No matching campaigns found' : 'No ads yet'}
+              </h3>
+              <p className="mt-2 text-gray-600">
+                {hasActiveScopedFilters
+                  ? 'Clear search or filter criteria to inspect all configured campaigns.'
+                  : 'Create the first campaign to power the login popup.'}
+              </p>
+              {hasActiveScopedFilters && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSearch('');
+                    setStatusFilter('');
+                    setRoleFilter('');
+                  }}
+                  className="btn-secondary btn-sm mt-4"
+                >
+                  Clear Filters
+                </button>
+              )}
             </div>
           ) : (
             <div className="divide-y divide-gray-100">
@@ -352,7 +399,7 @@ export default function AdsManagement() {
                       <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
                         <span className="rounded-full border border-gray-200 px-2.5 py-1 text-gray-700">{ad.name}</span>
                         <span className="rounded-full border border-gray-200 px-2.5 py-1 text-gray-700">
-                          {ad.targetRoles.length > 0 ? ad.targetRoles.join(', ') : 'All roles'}
+                          {(ad.targetRoles?.length ?? 0) > 0 ? ad.targetRoles.join(', ') : 'All roles'}
                         </span>
                         {ad.sponsorName ? (
                           <span className="rounded-full border border-gray-200 px-2.5 py-1 text-gray-700">
@@ -377,14 +424,14 @@ export default function AdsManagement() {
                       <Pencil className="mr-2 h-4 w-4" />
                       Edit
                     </button>
-                    <button type="button" onClick={() => handleToggleStatus(ad)} className="btn-outline">
+                    <button type="button" onClick={() => void handleToggleStatus(ad)} disabled={busyAdId === ad.id} className="btn-outline">
                       <PauseCircle className="mr-2 h-4 w-4" />
                       {ad.status === AdStatus.ACTIVE ? 'Pause' : 'Activate'}
                     </button>
-                    <button type="button" onClick={() => handleMove(ad.id, 'up')} disabled={hasActiveScopedFilters || index === 0} className="btn-outline disabled:opacity-50">
+                    <button type="button" onClick={() => void handleMove(ad.id, 'up')} disabled={busyAdId !== null || hasActiveScopedFilters || index === 0} className="btn-outline disabled:opacity-50">
                       <ArrowUp className="h-4 w-4" />
                     </button>
-                    <button type="button" onClick={() => handleMove(ad.id, 'down')} disabled={hasActiveScopedFilters || index === ads.length - 1} className="btn-outline disabled:opacity-50">
+                    <button type="button" onClick={() => void handleMove(ad.id, 'down')} disabled={busyAdId !== null || hasActiveScopedFilters || index === ads.length - 1} className="btn-outline disabled:opacity-50">
                       <ArrowDown className="h-4 w-4" />
                     </button>
                     <button type="button" onClick={() => setAdToDelete(ad)} className="inline-flex items-center rounded-xl px-3 py-2 text-sm font-medium text-red-600 hover:bg-red-50">

@@ -124,61 +124,66 @@ const OrdersPage = () => {
             }`}
             onClick={() => setFilter('ALL')}
           >
-            All Orders
+            All Orders ({orders.length})
           </button>
           {Object.values(OrderStatus).map((status) => (
             <button
               key={status}
               type="button"
-              className={`px-4 py-2 rounded-full text-sm font-semibold transition-all border ${
+              className={`px-4 py-2 rounded-full text-sm font-semibold transition-all border tabular-nums ${
                 filter === status
                 ? 'bg-primary-600 text-white border-primary-600 shadow-md'
                 : 'bg-white text-gray-700 border-gray-200 hover:border-primary-300 hover:text-primary-700'
               }`}
               onClick={() => setFilter(status)}
             >
-              {status}
+              {status} ({orders.filter((o) => o.status === status).length})
             </button>
           ))}
         </div>
 
-        {/* Error State */}
-        {error && (
-          <div className="card p-6 mb-8 bg-red-50 border border-red-200 rounded-2xl">
-            <div className="flex items-center gap-3">
-              <AlertTriangle className="w-6 h-6 text-red-600 shrink-0" />
-              <div>
-                <h3 className="font-bold text-red-900 mb-1">Error loading orders</h3>
-                <p className="text-red-700 text-sm">{error}</p>
-                <button
-                  type="button"
-                  onClick={load}
-                  className="mt-3 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors text-sm font-semibold"
-                >
-                  Retry
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Loading State */}
+        {/* Loading / Error / Empty / List */}
         {loading ? (
-          <div className="flex items-center justify-center min-h-[400px]">
+          <div className="flex items-center justify-center min-h-[320px]">
             <div className="spinner"></div>
           </div>
+        ) : error ? (
+          <div className="card p-8 max-w-lg mx-auto bg-red-50 border border-red-200 rounded-2xl text-center space-y-3">
+            <AlertTriangle className="w-10 h-10 text-red-600 mx-auto" />
+            <h3 className="font-bold text-red-900 text-lg">Error loading orders</h3>
+            <p className="text-red-700 text-sm">{error}</p>
+            <button
+              type="button"
+              onClick={() => void load()}
+              className="btn-primary btn-sm"
+            >
+              Retry
+            </button>
+          </div>
         ) : filtered.length === 0 ? (
-          // Empty State
-          <div className="card p-16 text-center shadow-xl max-w-md mx-auto border border-gray-100 rounded-2xl">
-            <div className="w-24 h-24 bg-gradient-to-br from-primary-100 to-primary-50 rounded-full flex items-center justify-center mx-auto mb-6 shadow-lg">
-              <Package className="w-10 h-10 text-primary-600" />
+          <div className="card p-14 text-center shadow-xl max-w-md mx-auto border border-gray-100 rounded-2xl">
+            <div className="w-20 h-20 bg-gradient-to-br from-primary-100 to-primary-50 rounded-2xl flex items-center justify-center mx-auto mb-5">
+              <Package className="w-9 h-9 text-primary-600" />
             </div>
-            <h3 className="text-2xl font-bold text-gray-900 mb-3">No orders found</h3>
-            <p className="text-gray-600 text-lg">
+            <h3 className="text-2xl font-bold text-gray-900 mb-2">No orders found</h3>
+            <p className="text-gray-600 mb-6">
               {filter === 'ALL'
                 ? "You haven't placed any orders yet."
                 : `No ${filter.toLowerCase()} orders found.`}
             </p>
+            {filter !== 'ALL' ? (
+              <button
+                type="button"
+                onClick={() => setFilter('ALL')}
+                className="btn-secondary"
+              >
+                Show All Orders
+              </button>
+            ) : (
+              <Link to="/courses" className="btn-primary">
+                Browse Courses
+              </Link>
+            )}
           </div>
         ) : (
           // Orders List

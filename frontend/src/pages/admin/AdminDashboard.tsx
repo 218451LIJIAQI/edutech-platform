@@ -100,17 +100,25 @@ const AdminDashboard = () => {
       return;
     }
 
+    let isMounted = true;
     const interval = setInterval(async () => {
       try {
         const latest = await adminService.getRecentActivities({ limit: activitiesLimit, page: activitiesPage });
-        setActivities(latest.items);
-        setActivitiesPagination(latest.pagination);
+        if (isMounted) {
+          setActivities(latest.items);
+          setActivitiesPagination(latest.pagination);
+        }
       } catch (error) {
-        clientLogger.warn('Background activity refresh failed:', error);
+        if (isMounted) {
+          clientLogger.warn('Background activity refresh failed:', error);
+        }
       }
     }, 20000);
 
-    return () => clearInterval(interval);
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
   }, [activitiesPage, activitiesLimit, stats]);
 
   if (isLoading) {
@@ -252,7 +260,7 @@ const AdminDashboard = () => {
                   <stat.icon className="w-6 h-6" />
                 </div>
               </div>
-              <h3 className="text-3xl font-bold mb-2 text-gray-900">{stat.value}</h3>
+              <h3 className="text-3xl font-bold mb-2 text-gray-900 tabular-nums">{stat.value}</h3>
               <p className="text-gray-500 text-xs mb-3 font-semibold uppercase">{stat.title}</p>
               <p className="text-xs text-gray-600 bg-gray-50/80 px-3 py-1.5 rounded-lg inline-block font-medium">{stat.change}</p>
             </div>
@@ -275,7 +283,7 @@ const AdminDashboard = () => {
                     </div>
                     <h3 className="text-lg font-bold text-gray-900">{alert.title}</h3>
                   </div>
-                  <p className="text-4xl font-bold text-gray-900">{alert.count}</p>
+                  <p className="text-4xl font-bold text-gray-900 tabular-nums">{alert.count}</p>
                 </div>
                 <CheckCircle className={`w-16 h-16 ${alert.color} opacity-10 group-hover:opacity-25 transition-opacity`} />
               </div>

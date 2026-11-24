@@ -12,7 +12,7 @@ import {
 import { CourseType } from '@/types';
 import type { CourseEditorTabId } from './types';
 
-export interface CourseEditorTab {
+interface CourseEditorTab {
   id: CourseEditorTabId;
   label: string;
   icon: LucideIcon;

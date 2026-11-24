@@ -7,7 +7,7 @@ import {
   ValidationError,
 } from "./errors";
 
-export type RequestUser = NonNullable<Request["user"]>;
+type RequestUser = NonNullable<Request["user"]>;
 
 const ADMIN_ROLE: UserRole = "ADMIN";
 
@@ -67,7 +67,7 @@ export const sendCreated = <T>(
   message?: string,
 ): Response => sendSuccess(res, data, message, 201);
 
-export const getFirstQueryValue = (value: unknown): unknown =>
+const getFirstQueryValue = (value: unknown): unknown =>
   Array.isArray(value) ? value[0] : value;
 
 export const getQueryString = (value: unknown): string | undefined => {
@@ -353,11 +353,20 @@ export const parsePositiveAmount = (
     throw new BadRequestError(`${fieldName} must be a positive number`);
   }
 
-  if (options?.max !== undefined && parsed > options.max) {
+  const normalized =
+    options?.roundCents !== false
+      ? Math.round((parsed + Number.EPSILON) * 100) / 100
+      : parsed;
+
+  if (normalized <= 0) {
+    throw new BadRequestError(`${fieldName} must be at least 0.01`);
+  }
+
+  if (options?.max !== undefined && normalized > options.max) {
     throw new BadRequestError(`${fieldName} must not exceed ${options.max}`);
   }
 
-  return options?.roundCents ? Math.round(parsed * 100) / 100 : parsed;
+  return normalized;
 };
 
 export const parseBoundedInt = (

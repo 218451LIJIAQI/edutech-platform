@@ -27,7 +27,7 @@ export interface Message {
   sender?: User;
 }
 
-export interface ContactMessagesResult {
+interface ContactMessagesResult {
   threadId: string | null;
   items: Message[];
   nextCursor?: string | null;

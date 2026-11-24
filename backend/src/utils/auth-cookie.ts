@@ -1,8 +1,8 @@
 import type { CookieOptions, Request, Response } from "express";
 import config from "../config/env";
 
-export const REFRESH_TOKEN_COOKIE_NAME = "refreshToken";
-export const REFRESH_SESSION_HINT_COOKIE_NAME = "refreshSession";
+const REFRESH_TOKEN_COOKIE_NAME = "refreshToken";
+const REFRESH_SESSION_HINT_COOKIE_NAME = "refreshSession";
 
 const REFRESH_TOKEN_COOKIE_PATH = `/api/${config.API_VERSION}/auth`;
 const REFRESH_SESSION_HINT_COOKIE_PATH = "/";

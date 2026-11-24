@@ -3,7 +3,7 @@ const PROTOCOL_RELATIVE_URL_PATTERN = /^\/\//;
 
 const trimTrailingSlash = (value: string) => value.replace(/\/+$/, '');
 
-export const getRuntimeOrigin = (): string => {
+const getRuntimeOrigin = (): string => {
   if (typeof window !== 'undefined' && window.location?.origin) {
     return window.location.origin;
   }

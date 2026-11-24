@@ -331,7 +331,7 @@ export const createPaymentUserRelationFilter = (
   };
 };
 
-export interface ActivityFeedItem {
+interface ActivityFeedItem {
   id: string;
   type:
     | "user_registered"
@@ -455,7 +455,7 @@ export const buildRecentActivities = ({
   };
 };
 
-export interface SettlementRow {
+interface SettlementRow {
   teacherUserId: string;
   teacherName: string;
   teacherEmail?: string;

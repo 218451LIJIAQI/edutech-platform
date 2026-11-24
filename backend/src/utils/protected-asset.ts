@@ -12,7 +12,7 @@ import {
 
 const DEFAULT_FILENAME = "file";
 
-export interface ProtectedAssetDescriptor {
+interface ProtectedAssetDescriptor {
   filename: string;
   absolutePath?: string;
   redirectUrl?: string;
@@ -90,7 +90,7 @@ const getExistingFileStats = (absoluteFilePath: string): fs.Stats => {
   }
 };
 
-export const applyProtectedAssetHeaders = (
+const applyProtectedAssetHeaders = (
   res: Response,
   options?: {
     disposition?: "inline" | "attachment";

@@ -1,14 +1,15 @@
 import { useEffect, useRef, useState } from 'react';
-import { useParams, useNavigate, useLocation } from 'react-router-dom';
+import { Link, useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useCourseStore } from '@/store/course-store';
 import { useAuthStore } from '@/store/auth-store';
-import { formatCurrency, formatDuration } from '@/utils/helpers';
-import { CourseType, Lesson, UserRole } from '@/types';
-import { BookOpen, Clock, Star, Users, CheckCircle, PlayCircle, Video, Radio, AlertCircle, X } from 'lucide-react';
+import { formatCurrency, formatDate, formatDuration } from '@/utils/helpers';
+import { CourseType, Lesson, Review, UserRole } from '@/types';
+import { BookOpen, Clock, Star, Users, CheckCircle, PlayCircle, Video, Radio, AlertCircle, X, RefreshCcw } from 'lucide-react';
 import toast from 'react-hot-toast';
 import UniversalVideoPlayer from '@/components/common/UniversalVideoPlayer';
 import ReportSubmissionModal from '@/components/common/ReportSubmissionModal';
 import cartService from '@/services/cart.service';
+import reviewService from '@/services/review.service';
 import { extractErrorMessage } from '@/utils/error-handler';
 import { useOverlayAccessibility, usePageTitle } from '@/hooks';
 import { getAccessToken, hasRecoverableAuthState } from '@/utils/auth-storage';
@@ -21,24 +22,49 @@ const CourseDetailPage = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const location = useLocation();
-  const { currentCourse, isLoading, fetchCourseById } = useCourseStore();
+  const { currentCourse, isLoading, error, errorStatus, fetchCourseById } = useCourseStore();
   const { isAuthenticated, user } = useAuthStore();
   const hasAccessToken = Boolean(getAccessToken());
   const hasRecoverableSession = hasRecoverableAuthState();
   const isSessionReady = Boolean(isAuthenticated && user);
   const isRestoringSession = hasRecoverableSession && (!hasAccessToken || !user);
   const [selectedPackage, setSelectedPackage] = useState<string | null>(null);
+  const [addingPackageId, setAddingPackageId] = useState<string | null>(null);
   const [isPurchasing, setIsPurchasing] = useState(false);
   const [isReportModalOpen, setIsReportModalOpen] = useState(false);
   const [previewLesson, setPreviewLesson] = useState<Lesson | null>(null);
+  const [courseReviews, setCourseReviews] = useState<Review[]>([]);
+  const [totalReviewsCount, setTotalReviewsCount] = useState(0);
   const previewModalRef = useRef<HTMLDivElement | null>(null);
   const closePreviewButtonRef = useRef<HTMLButtonElement | null>(null);
   usePageTitle(currentCourse ? currentCourse.title : 'Course Details');
 
+  const effectiveSelectedPackage =
+    selectedPackage && currentCourse?.packages?.some((pkg) => pkg.id === selectedPackage)
+      ? selectedPackage
+      : currentCourse?.packages?.[0]?.id ?? null;
+
   useEffect(() => {
-    if (id) {
-      fetchCourseById(id);
-    }
+    if (!id) return;
+    let isActive = true;
+    void fetchCourseById(id);
+    void reviewService
+      .getCourseReviews(id, { page: 1, limit: 6 })
+      .then((res) => {
+        if (!isActive) return;
+        const published = (res.reviews || []).filter((item) => item.isPublished);
+        setCourseReviews(published);
+        setTotalReviewsCount(res.pagination?.total ?? published.length);
+      })
+      .catch(() => {
+        if (isActive) {
+          setCourseReviews([]);
+          setTotalReviewsCount(0);
+        }
+      });
+    return () => {
+      isActive = false;
+    };
   }, [id, fetchCourseById]);
 
   useOverlayAccessibility({
@@ -93,7 +119,7 @@ const CourseDetailPage = () => {
       return;
     }
 
-    if (!selectedPackage) {
+    if (!effectiveSelectedPackage) {
       toast.error('Please select a package');
       return;
     }
@@ -105,8 +131,7 @@ const CourseDetailPage = () => {
 
     setIsPurchasing(true);
     try {
-      // Redirect to secure checkout page
-      navigate(`/courses/${id}/checkout/${selectedPackage}`);
+      navigate(`/courses/${id}/checkout/${effectiveSelectedPackage}`);
     } catch (error) {
       toast.error(extractErrorMessage(error, 'Failed to initiate purchase'));
     } finally {
@@ -131,12 +156,16 @@ const CourseDetailPage = () => {
       return;
     }
 
+    if (addingPackageId) return;
+    setAddingPackageId(packageId);
     try {
       await cartService.addItem(packageId);
       setSelectedPackage(packageId);
       toast.success('Added to cart');
     } catch (error) {
       toast.error(extractErrorMessage(error, 'Failed to add to cart'));
+    } finally {
+      setAddingPackageId(null);
     }
   };
 
@@ -157,15 +186,42 @@ const CourseDetailPage = () => {
   }
 
   if (!currentCourse) {
+    const isNotFound = !error || errorStatus === 404;
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-primary-50/10 to-indigo-50/20">
-        <div className="text-center">
-          <BookOpen className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-          <h2 className="text-3xl font-bold mb-4 text-gray-900">Course not found</h2>
-          <p className="text-gray-600 mb-8">The course you're looking for doesn't exist.</p>
-          <button type="button" onClick={() => navigate('/courses')} className="btn-primary">
-            Back to Courses
-          </button>
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-primary-50/10 to-indigo-50/20 px-4">
+        <div className="card max-w-md w-full text-center space-y-4">
+          {isNotFound ? (
+            <BookOpen className="w-16 h-16 text-gray-300 mx-auto" />
+          ) : (
+            <AlertCircle className="w-14 h-14 text-red-500 mx-auto" />
+          )}
+          <h2 className="text-2xl font-bold text-gray-900">
+            {isNotFound ? 'Course not found' : 'Unable to load course'}
+          </h2>
+          <p className="text-gray-600">
+            {isNotFound
+              ? "The course you're looking for doesn't exist or is no longer published."
+              : error}
+          </p>
+          <div className="flex items-center justify-center gap-3 pt-2">
+            {!isNotFound && id && (
+              <button
+                type="button"
+                onClick={() => void fetchCourseById(id)}
+                className="btn-primary inline-flex items-center gap-2"
+              >
+                <RefreshCcw className="w-4 h-4" />
+                Retry
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => navigate('/courses')}
+              className={isNotFound ? 'btn-primary' : 'btn-outline'}
+            >
+              Back to Courses
+            </button>
+          </div>
         </div>
       </div>
     );
@@ -239,18 +295,27 @@ const CourseDetailPage = () => {
                 {(teacher?.user?.firstName?.[0] || '')}{(teacher?.user?.lastName?.[0] || '')}
               </div>
               <div>
-                <p className="font-bold text-lg">
-                  {teacher?.user?.firstName} {teacher?.user?.lastName}
-                </p>
-                <div className="flex items-center space-x-3 text-sm text-primary-100 mt-1">
+                {teacher?.id ? (
+                  <Link
+                    to={`/teachers/${teacher.id}`}
+                    className="font-bold text-lg text-white hover:text-primary-100 hover:underline transition-colors"
+                  >
+                    {teacher?.user?.firstName} {teacher?.user?.lastName}
+                  </Link>
+                ) : (
+                  <p className="font-bold text-lg">
+                    {teacher?.user?.firstName} {teacher?.user?.lastName}
+                  </p>
+                )}
+                <div className="flex items-center space-x-3 text-sm text-primary-100 mt-1 tabular-nums">
                   <div className="flex items-center space-x-1">
-                  <Star className="w-4 h-4 fill-yellow-400 text-yellow-400" />
-                    <span className="font-semibold">{teacher?.averageRating?.toFixed(1) || 'N/A'}</span>
+                    <Star className="w-4 h-4 fill-yellow-400 text-yellow-400" />
+                    <span className="font-semibold">{teacher?.averageRating ? teacher.averageRating.toFixed(1) : 'N/A'}</span>
                   </div>
                   <span className="w-1.5 h-1.5 rounded-full bg-primary-100" aria-hidden="true"></span>
                   <div className="flex items-center space-x-1">
-                  <Users className="w-4 h-4" />
-                  <span>{teacher?.totalStudents || 0} students</span>
+                    <Users className="w-4 h-4" />
+                    <span>{teacher?.totalStudents || 0} students</span>
                   </div>
                 </div>
               </div>
@@ -361,6 +426,61 @@ const CourseDetailPage = () => {
                 </div>
               </div>
             )}
+
+            {/* Verified Student Reviews */}
+            <div className="card shadow-xl border border-gray-100 rounded-2xl">
+              <div className="flex items-center justify-between gap-4 mb-6">
+                <h3 className="text-2xl font-bold text-gray-900">Student Reviews</h3>
+                <div className="inline-flex items-center gap-2 rounded-full bg-amber-50 border border-amber-200 px-3.5 py-1.5 text-sm font-semibold text-amber-900 tabular-nums">
+                  <Star className="w-4 h-4 fill-yellow-400 text-yellow-500" />
+                  <span>{currentCourse.rating ? currentCourse.rating.toFixed(1) : 'New'}</span>
+                  <span className="text-amber-700">({totalReviewsCount})</span>
+                </div>
+              </div>
+
+              {courseReviews.length > 0 ? (
+                <div className="space-y-4">
+                  {courseReviews.map((review) => (
+                    <div
+                      key={review.id}
+                      className="rounded-xl border border-slate-200 bg-slate-50/70 p-4 space-y-2"
+                    >
+                      <div className="flex items-center justify-between gap-4">
+                        <div>
+                          <p className="font-semibold text-slate-900 text-sm">
+                            {[review.reviewer?.firstName, review.reviewer?.lastName]
+                              .filter(Boolean)
+                              .join(' ') || 'Verified Student'}
+                          </p>
+                          <p className="text-xs text-slate-500">{formatDate(review.createdAt)}</p>
+                        </div>
+                        <div className="flex items-center gap-0.5">
+                          {Array.from({ length: 5 }, (_, idx) => (
+                            <Star
+                              key={idx}
+                              className={`w-4 h-4 ${
+                                idx < review.rating
+                                  ? 'fill-yellow-400 text-yellow-400'
+                                  : 'text-slate-300'
+                              }`}
+                            />
+                          ))}
+                        </div>
+                      </div>
+                      {review.comment?.trim() ? (
+                        <p className="text-sm text-slate-700 leading-relaxed">
+                          {review.comment.trim()}
+                        </p>
+                      ) : null}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 p-8 text-center text-sm text-slate-600">
+                  No student reviews have been published for this course yet.
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Sidebar - Packages */}
@@ -371,9 +491,9 @@ const CourseDetailPage = () => {
                   {currentCourse.packages.map((pkg) => (
                     <div
                       key={pkg.id}
-                      className={`card transition-all duration-300 cursor-pointer ${
-                        selectedPackage === pkg.id
-                          ? 'ring-2 ring-primary-600 shadow-xl bg-gradient-to-br from-primary-50 to-primary-100'
+                      className={`card transition-all duration-200 cursor-pointer ${
+                        effectiveSelectedPackage === pkg.id
+                          ? 'ring-2 ring-primary-600 shadow-xl bg-gradient-to-br from-primary-50/90 to-indigo-50/70'
                           : 'hover:shadow-lg hover:border-primary-200'
                       }`}
                     >
@@ -388,7 +508,7 @@ const CourseDetailPage = () => {
                         }}
                         role="button"
                         tabIndex={0}
-                        aria-pressed={selectedPackage === pkg.id}
+                        aria-pressed={effectiveSelectedPackage === pkg.id}
                       >
                         <div className="mb-5">
                           <h4 className="text-xl font-bold text-gray-900 mb-2">{pkg.name}</h4>
@@ -445,15 +565,15 @@ const CourseDetailPage = () => {
                             onClick={() => setSelectedPackage(pkg.id)}
                             className="btn-outline flex-1 text-sm"
                           >
-                            Select
+                            {effectiveSelectedPackage === pkg.id ? 'Selected' : 'Select'}
                           </button>
                           <button
                             type="button"
                             onClick={() => void handleAddToCart(pkg.id)}
-                            disabled={isRestoringSession}
+                            disabled={isRestoringSession || addingPackageId !== null}
                             className="btn-primary flex-1 text-sm disabled:cursor-not-allowed disabled:opacity-60"
                           >
-                            Add to Cart
+                            {addingPackageId === pkg.id ? 'Adding...' : 'Add to Cart'}
                           </button>
                         </div>
                       )}
@@ -473,7 +593,7 @@ const CourseDetailPage = () => {
                     <button
                       type="button"
                       onClick={handlePurchase}
-                      disabled={!selectedPackage || isPurchasing || isRestoringSession}
+                      disabled={!effectiveSelectedPackage || isPurchasing || isRestoringSession}
                       className="btn-primary w-full justify-center disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       {isPurchasing ? (

@@ -1,6 +1,6 @@
 import type { SupportTicket } from '@/types';
 
-export interface SupportConversationEntry {
+interface SupportConversationEntry {
   readonly id: string;
   readonly kind: 'initial_request' | 'message';
   readonly senderId: string;
@@ -10,9 +10,9 @@ export interface SupportConversationEntry {
   readonly createdAt: string;
 }
 
-export const MAX_SUPPORT_ATTACHMENT_SIZE_BYTES = 10 * 1024 * 1024;
+const MAX_SUPPORT_ATTACHMENT_SIZE_BYTES = 10 * 1024 * 1024;
 
-export const ACCEPTED_SUPPORT_ATTACHMENT_TYPES = [
+const ACCEPTED_SUPPORT_ATTACHMENT_TYPES = [
   'image/jpeg',
   'image/png',
   'image/webp',

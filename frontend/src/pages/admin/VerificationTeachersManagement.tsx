@@ -89,8 +89,13 @@ const VerificationTeachersManagement = () => {
     setIsLoadingRegistrations(true);
     try {
       const result = await teacherService.getPendingRegistrations({ page: regPage, limit: 10 });
+      const totalPages = Math.max(1, result.pagination?.totalPages || 1);
+      if ((result.teachers || []).length === 0 && regPage > totalPages) {
+        setRegPage(totalPages);
+        return;
+      }
       setPendingRegistrations(result.teachers || []);
-      setRegTotalPages(result.pagination?.totalPages || 1);
+      setRegTotalPages(totalPages);
     } catch (error) {
       clientLogger.error('Failed to fetch pending registrations:', error);
       showTemporaryError(extractErrorMessage(error, 'Failed to load pending teacher registrations.'));
@@ -104,8 +109,13 @@ const VerificationTeachersManagement = () => {
     setIsLoadingProfiles(true);
     try {
       const result = await teacherService.getPendingProfileVerifications({ page: profPage, limit: 10 });
+      const totalPages = Math.max(1, result.pagination?.totalPages || 1);
+      if ((result.teachers || []).length === 0 && profPage > totalPages) {
+        setProfPage(totalPages);
+        return;
+      }
       setPendingProfiles(result.teachers || []);
-      setProfTotalPages(result.pagination?.totalPages || 1);
+      setProfTotalPages(totalPages);
     } catch (error) {
       clientLogger.error('Failed to fetch pending profiles:', error);
       showTemporaryError(extractErrorMessage(error, 'Failed to load pending profile verifications.'));
@@ -138,10 +148,13 @@ const VerificationTeachersManagement = () => {
     }
   }, []);
 
-  // Load pending certificate badge count on mount so the tab counter is accurate immediately.
+  const hasLoadedInitialCertBadgeRef = useRef(false);
   useEffect(() => {
-    void fetchPendingCertificates();
-  }, [fetchPendingCertificates]);
+    if (!hasLoadedInitialCertBadgeRef.current && activeTab !== 'certificates') {
+      hasLoadedInitialCertBadgeRef.current = true;
+      void fetchPendingCertificates();
+    }
+  }, [activeTab, fetchPendingCertificates]);
 
   useEffect(() => {
     if (activeTab === 'registrations') {
@@ -149,6 +162,7 @@ const VerificationTeachersManagement = () => {
     } else if (activeTab === 'profiles') {
       void fetchPendingProfiles();
     } else if (activeTab === 'certificates') {
+      hasLoadedInitialCertBadgeRef.current = true;
       void fetchPendingCertificates();
       void fetchAutoVerificationStats();
     }
@@ -357,11 +371,17 @@ const VerificationTeachersManagement = () => {
     }
   }, []);
 
-  const handleBackdropClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
-    if (e.target === e.currentTarget) {
+  const closeProfileReviewModal = useCallback(() => {
+    if (!isSubmittingProfileReview) {
       setIsProfileReviewModalOpen(false);
     }
-  }, []);
+  }, [isSubmittingProfileReview]);
+
+  const handleBackdropClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    if (e.target === e.currentTarget) {
+      closeProfileReviewModal();
+    }
+  }, [closeProfileReviewModal]);
 
   const handleRegistrationRejectBackdropClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
     if (e.target === e.currentTarget) {
@@ -404,7 +424,7 @@ const VerificationTeachersManagement = () => {
     isOpen: isProfileReviewModalOpen,
     containerRef: profileReviewModalRef,
     initialFocusRef: profileReviewStatusRef,
-    onClose: () => setIsProfileReviewModalOpen(false),
+    onClose: closeProfileReviewModal,
     trapFocus: true,
     lockBodyScroll: true,
   });
@@ -779,15 +799,17 @@ const VerificationTeachersManagement = () => {
                                 </div>
                               </td>
                               <td className="px-6 py-4 text-sm text-gray-600">
-                                <p className="font-medium text-gray-900">{cert.documentType}</p>
+                                <p className="font-medium text-gray-900 capitalize">
+                                  {cert.documentType.replace(/_/g, ' ')}
+                                </p>
                                 {cert.reviewNotes ? (
                                   <p className="mt-1 text-xs text-amber-700">{cert.reviewNotes}</p>
                                 ) : null}
                               </td>
                               <td className="px-6 py-4">
                                 {cert.verificationMethod === 'AUTO' ? (
-                                  <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-green-100 text-green-700 border border-green-200">
-                                    <Zap className="w-3 h-3" /> Auto
+                                  <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-100 text-amber-800 border border-amber-200">
+                                    <Zap className="w-3 h-3" /> Auto-Flagged
                                   </span>
                                 ) : (
                                   <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-blue-100 text-blue-700 border border-blue-200">
@@ -1048,8 +1070,9 @@ const VerificationTeachersManagement = () => {
             <div className="sticky top-0 bg-gradient-to-r from-primary-600 to-primary-700 text-white px-6 py-4 flex items-center justify-between">
               <h2 id="profile-review-title" className="text-2xl font-bold">Review Teacher Profile</h2>
               <button
-                onClick={() => setIsProfileReviewModalOpen(false)}
-                className="text-white hover:text-gray-200 transition-colors"
+                onClick={closeProfileReviewModal}
+                disabled={isSubmittingProfileReview}
+                className="text-white hover:text-gray-200 transition-colors disabled:opacity-50"
                 aria-label="Close profile review modal"
                 type="button"
               >
@@ -1185,7 +1208,8 @@ const VerificationTeachersManagement = () => {
               </div>
               <div className="flex gap-4 justify-end">
                 <button
-                  onClick={() => setIsProfileReviewModalOpen(false)}
+                  onClick={closeProfileReviewModal}
+                  disabled={isSubmittingProfileReview}
                   className="btn-outline"
                   type="button"
                 >

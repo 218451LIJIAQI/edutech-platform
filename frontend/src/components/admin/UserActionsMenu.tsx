@@ -345,27 +345,29 @@ const UserActionsMenu = ({
               </button>
 
               {!isAdmin && (
-                <button
-                  type="button"
-                  role="menuitem"
-                  onClick={handleEdit}
-                  className="flex w-full items-center gap-2 border-b px-4 py-2 text-left text-gray-700 transition-colors hover:bg-gray-50 focus:bg-gray-50 focus:outline-none"
-                >
-                  <Edit className="h-4 w-4" />
-                  Edit User
-                </button>
-              )}
+                <>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={handleEdit}
+                    className="flex w-full items-center gap-2 border-b px-4 py-2 text-left text-gray-700 transition-colors hover:bg-gray-50 focus:bg-gray-50 focus:outline-none"
+                  >
+                    <Edit className="h-4 w-4" />
+                    Edit User
+                  </button>
 
-              <button
-                type="button"
-                role="menuitem"
-                onClick={() => openConfirmation('resetPassword')}
-                disabled={isLoading}
-                className="flex w-full items-center gap-2 border-b px-4 py-2 text-left text-gray-700 transition-colors hover:bg-gray-50 focus:bg-gray-50 focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                <Key className="h-4 w-4" />
-                Reset Password
-              </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => openConfirmation('resetPassword')}
+                    disabled={isLoading}
+                    className="flex w-full items-center gap-2 border-b px-4 py-2 text-left text-gray-700 transition-colors hover:bg-gray-50 focus:bg-gray-50 focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    <Key className="h-4 w-4" />
+                    Reset Password
+                  </button>
+                </>
+              )}
 
               {!isAdmin && (
                 <>

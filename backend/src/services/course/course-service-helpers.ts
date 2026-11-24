@@ -28,6 +28,7 @@ export const courseDetailInclude = {
           firstName: true,
           lastName: true,
           avatar: true,
+          isActive: true,
         },
       },
     },
@@ -341,7 +342,7 @@ export const listCourseLessonIdsInOrder = async (
   return lessons.map((lesson) => lesson.id);
 };
 
-export const clampLessonOrderIndex = (
+const clampLessonOrderIndex = (
   requestedOrderIndex: number,
   lessonCount: number,
 ) => {
@@ -536,7 +537,7 @@ export const recalculateCourseEnrollmentsProgress = async (
   }
 };
 
-export const mapMaterialAccessForViewer = <
+const mapMaterialAccessForViewer = <
   T extends {
     id: string;
     fileUrl: string;

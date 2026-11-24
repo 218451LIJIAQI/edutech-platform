@@ -44,6 +44,10 @@ const NetworkStatus = () => {
   );
 
   useEffect(() => {
+    if (isLoading) {
+      return;
+    }
+
     if (!isOnline) {
       hasShownOfflineStateRef.current = true;
       setShowBanner(true);
@@ -64,7 +68,7 @@ const NetworkStatus = () => {
     }
 
     setShowBanner(false);
-  }, [isOnline, lastChanged]);
+  }, [isLoading, isOnline, lastChanged]);
 
   const handleRetry = useCallback(async () => {
     try {
@@ -83,7 +87,7 @@ const NetworkStatus = () => {
       role={isOnline ? 'status' : 'alert'}
       aria-live={isOnline ? 'polite' : 'assertive'}
       aria-atomic="true"
-      className={`fixed inset-x-0 top-0 z-[100] transition-colors duration-300 ${
+      className={`relative w-full z-[60] transition-colors duration-300 ${
         isOnline ? 'bg-green-600' : 'bg-red-600'
       }`}
     >

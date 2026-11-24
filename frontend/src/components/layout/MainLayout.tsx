@@ -19,8 +19,10 @@ const MainLayout = () => {
     <div className="min-h-screen flex flex-col bg-white text-gray-900 antialiased">
       <SkipLink targetId="main-content" />
 
-      <NetworkStatus />
-      <Navbar />
+      <div className="sticky top-0 z-50 w-full">
+        <NetworkStatus />
+        <Navbar />
+      </div>
 
       <main id="main-content" className="flex-1" role="main" tabIndex={-1}>
         <ErrorBoundary>

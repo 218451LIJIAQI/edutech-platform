@@ -85,6 +85,10 @@ type ProtectedUserDependencyCounts = {
   auditLogsAsAdmin: number;
   auditLogsAsUser: number;
   wallets: number;
+  reviewsSubmitted: number;
+  reviewsReceived: number;
+  packageOrders: number;
+  packagePayments: number;
 };
 
 type UserRecordWithPassword = {
@@ -124,6 +128,10 @@ class AdminService {
       auditLogsAsAdmin,
       auditLogsAsUser,
       wallets,
+      reviewsSubmitted,
+      reviewsReceived,
+      packageOrders,
+      packagePayments,
     ] = await Promise.all([
       prisma.payment.count({ where: { userId } }),
       prisma.order.count({ where: { userId } }),
@@ -134,6 +142,14 @@ class AdminService {
       prisma.userAuditLog.count({ where: { adminId: userId } }),
       prisma.userAuditLog.count({ where: { userId } }),
       prisma.wallet.count({ where: { userId } }),
+      prisma.review.count({ where: { reviewerId: userId } }),
+      prisma.review.count({ where: { teacherId: userId } }),
+      prisma.orderItem.count({
+        where: { package: { course: { teacherProfile: { userId } } } },
+      }),
+      prisma.payment.count({
+        where: { package: { course: { teacherProfile: { userId } } } },
+      }),
     ]);
 
     return {
@@ -146,6 +162,10 @@ class AdminService {
       auditLogsAsAdmin,
       auditLogsAsUser,
       wallets,
+      reviewsSubmitted,
+      reviewsReceived,
+      packageOrders,
+      packagePayments,
     };
   }
 
@@ -620,7 +640,8 @@ class AdminService {
     newPassword: string,
     adminId: string,
   ) {
-    await requireUser(userId);
+    const targetUser = await requireUser(userId);
+    ensureNotAdminUser(targetUser, "Cannot reset password for admin user");
     ensureStrongPassword(newPassword);
 
     const hashedPassword = await bcrypt.hash(newPassword, 12);

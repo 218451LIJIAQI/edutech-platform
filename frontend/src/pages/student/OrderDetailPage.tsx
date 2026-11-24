@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, FileText, Headphones, Package } from 'lucide-react';
+import { AlertCircle, ArrowLeft, FileText, Headphones, Package, RefreshCcw } from 'lucide-react';
 import ordersService from '@/services/orders.service';
 import { Order, Refund } from '@/types';
 import toast from 'react-hot-toast';
@@ -8,6 +8,7 @@ import RefundModal from '@/components/common/RefundModal';
 import CustomerServiceModal from '@/components/common/CustomerServiceModal';
 import ConfirmationModal from '@/components/common/ConfirmationModal';
 import { extractErrorMessage } from '@/utils/error-handler';
+import { roundCurrency } from '@/utils/helpers';
 import clientLogger from '@/utils/logger';
 import { usePageTitle } from '@/hooks';
 
@@ -26,6 +27,7 @@ const OrderDetailPage = () => {
   const [order, setOrder] = useState<Order | null>(null);
   const [refunds, setRefunds] = useState<Refund[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [working, setWorking] = useState(false);
   const [cancelReason, setCancelReason] = useState('');
   const [showRefundModal, setShowRefundModal] = useState(false);
@@ -39,6 +41,7 @@ const OrderDetailPage = () => {
   const load = useCallback(async () => {
     if (!id) return;
     setLoading(true);
+    setLoadError(null);
     try {
       const [orderData, refundsData] = await Promise.all([
         ordersService.getOrderById(id),
@@ -48,7 +51,9 @@ const OrderDetailPage = () => {
       setRefunds(refundsData);
     } catch (error) {
       clientLogger.error('Failed to load order details:', error);
-      toast.error(extractErrorMessage(error, 'Failed to load order'));
+      const message = extractErrorMessage(error, 'Failed to load order');
+      setLoadError(message);
+      toast.error(message);
     } finally {
       setLoading(false);
     }
@@ -141,21 +146,47 @@ const OrderDetailPage = () => {
 
   if (!order) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-primary-50/10 to-indigo-50/20">
-        <div className="text-center">
-          <p className="text-gray-600 mb-4">Order not found.</p>
-          <button type="button" className="btn-primary" onClick={() => navigate('/orders')}>
-            Back to Orders
-          </button>
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-primary-50/10 to-indigo-50/20 px-4">
+        <div className="card max-w-md w-full text-center space-y-4">
+          <AlertCircle className="w-12 h-12 text-red-500 mx-auto" />
+          <h2 className="text-xl font-bold text-slate-900">
+            {loadError ? 'Unable to load order' : 'Order not found'}
+          </h2>
+          <p className="text-slate-600 text-sm">
+            {loadError || 'We could not find an order matching this reference.'}
+          </p>
+          <div className="flex items-center justify-center gap-3">
+            {loadError && (
+              <button
+                type="button"
+                className="btn-primary inline-flex items-center gap-2"
+                onClick={() => void load()}
+              >
+                <RefreshCcw className="w-4 h-4" />
+                Retry
+              </button>
+            )}
+            <button
+              type="button"
+              className={loadError ? 'btn-outline' : 'btn-primary'}
+              onClick={() => navigate('/orders')}
+            >
+              Back to Orders
+            </button>
+          </div>
         </div>
       </div>
     );
   }
 
-  const completedRefundAmount = refunds
-    .filter((item) => item.status === 'COMPLETED')
-    .reduce((sum, item) => sum + Number(item.amount || 0), 0);
-  const remainingRefundableAmount = Math.max(0, order.totalAmount - completedRefundAmount);
+  const completedRefundAmount = roundCurrency(
+    refunds
+      .filter((item) => item.status === 'COMPLETED')
+      .reduce((sum, item) => sum + Number(item.amount || 0), 0)
+  );
+  const remainingRefundableAmount = roundCurrency(
+    Math.max(0, order.totalAmount - completedRefundAmount)
+  );
   const activeRefund =
     refunds.find((item) => ['PENDING', 'APPROVED', 'PROCESSING'].includes(item.status)) || null;
   const latestRefund = refunds[0] || null;
@@ -409,6 +440,7 @@ const OrderDetailPage = () => {
                   placeholder="Optional reason for cancellation"
                   value={cancelReason}
                   onChange={(e) => setCancelReason(e.target.value)}
+                  maxLength={500}
                   disabled={working}
                 />
                 <button

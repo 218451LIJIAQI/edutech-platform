@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useMemo } from 'react';
+import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import clientLogger from '@/utils/logger';
 import { UserRole, User } from '@/types';
 import adminService from '@/services/admin.service';
@@ -10,11 +10,11 @@ import {
   UserDetailsModal,
   UserFormModal,
 } from '@/components/admin';
-import { Users, Plus, Trash2, CheckCircle, XCircle, Download, Lock, Star } from 'lucide-react';
+import { AlertCircle, Users, Plus, RefreshCcw, Trash2, CheckCircle, XCircle, Download, Lock, Star } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { extractErrorMessage } from '@/utils/error-handler';
 import { buildCsvContent, downloadCsvFile } from '@/utils/download';
-import { usePageTitle } from '@/hooks';
+import { useDebounce, usePageTitle } from '@/hooks';
 
 interface ExtendedUser extends User {
   phone?: string;
@@ -56,6 +56,8 @@ const UsersManagement = () => {
     totalPages?: number;
   }>({});
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const requestIdRef = useRef(0);
   const [filters, setFilters] = useState<{
     role?: UserRole;
     isActive?: boolean;
@@ -70,6 +72,7 @@ const UsersManagement = () => {
     sortOrder: 'desc',
   });
   const [search, setSearch] = useState('');
+  const debouncedSearch = useDebounce(search.trim(), 300);
   const [failedAvatarUserIds, setFailedAvatarUserIds] = useState<Set<string>>(new Set());
 
   // Modal states
@@ -113,44 +116,65 @@ const UsersManagement = () => {
   }, []);
 
   const fetchUsers = useCallback(async () => {
+    const requestId = ++requestIdRef.current;
     setIsLoading(true);
+    setLoadError(null);
     try {
       const data = await adminService.getAllUsers({
         ...filters,
-        search: search || undefined,
+        search: debouncedSearch || undefined,
       });
-      setUsers(data.items || []);
+      if (requestId !== requestIdRef.current) {
+        return;
+      }
+
+      const loadedUsers = data.items || [];
+      if (
+        loadedUsers.length === 0 &&
+        filters.page > 1 &&
+        data.pagination?.totalPages &&
+        filters.page > data.pagination.totalPages
+      ) {
+        setFilters((prev) => ({
+          ...prev,
+          page: Math.max(1, data.pagination.totalPages),
+        }));
+        return;
+      }
+
+      setUsers(loadedUsers);
+      setFailedAvatarUserIds(new Set());
+      const manageableUserIds = new Set(
+        loadedUsers
+          .filter((user) => !isProtectedAdminUser(user))
+          .map((user) => user.id)
+      );
+      setSelectedUserIds((currentIds) => {
+        const nextIds = new Set(
+          Array.from(currentIds).filter((userId) => manageableUserIds.has(userId))
+        );
+        return nextIds.size === currentIds.size ? currentIds : nextIds;
+      });
       setPagination(data.pagination);
       setOverview(data.overview || {});
     } catch (error) {
+      if (requestId !== requestIdRef.current) {
+        return;
+      }
       clientLogger.error('Failed to fetch users:', error);
-      toast.error(extractErrorMessage(error, 'Failed to load users'));
+      const message = extractErrorMessage(error, 'Failed to load users');
+      setLoadError(message);
+      toast.error(message);
     } finally {
-      setIsLoading(false);
+      if (requestId === requestIdRef.current) {
+        setIsLoading(false);
+      }
     }
-  }, [filters, search]);
+  }, [filters, debouncedSearch]);
 
   useEffect(() => {
-    fetchUsers();
+    void fetchUsers();
   }, [fetchUsers]);
-
-  useEffect(() => {
-    setFailedAvatarUserIds(new Set());
-  }, [users]);
-
-  useEffect(() => {
-    const manageableUserIds = new Set(
-      users.filter((user) => !isProtectedAdminUser(user)).map((user) => user.id)
-    );
-
-    setSelectedUserIds((currentIds) => {
-      const nextIds = new Set(
-        Array.from(currentIds).filter((userId) => manageableUserIds.has(userId))
-      );
-
-      return nextIds.size === currentIds.size ? currentIds : nextIds;
-    });
-  }, [users]);
 
   const handleToggleStatus = async () => {
     if (!statusActionTarget) {
@@ -442,6 +466,20 @@ const UsersManagement = () => {
                 </div>
                 <p className="text-gray-600 font-medium">Loading users...</p>
               </div>
+            </div>
+          ) : loadError ? (
+            <div className="text-center py-14 space-y-3 px-6">
+              <AlertCircle className="w-12 h-12 text-red-500 mx-auto" />
+              <h3 className="text-lg font-bold text-gray-900">Unable to load users</h3>
+              <p className="text-sm text-gray-600">{loadError}</p>
+              <button
+                type="button"
+                onClick={() => void fetchUsers()}
+                className="btn-primary btn-sm inline-flex items-center gap-1.5"
+              >
+                <RefreshCcw className="w-4 h-4" />
+                Retry
+              </button>
             </div>
           ) : users.length === 0 ? (
             <div className="text-center py-16">

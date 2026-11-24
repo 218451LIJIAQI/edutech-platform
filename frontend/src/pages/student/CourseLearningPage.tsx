@@ -23,6 +23,7 @@ import toast from 'react-hot-toast';
 import UniversalVideoPlayer from '@/components/common/UniversalVideoPlayer';
 import LessonQuizCard from '@/components/student/LessonQuizCard';
 import { extractErrorMessage } from '@/utils/error-handler';
+import { formatFileSize } from '@/utils/helpers';
 import {
   deriveInitialCompletedLessonIds,
   selectPreferredCourseEnrollment,
@@ -494,7 +495,7 @@ const CourseLearningPage = () => {
                               <p className="text-sm text-slate-600 mt-0.5">{material.description}</p>
                             )}
                             <p className="text-xs text-slate-500 mt-1 tabular-nums">
-                              {material.fileType} &middot; {(material.fileSize / 1024).toFixed(0)} KB
+                              {material.fileType} &middot; {formatFileSize(material.fileSize)}
                             </p>
                           </div>
                         </div>
@@ -513,7 +514,11 @@ const CourseLearningPage = () => {
                           <span className="text-xs font-medium text-amber-700 shrink-0">
                             Download unavailable
                           </span>
-                        ) : null}
+                        ) : (
+                          <span className="badge-warning shrink-0">
+                            View Only (Protected)
+                          </span>
+                        )}
                       </div>
                     );
                   })}
@@ -586,7 +591,7 @@ const CourseLearningPage = () => {
                           </div>
                           <div className="flex-1 min-w-0">
                             <p className="text-sm font-semibold truncate text-slate-900">
-                              <span className="tabular-nums">{index + 1}.</span> {lesson.title}
+                              <span className="tabular-nums">{index + 1}.</span> {lesson.title.replace(/^\d+[.)]\s+/, '')}
                             </p>
                             <div className="flex items-center gap-2 text-xs text-slate-600 mt-1">
                               <span className="badge-primary py-0.5 px-2">{lesson.type}</span>
@@ -687,7 +692,11 @@ const CourseLearningPage = () => {
                     Community
                   </Link>
                   <Link
-                    to={teacherUserId ? `/messages/${teacherUserId}` : '/messages'}
+                    to={
+                      teacherUserId
+                        ? `/messages?contactId=${encodeURIComponent(teacherUserId)}`
+                        : '/messages'
+                    }
                     className="btn-outline btn-sm"
                   >
                     Message Teacher

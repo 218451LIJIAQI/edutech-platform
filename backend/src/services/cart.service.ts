@@ -103,6 +103,24 @@ const pruneUnavailableCartItems = async (
             },
           },
         },
+        {
+          package: {
+            course: {
+              teacherProfile: {
+                registrationStatus: { not: "APPROVED" },
+              },
+            },
+          },
+        },
+        {
+          package: {
+            course: {
+              teacherProfile: {
+                user: { isActive: false },
+              },
+            },
+          },
+        },
       ],
     },
   });
@@ -251,11 +269,26 @@ class CartService {
       const pkg = await tx.lessonPackage.findUnique({
         where: { id: packageId },
         include: {
-          course: true,
+          course: {
+            include: {
+              teacherProfile: {
+                select: {
+                  registrationStatus: true,
+                  user: { select: { isActive: true } },
+                },
+              },
+            },
+          },
         },
       });
 
-      if (!pkg || !pkg.isActive || !pkg.course?.isPublished) {
+      if (
+        !pkg ||
+        !pkg.isActive ||
+        !pkg.course?.isPublished ||
+        pkg.course.teacherProfile.registrationStatus !== "APPROVED" ||
+        !pkg.course.teacherProfile.user.isActive
+      ) {
         throw new NotFoundError("Package not available");
       }
 

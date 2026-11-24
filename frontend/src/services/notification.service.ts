@@ -15,7 +15,7 @@ export interface Notification {
   createdAt: string;
 }
 
-export interface CourseNotificationDispatchResult {
+interface CourseNotificationDispatchResult {
   recipients: number;
 }
 

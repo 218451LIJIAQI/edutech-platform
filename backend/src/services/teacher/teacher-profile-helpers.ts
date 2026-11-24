@@ -78,7 +78,7 @@ export const pendingProfileVerificationInclude = {
   },
 } satisfies Prisma.TeacherProfileInclude;
 
-export type TeacherByIdRecord = Prisma.TeacherProfileGetPayload<{
+type TeacherByIdRecord = Prisma.TeacherProfileGetPayload<{
   include: typeof teacherByIdInclude;
 }>;
 
@@ -109,7 +109,7 @@ export type TeacherByIdResponse = Omit<
   profilePhoto: string | null | undefined;
 };
 
-export type ExtendedProfileRecord = Prisma.TeacherProfileGetPayload<{
+type ExtendedProfileRecord = Prisma.TeacherProfileGetPayload<{
   include: typeof extendedProfileInclude;
 }>;
 
@@ -125,7 +125,7 @@ export type ExtendedProfileResponse = Omit<
   pendingProfileSubmittedAt?: Date;
 };
 
-export type PendingProfileVerificationTeacher =
+type PendingProfileVerificationTeacher =
   Prisma.TeacherProfileGetPayload<{
     include: typeof pendingProfileVerificationInclude;
   }>;

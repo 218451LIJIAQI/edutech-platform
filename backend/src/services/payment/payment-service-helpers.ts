@@ -13,6 +13,7 @@ const paymentHistoryTeacherUserSelect = {
   firstName: true,
   lastName: true,
   email: true,
+  isActive: true,
 } satisfies Prisma.UserSelect;
 
 const packageWithTeacherUserInclude = {
@@ -118,7 +119,13 @@ export const requireAvailableLessonPackage = async (
     include: {
       course: {
         include: {
-          teacherProfile: true,
+          teacherProfile: {
+            include: {
+              user: {
+                select: { isActive: true },
+              },
+            },
+          },
         },
       },
     },
@@ -128,7 +135,12 @@ export const requireAvailableLessonPackage = async (
     throw new NotFoundError("Package not found");
   }
 
-  if (!lessonPackage.isActive || !lessonPackage.course?.isPublished) {
+  if (
+    !lessonPackage.isActive ||
+    !lessonPackage.course?.isPublished ||
+    lessonPackage.course.teacherProfile.registrationStatus !== "APPROVED" ||
+    !lessonPackage.course.teacherProfile.user.isActive
+  ) {
     throw new ValidationError("This package is no longer available");
   }
 

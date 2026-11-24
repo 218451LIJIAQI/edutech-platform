@@ -91,6 +91,8 @@ const LiveSessionPage = () => {
   const [message, setMessage] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const isRecoveringSocketSessionRef = useRef(false);
+  const userRef = useRef(user);
+  userRef.current = user;
   const meetingUrl = normalizeMeetingUrl(session?.meetingUrl);
   const canOpenMeetingRoom = Boolean(
     meetingUrl &&
@@ -149,7 +151,7 @@ const LiveSessionPage = () => {
     });
 
     newSocket.on('user-joined', (data: SessionParticipantEvent) => {
-      if (data.user?.id && data.user.id === user?.id) {
+      if (data.user?.id && data.user.id === userRef.current?.id) {
         return;
       }
       const userName = data.user?.firstName
@@ -159,7 +161,7 @@ const LiveSessionPage = () => {
     });
 
     newSocket.on('user-left', (data: SessionParticipantEvent) => {
-      if (data.userId && data.userId === user?.id) {
+      if (data.userId && data.userId === userRef.current?.id) {
         return;
       }
       const userName = data.user?.firstName
@@ -179,12 +181,12 @@ const LiveSessionPage = () => {
 
     newSocket.on('hand-raised', (data: SessionParticipantEvent) => {
       const raisedId = data.user?.id || data.userId;
-      if (raisedId && raisedId === user?.id) {
+      if (raisedId && raisedId === userRef.current?.id) {
         toast.success('Your hand was raised');
         return;
       }
 
-      if (user?.role === UserRole.TEACHER) {
+      if (userRef.current?.role === UserRole.TEACHER) {
         const studentName = data.user?.firstName
           ? `${data.user.firstName}${data.user.lastName ? ` ${data.user.lastName}` : ''}`
           : 'A participant';
@@ -250,7 +252,7 @@ const LiveSessionPage = () => {
       newSocket.off('connect_error', handleSocketError);
       newSocket.disconnect();
     };
-  }, [fetchProfile, navigate, sessionId, user?.id, user?.role]);
+  }, [fetchProfile, navigate, sessionId]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -452,7 +454,12 @@ const LiveSessionPage = () => {
                     sendMessage();
                   }
                 }}
-                placeholder="Type a message..."
+                placeholder={
+                  !isJoined && !connectionError
+                    ? 'Connecting to classroom...'
+                    : 'Type a message...'
+                }
+                maxLength={1000}
                 className="flex-1 input"
                 disabled={!isJoined || session?.status !== 'ONGOING'}
               />

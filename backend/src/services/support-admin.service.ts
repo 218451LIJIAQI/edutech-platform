@@ -4,7 +4,9 @@ import {
   SupportTicketStatus,
 } from "@prisma/client";
 import prisma from "../config/database";
+import logger from "../utils/logger";
 import { NotFoundError, ValidationError } from "../utils/errors";
+import notificationService from "./notification.service";
 import { normalizeOffsetPagination } from "./shared/pagination";
 import {
   ensureActiveAdmin,
@@ -205,7 +207,13 @@ class SupportAdminService {
     return prisma.$transaction(async (tx) => {
       const ticket = await tx.supportTicket.findUnique({
         where: { id: normalizedTicketId },
-        select: { id: true, status: true, assignedTo: true },
+        select: {
+          id: true,
+          userId: true,
+          ticketNo: true,
+          status: true,
+          assignedTo: true,
+        },
       });
 
       if (!ticket) {
@@ -239,6 +247,18 @@ class SupportAdminService {
         },
       });
 
+      return { createdMessage, ticketUserId: ticket.userId, ticketNo: ticket.ticketNo };
+    }).then(async ({ createdMessage, ticketUserId, ticketNo }) => {
+      try {
+        await notificationService.createNotification(
+          ticketUserId,
+          `New Reply on Ticket ${ticketNo}`,
+          "Support has replied to your ticket. Open Support Center to view the update.",
+          "support",
+        );
+      } catch (error) {
+        logger.warn("Failed to create support reply notification", { ticketUserId, error });
+      }
       return createdMessage;
     });
   }
@@ -288,7 +308,21 @@ class SupportAdminService {
       throw new ValidationError("Support ticket is already resolved");
     }
 
-    return fetchTicketWithDetails(normalizedTicketId);
+    const resolvedTicket = await fetchTicketWithDetails(normalizedTicketId);
+    try {
+      await notificationService.createNotification(
+        resolvedTicket.userId,
+        `Ticket ${resolvedTicket.ticketNo} Resolved`,
+        `Your support ticket "${resolvedTicket.subject}" has been marked resolved.`,
+        "support",
+      );
+    } catch (error) {
+      logger.warn("Failed to create support resolution notification", {
+        userId: resolvedTicket.userId,
+        error,
+      });
+    }
+    return resolvedTicket;
   }
 
   async closeTicket(ticketId: string): Promise<SupportTicketWithDetails> {
@@ -318,7 +352,21 @@ class SupportAdminService {
       },
     });
 
-    return fetchTicketWithDetails(normalizedTicketId);
+    const closedTicket = await fetchTicketWithDetails(normalizedTicketId);
+    try {
+      await notificationService.createNotification(
+        closedTicket.userId,
+        `Ticket ${closedTicket.ticketNo} Closed`,
+        `Your support ticket "${closedTicket.subject}" has been closed.`,
+        "support",
+      );
+    } catch (error) {
+      logger.warn("Failed to create support close notification", {
+        userId: closedTicket.userId,
+        error,
+      });
+    }
+    return closedTicket;
   }
 
   async getTicketStats(): Promise<{

@@ -6,7 +6,7 @@ import {
 } from '@/utils/asset-normalizers';
 import { extractData } from './response-utils';
 
-export interface AdminSupportStats {
+interface AdminSupportStats {
   open: number;
   inProgress: number;
   resolved: number;

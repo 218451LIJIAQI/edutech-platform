@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import clientLogger from '@/utils/logger';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { Heart, Bookmark, Share2, MessageCircle, Flag, User, Tag, Loader2 } from 'lucide-react';
+import { AlertCircle, Heart, Bookmark, RefreshCcw, Share2, MessageCircle, Flag, User, Tag, Loader2 } from 'lucide-react';
 import communityService from '@/services/community.service';
 import { CommunityComment, CommunityPost } from '@/types/community';
 import { useAuthStore } from '@/store/auth-store';
@@ -31,6 +31,8 @@ const PostDetailPage = () => {
   const [post, setPost] = useState<CommunityPost | null>(null);
   const [comments, setComments] = useState<CommunityComment[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [isTogglingAction, setIsTogglingAction] = useState(false);
 
   const [commentInput, setCommentInput] = useState('');
   const [isSubmittingComment, setIsSubmittingComment] = useState(false);
@@ -39,26 +41,30 @@ const PostDetailPage = () => {
 
   usePageTitle(post?.title ? `${post.title}` : 'Community Post');
 
-  useEffect(() => {
-    const load = async () => {
-      if (!id) return;
-      setIsLoading(true);
-      try {
-        const [loadedPost, loadedComments] = await Promise.all([
-          communityService.getPostById(id),
-          communityService.getComments(id),
-        ]);
-        setPost(loadedPost);
-        setComments(loadedComments);
-      } catch (error) {
-        clientLogger.error('Failed to load post:', error);
-        toast.error(extractErrorMessage(error, 'Failed to load post'));
-      } finally {
-        setIsLoading(false);
-      }
-    };
-    void load();
+  const load = useCallback(async () => {
+    if (!id) return;
+    setIsLoading(true);
+    setLoadError(null);
+    try {
+      const [loadedPost, loadedComments] = await Promise.all([
+        communityService.getPostById(id),
+        communityService.getComments(id),
+      ]);
+      setPost(loadedPost);
+      setComments(loadedComments);
+    } catch (error) {
+      clientLogger.error('Failed to load post:', error);
+      const message = extractErrorMessage(error, 'Failed to load post');
+      setLoadError(message);
+      toast.error(message);
+    } finally {
+      setIsLoading(false);
+    }
   }, [id]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
 
   const onShare = async () => {
     if (!post) return;
@@ -81,24 +87,30 @@ const PostDetailPage = () => {
   };
 
   const toggleLike = async () => {
-    if (!post) return;
+    if (!post || isTogglingAction) return;
+    setIsTogglingAction(true);
     try {
       const { likes, hasLiked } = await communityService.likePost(post.id);
-      setPost({ ...post, likes, hasLiked });
+      setPost((current) => (current ? { ...current, likes, hasLiked } : current));
     } catch (error) {
       clientLogger.error('Failed to like post:', error);
       toast.error(extractErrorMessage(error, 'Failed to like post'));
+    } finally {
+      setIsTogglingAction(false);
     }
   };
 
   const toggleBookmark = async () => {
-    if (!post) return;
+    if (!post || isTogglingAction) return;
+    setIsTogglingAction(true);
     try {
       const { bookmarks, hasBookmarked } = await communityService.bookmarkPost(post.id);
-      setPost({ ...post, bookmarks, hasBookmarked });
+      setPost((current) => (current ? { ...current, bookmarks, hasBookmarked } : current));
     } catch (error) {
       clientLogger.error('Failed to bookmark post:', error);
       toast.error(extractErrorMessage(error, 'Failed to bookmark post'));
+    } finally {
+      setIsTogglingAction(false);
     }
   };
 
@@ -133,10 +145,34 @@ const PostDetailPage = () => {
 
   if (!post) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-primary-50/10 to-indigo-50/20">
-        <div className="text-center">
-          <p className="text-gray-600 mb-4">Post not found</p>
-          <button type="button" className="btn-primary" onClick={() => navigate('/community')}>Back to Community</button>
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-primary-50/10 to-indigo-50/20 px-4">
+        <div className="card max-w-md w-full text-center space-y-4">
+          <AlertCircle className="w-12 h-12 text-red-500 mx-auto" />
+          <h2 className="text-xl font-bold text-slate-900">
+            {loadError ? 'Unable to load post' : 'Post not found'}
+          </h2>
+          <p className="text-slate-600 text-sm">
+            {loadError || 'This discussion thread may have been removed.'}
+          </p>
+          <div className="flex items-center justify-center gap-3">
+            {loadError && (
+              <button
+                type="button"
+                className="btn-primary inline-flex items-center gap-2"
+                onClick={() => void load()}
+              >
+                <RefreshCcw className="w-4 h-4" />
+                Retry
+              </button>
+            )}
+            <button
+              type="button"
+              className={loadError ? 'btn-outline' : 'btn-primary'}
+              onClick={() => navigate('/community')}
+            >
+              Back to Community
+            </button>
+          </div>
         </div>
       </div>
     );
@@ -259,6 +295,7 @@ const PostDetailPage = () => {
                   }
                 }}
                 className="input flex-1"
+                maxLength={1000}
                 placeholder="Write your comment..."
               />
               <button type="button" onClick={() => void addComment()} className="btn-primary btn-sm">Post</button>

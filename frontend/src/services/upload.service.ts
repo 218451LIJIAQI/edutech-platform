@@ -11,7 +11,7 @@ interface UploadResponse {
   originalName?: string;
 }
 
-export const UPLOAD_FOLDERS = {
+const UPLOAD_FOLDERS = {
   GENERAL: 'general',
   SUPPORT_ATTACHMENTS: 'support-attachments',
   COMMUNITY_IMAGES: 'community-images',
@@ -24,7 +24,7 @@ export const UPLOAD_FOLDERS = {
   TEACHER_CERTIFICATES: 'teacher-certificates',
 } as const;
 
-export type UploadFolder = (typeof UPLOAD_FOLDERS)[keyof typeof UPLOAD_FOLDERS];
+type UploadFolder = (typeof UPLOAD_FOLDERS)[keyof typeof UPLOAD_FOLDERS];
 
 const MB = 1024 * 1024;
 const IMAGE_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp'];

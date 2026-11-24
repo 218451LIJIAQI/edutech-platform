@@ -190,6 +190,9 @@ const validateCtaUrl = (ctaUrl: string, destinationType: AdDestinationType) => {
 };
 
 const normalizeTargetRoles = (targetRoles?: UserRole[]) => {
+  if (targetRoles !== undefined && targetRoles !== null && !Array.isArray(targetRoles)) {
+    throw new ValidationError("targetRoles must be an array");
+  }
   const validRoles = new Set(Object.values(UserRole));
   const uniqueRoles = Array.from(new Set((targetRoles || []).filter(Boolean)));
 

@@ -10,6 +10,8 @@ import {
 import prisma from "../config/database";
 import config from "../config/env";
 import { NotFoundError, ValidationError } from "../utils/errors";
+import logger from "../utils/logger";
+import notificationService from "./notification.service";
 import walletService from "./wallet.service";
 import { countDistinctActiveStudentsForTeacherProfile } from "./shared/enrollment-access";
 import { normalizeOffsetPagination } from "./shared/pagination";
@@ -186,12 +188,30 @@ class RefundAdminService {
     return refund;
   }
 
+  private async notifyStudentRefundUpdate(
+    userId: string | undefined,
+    title: string,
+    message: string,
+  ): Promise<void> {
+    if (!userId) return;
+    try {
+      await notificationService.createNotification(
+        userId,
+        title,
+        message,
+        "refund",
+      );
+    } catch (error) {
+      logger.warn("Failed to create refund notification", { userId, error });
+    }
+  }
+
   async approveRefund(
     refundId: string,
     adminNotes?: string,
   ): Promise<RefundWithOrderUser> {
     const note = normalizeOptionalSanitizedText(adminNotes);
-    return transitionRefundStatus(
+    const updated = await transitionRefundStatus(
       normalizeRequiredSanitizedText(refundId, "Refund ID"),
       RefundStatus.PENDING,
       RefundStatus.APPROVED,
@@ -200,24 +220,41 @@ class RefundAdminService {
         processedAt: new Date(),
       },
     );
+
+    await this.notifyStudentRefundUpdate(
+      updated.order?.user?.id,
+      "Refund Request Approved",
+      `Your refund request of $${roundMoney(updated.amount).toFixed(2)} for order ${updated.order?.orderNo ?? ""} has been approved and queued for settlement.`,
+    );
+
+    return updated;
   }
 
   async rejectRefund(
     refundId: string,
     rejectionReason: string,
   ): Promise<RefundWithOrderUser> {
-    return transitionRefundStatus(
+    const sanitizedReason = normalizeRequiredSanitizedText(
+      rejectionReason,
+      "Rejection reason",
+    );
+    const updated = await transitionRefundStatus(
       normalizeRequiredSanitizedText(refundId, "Refund ID"),
       RefundStatus.PENDING,
       RefundStatus.REJECTED,
       {
-        notes: normalizeRequiredSanitizedText(
-          rejectionReason,
-          "Rejection reason",
-        ),
+        notes: sanitizedReason,
         processedAt: new Date(),
       },
     );
+
+    await this.notifyStudentRefundUpdate(
+      updated.order?.user?.id,
+      "Refund Request Rejected",
+      `Your refund request for order ${updated.order?.orderNo ?? ""} was not approved: ${sanitizedReason}`,
+    );
+
+    return updated;
   }
 
   async markAsProcessing(
@@ -520,7 +557,14 @@ class RefundAdminService {
       }
     });
 
-    return fetchRefundWithOrderUser(normalizedRefundId);
+    const completedRefund = await fetchRefundWithOrderUser(normalizedRefundId);
+    await this.notifyStudentRefundUpdate(
+      completedRefund.order?.user?.id,
+      "Refund Completed",
+      `Your refund of $${roundMoney(completedRefund.amount).toFixed(2)} for order ${completedRefund.order?.orderNo ?? ""} has been completed.`,
+    );
+
+    return completedRefund;
   }
 
   async getRefundStats(): Promise<{

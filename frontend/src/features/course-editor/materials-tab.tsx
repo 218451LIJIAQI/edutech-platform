@@ -1,5 +1,6 @@
 import { Download, Edit, File as FileIcon, Plus, Trash2, Upload } from 'lucide-react';
 import type { Material } from '@/types';
+import { formatFileSize } from '@/utils/helpers';
 
 interface CourseEditorMaterialsTabProps {
   courseExists: boolean;
@@ -8,20 +9,6 @@ interface CourseEditorMaterialsTabProps {
   onEditMaterial: (materialId: string) => void;
   onRequestDelete: (materialId: string, materialTitle: string) => void;
 }
-
-const formatFileSize = (fileSize?: number | null): string | null => {
-  if (!fileSize || fileSize <= 0) {
-    return null;
-  }
-
-  const sizeInMb = fileSize / 1024 / 1024;
-
-  if (sizeInMb >= 1) {
-    return `${sizeInMb.toFixed(2)} MB`;
-  }
-
-  return `${Math.max(fileSize / 1024, 1).toFixed(0)} KB`;
-};
 
 const formatFileType = (fileType?: string | null): string => {
   if (!fileType) {
@@ -120,7 +107,7 @@ export default function CourseEditorMaterialsTab({
           {materials.map((material) => {
             const title = material.title?.trim() || 'Untitled material';
             const description = material.description?.trim();
-            const fileSizeLabel = formatFileSize(material.fileSize);
+            const fileSizeLabel = material.fileSize && material.fileSize > 0 ? formatFileSize(material.fileSize) : null;
             const fileTypeLabel = formatFileType(material.fileType);
 
             return (

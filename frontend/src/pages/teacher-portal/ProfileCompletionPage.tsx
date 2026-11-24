@@ -93,7 +93,7 @@ const ProfileCompletionPage = () => {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-primary-50/10 to-indigo-50/20 py-8 relative">
       <div className="absolute inset-0 bg-[linear-gradient(rgba(0,0,0,0.015)_1px,transparent_1px),linear-gradient(90deg,rgba(0,0,0,0.015)_1px,transparent_1px)] bg-[size:32px_32px] pointer-events-none"></div>
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 max-w-4xl relative">
+      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 relative">
         {/* Header */}
         <div className="mb-8">
           <div className="flex items-center gap-3 mb-3">

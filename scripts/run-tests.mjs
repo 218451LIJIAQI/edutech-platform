@@ -113,6 +113,196 @@ const probeCandidateFile = (basePath) => {
   return null;
 };
 
+const makeEnum = (values) =>
+  Object.freeze(Object.fromEntries(values.map((value) => [value, value])));
+
+const createOfflinePackageShim = (request) => {
+  if (request === 'dotenv') {
+    const shim = { config: () => ({ parsed: {} }) };
+    return { __esModule: true, ...shim, default: shim };
+  }
+
+  if (request === '@prisma/client') {
+    class MockPrismaClient {
+      $on() {}
+      async $disconnect() {}
+    }
+    class Decimal {
+      constructor(v) {
+        this.val = Number(v);
+      }
+      toNumber() {
+        return this.val;
+      }
+      toString() {
+        return String(this.val);
+      }
+    }
+    return {
+      PrismaClient: MockPrismaClient,
+      Prisma: {
+        Decimal,
+        sql: (strings, ...values) => ({
+          strings: Array.from(strings),
+          values,
+        }),
+        join: (items) => items,
+      },
+      UserRole: makeEnum(['STUDENT', 'TEACHER', 'ADMIN']),
+      VerificationStatus: makeEnum(['PENDING', 'APPROVED', 'REJECTED']),
+      CourseType: makeEnum(['LIVE', 'RECORDED', 'HYBRID']),
+      LessonType: makeEnum(['LIVE', 'RECORDED', 'HYBRID']),
+      PaymentStatus: makeEnum(['PENDING', 'COMPLETED', 'FAILED', 'REFUNDED']),
+      OrderStatus: makeEnum(['PENDING', 'PAID', 'CANCELLED', 'REFUNDED', 'FAILED']),
+      ReportStatus: makeEnum(['OPEN', 'UNDER_REVIEW', 'RESOLVED', 'DISMISSED']),
+      ReportType: makeEnum([
+        'QUALITY_ISSUE',
+        'INAPPROPRIATE_CONTENT',
+        'FRAUD',
+        'TECHNICAL_ISSUE',
+        'OTHER',
+      ]),
+      LiveSessionStatus: makeEnum([
+        'SCHEDULED',
+        'ONGOING',
+        'COMPLETED',
+        'CANCELLED',
+      ]),
+      RefundStatus: makeEnum([
+        'PENDING',
+        'APPROVED',
+        'REJECTED',
+        'COMPLETED',
+        'PROCESSING',
+      ]),
+      RefundMethod: makeEnum(['ORIGINAL_PAYMENT', 'WALLET', 'BANK_TRANSFER']),
+      SupportTicketStatus: makeEnum(['OPEN', 'IN_PROGRESS', 'RESOLVED', 'CLOSED']),
+      SupportTicketPriority: makeEnum(['LOW', 'MEDIUM', 'HIGH', 'URGENT']),
+      RegistrationStatus: makeEnum(['PENDING', 'APPROVED', 'REJECTED']),
+      AdPlacement: makeEnum(['LOGIN_MODAL']),
+      AdStatus: makeEnum(['DRAFT', 'ACTIVE', 'PAUSED', 'ARCHIVED']),
+      AdDestinationType: makeEnum(['INTERNAL', 'EXTERNAL']),
+      AdTheme: makeEnum([
+        'MIDNIGHT',
+        'SUNSET',
+        'AURORA',
+        'OCEAN',
+        'FOREST',
+        'ROSE',
+      ]),
+      WalletTransactionType: makeEnum([
+        'CREDIT',
+        'DEBIT',
+        'FREEZE',
+        'UNFREEZE',
+        'ADJUSTMENT',
+      ]),
+      WalletTransactionSource: makeEnum([
+        'COURSE_SALE',
+        'REFUND',
+        'REVERSAL',
+        'ADMIN_ADJUSTMENT',
+        'PAYOUT',
+      ]),
+      PayoutMethodType: makeEnum([
+        'BANK_TRANSFER',
+        'GRABPAY',
+        'TOUCH_N_GO',
+        'PAYPAL',
+        'OTHER',
+      ]),
+      PayoutRequestStatus: makeEnum([
+        'PENDING',
+        'APPROVED',
+        'REJECTED',
+        'PROCESSING',
+        'PAID',
+        'CANCELLED',
+      ]),
+      VerificationMethod: makeEnum(['MANUAL', 'AUTO']),
+    };
+  }
+
+  if (request === 'multer') {
+    const multerShim = Object.assign(
+      () => ({
+        single: () => (_req, _res, next) => next(),
+        array: () => (_req, _res, next) => next(),
+      }),
+      { diskStorage: (opts) => opts }
+    );
+    return { __esModule: true, default: multerShim };
+  }
+
+  if (request === 'winston') {
+    const noopLogger = {
+      info: () => undefined,
+      warn: () => undefined,
+      error: () => undefined,
+      debug: () => undefined,
+      add: () => undefined,
+    };
+    const winstonShim = {
+      createLogger: () => noopLogger,
+      format: Object.assign(
+        (fn) => () => fn,
+        {
+          combine: () => ({}),
+          timestamp: () => ({}),
+          errors: () => ({}),
+          splat: () => ({}),
+          json: () => ({}),
+          colorize: () => ({}),
+          printf: () => ({}),
+        }
+      ),
+      transports: { File: class {}, Console: class {} },
+    };
+    return { __esModule: true, ...winstonShim, default: winstonShim };
+  }
+
+  if (request === 'bcryptjs') {
+    const bcryptShim = {
+      hash: async (value) => `hashed:${value}`,
+      compare: async () => true,
+    };
+    return { __esModule: true, ...bcryptShim, default: bcryptShim };
+  }
+
+  if (request === 'jsonwebtoken') {
+    const jwtShim = {
+      verify: () => ({}),
+      sign: () => 'signed-token',
+    };
+    return { __esModule: true, ...jwtShim, default: jwtShim };
+  }
+
+  if (request === 'axios') {
+    const axiosShim = {
+      create: () => ({
+        interceptors: {
+          request: { use: () => undefined },
+          response: { use: () => undefined },
+        },
+      }),
+      post: async () => ({ data: {} }),
+      isAxiosError: (val) =>
+        Boolean(val && typeof val === 'object' && 'isAxiosError' in val),
+    };
+    return { __esModule: true, ...axiosShim, default: axiosShim };
+  }
+
+  if (request === 'react-hot-toast') {
+    const toastShim = Object.assign(() => undefined, {
+      error: () => undefined,
+      success: () => undefined,
+    });
+    return { __esModule: true, default: toastShim };
+  }
+
+  return null;
+};
+
 const originalResolveFilename = Module._resolveFilename;
 const originalLoad = Module._load;
 
@@ -150,18 +340,17 @@ Module._resolveFilename = function resolveWithTypeScriptSupport(
 };
 
 Module._load = function loadWithFallbacks(request, parent, isMain) {
-  if (request === 'dotenv') {
-    try {
-      return originalLoad.call(this, request, parent, isMain);
-    } catch (error) {
-      if (error?.code === 'MODULE_NOT_FOUND') {
-        const shim = { config: () => ({ parsed: {} }) };
-        return { __esModule: true, ...shim, default: shim };
+  try {
+    return originalLoad.call(this, request, parent, isMain);
+  } catch (error) {
+    if (error?.code === 'MODULE_NOT_FOUND') {
+      const shim = createOfflinePackageShim(request);
+      if (shim) {
+        return shim;
       }
-      throw error;
     }
+    throw error;
   }
-  return originalLoad.call(this, request, parent, isMain);
 };
 
 const compileSourceModule = (module, filename) => {

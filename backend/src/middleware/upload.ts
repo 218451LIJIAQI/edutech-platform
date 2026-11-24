@@ -337,7 +337,7 @@ export const resolveUploadCategory = (
   return category;
 };
 
-export const getUploadCategoryConfig = (
+const getUploadCategoryConfig = (
   req: Request,
   file: Express.Multer.File,
 ): UploadCategoryConfig => {
@@ -592,7 +592,7 @@ export const validateStoredUpload = (file: Express.Multer.File) => {
   };
 };
 
-export const cleanupRequestUploadedFiles = async (req: Request): Promise<void> => {
+const cleanupRequestUploadedFiles = async (req: Request): Promise<void> => {
   const collectedPaths = new Set<string>();
   const recordFile = (candidate?: Express.Multer.File) => {
     if (candidate?.path) {

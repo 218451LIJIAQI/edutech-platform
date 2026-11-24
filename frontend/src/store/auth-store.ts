@@ -27,7 +27,6 @@ interface AuthState {
     data: Omit<Partial<User>, 'avatar'> & { avatar?: string | null }
   ) => Promise<void>;
   fetchProfile: () => Promise<void>;
-  setUser: (user: User) => void;
 }
 
 type PersistedAuthState = Pick<AuthState, 'user' | 'isAuthenticated'>;
@@ -201,10 +200,6 @@ export const useAuthStore = create<AuthState>()(
           }
 
           return profileHydrationPromise;
-        },
-
-        setUser: (user: User) => {
-          set({ user });
         },
       };
     },

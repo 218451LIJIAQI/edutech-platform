@@ -3,19 +3,12 @@ import toast from 'react-hot-toast';
 import type { Course } from '@/types';
 import { downloadProtectedAsset } from '@/utils/protected-assets';
 import { extractErrorMessage } from '@/utils/error-handler';
+import { formatFileSize } from '@/utils/helpers';
 import clientLogger from '@/utils/logger';
 
 interface CourseManagementMaterialsTabProps {
   materials: NonNullable<Course['materials']>;
 }
-
-const formatFileSize = (bytes: number): string => {
-  if (!Number.isFinite(bytes) || bytes <= 0) return '0 KB';
-  if (bytes >= 1024 * 1024) {
-    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-  }
-  return `${Math.max(1, Math.round(bytes / 1024))} KB`;
-};
 
 export default function CourseManagementMaterialsTab({
   materials,

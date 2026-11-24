@@ -3,7 +3,7 @@ import { ApiResponse, Refund } from '@/types';
 import { normalizeRefund, toFiniteNumber } from '@/utils/asset-normalizers';
 import { extractData } from './response-utils';
 
-export interface AdminRefundStats {
+interface AdminRefundStats {
   pending: number;
   approved: number;
   processing: number;

@@ -45,6 +45,17 @@ const reviewService = {
     return normalizeReviewList(extractData(response));
   },
 
+  getTeacherReviews: async (
+    teacherId: string,
+    params?: { page?: number; limit?: number }
+  ): Promise<TeacherReviewListResponse> => {
+    const response = await api.get<ApiResponse<TeacherReviewListResponse>>(
+      `/reviews/teacher/${teacherId}`,
+      { params }
+    );
+    return normalizeReviewList(extractData(response));
+  },
+
   getMyReviews: async (): Promise<Review[]> => {
     const response = await api.get<ApiResponse<Review[]>>('/reviews/my-reviews');
     return extractData(response).map(normalizeReviewAssets);

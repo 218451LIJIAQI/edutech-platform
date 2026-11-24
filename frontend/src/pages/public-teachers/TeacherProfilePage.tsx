@@ -4,7 +4,8 @@ import { useParams, Link } from 'react-router-dom';
 import { Star, Users, Award, Calendar, BookOpen, AlertCircle, Globe, Briefcase, GraduationCap, ArrowRight } from 'lucide-react';
 import teacherService from '@/services/teacher.service';
 import courseService from '@/services/course.service';
-import { TeacherProfile, Course, UserRole } from '@/types';
+import reviewService from '@/services/review.service';
+import { TeacherProfile, Course, Review, UserRole } from '@/types';
 import { formatDate, formatCurrency } from '@/utils/helpers';
 import { useAuthStore } from '@/store/auth-store';
 import ReportSubmissionModal from '@/components/common/ReportSubmissionModal';
@@ -34,6 +35,7 @@ const TeacherProfilePage = () => {
   const isRestoringSession = hasRecoverableSession && (!hasAccessToken || !user);
   const [teacher, setTeacher] = useState<TeacherProfile | null>(null);
   const [courses, setCourses] = useState<Course[]>([]);
+  const [reviews, setReviews] = useState<Review[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isReportOpen, setIsReportOpen] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -51,15 +53,20 @@ const TeacherProfilePage = () => {
     setIsLoading(true);
     setLoadError(null);
     try {
-      const [teacherData, coursesData] = await Promise.all([
+      const [teacherData, coursesData, reviewsData] = await Promise.all([
         teacherService.getTeacherById(id),
         courseService.getAllCourses({
           teacherId: id,
         }),
+        reviewService.getTeacherReviews(id, { page: 1, limit: 6 }).catch(() => ({
+          reviews: [] as Review[],
+          pagination: { total: 0, page: 1, limit: 6, totalPages: 1 },
+        })),
       ]);
 
       setTeacher(teacherData);
       setCourses(coursesData.items || coursesData.courses || []);
+      setReviews((reviewsData.reviews || []).filter((item) => item.isPublished));
     } catch (error) {
       clientLogger.error('Failed to fetch teacher data:', error);
       const errorMessage = extractErrorMessage(error, 'Failed to load teacher profile');
@@ -278,8 +285,8 @@ const TeacherProfilePage = () => {
                           <div className="flex items-center space-x-4">
                             <span className="badge-primary">{course.category}</span>
                             {course.packages && course.packages.length > 0 && (
-                              <span className="text-primary-600 font-bold">
-                                From {formatCurrency(course.packages[0].finalPrice)}
+                              <span className="text-primary-600 font-bold tabular-nums">
+                                From {formatCurrency(Math.min(...course.packages.map((p) => p.finalPrice)))}
                               </span>
                             )}
                           </div>
@@ -292,6 +299,58 @@ const TeacherProfilePage = () => {
                 <div className="text-center py-12">
                   <BookOpen className="w-16 h-16 text-gray-300 mx-auto mb-4" />
                   <p className="text-gray-600 text-lg">No courses available yet.</p>
+                </div>
+              )}
+            </div>
+
+            {/* Verified Student Reviews */}
+            <div className="card shadow-xl border border-gray-100 rounded-2xl">
+              <h2 className="text-2xl font-bold mb-6 text-gray-900">Student Reviews</h2>
+              {reviews.length > 0 ? (
+                <div className="space-y-4">
+                  {reviews.map((review) => (
+                    <div
+                      key={review.id}
+                      className="rounded-xl border border-slate-200 bg-slate-50/70 p-4 space-y-2"
+                    >
+                      <div className="flex items-center justify-between gap-4">
+                        <div>
+                          <p className="font-semibold text-slate-900 text-sm">
+                            {[review.reviewer?.firstName, review.reviewer?.lastName]
+                              .filter(Boolean)
+                              .join(' ') || 'Verified Student'}
+                          </p>
+                          <p className="text-xs text-slate-500">
+                            {review.enrollment?.package?.course?.title
+                              ? `${review.enrollment.package.course.title} · `
+                              : ''}
+                            {formatDate(review.createdAt)}
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-0.5">
+                          {Array.from({ length: 5 }, (_, idx) => (
+                            <Star
+                              key={idx}
+                              className={`w-4 h-4 ${
+                                idx < review.rating
+                                  ? 'fill-yellow-400 text-yellow-400'
+                                  : 'text-slate-300'
+                              }`}
+                            />
+                          ))}
+                        </div>
+                      </div>
+                      {review.comment?.trim() ? (
+                        <p className="text-sm text-slate-700 leading-relaxed">
+                          {review.comment.trim()}
+                        </p>
+                      ) : null}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 p-8 text-center text-sm text-slate-600">
+                  No published student reviews yet.
                 </div>
               )}
             </div>

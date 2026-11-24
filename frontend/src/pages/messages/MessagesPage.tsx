@@ -49,7 +49,10 @@ const MessagesPage = () => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [loadingContacts, setLoadingContacts] = useState(true);
+  const [contactsError, setContactsError] = useState<string | null>(null);
   const [loadingThread, setLoadingThread] = useState(false);
+  const [isSending, setIsSending] = useState(false);
+  const requestedContactId = query.get('contactId');
 
   const listRef = useRef<HTMLDivElement | null>(null);
   const isMountedRef = useRef(true);
@@ -136,59 +139,60 @@ const MessagesPage = () => {
     }
   }, [scheduleScrollToBottom]);
 
-  // Load contacts (backend GET /messages/contacts already includes batched unreadCount per contact)
-  useEffect(() => {
-    let isActive = true;
+  const loadContacts = useCallback(async () => {
+    setLoadingContacts(true);
+    setContactsError(null);
+    try {
+      let list = await messageService.getContacts();
 
-    const init = async () => {
-      setLoadingContacts(true);
-      try {
-        let list = await messageService.getContacts();
-
-        // Ensure admin pinned at top for students and teachers
-        if (user?.role === UserRole.STUDENT || user?.role === UserRole.TEACHER) {
-          const adminContactIndex = list.findIndex((c) => c.role === 'ADMIN');
-          if (adminContactIndex > 0) {
-            const [adminContact] = list.splice(adminContactIndex, 1);
-            list = [adminContact, ...list];
-          }
-        }
-
-        if (!isActive) {
-          return;
-        }
-
-        setContacts(list);
-
-        const contactId = query.get('contactId');
-        if (contactId) {
-          const contact = list.find((item) => item.id === contactId);
-          if (contact) {
-            await openConversation(contact);
-          }
-        }
-      } catch (error) {
-        if (isActive) {
-          clientLogger.error('Failed to load contacts:', error);
-          toast.error(extractErrorMessage(error, 'Failed to load contacts'));
-        }
-      } finally {
-        if (isActive) {
-          setLoadingContacts(false);
+      if (user?.role === UserRole.STUDENT || user?.role === UserRole.TEACHER) {
+        const adminContactIndex = list.findIndex((c) => c.role === 'ADMIN');
+        if (adminContactIndex > 0) {
+          const [adminContact] = list.splice(adminContactIndex, 1);
+          list = [adminContact, ...list];
         }
       }
-    };
 
-    void init();
+      if (!isMountedRef.current) {
+        return;
+      }
 
-    return () => {
-      isActive = false;
-    };
-  }, [openConversation, query, user?.role]);
+      setContacts(list);
+    } catch (error) {
+      if (isMountedRef.current) {
+        clientLogger.error('Failed to load contacts:', error);
+        const message = extractErrorMessage(error, 'Failed to load contacts');
+        setContactsError(message);
+        toast.error(message);
+      }
+    } finally {
+      if (isMountedRef.current) {
+        setLoadingContacts(false);
+      }
+    }
+  }, [user?.role]);
+
+  useEffect(() => {
+    void loadContacts();
+  }, [loadContacts]);
+
+  useEffect(() => {
+    if (!requestedContactId || contacts.length === 0) {
+      return;
+    }
+    if (activeContact?.id === requestedContactId) {
+      return;
+    }
+    const matched = contacts.find((item) => item.id === requestedContactId);
+    if (matched) {
+      void openConversation(matched);
+    }
+  }, [activeContact?.id, contacts, openConversation, requestedContactId]);
 
   const handleSend = async () => {
     const text = input.trim();
-    if (!text || !activeContact || !user) return;
+    if (!text || !activeContact || !user || isSending) return;
+    setIsSending(true);
 
     const optimisticId = `local-${Date.now()}-${Math.random().toString(36).slice(2)}`;
     const optimisticMessage: Message = {
@@ -226,6 +230,11 @@ const MessagesPage = () => {
           toast.error(extractErrorMessage(error, 'Failed to send message'));
           setMessages((prev) => prev.filter((item) => item.id !== optimisticId));
           setInput(text);
+        }
+      })
+      .finally(() => {
+        if (isMountedRef.current) {
+          setIsSending(false);
         }
       });
   };
@@ -268,8 +277,23 @@ const MessagesPage = () => {
 
               {loadingContacts ? (
                 <div className="text-center text-gray-600 py-6">Loading contacts...</div>
+              ) : contactsError ? (
+                <div className="text-center py-6 space-y-2">
+                  <p className="text-sm text-red-700">{contactsError}</p>
+                  <button
+                    type="button"
+                    onClick={() => void loadContacts()}
+                    className="btn-outline btn-sm"
+                  >
+                    Retry
+                  </button>
+                </div>
               ) : filteredContacts.length === 0 ? (
-                <div className="text-center text-gray-600 py-6">No contacts yet</div>
+                <div className="text-center text-gray-600 py-6 text-sm">
+                  {searchText.trim()
+                    ? 'No contacts match your search.'
+                    : 'No contacts yet.'}
+                </div>
               ) : (
                 <ul className="space-y-2 max-h-[65vh] overflow-auto pr-2">
                   {filteredContacts.map((c, idx) => (
@@ -360,7 +384,8 @@ const MessagesPage = () => {
                     <input
                       value={input}
                       onChange={(e) => setInput(e.target.value)}
-                      placeholder="Type a message"
+                      placeholder="Type a message..."
+                      maxLength={2000}
                       className="input flex-1"
                       onKeyDown={(e) => {
                         if (e.key === 'Enter' && !e.shiftKey) {
@@ -369,9 +394,14 @@ const MessagesPage = () => {
                         }
                       }}
                     />
-                    <button type="button" className="btn-primary" onClick={handleSend} disabled={!activeContact || !input.trim()}>
+                    <button
+                      type="button"
+                      className="btn-primary"
+                      onClick={() => void handleSend()}
+                      disabled={!activeContact || !input.trim() || isSending}
+                    >
                       <Send className="w-4 h-4 mr-1" />
-                      Send
+                      {isSending ? 'Sending...' : 'Send'}
                     </button>
                   </div>
                 </>

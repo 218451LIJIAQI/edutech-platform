@@ -108,7 +108,7 @@ const walletService = {
       }
       return {
         ...data.data,
-        items: data.data.items.map(normalizeWalletTransaction),
+        items: (Array.isArray(data.data.items) ? data.data.items : []).map(normalizeWalletTransaction),
       };
     } catch (error) {
       wrapWalletError('Failed to fetch transactions', error);
@@ -203,7 +203,7 @@ const walletService = {
       }
       return {
         ...data.data,
-        items: data.data.items.map(normalizePayoutRequest),
+        items: (Array.isArray(data.data.items) ? data.data.items : []).map(normalizePayoutRequest),
       };
     } catch (error) {
       wrapWalletError('Failed to fetch payouts', error);
@@ -225,7 +225,7 @@ const walletService = {
       }
       return {
         ...data.data,
-        items: data.data.items.map(normalizePayoutRequest),
+        items: (Array.isArray(data.data.items) ? data.data.items : []).map(normalizePayoutRequest),
       };
     } catch (error) {
       wrapWalletError('Failed to fetch payout requests', error);

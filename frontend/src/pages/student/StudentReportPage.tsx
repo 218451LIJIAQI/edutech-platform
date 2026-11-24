@@ -153,24 +153,7 @@ const StudentReportPage = () => {
           </div>
         </div>
 
-        {error && (
-          <div className="card p-6 mb-8 bg-red-50 border border-red-200 rounded-2xl">
-            <div className="flex items-center gap-3">
-              <AlertCircle className="w-6 h-6 text-red-600 flex-shrink-0" />
-              <div>
-                <h3 className="font-bold text-red-900 mb-1">Error loading reports</h3>
-                <p className="text-red-700 text-sm">{error}</p>
-                <button
-                  type="button"
-                  onClick={() => void fetchReports()}
-                  className="mt-3 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors text-sm font-semibold"
-                >
-                  Retry
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
+
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-8">
           <div className="lg:col-span-2">
@@ -196,7 +179,20 @@ const StudentReportPage = () => {
               )}
             </div>
 
-            {filteredReports.length > 0 ? (
+            {error ? (
+              <div className="card p-8 bg-red-50 border border-red-200 rounded-2xl text-center space-y-3">
+                <AlertCircle className="w-10 h-10 text-red-600 mx-auto" />
+                <h3 className="font-bold text-red-900 text-lg">Error loading reports</h3>
+                <p className="text-red-700 text-sm">{error}</p>
+                <button
+                  type="button"
+                  onClick={() => void fetchReports()}
+                  className="btn-primary btn-sm"
+                >
+                  Retry
+                </button>
+              </div>
+            ) : filteredReports.length > 0 ? (
               <div className="space-y-4">
                 {filteredReports.map((report) => (
                   <div

@@ -39,14 +39,13 @@ import {
 import {
   buildCurrentEnrollmentWhere,
   countDistinctActiveStudentsForTeacherProfile,
-  isEnrollmentCurrentlyActive,
 } from "./shared/enrollment-access";
 
 const pendingCartPaymentInclude = {
   order: {
     include: {
       items: {
-        select: { packageId: true },
+        select: { packageId: true, finalPrice: true },
       },
     },
   },
@@ -301,8 +300,9 @@ class PaymentService {
   private async findReusablePendingPackagePayment(
     userId: string,
     packageId: string,
+    expectedSplit: PaymentSplit,
   ): Promise<PaymentModel | null> {
-    return prisma.payment.findFirst({
+    const candidate = await prisma.payment.findFirst({
       where: {
         userId,
         packageId,
@@ -310,11 +310,22 @@ class PaymentService {
       },
       orderBy: { createdAt: "desc" },
     });
+
+    if (!candidate) return null;
+
+    const matchesSplit =
+      roundMoney(candidate.amount) === expectedSplit.amount &&
+      roundMoney(candidate.platformCommission) ===
+        expectedSplit.platformCommission &&
+      roundMoney(candidate.teacherEarning) === expectedSplit.teacherEarning;
+
+    return matchesSplit ? candidate : null;
   }
 
   private async findReusablePendingCartPayment(
     userId: string,
     packageIds: string[],
+    expectedSplit: PaymentSplit,
   ): Promise<PendingCartPaymentRecord | null> {
     if (packageIds.length === 0) return null;
 
@@ -330,14 +341,22 @@ class PaymentService {
     });
 
     return (
-      pendingPayments.find((payment) =>
-        payment.order
-          ? haveSamePackages(
-              payment.order.items.map((item) => item.packageId),
-              packageIds,
-            )
-          : false,
-      ) ?? null
+      pendingPayments.find((payment) => {
+        if (!payment.order) return false;
+        const samePackages = haveSamePackages(
+          payment.order.items.map((item) => item.packageId),
+          packageIds,
+        );
+        if (!samePackages) return false;
+
+        return (
+          roundMoney(payment.order.totalAmount) === expectedSplit.amount &&
+          roundMoney(payment.amount) === expectedSplit.amount &&
+          roundMoney(payment.platformCommission) ===
+            expectedSplit.platformCommission &&
+          roundMoney(payment.teacherEarning) === expectedSplit.teacherEarning
+        );
+      }) ?? null
     );
   }
 
@@ -352,20 +371,6 @@ class PaymentService {
       confirmationTime: Date;
     },
   ): Promise<Enrollment> {
-    const existed = await tx.enrollment.findUnique({
-      where: {
-        userId_packageId: {
-          userId: params.userId,
-          packageId: params.packageId,
-        },
-      },
-      select: { isActive: true, expiresAt: true },
-    });
-
-    const hadCurrentEnrollment = isEnrollmentCurrentlyActive(
-      existed,
-      params.confirmationTime,
-    );
     const expiresAt = calculateExpirationDate(params.duration);
 
     const enrollment = await tx.enrollment.upsert({
@@ -383,10 +388,16 @@ class PaymentService {
       },
     });
 
+    const activeStudentCount = await countDistinctActiveStudentsForTeacherProfile(
+      tx,
+      params.teacherProfileId,
+      params.confirmationTime,
+    );
+
     await tx.teacherProfile.update({
       where: { id: params.teacherProfileId },
       data: {
-        ...(hadCurrentEnrollment ? {} : { totalStudents: { increment: 1 } }),
+        totalStudents: activeStudentCount,
         totalEarnings: { increment: params.teacherEarning },
       },
     });
@@ -440,7 +451,9 @@ class PaymentService {
       (item) =>
         !item.package ||
         !item.package.isActive ||
-        !item.package.course?.isPublished,
+        !item.package.course?.isPublished ||
+        item.package.course.teacherProfile.registrationStatus !== "APPROVED" ||
+        !item.package.course.teacherProfile.user.isActive,
     );
 
     if (unavailable) {
@@ -457,12 +470,41 @@ class PaymentService {
       );
     }
 
+    const expectedCartTotal = roundMoney(
+      cartItems.reduce(
+        (sum, item) => sum + roundMoney(item.package.finalPrice),
+        0,
+      ),
+    );
+    const expectedCartCommission = cartItems.reduce(
+      (sum, item) =>
+        sum +
+        calculatePlatformCommission(
+          item.package.finalPrice,
+          item.package.course.teacherProfile,
+          config.PLATFORM_COMMISSION_RATE,
+        ),
+      0,
+    );
+    const expectedCartSplit = buildPaymentSplit(
+      expectedCartTotal,
+      expectedCartCommission,
+    );
+
     const reusablePayment = await this.findReusablePendingCartPayment(
       normalizedUserId,
       cartPackageIds,
+      expectedCartSplit,
     );
 
     if (reusablePayment?.order) {
+      await prisma.cartItem.deleteMany({
+        where: {
+          userId: normalizedUserId,
+          packageId: { in: cartPackageIds },
+        },
+      });
+
       return {
         payment: reusablePayment,
         order: {
@@ -522,9 +564,19 @@ class PaymentService {
       referenceDate,
     );
 
+    const expectedPackageSplit = buildPaymentSplit(
+      lessonPackage.finalPrice,
+      calculatePlatformCommission(
+        lessonPackage.finalPrice,
+        lessonPackage.course.teacherProfile,
+        config.PLATFORM_COMMISSION_RATE,
+      ),
+    );
+
     const reusableOrderPayment = await this.findReusablePendingCartPayment(
       normalizedUserId,
       [normalizedPackageId],
+      expectedPackageSplit,
     );
 
     if (reusableOrderPayment?.order) {
@@ -533,7 +585,7 @@ class PaymentService {
         package: {
           id: lessonPackage.id,
           name: lessonPackage.name,
-          price: roundMoney(lessonPackage.finalPrice),
+          price: expectedPackageSplit.amount,
         },
       };
     }
@@ -541,6 +593,7 @@ class PaymentService {
     const reusablePayment = await this.findReusablePendingPackagePayment(
       normalizedUserId,
       normalizedPackageId,
+      expectedPackageSplit,
     );
 
     if (reusablePayment) {
@@ -638,7 +691,11 @@ class PaymentService {
                   isPublished: true,
                   teacherProfileId: true,
                   teacherProfile: {
-                    select: { userId: true },
+                    select: {
+                      userId: true,
+                      registrationStatus: true,
+                      user: { select: { isActive: true } },
+                    },
                   },
                 },
               },
@@ -648,7 +705,10 @@ class PaymentService {
           if (
             !currentPackage ||
             !currentPackage.isActive ||
-            !currentPackage.course?.isPublished
+            !currentPackage.course?.isPublished ||
+            currentPackage.course.teacherProfile.registrationStatus !==
+              "APPROVED" ||
+            !currentPackage.course.teacherProfile.user.isActive
           ) {
             await markPendingPaymentFailed(tx, normalizedPaymentId);
             return { kind: "unavailable-package" as const };
@@ -813,7 +873,11 @@ class PaymentService {
           if (
             order.items.some(
               (item) =>
-                !item.package?.isActive || !item.package.course?.isPublished,
+                !item.package?.isActive ||
+                !item.package.course?.isPublished ||
+                item.package.course.teacherProfile.registrationStatus !==
+                  "APPROVED" ||
+                !item.package.course.teacherProfile.user.isActive,
             )
           ) {
             await failOrderCheckout(tx, normalizedPaymentId, order.id);

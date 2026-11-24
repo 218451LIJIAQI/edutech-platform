@@ -1,7 +1,9 @@
 import { Prisma, RefundStatus } from "@prisma/client";
 import prisma from "../config/database";
 import config from "../config/env";
+import logger from "../utils/logger";
 import { NotFoundError, ValidationError } from "../utils/errors";
+import notificationService from "./notification.service";
 import { sanitizeUserPlainText } from "../utils/sanitize-user-content";
 import { normalizeOffsetPagination } from "./shared/pagination";
 import {
@@ -45,7 +47,7 @@ type PayoutMethodTypeValue =
 
 type JsonPrimitive = string | number | boolean | null;
 type JsonValue = JsonPrimitive | JsonValue[] | { [key: string]: JsonValue };
-export type JsonObject = { [key: string]: JsonValue };
+type JsonObject = { [key: string]: JsonValue };
 
 type PayoutAction = "approve" | "reject" | "processing" | "paid";
 
@@ -242,7 +244,7 @@ const getStringMetadataValue = (
   return typeof value === "string" && value.trim() ? value.trim() : undefined;
 };
 
-export const buildWalletReferenceId = (
+const buildWalletReferenceId = (
   source: TransactionSource,
   metadata?: JsonObject,
 ): string | undefined => {
@@ -936,7 +938,37 @@ class WalletService {
         throw new ValidationError("Invalid payout action");
       }
 
-      return tx.payoutRequest.findUniqueOrThrow({ where: { id: payoutId } });
+      const updatedPayout = await tx.payoutRequest.findUniqueOrThrow({
+        where: { id: payoutId },
+      });
+      return { updatedPayout, teacherUserId: payout.wallet.userId, amount };
+    }).then(async ({ updatedPayout, teacherUserId, amount }) => {
+      const titlesByAction: Record<PayoutAction, string> = {
+        approve: "Payout Request Approved",
+        processing: "Payout Transfer Processing",
+        reject: "Payout Request Rejected",
+        paid: "Payout Settled",
+      };
+      const messagesByAction: Record<PayoutAction, string> = {
+        approve: `Your payout request of $${amount.toFixed(2)} has been approved.`,
+        processing: `Your payout of $${amount.toFixed(2)} is now being processed.`,
+        reject: `Your payout request of $${amount.toFixed(2)} was rejected and returned to your available balance${adminNote ? `: ${adminNote}` : "."}`,
+        paid: `Your payout of $${amount.toFixed(2)} has been marked paid${externalReference ? ` (Ref: ${externalReference})` : ""}.`,
+      };
+      try {
+        await notificationService.createNotification(
+          teacherUserId,
+          titlesByAction[action],
+          messagesByAction[action],
+          "payout",
+        );
+      } catch (error) {
+        logger.warn("Failed to create payout review notification", {
+          teacherUserId,
+          error,
+        });
+      }
+      return updatedPayout;
     });
   }
 
@@ -1119,18 +1151,6 @@ class WalletService {
     }
   }
 
-  async debitForRefund(userId: string, amount: number, metadata?: JsonObject) {
-    const referenceId = buildWalletReferenceId("REFUND", metadata);
-    try {
-      await prisma.$transaction((tx) =>
-        this.debitForRefundInTransaction(tx, userId, amount, metadata),
-      );
-    } catch (error) {
-      if (!(referenceId && isUniqueConstraintError(error))) {
-        throw error;
-      }
-    }
-  }
 }
 
 export default new WalletService();

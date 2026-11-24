@@ -7,6 +7,7 @@ import logger from "../utils/logger";
 import { authenticateAccessToken, extractBearerToken } from "../middleware/auth";
 import { AuthenticationError } from "../utils/errors";
 import { buildCurrentEnrollmentWhere } from "../services/shared/enrollment-access";
+import { isApprovedTeacherProfileCompletionStatus } from "../services/teacher/teacher-profile-helpers";
 import { sanitizeUserPlainText } from "../utils/sanitize-user-content";
 
 const MAX_CHAT_MESSAGE_LENGTH = 1000;
@@ -35,6 +36,12 @@ const liveSessionAccessInclude = {
             select: {
               userId: true,
               registrationStatus: true,
+              profileCompletionStatus: true,
+              user: {
+                select: {
+                  isActive: true,
+                },
+              },
             },
           },
         },
@@ -50,12 +57,51 @@ type LiveSessionAccessRecord = Prisma.LiveSessionGetPayload<{
 /**
  * Manages real-time classroom presence, chat, hand-raising, and teacher lifecycle controls.
  */
+let activeLiveSessionHandler: LiveSessionHandler | null = null;
+
+export const broadcastLiveSessionStatusChange = (
+  session: SerializableLiveSession,
+  teacherUserId: string,
+): void => {
+  activeLiveSessionHandler?.notifyRestStatusChange(session, teacherUserId);
+};
+
 class LiveSessionHandler {
   private io: Server;
 
   constructor(io: Server) {
     this.io = io;
+    activeLiveSessionHandler = this;
     this.initialize();
+  }
+
+  public notifyRestStatusChange(
+    session: SerializableLiveSession,
+    teacherUserId: string,
+  ): void {
+    if (session.status === LiveSessionStatus.ONGOING) {
+      this.emitLifecycleUpdateToRoom(
+        session.id,
+        "session-started",
+        session,
+        teacherUserId,
+        true,
+      );
+      return;
+    }
+
+    if (
+      session.status === LiveSessionStatus.COMPLETED ||
+      session.status === LiveSessionStatus.CANCELLED
+    ) {
+      this.emitLifecycleUpdateToRoom(
+        session.id,
+        "session-ended",
+        session,
+        teacherUserId,
+        false,
+      );
+    }
   }
 
   private initialize(): void {
@@ -242,7 +288,10 @@ class LiveSessionHandler {
       Boolean(socket.userId) &&
       session.lesson.course.teacherProfile.userId === socket.userId &&
       session.lesson.course.teacherProfile.registrationStatus ===
-        RegistrationStatus.APPROVED
+        RegistrationStatus.APPROVED &&
+      isApprovedTeacherProfileCompletionStatus(
+        session.lesson.course.teacherProfile.profileCompletionStatus,
+      )
     );
   }
 
@@ -250,7 +299,13 @@ class LiveSessionHandler {
     userId: string,
     session: LiveSessionAccessRecord,
   ): Promise<boolean> {
-    if (session.lesson.isFree && session.lesson.course.isPublished) {
+    if (
+      session.lesson.isFree &&
+      session.lesson.course.isPublished &&
+      session.lesson.course.teacherProfile.registrationStatus ===
+        RegistrationStatus.APPROVED &&
+      session.lesson.course.teacherProfile.user.isActive
+    ) {
       return true;
     }
 

@@ -46,6 +46,7 @@ const CommunityHomePage = () => {
   const [totalPages, setTotalPages] = useState(1);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [pendingActionPostIds, setPendingActionPostIds] = useState<Set<string>>(new Set());
   const requestIdRef = useRef(0);
 
   const query: FeedQuery = useMemo(() => ({ tab, tag, page, limit: 9 }), [tab, tag, page]);
@@ -123,6 +124,8 @@ const CommunityHomePage = () => {
   }, []);
 
   const toggleLike = async (id: string) => {
+    if (pendingActionPostIds.has(id)) return;
+    setPendingActionPostIds((prev) => new Set(prev).add(id));
     try {
       const { likes, hasLiked } = await communityService.likePost(id);
       setPosts((currentPosts) =>
@@ -131,10 +134,18 @@ const CommunityHomePage = () => {
     } catch (error) {
       clientLogger.error('Failed to like post:', error);
       toast.error(extractErrorMessage(error, 'Failed to like post'));
+    } finally {
+      setPendingActionPostIds((prev) => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
     }
   };
 
   const toggleBookmark = async (id: string) => {
+    if (pendingActionPostIds.has(id)) return;
+    setPendingActionPostIds((prev) => new Set(prev).add(id));
     try {
       const { bookmarks, hasBookmarked } = await communityService.bookmarkPost(id);
       setPosts((currentPosts) =>
@@ -145,6 +156,12 @@ const CommunityHomePage = () => {
     } catch (error) {
       clientLogger.error('Failed to bookmark post:', error);
       toast.error(extractErrorMessage(error, 'Failed to bookmark post'));
+    } finally {
+      setPendingActionPostIds((prev) => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
     }
   };
 

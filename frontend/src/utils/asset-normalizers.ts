@@ -11,6 +11,7 @@ import type {
   OrderItem,
   Payment,
   Refund,
+  Report,
   Review,
   SupportTicket,
   SupportTicketMessage,
@@ -18,7 +19,11 @@ import type {
   TeacherVerification,
   User,
 } from '@/types';
-import { getApiBaseUrl, resolveBackendAssetUrl } from './runtime';
+import {
+  getApiBaseUrl,
+  resolveBackendAssetUrl,
+  toStorableBackendAssetPath,
+} from './runtime';
 import {
   LEGACY_PROFILE_STATUS_COMPLETE,
   PROFILE_STATUS_APPROVED,
@@ -57,7 +62,7 @@ export const toOptionalFiniteNumber = (
   return toFiniteNumber(value);
 };
 
-export const normalizeStringIdArray = (value: unknown): string[] | undefined => {
+const normalizeStringIdArray = (value: unknown): string[] | undefined => {
   if (!Array.isArray(value)) {
     return undefined;
   }
@@ -91,7 +96,7 @@ export const normalizeAssetUrl = (value?: string | null): string | undefined => 
   return resolveBackendAssetUrl(trimmed);
 };
 
-export const normalizeAssetUrlList = (
+const normalizeAssetUrlList = (
   value?: string[] | string
 ): string[] | undefined => {
   if (!value) {
@@ -137,24 +142,8 @@ const normalizeUserAvatarOnly = (user?: User): User | undefined =>
     : user;
 
 const isSupportAttachmentUploadPath = (value?: string): boolean => {
-  const trimmed = value?.trim();
-  if (!trimmed) {
-    return false;
-  }
-
-  if (trimmed.startsWith(SUPPORT_ATTACHMENT_UPLOAD_PATH)) {
-    return true;
-  }
-
-  if (!/^https?:\/\//i.test(trimmed)) {
-    return false;
-  }
-
-  try {
-    return new URL(trimmed).pathname.startsWith(SUPPORT_ATTACHMENT_UPLOAD_PATH);
-  } catch {
-    return false;
-  }
+  const storable = toStorableBackendAssetPath(value);
+  return storable.startsWith(SUPPORT_ATTACHMENT_UPLOAD_PATH);
 };
 
 const getAttachmentFileName = (value: string): string | undefined => {
@@ -282,6 +271,7 @@ export const normalizeMaterialAssets = (material: Material): Material => ({
 
 export const normalizeAdAssets = (ad: AdCampaign): AdCampaign => ({
   ...ad,
+  targetRoles: Array.isArray(ad.targetRoles) ? ad.targetRoles : [],
   imageUrl: normalizeAssetUrl(ad.imageUrl ?? undefined),
 });
 
@@ -333,7 +323,7 @@ export const normalizePayment = <T extends Payment>(payment: T): T => ({
   teacherEarning: toFiniteNumber(payment.teacherEarning),
 });
 
-export const normalizeOrderItem = (item: OrderItem): OrderItem => ({
+const normalizeOrderItem = (item: OrderItem): OrderItem => ({
   ...item,
   price: toFiniteNumber(item.price),
   discount: toOptionalFiniteNumber(item.discount),
@@ -341,17 +331,24 @@ export const normalizeOrderItem = (item: OrderItem): OrderItem => ({
   package: item.package ? normalizeLessonPackage(item.package) : item.package,
 });
 
-export const normalizeOrder = (order: Order): Order => ({
+export const normalizeOrder = <T extends Order & { user?: User }>(order: T): T => ({
   ...order,
   totalAmount: toFiniteNumber(order.totalAmount),
   refundAmount: toOptionalFiniteNumber(order.refundAmount),
   items: order.items?.map(normalizeOrderItem),
+  ...(order.user ? { user: normalizeUserAvatarOnly(order.user) } : {}),
 });
 
 export const normalizeRefund = (refund: Refund): Refund => ({
   ...refund,
   amount: toFiniteNumber(refund.amount),
   order: refund.order ? normalizeOrder(refund.order) : refund.order,
+});
+
+export const normalizeReportAssets = (report: Report): Report => ({
+  ...report,
+  reporter: normalizeUserAvatarOnly(report.reporter),
+  reported: normalizeUserAvatarOnly(report.reported),
 });
 
 export const normalizeCartSummary = (summary: CartSummary): CartSummary => ({

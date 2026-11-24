@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback, useMemo } from 'react';
 import clientLogger from '@/utils/logger';
 import { Link, useNavigate } from 'react-router-dom';
-import { Plus, Edit, Trash2, Eye, EyeOff, Users, Video, Radio, PlayCircle, Search, Filter, BookOpen, TrendingUp, CheckCircle, Zap } from 'lucide-react';
+import { AlertCircle, Plus, Edit, Trash2, Eye, EyeOff, Users, Video, Radio, PlayCircle, RefreshCcw, Search, Filter, BookOpen, TrendingUp, CheckCircle, Zap } from 'lucide-react';
 import courseService from '@/services/course.service';
 import { Course, CourseType } from '@/types';
 import { formatCurrency } from '@/utils/helpers';
@@ -22,6 +22,8 @@ const ManageCoursesPage = () => {
   const navigate = useNavigate();
   const [courses, setCourses] = useState<Course[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [togglingCourseId, setTogglingCourseId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterStatus, setFilterStatus] = useState<'all' | 'published' | 'draft'>('all');
   const [failedThumbnailCourseIds, setFailedThumbnailCourseIds] = useState<Set<string>>(new Set());
@@ -31,26 +33,28 @@ const ManageCoursesPage = () => {
 
   const fetchMyCourses = useCallback(async () => {
     setIsLoading(true);
+    setLoadError(null);
     try {
-      const courses = await courseService.getMyCourses();
-      setCourses(courses);
+      const loadedCourses = await courseService.getMyCourses();
+      setCourses(loadedCourses);
+      setFailedThumbnailCourseIds(new Set());
     } catch (error) {
       clientLogger.error('Failed to fetch courses:', error);
-      toast.error(extractErrorMessage(error, 'Failed to load courses'));
+      const message = extractErrorMessage(error, 'Failed to load courses');
+      setLoadError(message);
+      toast.error(message);
     } finally {
       setIsLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    fetchMyCourses();
+    void fetchMyCourses();
   }, [fetchMyCourses]);
 
-  useEffect(() => {
-    setFailedThumbnailCourseIds(new Set());
-  }, [courses]);
-
   const handleTogglePublish = async (courseId: string, currentStatus: boolean) => {
+    if (togglingCourseId) return;
+    setTogglingCourseId(courseId);
     try {
       await courseService.updateCourse(courseId, {
         isPublished: !currentStatus,
@@ -58,10 +62,12 @@ const ManageCoursesPage = () => {
       toast.success(
         !currentStatus ? 'Course published successfully' : 'Course unpublished'
       );
-      fetchMyCourses();
+      await fetchMyCourses();
     } catch (error) {
       clientLogger.error('Failed to update course status:', error);
       toast.error(extractErrorMessage(error, 'Failed to update course status'));
+    } finally {
+      setTogglingCourseId(null);
     }
   };
 
@@ -266,7 +272,21 @@ const ManageCoursesPage = () => {
         </div>
 
         {/* Courses Grid */}
-        {filteredCourses.length > 0 ? (
+        {loadError ? (
+          <div className="card max-w-lg mx-auto text-center space-y-4 py-12">
+            <AlertCircle className="w-12 h-12 text-red-500 mx-auto" />
+            <h2 className="text-xl font-bold text-slate-900">Unable to load your courses</h2>
+            <p className="text-sm text-slate-600">{loadError}</p>
+            <button
+              type="button"
+              onClick={() => void fetchMyCourses()}
+              className="btn-primary inline-flex items-center gap-2"
+            >
+              <RefreshCcw className="w-4 h-4" />
+              Retry
+            </button>
+          </div>
+        ) : filteredCourses.length > 0 ? (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {filteredCourses.map((course) => {
               const courseCover = getCourseCover(course);
@@ -274,7 +294,7 @@ const ManageCoursesPage = () => {
               return (
               <div
                 key={course.id}
-                className="card shadow-xl hover:shadow-2xl transition-all duration-300 transform hover:scale-[1.02] overflow-hidden group border border-gray-100 hover:border-primary-200 rounded-2xl"
+                className="card card-smooth p-0 overflow-hidden group border border-slate-200/80 rounded-2xl"
               >
                 {/* Course Header with Thumbnail */}
                 <div className="relative h-40 overflow-hidden">
@@ -378,8 +398,8 @@ const ManageCoursesPage = () => {
                   {course.packages && course.packages.length > 0 && (
                     <div className="mb-6 p-3 bg-gradient-to-r from-green-50 to-emerald-50 rounded-lg border border-green-200">
                       <p className="text-xs text-gray-600 mb-1">Starting Price</p>
-                      <p className="text-lg font-bold text-green-700">
-                        {formatCurrency(course.packages[0].finalPrice)}
+                      <p className="text-lg font-bold text-green-700 tabular-nums">
+                        {formatCurrency(Math.min(...course.packages.map((p) => p.finalPrice)))}
                       </p>
                     </div>
                   )}
@@ -402,8 +422,9 @@ const ManageCoursesPage = () => {
                     </button>
                     <button
                       type="button"
-                      onClick={() => handleTogglePublish(course.id, course.isPublished)}
-                      className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-all"
+                      disabled={togglingCourseId === course.id}
+                      onClick={() => void handleTogglePublish(course.id, course.isPublished)}
+                      className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-all disabled:opacity-50"
                       title={course.isPublished ? 'Unpublish' : 'Publish'}
                     >
                       {course.isPublished ? (

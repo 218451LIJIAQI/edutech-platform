@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import clientLogger from '@/utils/logger';
 import { Link, useNavigate } from 'react-router-dom';
-import { Users, Search, Filter, Download, TrendingUp, Calendar, BookOpen, User, MessageSquare, Copy } from 'lucide-react';
+import { AlertCircle, Users, Search, Filter, Download, RefreshCcw, TrendingUp, Calendar, BookOpen, User, MessageSquare, Copy } from 'lucide-react';
 import courseService from '@/services/course.service';
 import enrollmentService from '@/services/enrollment.service';
 import { Course, Enrollment, User as AppUser } from '@/types';
@@ -30,6 +30,7 @@ interface AggregatedStudent {
 const TeacherStudentManagementPage = () => {
   usePageTitle('Student Management');
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [courses, setCourses] = useState<Course[]>([]);
   const [students, setStudents] = useState<AggregatedStudent[]>([]);
   const [search, setSearch] = useState('');
@@ -38,17 +39,15 @@ const TeacherStudentManagementPage = () => {
   const [progressMax, setProgressMax] = useState(100);
   const navigate = useNavigate();
 
-  useEffect(() => {
-    let isActive = true;
+  const hasActiveFilters = Boolean(
+    search.trim() || filterCourseId !== 'all' || progressMin > 0 || progressMax < 100
+  );
 
-    const loadStudentData = async () => {
-      setIsLoading(true);
-      try {
+  const loadStudentData = useCallback(async () => {
+    setIsLoading(true);
+    setLoadError(null);
+    try {
         const myCourses = await courseService.getMyCourses();
-        if (!isActive) {
-          return;
-        }
-
         setCourses(myCourses);
 
         const enrollmentResults = await Promise.allSettled(
@@ -108,27 +107,20 @@ const TeacherStudentManagementPage = () => {
           }
         }
 
-        if (isActive) {
-          setStudents(Array.from(aggregatedStudents.values()));
-        }
+        setStudents(Array.from(aggregatedStudents.values()));
       } catch (error) {
-        if (isActive) {
-          clientLogger.error('Failed to load students:', error);
-          toast.error(extractErrorMessage(error, 'Failed to load students'));
-        }
+        clientLogger.error('Failed to load students:', error);
+        const message = extractErrorMessage(error, 'Failed to load students');
+        setLoadError(message);
+        toast.error(message);
       } finally {
-        if (isActive) {
-          setIsLoading(false);
-        }
+        setIsLoading(false);
       }
-    };
-
-    void loadStudentData();
-
-    return () => {
-      isActive = false;
-    };
   }, []);
+
+  useEffect(() => {
+    void loadStudentData();
+  }, [loadStudentData]);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -184,16 +176,22 @@ const TeacherStudentManagementPage = () => {
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-primary-50/10 to-indigo-50/20 py-8 relative">
       <div className="absolute inset-0 bg-[linear-gradient(rgba(0,0,0,0.015)_1px,transparent_1px),linear-gradient(90deg,rgba(0,0,0,0.015)_1px,transparent_1px)] bg-[size:32px_32px] pointer-events-none"></div>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative">
-        <div className="mb-8 flex items-center gap-3">
-          <div className="w-12 h-12 bg-gradient-to-br from-primary-500 to-indigo-600 rounded-2xl flex items-center justify-center shadow-lg shadow-primary-500/25">
-            <Users className="w-6 h-6 text-white" />
+        <div className="mb-8 flex flex-wrap items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="w-12 h-12 bg-gradient-to-br from-primary-500 to-indigo-600 rounded-2xl flex items-center justify-center shadow-lg shadow-primary-500/25">
+              <Users className="w-6 h-6 text-white" />
+            </div>
+            <div>
+              <h1 className="text-3xl font-extrabold text-gray-900">
+                Student <span className="bg-gradient-to-r from-primary-600 to-indigo-600 bg-clip-text text-transparent">Directory</span>
+              </h1>
+              <p className="text-gray-500 font-medium">View aggregated learners and progress across all your courses</p>
+            </div>
           </div>
-          <div>
-            <h1 className="text-3xl font-extrabold text-gray-900">
-              Student <span className="bg-gradient-to-r from-primary-600 to-indigo-600 bg-clip-text text-transparent">Management</span>
-            </h1>
-            <p className="text-gray-500 font-medium">View all students across your courses</p>
-          </div>
+          <Link to="/teacher/students" className="btn-outline btn-sm">
+            <BookOpen className="w-4 h-4" />
+            Per-Course Roster View
+          </Link>
         </div>
 
         {/* Filters */}
@@ -223,12 +221,53 @@ const TeacherStudentManagementPage = () => {
               </select>
             </div>
 
-            <div className="flex items-center gap-3">
-              <span className="text-sm text-gray-600">Progress</span>
-              <input type="number" min={0} max={100} value={progressMin} onChange={(e) => setProgressMin(Number(e.target.value) || 0)} className="input w-20" />
-              <span>-</span>
-              <input type="number" min={0} max={100} value={progressMax} onChange={(e) => setProgressMax(Number(e.target.value) || 100)} className="input w-20" />
-              <button type="button" onClick={exportCSV} className="btn-outline ml-auto">
+            <div className="flex flex-wrap items-center gap-3">
+              <span className="text-sm text-gray-600">Progress (%)</span>
+              <input
+                type="number"
+                min={0}
+                max={100}
+                value={progressMin}
+                onChange={(e) => {
+                  const raw = e.target.value;
+                  setProgressMin(raw === '' ? 0 : Math.min(100, Math.max(0, Number(raw))));
+                }}
+                className="input w-20 tabular-nums"
+                aria-label="Minimum progress percentage"
+              />
+              <span>&ndash;</span>
+              <input
+                type="number"
+                min={0}
+                max={100}
+                value={progressMax}
+                onChange={(e) => {
+                  const raw = e.target.value;
+                  setProgressMax(raw === '' ? 100 : Math.min(100, Math.max(0, Number(raw))));
+                }}
+                className="input w-20 tabular-nums"
+                aria-label="Maximum progress percentage"
+              />
+              {hasActiveFilters && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSearch('');
+                    setFilterCourseId('all');
+                    setProgressMin(0);
+                    setProgressMax(100);
+                  }}
+                  className="btn-secondary btn-sm"
+                >
+                  Clear Filters
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={exportCSV}
+                disabled={filtered.length === 0}
+                className="btn-outline ml-auto"
+              >
                 <Download className="w-4 h-4 mr-2" /> Export CSV
               </button>
             </div>
@@ -238,9 +277,40 @@ const TeacherStudentManagementPage = () => {
         {/* Table */}
         <div className="card shadow-xl border border-gray-100 rounded-2xl">
           {isLoading ? (
-            <div className="py-12 text-center text-gray-600">Loading...</div>
+            <div className="py-12 text-center text-gray-600">Loading student directory...</div>
+          ) : loadError ? (
+            <div className="py-12 text-center space-y-3">
+              <AlertCircle className="w-10 h-10 text-red-500 mx-auto" />
+              <p className="text-sm font-medium text-red-800">{loadError}</p>
+              <button
+                type="button"
+                onClick={() => void loadStudentData()}
+                className="btn-primary btn-sm inline-flex items-center gap-1.5"
+              >
+                <RefreshCcw className="w-4 h-4" />
+                Retry
+              </button>
+            </div>
           ) : filtered.length === 0 ? (
-            <div className="py-12 text-center text-gray-600">No students found</div>
+            <div className="py-12 text-center space-y-3">
+              <p className="text-gray-700 font-semibold">
+                {hasActiveFilters ? 'No students match the current filters' : 'No enrolled students yet'}
+              </p>
+              {hasActiveFilters && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSearch('');
+                    setFilterCourseId('all');
+                    setProgressMin(0);
+                    setProgressMax(100);
+                  }}
+                  className="btn-secondary btn-sm"
+                >
+                  Reset Filters
+                </button>
+              )}
+            </div>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full">

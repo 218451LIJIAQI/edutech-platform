@@ -1,10 +1,23 @@
 import assert from 'node:assert/strict';
 import { afterEach, describe, it } from 'node:test';
+import { normalizeErrorResponseData } from '@/services/api';
+import {
+  normalizeRefund,
+  normalizeReportAssets,
+  normalizeSupportMessageAssets,
+} from '@/utils/asset-normalizers';
 import {
   createTokenRefreshCoordinator,
   extractBearerToken,
 } from '@/utils/auth-storage';
 import { shareLink } from '@/utils/clipboard';
+import { extractErrorMessage, extractFieldErrors } from '@/utils/error-handler';
+import {
+  formatCurrency,
+  formatDate,
+  formatFileSize,
+  roundCurrency,
+} from '@/utils/helpers';
 import {
   getSocketServerUrl,
   normalizeRequestPath,
@@ -138,7 +151,6 @@ describe('concurrent 401 token refresh coordinator and shareLink helper', () => 
 
     assert.equal(extractBearerToken('Bearer expired-token-1'), 'expired-token-1');
 
-    // 4 concurrent 401 responses all carrying expired-token-1
     const results = await Promise.all([
       coordinator.acquireFreshToken('expired-token-1'),
       coordinator.acquireFreshToken('expired-token-1'),
@@ -155,8 +167,6 @@ describe('concurrent 401 token refresh coordinator and shareLink helper', () => 
     assert.equal(refreshCallCount, 1);
     assert.equal(terminalFailures, 0);
 
-    // A 5th in-flight request that was originally sent with expired-token-1 arrives AFTER refresh finished:
-    // must reuse fresh-token-2 with ZERO additional refresh HTTP calls!
     const lateArrivalToken = await coordinator.acquireFreshToken('expired-token-1');
     assert.equal(lateArrivalToken, 'fresh-token-2');
     assert.equal(refreshCallCount, 1);
@@ -236,6 +246,151 @@ describe('resolveExternalVideoEmbed', () => {
     assert.equal(
       resolveExternalVideoEmbed('https://youtube.com.attacker.example/watch?v=dQw4w9WgXcQ'),
       null
+    );
+  });
+});
+
+describe('shared helpers, asset normalizers, and structured API error preservation', () => {
+  it('formats currency without -0 drift, guards invalid dates, and formats file sizes consistently', () => {
+    assert.equal(roundCurrency(-0.001), 0);
+    assert.equal(Object.is(roundCurrency(-0), -0), false);
+    assert.equal(formatCurrency('19.995'), '$20.00');
+    assert.equal(formatDate('not-a-valid-date'), 'N/A');
+    assert.equal(formatDate(null), 'N/A');
+    assert.equal(formatFileSize(0), '0 KB');
+    assert.equal(formatFileSize(2048), '2 KB');
+    assert.equal(formatFileSize(2.5 * 1024 * 1024), '2.50 MB');
+  });
+
+  it('rewrites backend support attachments to protected endpoints while preserving third-party URLs and nested avatars', () => {
+    setTestViteEnv({ VITE_API_URL: 'https://api.example.com/api/v1' });
+
+    const internalMsg = normalizeSupportMessageAssets({
+      id: 'msg-1',
+      ticketId: 'tkt-1',
+      senderId: 'u-1',
+      message: 'See screenshot',
+      attachment: 'https://api.example.com/uploads/support-attachments/screen.png',
+      isInternal: false,
+      createdAt: '2026-11-23T00:00:00.000Z',
+    });
+    assert.equal(
+      internalMsg.attachment,
+      'https://api.example.com/api/v1/support/messages/msg-1/attachment?filename=screen.png'
+    );
+
+    const externalMsg = normalizeSupportMessageAssets({
+      id: 'msg-2',
+      ticketId: 'tkt-1',
+      senderId: 'u-1',
+      message: 'External mirror',
+      attachment: 'https://cdn.partner.org/uploads/support-attachments/guide.pdf',
+      isInternal: false,
+      createdAt: '2026-11-23T00:00:00.000Z',
+    });
+    assert.equal(
+      externalMsg.attachment,
+      'https://cdn.partner.org/uploads/support-attachments/guide.pdf'
+    );
+
+    const normalizedRefund = normalizeRefund({
+      id: 'ref-1',
+      orderId: 'ord-1',
+      userId: 'u-1',
+      amount: '45.50' as unknown as number,
+      reason: 'Schedule conflict',
+      refundMethod: 'ORIGINAL_PAYMENT',
+      status: 'PENDING',
+      createdAt: '2026-11-23T00:00:00.000Z',
+      updatedAt: '2026-11-23T00:00:00.000Z',
+      order: {
+        id: 'ord-1',
+        orderNo: 'ORD-1001',
+        userId: 'u-1',
+        totalAmount: '90.00' as unknown as number,
+        status: 'PAID',
+        createdAt: '2026-11-23T00:00:00.000Z',
+        updatedAt: '2026-11-23T00:00:00.000Z',
+        user: {
+          id: 'u-1',
+          email: 'student@example.com',
+          firstName: 'Lin',
+          lastName: 'Mei',
+          role: 'STUDENT',
+          isActive: true,
+          avatar: '/uploads/avatars/student.png',
+          createdAt: '2026-11-23T00:00:00.000Z',
+          updatedAt: '2026-11-23T00:00:00.000Z',
+        },
+      },
+    });
+    assert.equal(normalizedRefund.amount, 45.5);
+    assert.equal(
+      normalizedRefund.order?.user?.avatar,
+      'https://api.example.com/uploads/avatars/student.png'
+    );
+
+    const normalizedReport = normalizeReportAssets({
+      id: 'rep-1',
+      reporterId: 'u-1',
+      reportedId: 'u-2',
+      type: 'HARASSMENT',
+      description: 'Spam message',
+      status: 'OPEN',
+      createdAt: '2026-11-23T00:00:00.000Z',
+      updatedAt: '2026-11-23T00:00:00.000Z',
+      reporter: {
+        id: 'u-1',
+        email: 'r1@example.com',
+        firstName: 'A',
+        lastName: 'B',
+        role: 'STUDENT',
+        isActive: true,
+        avatar: '/uploads/avatars/r1.jpg',
+        createdAt: '2026-11-23T00:00:00.000Z',
+        updatedAt: '2026-11-23T00:00:00.000Z',
+      },
+    });
+    assert.equal(
+      normalizedReport.reporter?.avatar,
+      'https://api.example.com/uploads/avatars/r1.jpg'
+    );
+  });
+
+  it('preserves structured field errors across JSON objects and JSON Blobs in normalizeErrorResponseData', async () => {
+    const jsonPayload = {
+      status: 'error',
+      message: 'Validation failed',
+      errors: {
+        email: ['Please provide a valid email address'],
+        password: ['Password must be at least 8 characters long'],
+      },
+    };
+
+    const normalizedObj = await normalizeErrorResponseData(jsonPayload);
+    const extractedFromObj = extractFieldErrors({
+      response: { data: normalizedObj.normalizedData },
+    });
+    assert.deepEqual(extractedFromObj, {
+      email: 'Please enter a valid email address',
+      password: 'Password must be at least 8 characters',
+    });
+
+    const blobPayload = new Blob([JSON.stringify(jsonPayload)], {
+      type: 'application/json; charset=utf-8',
+    });
+    const normalizedBlob = await normalizeErrorResponseData(blobPayload);
+    assert.equal(normalizedBlob.message, 'Validation failed');
+    assert.deepEqual(
+      extractFieldErrors({ response: { data: normalizedBlob.normalizedData } }),
+      {
+        email: 'Please enter a valid email address',
+        password: 'Password must be at least 8 characters',
+      }
+    );
+    assert.equal(
+      extractErrorMessage({ response: { data: normalizedBlob.normalizedData } }),
+      'Please enter a valid email address; Password must be at least 8 characters'
     );
   });
 });

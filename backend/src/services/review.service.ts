@@ -400,6 +400,7 @@ class ReviewService {
       : 10;
     const skip = (safePage - 1) * safeLimit;
 
+    let resolvedTeacherUserId = normalizedTeacherId;
     const teacher = await prisma.user.findUnique({
       where: {
         id: normalizedTeacherId,
@@ -410,16 +411,24 @@ class ReviewService {
       },
     });
 
-    if (!teacher) {
-      throw new NotFoundError("Teacher not found");
-    }
-
-    if (teacher.role !== UserRole.TEACHER) {
-      throw new ValidationError("Selected user is not a teacher");
+    if (teacher) {
+      if (teacher.role !== UserRole.TEACHER) {
+        throw new ValidationError("Selected user is not a teacher");
+      }
+      resolvedTeacherUserId = teacher.id;
+    } else {
+      const profile = await prisma.teacherProfile.findUnique({
+        where: { id: normalizedTeacherId },
+        select: { userId: true },
+      });
+      if (!profile) {
+        throw new NotFoundError("Teacher not found");
+      }
+      resolvedTeacherUserId = profile.userId;
     }
 
     const where: Prisma.ReviewWhereInput = {
-      teacherId: normalizedTeacherId,
+      teacherId: resolvedTeacherUserId,
       isPublished: true,
     };
 
@@ -478,10 +487,22 @@ class ReviewService {
       },
       select: {
         id: true,
+        isPublished: true,
+        teacherProfile: {
+          select: {
+            registrationStatus: true,
+            user: { select: { isActive: true } },
+          },
+        },
       },
     });
 
-    if (!course) {
+    if (
+      !course ||
+      !course.isPublished ||
+      course.teacherProfile.registrationStatus !== "APPROVED" ||
+      !course.teacherProfile.user.isActive
+    ) {
       throw new NotFoundError("Course not found");
     }
 

@@ -18,6 +18,8 @@ import { LessonType } from '@/types';
 import type { Course, LiveSession, LiveSessionStatus } from '@/types';
 import courseService from '@/services/course.service';
 import { extractErrorMessage } from '@/utils/error-handler';
+import { toStorableBackendAssetPath } from '@/utils/runtime';
+import { normalizeSafeHttpUrl, normalizeSafeInternalPath } from '@/utils/safe-url';
 import clientLogger from '@/utils/logger';
 
 interface CourseManagementLiveTabProps {
@@ -160,12 +162,26 @@ export default function CourseManagementLiveTab({
     recordingUrl?: string | null
   ) => {
     if (updatingSessionId) return;
+
+    let normalizedRecordingUrl = recordingUrl;
+    if (typeof recordingUrl === 'string' && recordingUrl.trim()) {
+      const candidate = toStorableBackendAssetPath(recordingUrl.trim());
+      const safe =
+        normalizeSafeHttpUrl(candidate) ||
+        (candidate.startsWith('/uploads/') ? normalizeSafeInternalPath(candidate) : null);
+      if (!safe) {
+        toast.error('Please enter a valid http(s) URL or /uploads/ video path');
+        return;
+      }
+      normalizedRecordingUrl = safe;
+    }
+
     setUpdatingSessionId(sessionId);
     try {
       const updated = await courseService.updateLiveSessionStatus(
         sessionId,
         nextStatus,
-        recordingUrl
+        normalizedRecordingUrl
       );
       setSessions((prev) =>
         prev.map((item) => (item.id === sessionId ? { ...item, ...updated } : item))

@@ -2,7 +2,7 @@ import type { Prisma } from "@prisma/client";
 
 type EnrollmentReader = Pick<Prisma.TransactionClient, "enrollment">;
 
-export type EnrollmentLifecycleRecord = {
+type EnrollmentLifecycleRecord = {
   isActive: boolean;
   expiresAt: Date | null;
 };

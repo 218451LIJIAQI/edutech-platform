@@ -4,7 +4,7 @@ import courseService from '@/services/course.service';
 import toast from 'react-hot-toast';
 import { extractErrorMessage } from '@/utils/error-handler';
 
-export interface FetchCoursesParams {
+interface FetchCoursesParams {
   category?: string;
   search?: string;
   courseType?: 'LIVE' | 'RECORDED' | 'HYBRID';
@@ -17,7 +17,7 @@ export interface FetchCoursesParams {
   limit?: number;
 }
 
-export interface CourseListPagination {
+interface CourseListPagination {
   total: number;
   page: number;
   limit: number;
@@ -31,17 +31,31 @@ interface CourseState {
   categories: string[];
   isLoading: boolean;
   error: string | null;
+  errorStatus: number | null;
 
   fetchCourses: (params?: FetchCoursesParams) => Promise<void>;
   fetchCourseById: (id: string) => Promise<void>;
   fetchCategories: () => Promise<void>;
-  setCurrentCourse: (course: Course | null) => void;
-  clearCourses: () => void;
   clearError: () => void;
 }
 
 let latestCoursesRequestId = 0;
 let latestCourseDetailRequestId = 0;
+
+const extractHttpStatus = (error: unknown): number | null => {
+  if (
+    error &&
+    typeof error === 'object' &&
+    'response' in error &&
+    error.response &&
+    typeof error.response === 'object' &&
+    'status' in error.response &&
+    typeof error.response.status === 'number'
+  ) {
+    return error.response.status;
+  }
+  return null;
+};
 
 export const useCourseStore = create<CourseState>((set) => ({
   courses: [],
@@ -50,11 +64,12 @@ export const useCourseStore = create<CourseState>((set) => ({
   categories: [],
   isLoading: false,
   error: null,
+  errorStatus: null,
 
   fetchCourses: async (params?: FetchCoursesParams) => {
     const requestId = ++latestCoursesRequestId;
     try {
-      set({ isLoading: true, error: null });
+      set({ isLoading: true, error: null, errorStatus: null });
       const data = await courseService.getAllCourses(params);
 
       if (requestId !== latestCoursesRequestId) {
@@ -93,13 +108,18 @@ export const useCourseStore = create<CourseState>((set) => ({
         pagination: paginationMeta,
         isLoading: false,
         error: null,
+        errorStatus: null,
       });
     } catch (error) {
       if (requestId !== latestCoursesRequestId) {
         return;
       }
       const errorMessage = extractErrorMessage(error, 'Failed to fetch courses');
-      set({ isLoading: false, error: errorMessage });
+      set({
+        isLoading: false,
+        error: errorMessage,
+        errorStatus: extractHttpStatus(error),
+      });
       toast.error(errorMessage);
     }
   },
@@ -110,7 +130,12 @@ export const useCourseStore = create<CourseState>((set) => ({
       if (!id) {
         throw new Error('Course ID is required');
       }
-      set({ isLoading: true, error: null });
+      set((state) => ({
+        isLoading: true,
+        error: null,
+        errorStatus: null,
+        currentCourse: state.currentCourse?.id === id ? state.currentCourse : null,
+      }));
       const course = await courseService.getCourseById(id);
 
       if (requestId !== latestCourseDetailRequestId) {
@@ -118,18 +143,36 @@ export const useCourseStore = create<CourseState>((set) => ({
       }
 
       if (!course) {
-        throw new Error('Course not found');
+        set({
+          currentCourse: null,
+          isLoading: false,
+          error: 'Course not found',
+          errorStatus: 404,
+        });
+        return;
       }
 
-      set({ currentCourse: course, isLoading: false, error: null });
+      set({
+        currentCourse: course,
+        isLoading: false,
+        error: null,
+        errorStatus: null,
+      });
     } catch (error) {
       if (requestId !== latestCourseDetailRequestId) {
         return;
       }
+      const status = extractHttpStatus(error);
       const errorMessage = extractErrorMessage(error, 'Failed to fetch course');
-      set({ isLoading: false, error: errorMessage });
-      toast.error(errorMessage);
-      throw new Error(errorMessage);
+      set({
+        currentCourse: null,
+        isLoading: false,
+        error: errorMessage,
+        errorStatus: status,
+      });
+      if (status !== 404) {
+        toast.error(errorMessage);
+      }
     }
   },
 
@@ -148,15 +191,7 @@ export const useCourseStore = create<CourseState>((set) => ({
     }
   },
 
-  setCurrentCourse: (course: Course | null) => {
-    set({ currentCourse: course });
-  },
-
-  clearCourses: () => {
-    set({ courses: [], pagination: null, currentCourse: null, error: null });
-  },
-
   clearError: () => {
-    set({ error: null });
+    set({ error: null, errorStatus: null });
   },
 }));

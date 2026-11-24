@@ -160,7 +160,7 @@ const getCompletedRefundAmount = (
     ),
   );
 
-export const normalizeOrderRefundState = <
+const normalizeOrderRefundState = <
   T extends {
     totalAmount: unknown;
     status: OrderStatus;
@@ -293,6 +293,12 @@ class OrdersService {
               select: {
                 id: true,
                 isPublished: true,
+                teacherProfile: {
+                  select: {
+                    registrationStatus: true,
+                    user: { select: { isActive: true } },
+                  },
+                },
               },
             },
           },
@@ -332,7 +338,11 @@ class OrdersService {
     }
 
     const unavailableItem = cartItems.find(
-      (item) => !item.package.isActive || !item.package.course.isPublished,
+      (item) =>
+        !item.package.isActive ||
+        !item.package.course.isPublished ||
+        item.package.course.teacherProfile.registrationStatus !== "APPROVED" ||
+        !item.package.course.teacherProfile.user.isActive,
     );
 
     if (unavailableItem) {
@@ -459,6 +469,12 @@ class OrdersService {
           select: {
             id: true,
             isPublished: true,
+            teacherProfile: {
+              select: {
+                registrationStatus: true,
+                user: { select: { isActive: true } },
+              },
+            },
           },
         },
       },
@@ -468,7 +484,12 @@ class OrdersService {
       throw new NotFoundError("Package not found");
     }
 
-    if (!lessonPackage.isActive || !lessonPackage.course.isPublished) {
+    if (
+      !lessonPackage.isActive ||
+      !lessonPackage.course.isPublished ||
+      lessonPackage.course.teacherProfile.registrationStatus !== "APPROVED" ||
+      !lessonPackage.course.teacherProfile.user.isActive
+    ) {
       throw new ValidationError("This package is no longer available");
     }
 

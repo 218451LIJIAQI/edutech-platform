@@ -1,14 +1,14 @@
 import prisma from "../config/database";
 
-export interface LockableUser {
+interface LockableUser {
   id: string;
   isLocked: boolean;
   lockedUntil: Date | null;
   failedLoginAttempts: number;
 }
 
-export const INVALID_TOKEN_VERSION = -1;
-export const DEFAULT_TOKEN_VERSION = 0;
+const INVALID_TOKEN_VERSION = -1;
+const DEFAULT_TOKEN_VERSION = 0;
 
 /**
  * Safely extracts tokenVersion from a JWT payload.

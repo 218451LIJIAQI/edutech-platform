@@ -170,6 +170,7 @@ const CreatePostPage = () => {
 
   const [media, setMedia] = useState<CommunityMedia[]>([]);
   const [isUploading, setIsUploading] = useState(false);
+  const [isPublishing, setIsPublishing] = useState(false);
   const [mediaUrlInput, setMediaUrlInput] = useState('');
 
   const [courseQuery, setCourseQuery] = useState('');
@@ -389,7 +390,7 @@ const CreatePostPage = () => {
   };
 
   const submit = async () => {
-    if (!user) return;
+    if (!user || isPublishing || isUploading) return;
     const trimmed = content.trim();
     if (!canSubmit) { toast.error('Please write more content'); return; }
     if (tags.length > MAX_TAGS) {
@@ -417,6 +418,7 @@ const CreatePostPage = () => {
       courseTitle: linkedCourse?.title,
     };
 
+    setIsPublishing(true);
     try {
       const created = await communityService.createPost(payload);
       clearDraftFromStorage();
@@ -425,6 +427,8 @@ const CreatePostPage = () => {
     } catch (error) {
       clientLogger.error('Failed to create post:', error);
       toast.error(extractErrorMessage(error, 'Failed to create post. Please try again.'));
+    } finally {
+      setIsPublishing(false);
     }
   };
 
@@ -640,7 +644,7 @@ const CreatePostPage = () => {
               >
                 Cancel
               </button>
-              <button type="button" onClick={() => void submit()} disabled={!canSubmit} className="btn-primary disabled:opacity-50 disabled:cursor-not-allowed">Publish</button>
+              <button type="button" onClick={() => void submit()} disabled={!canSubmit || isPublishing || isUploading} className="btn-primary disabled:opacity-50 disabled:cursor-not-allowed">{isPublishing ? 'Publishing...' : 'Publish'}</button>
             </div>
           </div>
         </div>

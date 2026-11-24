@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import clientLogger from '@/utils/logger';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
-import { Edit } from 'lucide-react';
+import { AlertCircle, Edit, RefreshCcw } from 'lucide-react';
 import { Course, Lesson, LessonPackage, Material } from '@/types';
 import courseService from '@/services/course.service';
 import uploadService from '@/services/upload.service';
@@ -42,8 +42,10 @@ const CreateCoursePage = () => {
   const [packages, setPackages] = useState<LessonPackage[]>([]);
   const [materials, setMaterials] = useState<Material[]>([]);
   const [activeTab, setActiveTab] = useState<CourseEditorTabId>('basic');
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(isEditMode);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [isTogglingPublish, setIsTogglingPublish] = useState(false);
   const [thumbnailFile, setThumbnailFile] = useState<File | null>(null);
   const [thumbnailType, setThumbnailType] = useState<'upload' | 'link'>('upload');
   const [thumbnailLink, setThumbnailLink] = useState('');
@@ -100,6 +102,7 @@ const CreateCoursePage = () => {
 
   const fetchCourse = useCallback(async () => {
     setIsLoading(true);
+    setLoadError(null);
     try {
       const data = await courseService.getCourseById(courseId!);
       setCourse(data);
@@ -114,7 +117,9 @@ const CreateCoursePage = () => {
       syncMediaStateFromCourse(data);
     } catch (error) {
       clientLogger.error('Failed to fetch course:', error);
-      toast.error(extractErrorMessage(error, 'Failed to load course'));
+      const message = extractErrorMessage(error, 'Failed to load course');
+      setLoadError(message);
+      toast.error(message);
     } finally {
       setIsLoading(false);
     }
@@ -170,8 +175,8 @@ const CreateCoursePage = () => {
   };
 
   const handlePublishToggle = async () => {
-    if (!course) return;
-
+    if (!course || isTogglingPublish) return;
+    setIsTogglingPublish(true);
     try {
       await courseService.updateCourse(course.id, {
         isPublished: !course.isPublished,
@@ -183,6 +188,8 @@ const CreateCoursePage = () => {
     } catch (error) {
       clientLogger.error('Failed to update course status:', error);
       toast.error(extractErrorMessage(error, 'Failed to update course status'));
+    } finally {
+      setIsTogglingPublish(false);
     }
   };
 
@@ -267,6 +274,35 @@ const CreateCoursePage = () => {
             <div className="absolute inset-0 rounded-2xl bg-primary-500/20 animate-ping"></div>
           </div>
           <p className="text-gray-600 font-medium">Loading course editor...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (isEditMode && loadError && !course) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-primary-50/10 to-indigo-50/20 px-4">
+        <div className="card max-w-md w-full text-center space-y-4">
+          <AlertCircle className="w-12 h-12 text-red-500 mx-auto" />
+          <h2 className="text-xl font-bold text-slate-900">Unable to load course editor</h2>
+          <p className="text-sm text-slate-600">{loadError}</p>
+          <div className="flex items-center justify-center gap-3">
+            <button
+              type="button"
+              onClick={() => void fetchCourse()}
+              className="btn-primary inline-flex items-center gap-2"
+            >
+              <RefreshCcw className="w-4 h-4" />
+              Retry
+            </button>
+            <button
+              type="button"
+              onClick={() => navigate('/teacher/courses')}
+              className="btn-outline"
+            >
+              Back to Courses
+            </button>
+          </div>
         </div>
       </div>
     );
