@@ -36,6 +36,7 @@ export default function CourseManagementNotificationsTab({
             <input
               id="course-notification-title"
               type="text"
+              maxLength={150}
               value={title}
               onChange={(event) => onTitleChange(event.target.value)}
               placeholder="e.g., New Class Schedule, New Course Material, etc."
@@ -49,6 +50,7 @@ export default function CourseManagementNotificationsTab({
             </label>
             <textarea
               id="course-notification-message"
+              maxLength={2000}
               value={message}
               onChange={(event) => onMessageChange(event.target.value)}
               placeholder="Write your notification message here..."

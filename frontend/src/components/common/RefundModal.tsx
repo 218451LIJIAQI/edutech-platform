@@ -473,7 +473,7 @@ const RefundModal = ({
                     placeholder="Please provide your bank name, account holder name, and account number."
                     className="input h-24 w-full resize-none"
                     disabled={working}
-                    maxLength={1000}
+                    maxLength={2000}
                   />
                 </div>
               )}

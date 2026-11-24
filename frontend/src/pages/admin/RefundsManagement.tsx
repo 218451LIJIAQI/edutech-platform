@@ -725,7 +725,7 @@ const RefundsManagement = () => {
             aria-modal="true"
             aria-labelledby="approve-refund-modal-title"
             aria-describedby="approve-refund-modal-description"
-            className="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden"
+            className="bg-white rounded-2xl shadow-2xl max-w-md w-full max-h-[90vh] overflow-y-auto"
           >
             <div className="bg-gradient-to-r from-green-500 to-green-600 p-4 flex items-center gap-3">
               <div className="p-2 bg-white/20 rounded-lg">
@@ -746,7 +746,7 @@ const RefundsManagement = () => {
                 value={approvalNotes}
                 onChange={(e) => setApprovalNotes(e.target.value)}
                 placeholder="Optional notes for approval..."
-                maxLength={500}
+                maxLength={2000}
                 className="w-full h-24 px-4 py-3 border border-gray-200 rounded-xl resize-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all"
                 disabled={working}
               />
@@ -795,7 +795,7 @@ const RefundsManagement = () => {
             aria-modal="true"
             aria-labelledby="reject-refund-modal-title"
             aria-describedby="reject-refund-modal-description"
-            className="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden"
+            className="bg-white rounded-2xl shadow-2xl max-w-md w-full max-h-[90vh] overflow-y-auto"
           >
             <div className="bg-gradient-to-r from-red-500 to-red-600 p-4 flex items-center gap-3">
               <div className="p-2 bg-white/20 rounded-lg">
@@ -808,7 +808,7 @@ const RefundsManagement = () => {
                 Provide a rejection reason before declining this refund request.
               </p>
               {rejectError && (
-                <div role="alert" className="mb-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-medium text-red-700">
+                <div id="refund-reject-error" role="alert" className="mb-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-medium text-red-700">
                   {rejectError}
                 </div>
               )}
@@ -818,13 +818,15 @@ const RefundsManagement = () => {
               <textarea
                 id="refund-reject-reason"
                 ref={rejectReasonRef}
+                aria-invalid={Boolean(rejectError)}
+                aria-describedby={rejectError ? 'refund-reject-error' : undefined}
                 value={rejectionReason}
                 onChange={(e) => {
                   setRejectionReason(e.target.value);
                   setRejectError(null);
                 }}
                 placeholder="Please provide a reason for rejection..."
-                maxLength={500}
+                maxLength={1000}
                 className="w-full h-24 px-4 py-3 border border-gray-200 rounded-xl resize-none focus:ring-2 focus:ring-red-500 focus:border-transparent transition-all"
                 disabled={working}
               />

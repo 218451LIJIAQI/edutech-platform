@@ -349,10 +349,11 @@ class AdminService {
     const user = await requireUser(userId);
     ensureNotAdminUser(user, "Cannot modify admin user status");
 
-    if (!isActive && user.isActive && user.role === UserRole.TEACHER) {
+    if (user.role === UserRole.TEACHER && !isActive) {
+      const teacherLabel = `${user.firstName} ${user.lastName}`.trim() || undefined;
       await assertTeacherHasNoActiveStudents(
-        userId,
-        undefined,
+        user.id,
+        teacherLabel,
         prisma,
         "deactivate",
       );
@@ -448,6 +449,14 @@ class AdminService {
       throw new ValidationError("First name and last name are required");
     }
 
+    if (firstName.length < 2 || firstName.length > 50) {
+      throw new ValidationError("First name must be between 2 and 50 characters");
+    }
+
+    if (lastName.length < 2 || lastName.length > 50) {
+      throw new ValidationError("Last name must be between 2 and 50 characters");
+    }
+
     ensureAdminManageableRole(data.role);
     const normalizedEmail = await ensureEmailAvailable(data.email);
     ensureStrongPassword(data.password);
@@ -525,19 +534,6 @@ class AdminService {
       ensureAdminManageableRole(data.role);
     }
 
-    if (
-      data.isActive === false &&
-      user.isActive &&
-      user.role === UserRole.TEACHER
-    ) {
-      await assertTeacherHasNoActiveStudents(
-        userId,
-        undefined,
-        prisma,
-        "deactivate",
-      );
-    }
-
     const nextEmail =
       data.email === undefined
         ? undefined
@@ -559,6 +555,30 @@ class AdminService {
 
     if (nextFirstName === "" || nextLastName === "") {
       throw new ValidationError("First name and last name cannot be empty");
+    }
+
+    if (
+      nextFirstName !== undefined &&
+      (nextFirstName.length < 2 || nextFirstName.length > 50)
+    ) {
+      throw new ValidationError("First name must be between 2 and 50 characters");
+    }
+
+    if (
+      nextLastName !== undefined &&
+      (nextLastName.length < 2 || nextLastName.length > 50)
+    ) {
+      throw new ValidationError("Last name must be between 2 and 50 characters");
+    }
+
+    if (user.role === UserRole.TEACHER && data.isActive === false) {
+      const teacherLabel = `${user.firstName} ${user.lastName}`.trim() || undefined;
+      await assertTeacherHasNoActiveStudents(
+        user.id,
+        teacherLabel,
+        prisma,
+        "deactivate",
+      );
     }
 
     const nextPhone = normalizeNullableInlineAdminText(data.phone);
@@ -863,7 +883,7 @@ class AdminService {
     const normalizedIds = this.normalizeUserIds(userIds);
     const existingUsers = await prisma.user.findMany({
       where: { id: { in: normalizedIds } },
-      select: { id: true, role: true },
+      select: { id: true, role: true, firstName: true, lastName: true },
     });
     const userMap = new Map(existingUsers.map((u) => [u.id, u]));
 
@@ -886,8 +906,8 @@ class AdminService {
       if (!isActive && target.role === UserRole.TEACHER) {
         try {
           await assertTeacherHasNoActiveStudents(
-            userId,
-            undefined,
+            target.id,
+            `${target.firstName} ${target.lastName}`.trim() || undefined,
             prisma,
             "deactivate",
           );
@@ -897,7 +917,7 @@ class AdminService {
             reason:
               error instanceof Error
                 ? error.message
-                : "Cannot deactivate teacher with active students",
+                : "Teacher has active enrolled students",
           });
           continue;
         }

@@ -38,14 +38,14 @@ const createTicketValidation = [
     .notEmpty()
     .withMessage("description is required")
     .bail()
-    .isLength({ max: 2000 })
+    .isLength({ max: 5000 })
     .withMessage("description too long"),
   body("category")
     .trim()
     .notEmpty()
     .withMessage("category is required")
     .bail()
-    .isLength({ max: 50 })
+    .isLength({ max: 80 })
     .withMessage("category too long"),
   body("orderId")
     .optional({ values: "falsy" })
@@ -65,7 +65,7 @@ const addMessageValidation = [
     .notEmpty()
     .withMessage("message is required")
     .bail()
-    .isLength({ max: 2000 })
+    .isLength({ max: 5000 })
     .withMessage("message too long"),
   attachmentValidation,
 ];
@@ -75,7 +75,7 @@ const closeTicketValidation = [
   body("resolution")
     .optional({ values: "falsy" })
     .trim()
-    .isLength({ max: 2000 })
+    .isLength({ max: 3000 })
     .withMessage("resolution too long"),
 ];
 

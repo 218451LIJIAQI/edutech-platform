@@ -126,7 +126,12 @@ export const parseOptionalString = (
   fieldName?: string,
   optionsOrMaxLength?:
     | number
-    | { maxLength?: number; rejectBlank?: boolean; rejectNull?: boolean },
+    | {
+        minLength?: number;
+        maxLength?: number;
+        rejectBlank?: boolean;
+        rejectNull?: boolean;
+      },
 ): string | undefined => {
   const options =
     typeof optionsOrMaxLength === "number"
@@ -158,6 +163,12 @@ export const parseOptionalString = (
       throw new BadRequestError(`${fieldName || "Field"} cannot be empty`);
     }
     return undefined;
+  }
+
+  if (options?.minLength !== undefined && trimmed.length < options.minLength) {
+    throw new BadRequestError(
+      `${fieldName || "Field"} must be at least ${options.minLength} characters`,
+    );
   }
 
   if (options?.maxLength !== undefined && trimmed.length > options.maxLength) {

@@ -13,58 +13,20 @@ import { extractErrorMessage } from '@/utils/error-handler';
 import { parseSafeHttpUrl } from '@/utils/safe-url';
 import { toStorableBackendAssetPath } from '@/utils/runtime';
 import { resolveExternalVideoEmbed } from '@/utils/video-embed';
+import {
+  clearUserScopedCommunityDraft,
+  readUserScopedCommunityDraft,
+  writeUserScopedCommunityDraft,
+} from '@/utils/helpers';
 import { usePageTitle } from '@/hooks';
 
 const MIN_CONTENT = 10;
+const MAX_TITLE_LENGTH = 200;
+const MAX_CONTENT_LENGTH = 2000;
 const MAX_TAGS = 5;
+const MAX_TAG_LENGTH = 40;
 const MAX_MEDIA_ITEMS = 10;
-const DRAFT_STORAGE_KEY = 'community-create-post-draft-v1';
 const RESTRICTED_TERMS = ['politics', 'violence', 'hate', 'porn'];
-
-const getDraftStorageKey = (userId?: string) =>
-  userId ? `${DRAFT_STORAGE_KEY}:${userId}` : null;
-
-const readDraftFromStorage = (userId?: string) => {
-  const key = getDraftStorageKey(userId);
-  if (typeof window === 'undefined' || !key) {
-    return null;
-  }
-
-  try {
-    return window.localStorage.getItem(key);
-  } catch (error) {
-    clientLogger.warn('Failed to read community draft from storage:', error);
-    return null;
-  }
-};
-
-const writeDraftToStorage = (userId: string | undefined, value: string) => {
-  const key = getDraftStorageKey(userId);
-  if (typeof window === 'undefined' || !key) {
-    return false;
-  }
-
-  try {
-    window.localStorage.setItem(key, value);
-    return true;
-  } catch (error) {
-    clientLogger.warn('Failed to persist community draft:', error);
-    return false;
-  }
-};
-
-const clearDraftFromStorage = (userId?: string) => {
-  const key = getDraftStorageKey(userId);
-  if (typeof window === 'undefined' || !key) {
-    return;
-  }
-
-  try {
-    window.localStorage.removeItem(key);
-  } catch (error) {
-    clientLogger.warn('Failed to clear community draft:', error);
-  }
-};
 
 const normalizeTagName = (value: string): string =>
   value.trim().replace(/^#+/, '').trim();
@@ -201,19 +163,24 @@ const CreatePostPage = () => {
   }, []);
 
   useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
     setHasLoadedDraft(false);
-    if (typeof window === 'undefined' || !user?.id) {
+    setTitle('');
+    setContent('');
+    setTags([]);
+    setMedia([]);
+    setLinkedCourse(undefined);
+
+    if (!user?.id) {
       return;
     }
 
     try {
-      const savedDraft = readDraftFromStorage(user.id);
+      const savedDraft = readUserScopedCommunityDraft(user.id);
       if (!savedDraft) {
-        setTitle('');
-        setContent('');
-        setTags([]);
-        setMedia([]);
-        setLinkedCourse(undefined);
         return;
       }
 
@@ -225,8 +192,8 @@ const CreatePostPage = () => {
         linkedCourse?: { id: string; title: string };
       };
 
-      setTitle(parsedDraft.title || '');
-      setContent(parsedDraft.content || '');
+      setTitle((parsedDraft.title || '').slice(0, MAX_TITLE_LENGTH));
+      setContent((parsedDraft.content || '').slice(0, MAX_CONTENT_LENGTH));
       setTags(normalizeDraftTags(parsedDraft.tags));
       setMedia(Array.isArray(parsedDraft.media) ? parsedDraft.media : []);
       setLinkedCourse(parsedDraft.linkedCourse);
@@ -248,7 +215,7 @@ const CreatePostPage = () => {
   }, [user?.id]);
 
   useEffect(() => {
-    if (!hasLoadedDraft || typeof window === 'undefined' || !user?.id) {
+    if (!hasLoadedDraft || !user?.id || typeof window === 'undefined') {
       return;
     }
 
@@ -260,11 +227,11 @@ const CreatePostPage = () => {
       linkedCourse;
 
     if (!hasDraftContent) {
-      clearDraftFromStorage(user.id);
+      clearUserScopedCommunityDraft(user.id);
       return;
     }
 
-    writeDraftToStorage(
+    writeUserScopedCommunityDraft(
       user.id,
       JSON.stringify({
         title,
@@ -434,7 +401,7 @@ const CreatePostPage = () => {
     setIsPublishing(true);
     try {
       const created = await communityService.createPost(payload);
-      clearDraftFromStorage(user.id);
+      clearUserScopedCommunityDraft(user?.id);
       toast.success('Posted successfully');
       navigate(`/community/post/${created.id}`);
     } catch (error) {
@@ -469,6 +436,7 @@ const CreatePostPage = () => {
                 id="community-post-title"
                 value={title}
                 onChange={e => setTitle(e.target.value)}
+                maxLength={MAX_TITLE_LENGTH}
                 className="input"
                 placeholder="Summarize your post in one sentence"
               />
@@ -481,6 +449,7 @@ const CreatePostPage = () => {
                 value={content}
                 onChange={e => setContent(e.target.value)}
                 rows={8}
+                maxLength={MAX_CONTENT_LENGTH}
                 className="input"
                 placeholder="Share your learning insights, course recommendations, or progress updates"
               />
@@ -488,7 +457,7 @@ const CreatePostPage = () => {
             </div>
 
             <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-2">Add Media (Images/Videos)</label>
+              <span className="block text-sm font-semibold text-gray-700 mb-2">Add Media (Images/Videos)</span>
               <p className="text-xs text-gray-600 mb-2">Tip: Use an image as the first media to make your post more eye-catching in the feed.</p>
               <div className="flex items-center gap-3 mb-3 flex-wrap">
                 {/* Local upload */}
@@ -582,6 +551,7 @@ const CreatePostPage = () => {
               <div className="flex items-center gap-2 mb-2">
                 <input
                   id="community-post-tag"
+                  maxLength={MAX_TAG_LENGTH}
                   value={tagInput}
                   onChange={e => setTagInput(e.target.value)}
                   className="input flex-1"
@@ -650,7 +620,7 @@ const CreatePostPage = () => {
               <button
                 type="button"
                 onClick={() => {
-                  clearDraftFromStorage();
+                  clearUserScopedCommunityDraft(user?.id);
                   navigate('/community');
                 }}
                 className="btn-outline"

@@ -52,7 +52,7 @@ export interface Course {
   };
 }
 
-export interface QuizQuestion {
+interface QuizQuestion {
   readonly question: string;
   readonly options: string[];
   readonly correctOptionIndex?: number;
@@ -76,7 +76,7 @@ export interface Lesson {
   readonly isFree: boolean;
 }
 
-export interface QuizSubmissionResultItem {
+interface QuizSubmissionResultItem {
   readonly question: string;
   readonly options: string[];
   readonly selectedOptionIndex: number;

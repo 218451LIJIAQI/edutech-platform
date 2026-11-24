@@ -93,8 +93,14 @@ class AuthController {
     const result = await authService.register({
       email: normalizeEmail(req.body?.email),
       password: parsePassword(req.body?.password),
-      firstName: parseRequiredString(req.body?.firstName, "firstName"),
-      lastName: parseRequiredString(req.body?.lastName, "lastName"),
+      firstName: parseRequiredString(req.body?.firstName, "firstName", {
+        minLength: 2,
+        maxLength: 50,
+      }),
+      lastName: parseRequiredString(req.body?.lastName, "lastName", {
+        minLength: 2,
+        maxLength: 50,
+      }),
       role: parseSelfRegistrationRole(req.body?.role),
     });
 
@@ -173,23 +179,23 @@ class AuthController {
   });
 
   updateProfile = asyncHandler(async (req: Request, res: Response) => {
-    const avatar =
-      req.body?.avatar === ""
-        ? (() => {
-            throw new ValidationError("avatar cannot be empty");
-          })()
-        : parseNullableString(req.body?.avatar, "avatar");
+    if (req.body?.avatar === "") {
+      throw new ValidationError("avatar cannot be empty");
+    }
+    const avatar = parseNullableString(req.body?.avatar, "avatar");
 
     const user = await authService.updateProfile(requireAuthUserId(req), {
       firstName: parseOptionalString(req.body?.firstName, "firstName", {
-        rejectNull: true,
-        rejectBlank: true,
+        minLength: 2,
         maxLength: 50,
+        rejectBlank: true,
+        rejectNull: true,
       }),
       lastName: parseOptionalString(req.body?.lastName, "lastName", {
-        rejectNull: true,
-        rejectBlank: true,
+        minLength: 2,
         maxLength: 50,
+        rejectBlank: true,
+        rejectNull: true,
       }),
       avatar,
     });

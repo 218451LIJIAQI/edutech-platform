@@ -1,5 +1,6 @@
 import { DollarSign, Plus, Trash2 } from 'lucide-react';
 import type { LessonPackage } from '@/types';
+import { toFiniteNumber } from '@/utils/asset-normalizers';
 import { formatCurrency } from '@/utils/helpers';
 
 interface CourseEditorPackagesTabProps {
@@ -10,19 +11,8 @@ interface CourseEditorPackagesTabProps {
   onRequestDelete: (packageId: string, packageName: string) => void;
 }
 
-const toNumber = (value: number | string | null | undefined): number => {
-  if (typeof value === 'number') {
-    return Number.isFinite(value) ? value : 0;
-  }
-
-  if (typeof value === 'string') {
-    const parsedValue = Number(value.trim());
-
-    return Number.isFinite(parsedValue) ? parsedValue : 0;
-  }
-
-  return 0;
-};
+const toNumber = (value: number | string | null | undefined): number =>
+  toFiniteNumber(value, 0);
 
 export default function CourseEditorPackagesTab({
   courseExists,

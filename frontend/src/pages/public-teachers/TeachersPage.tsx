@@ -1,34 +1,24 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import clientLogger from '@/utils/logger';
-import { Link, useSearchParams } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { Star, Users, Award, Search, GraduationCap, Trophy } from 'lucide-react';
 import teacherService from '@/services/teacher.service';
 import { TeacherProfile } from '@/types';
 import { extractErrorMessage } from '@/utils/error-handler';
 import { getTeacherDisplayPhoto } from '@/utils/asset-normalizers';
 import { useDebounce, usePageTitle } from '@/hooks';
+import { formatCurrency } from '@/utils/helpers';
 
 const PAGE_LIMIT = 12;
 
-const VALID_MIN_RATINGS = new Set([0, 3, 4, 4.5]);
-
 const TeachersPage = () => {
   usePageTitle('Find Teachers');
-  const [searchParams, setSearchParams] = useSearchParams();
   const [teachers, setTeachers] = useState<TeacherProfile[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [searchTerm, setSearchTerm] = useState(() => searchParams.get('search') || '');
-  const [verifiedOnly, setVerifiedOnly] = useState(
-    () => searchParams.get('verified') !== 'false'
-  );
-  const [minRating, setMinRating] = useState<number>(() => {
-    const parsed = Number(searchParams.get('minRating') || 0);
-    return VALID_MIN_RATINGS.has(parsed) ? parsed : 0;
-  });
-  const [page, setPage] = useState(() => {
-    const parsed = Number.parseInt(searchParams.get('page') || '1', 10);
-    return Number.isFinite(parsed) && parsed >= 1 ? parsed : 1;
-  });
+  const [searchTerm, setSearchTerm] = useState('');
+  const [verifiedOnly, setVerifiedOnly] = useState(true);
+  const [minRating, setMinRating] = useState<number>(0);
+  const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [error, setError] = useState<string | null>(null);
   const requestIdRef = useRef(0);
@@ -68,36 +58,6 @@ const TeachersPage = () => {
       }
     }
   }, [verifiedOnly, minRating, debouncedSearch, page]);
-
-  useEffect(() => {
-    setSearchParams(
-      (prev) => {
-        const next = new URLSearchParams(prev);
-        if (debouncedSearch.trim()) {
-          next.set('search', debouncedSearch.trim());
-        } else {
-          next.delete('search');
-        }
-        if (!verifiedOnly) {
-          next.set('verified', 'false');
-        } else {
-          next.delete('verified');
-        }
-        if (minRating > 0) {
-          next.set('minRating', String(minRating));
-        } else {
-          next.delete('minRating');
-        }
-        if (page > 1) {
-          next.set('page', String(page));
-        } else {
-          next.delete('page');
-        }
-        return next;
-      },
-      { replace: true }
-    );
-  }, [debouncedSearch, verifiedOnly, minRating, page, setSearchParams]);
 
   useEffect(() => {
     void fetchTeachers();
@@ -301,7 +261,7 @@ const TeachersPage = () => {
 
                         {teacher.hourlyRate ? (
                           <div className="text-primary-700 font-bold text-sm">
-                            ${teacher.hourlyRate}/hr
+                            {formatCurrency(teacher.hourlyRate)}/hr
                           </div>
                         ) : null}
                       </div>

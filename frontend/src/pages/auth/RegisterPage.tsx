@@ -69,11 +69,11 @@ const RegisterPage = () => {
     const trimmedEmail = formData.email.trim();
     const errors: Record<string, string> = {};
 
-    if (trimmedFirstName.length < 2) {
-      errors.firstName = 'First name must be at least 2 characters';
+    if (trimmedFirstName.length < 2 || trimmedFirstName.length > 50) {
+      errors.firstName = 'First name must be between 2 and 50 characters';
     }
-    if (trimmedLastName.length < 2) {
-      errors.lastName = 'Last name must be at least 2 characters';
+    if (trimmedLastName.length < 2 || trimmedLastName.length > 50) {
+      errors.lastName = 'Last name must be between 2 and 50 characters';
     }
     if (!isValidEmail(trimmedEmail)) {
       errors.email = 'Please enter a valid email address';
@@ -169,13 +169,17 @@ const RegisterPage = () => {
                   name="firstName"
                   type="text"
                   required
+                  minLength={2}
+                  maxLength={50}
+                  aria-invalid={Boolean(fieldErrors.firstName)}
+                  aria-describedby={fieldErrors.firstName ? 'register-firstName-error' : undefined}
                   className={`input ${fieldErrors.firstName ? 'input-error' : ''}`}
                   placeholder="Enter first name"
                   value={formData.firstName}
                   onChange={handleChange}
                 />
                 {fieldErrors.firstName && (
-                  <p className="text-xs text-danger-600 flex items-center gap-1">
+                  <p id="register-firstName-error" className="text-xs text-danger-600 flex items-center gap-1">
                     <AlertCircle className="w-3 h-3" /> {fieldErrors.firstName}
                   </p>
                 )}
@@ -190,13 +194,17 @@ const RegisterPage = () => {
                   name="lastName"
                   type="text"
                   required
+                  minLength={2}
+                  maxLength={50}
+                  aria-invalid={Boolean(fieldErrors.lastName)}
+                  aria-describedby={fieldErrors.lastName ? 'register-lastName-error' : undefined}
                   className={`input ${fieldErrors.lastName ? 'input-error' : ''}`}
                   placeholder="Enter last name"
                   value={formData.lastName}
                   onChange={handleChange}
                 />
                 {fieldErrors.lastName && (
-                  <p className="text-xs text-danger-600 flex items-center gap-1">
+                  <p id="register-lastName-error" className="text-xs text-danger-600 flex items-center gap-1">
                     <AlertCircle className="w-3 h-3" /> {fieldErrors.lastName}
                   </p>
                 )}
@@ -214,6 +222,8 @@ const RegisterPage = () => {
                   name="email"
                   type="email"
                   required
+                  aria-invalid={Boolean(fieldErrors.email)}
+                  aria-describedby={fieldErrors.email ? 'register-email-error' : undefined}
                   className={`input pl-12 group-hover:border-primary-300 transition-colors ${fieldErrors.email ? 'input-error' : ''}`}
                   placeholder="you@example.com"
                   value={formData.email}
@@ -224,7 +234,7 @@ const RegisterPage = () => {
                 </div>
               </div>
               {fieldErrors.email && (
-                <p className="text-xs text-danger-600 flex items-center gap-1">
+                <p id="register-email-error" className="text-xs text-danger-600 flex items-center gap-1">
                   <AlertCircle className="w-3 h-3" /> {fieldErrors.email}
                 </p>
               )}
@@ -232,8 +242,8 @@ const RegisterPage = () => {
 
             {/* Role Selection */}
             <div className="space-y-3">
-              <label className="block text-sm font-semibold text-gray-700">I want to</label>
-              <div className="grid grid-cols-2 gap-3">
+              <span id="register-role-label" className="block text-sm font-semibold text-gray-700">I want to</span>
+              <div role="group" aria-labelledby="register-role-label" className="grid grid-cols-2 gap-3">
                 <button
                   type="button"
                   onClick={() => setFormData({ ...formData, role: UserRole.STUDENT })}
@@ -316,7 +326,11 @@ const RegisterPage = () => {
                     name="password"
                     type={showPassword ? 'text' : 'password'}
                     required
+                    minLength={8}
+                    maxLength={72}
                     autoComplete="new-password"
+                    aria-invalid={Boolean(fieldErrors.password)}
+                    aria-describedby={fieldErrors.password ? 'register-password-error' : undefined}
                     className={`input pl-12 pr-12 group-hover:border-primary-300 transition-colors ${fieldErrors.password ? 'input-error' : ''}`}
                     placeholder="Enter password"
                     value={formData.password}
@@ -335,7 +349,7 @@ const RegisterPage = () => {
                   </button>
                 </div>
                 {fieldErrors.password && (
-                  <p className="text-xs text-danger-600 flex items-center gap-1">
+                  <p id="register-password-error" className="text-xs text-danger-600 flex items-center gap-1">
                     <AlertCircle className="w-3 h-3" /> {fieldErrors.password}
                   </p>
                 )}
@@ -351,7 +365,11 @@ const RegisterPage = () => {
                     name="confirmPassword"
                     type={showConfirmPassword ? 'text' : 'password'}
                     required
+                    minLength={8}
+                    maxLength={72}
                     autoComplete="new-password"
+                    aria-invalid={Boolean(fieldErrors.confirmPassword)}
+                    aria-describedby={fieldErrors.confirmPassword ? 'register-confirmPassword-error' : undefined}
                     className={`input pl-12 pr-12 group-hover:border-primary-300 transition-colors ${fieldErrors.confirmPassword ? 'input-error' : ''}`}
                     placeholder="Confirm password"
                     value={formData.confirmPassword}
@@ -370,7 +388,7 @@ const RegisterPage = () => {
                   </button>
                 </div>
                 {fieldErrors.confirmPassword && (
-                  <p className="text-xs text-danger-600 flex items-center gap-1">
+                  <p id="register-confirmPassword-error" className="text-xs text-danger-600 flex items-center gap-1">
                     <AlertCircle className="w-3 h-3" /> {fieldErrors.confirmPassword}
                   </p>
                 )}

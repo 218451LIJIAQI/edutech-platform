@@ -247,6 +247,7 @@ const ForgotPasswordPage = () => {
         <div className="bg-white/90 backdrop-blur-xl rounded-3xl shadow-2xl shadow-gray-900/5 p-8 border border-gray-100/80">
           {error && (
             <div
+              id="forgot-password-error"
               role="alert"
               className="flex items-center gap-3 bg-danger-50 border border-danger-200/60 text-danger-700 px-4 py-3.5 rounded-xl animate-scaleIn mb-5"
             >
@@ -267,6 +268,8 @@ const ForgotPasswordPage = () => {
                     required
                     autoComplete="email"
                     autoFocus
+                    aria-invalid={Boolean(error)}
+                    aria-describedby={error ? 'forgot-password-error' : undefined}
                     className="input pl-12 group-hover:border-primary-300 transition-colors"
                     placeholder="you@example.com"
                     value={email}
@@ -318,6 +321,8 @@ const ForgotPasswordPage = () => {
                     autoComplete="one-time-code"
                     inputMode="numeric"
                     maxLength={6}
+                    aria-invalid={Boolean(error)}
+                    aria-describedby={error ? 'forgot-password-error' : undefined}
                     className="input pl-12 text-center text-2xl font-mono group-hover:border-primary-300 transition-colors"
                     placeholder="000000"
                     value={verificationCode}
@@ -395,8 +400,12 @@ const ForgotPasswordPage = () => {
                     id="newPassword"
                     type={showPassword ? 'text' : 'password'}
                     required
+                    minLength={8}
+                    maxLength={72}
                     autoFocus
                     autoComplete="new-password"
+                    aria-invalid={Boolean(error)}
+                    aria-describedby={error ? 'forgot-password-error' : undefined}
                     className="input pl-12 pr-12 group-hover:border-primary-300 transition-colors"
                     placeholder="Enter new password"
                     value={newPassword}
@@ -430,7 +439,11 @@ const ForgotPasswordPage = () => {
                     id="confirmPassword"
                     type={showConfirmPassword ? 'text' : 'password'}
                     required
+                    minLength={8}
+                    maxLength={72}
                     autoComplete="new-password"
+                    aria-invalid={Boolean(error)}
+                    aria-describedby={error ? 'forgot-password-error' : undefined}
                     className="input pl-12 pr-12 group-hover:border-primary-300 transition-colors"
                     placeholder="Confirm new password"
                     value={confirmPassword}

@@ -73,9 +73,14 @@ const SUPERSEDED_PROFILE_SUBMISSION_REVIEW_NOTE =
   "Superseded by a newer profile submission review";
 const TEACHER_CERTIFICATE_UPLOAD_FOLDER = "teacher-certificates";
 const MAX_SHORT_TEXT_LENGTH = 200;
+const MAX_CREDENTIAL_ID_LENGTH = 100;
+const MAX_SELF_INTRO_LENGTH = 500;
+const MAX_REVIEW_NOTES_LENGTH = 500;
 const MAX_BIO_TEXT_LENGTH = 1000;
+const MAX_EXPERIENCE_TEXT_LENGTH = 2000;
 const MAX_LONG_TEXT_LENGTH = 5000;
-const MAX_TEXT_LIST_ITEMS = 30;
+const MAX_TEXT_LIST_ITEMS = 20;
+const MAX_CERTIFICATE_PHOTOS = 10;
 
 type ReviewVerificationStatus = "APPROVED" | "REJECTED";
 type ReviewRegistrationStatus = "APPROVED" | "REJECTED";
@@ -199,6 +204,17 @@ const normalizeNonNegativeNumber = (
   return Math.round(value * 100) / 100;
 };
 
+const normalizeYearsOfExperience = (value?: number): number | undefined => {
+  if (value === undefined) return undefined;
+  const parsedYears = Math.floor(
+    normalizeNonNegativeNumber(value, "Years of experience") ?? 0,
+  );
+  if (parsedYears > 70) {
+    throw new ValidationError("Years of experience must be between 0 and 70");
+  }
+  return parsedYears;
+};
+
 const normalizeTeacherAsset = (
   value: string | undefined,
   allowedFolders: string[],
@@ -233,36 +249,49 @@ const normalizeTeacherAssetList = (
   values: string[] | undefined,
   allowedFolders: string[],
   errorMessage: string,
+  maxItems = MAX_CERTIFICATE_PHOTOS,
 ): string[] | undefined => {
   if (values === undefined) return undefined;
-  return values
+  const normalized = values
     .map((value) => normalizeOptionalUrlOrPath(value) ?? undefined)
     .filter((value): value is string => Boolean(value))
     .map((value) =>
       ensureUrlOrUploadPathForFolders(value, allowedFolders, errorMessage),
     );
+
+  if (normalized.length > maxItems) {
+    throw new ValidationError(
+      `Certificate photos must not exceed ${maxItems} items`,
+    );
+  }
+
+  return normalized;
 };
 
 const normalizeTeacherExtendedProfileInput = (
   data: TeacherExtendedProfileInput,
 ): TeacherExtendedProfileInput => ({
   ...data,
-  selfIntroduction: normalizeOptionalTeacherText(data.selfIntroduction),
-  educationBackground: normalizeNullableTeacherText(data.educationBackground),
-  teachingExperience: normalizeNullableTeacherText(data.teachingExperience),
+  selfIntroduction: normalizeOptionalTeacherText(
+    data.selfIntroduction,
+    MAX_SELF_INTRO_LENGTH,
+  ),
+  educationBackground: normalizeNullableTeacherText(
+    data.educationBackground,
+    MAX_EXPERIENCE_TEXT_LENGTH,
+  ),
+  teachingExperience: normalizeNullableTeacherText(
+    data.teachingExperience,
+    MAX_EXPERIENCE_TEXT_LENGTH,
+  ),
   awards: normalizeTeacherTextList(data.awards),
   specialties: normalizeTeacherTextList(data.specialties),
-  teachingStyle: normalizeNullableTeacherText(data.teachingStyle),
+  teachingStyle: normalizeNullableTeacherText(
+    data.teachingStyle,
+    MAX_BIO_TEXT_LENGTH,
+  ),
   languages: normalizeTeacherTextList(data.languages),
-  yearsOfExperience:
-    data.yearsOfExperience === undefined
-      ? undefined
-      : Math.floor(
-          normalizeNonNegativeNumber(
-            data.yearsOfExperience,
-            "Years of experience",
-          ) ?? 0,
-        ),
+  yearsOfExperience: normalizeYearsOfExperience(data.yearsOfExperience),
   profilePhoto: normalizeNullableTeacherAsset(
     data.profilePhoto,
     ["teacher-profiles"],
@@ -518,7 +547,7 @@ class TeacherService {
         expiryDate: normalizedExpiryDate,
         credentialId: normalizeOptionalTeacherText(
           data.credentialId,
-          MAX_SHORT_TEXT_LENGTH,
+          MAX_CREDENTIAL_ID_LENGTH,
         ),
         credentialUrl: normalizeTeacherAsset(
           data.credentialUrl,
@@ -631,7 +660,7 @@ class TeacherService {
       "Verification ID",
     );
     const normalizedStatus = normalizeReviewVerificationStatus(status);
-    const normalizedReviewNotes = normalizeOptionalTeacherText(reviewNotes);
+    const normalizedReviewNotes = normalizeOptionalTeacherText(reviewNotes, MAX_REVIEW_NOTES_LENGTH);
 
     if (
       normalizedStatus === VerificationStatus.REJECTED &&
@@ -910,7 +939,16 @@ class TeacherService {
       "Teacher profile ID",
     );
     const normalizedStatus = normalizeReviewRegistrationStatus(status);
-    const normalizedReviewNotes = normalizeOptionalTeacherText(reviewNotes);
+    const normalizedReviewNotes = normalizeOptionalTeacherText(reviewNotes, MAX_REVIEW_NOTES_LENGTH);
+
+    if (
+      normalizedStatus === RegistrationStatus.REJECTED &&
+      !normalizedReviewNotes
+    ) {
+      throw new ValidationError(
+        "Review notes are required when rejecting a registration",
+      );
+    }
 
     await ensureActiveAdmin(adminId, "review teacher records");
 
@@ -1018,7 +1056,17 @@ class TeacherService {
       "Teacher profile ID",
     );
     const normalizedStatus = normalizeReviewVerificationStatus(status);
-    const normalizedReviewNotes = normalizeOptionalTeacherText(reviewNotes);
+    const normalizedReviewNotes = normalizeOptionalTeacherText(reviewNotes, MAX_REVIEW_NOTES_LENGTH);
+
+    if (
+      normalizedStatus === VerificationStatus.REJECTED &&
+      !normalizedReviewNotes
+    ) {
+      throw new ValidationError(
+        "Review notes are required when rejecting a profile submission",
+      );
+    }
+
     const normalizedAdminId = await ensureActiveAdmin(
       adminId,
       "review teacher records",

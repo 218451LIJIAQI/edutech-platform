@@ -188,11 +188,12 @@ const RevenueAnalytics = () => {
                 hasDateRangeError ? 'border-red-500 focus:ring-red-500' : ''
               }`}
               aria-invalid={hasDateRangeError}
+              aria-describedby={hasDateRangeError ? 'revenue-date-range-error' : undefined}
             />
           </div>
 
           {hasDateRangeError && (
-            <p className="mt-1 text-sm text-red-600">
+            <p id="revenue-date-range-error" className="mt-1 text-sm text-red-600">
               End date must be the same as or later than start date.
             </p>
           )}

@@ -72,7 +72,8 @@ const BCRYPT_SALT_ROUNDS = 12;
 const PASSWORD_RESET_RETRY_ATTEMPTS = 3;
 const PASSWORD_MIN_LENGTH = 8;
 const PASSWORD_MAX_LENGTH = 72;
-const NAME_MAX_LENGTH = 80;
+const NAME_MIN_LENGTH = 2;
+const NAME_MAX_LENGTH = 50;
 const EMAIL_MAX_LENGTH = 254;
 
 const EMAIL_FORMAT = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -129,7 +130,12 @@ class AuthService {
     }
 
     if (user.role === UserRole.TEACHER) {
-      await assertTeacherHasNoActiveStudents(userId);
+      await assertTeacherHasNoActiveStudents(
+        userId,
+        undefined,
+        prisma,
+        "deactivate",
+      );
 
       const pendingPayoutCount = await prisma.payoutRequest.count({
         where: {
@@ -829,9 +835,12 @@ class AuthService {
       throw new ValidationError(`${fieldName} is required`);
     }
 
-    if (normalized.length > NAME_MAX_LENGTH) {
+    if (
+      normalized.length < NAME_MIN_LENGTH ||
+      normalized.length > NAME_MAX_LENGTH
+    ) {
       throw new ValidationError(
-        `${fieldName} must not exceed ${NAME_MAX_LENGTH} characters`,
+        `${fieldName} must be between ${NAME_MIN_LENGTH} and ${NAME_MAX_LENGTH} characters`,
       );
     }
 

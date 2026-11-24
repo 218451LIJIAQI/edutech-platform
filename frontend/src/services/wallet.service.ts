@@ -12,6 +12,7 @@ import {
 } from '@/types';
 import { extractErrorMessage } from '@/utils/error-handler';
 import { toFiniteNumber, toOptionalFiniteNumber } from '@/utils/asset-normalizers';
+import { extractData } from './response-utils';
 
 export interface WalletTransactionListResponse {
   items: WalletTransaction[];
@@ -82,11 +83,10 @@ const normalizePayoutRequest = (request: PayoutRequest): PayoutRequest => ({
 const walletService = {
   async getMySummary(): Promise<WalletSummary> {
     try {
-      const { data } = await api.get<ApiResponse<WalletSummary>>('/wallet/me');
-      if (!data.data) {
-        throw new Error('No wallet summary data received');
-      }
-      return normalizeWalletSummary(data.data);
+      const response = await api.get<ApiResponse<WalletSummary>>('/wallet/me');
+      return normalizeWalletSummary(
+        extractData(response, 'No wallet summary data received')
+      );
     } catch (error) {
       wrapWalletError('Failed to fetch wallet summary', error);
     }
@@ -99,16 +99,16 @@ const walletService = {
     source?: WalletTransactionSource;
   }): Promise<WalletTransactionListResponse> {
     try {
-      const { data } = await api.get<ApiResponse<WalletTransactionListResponse>>(
+      const response = await api.get<ApiResponse<WalletTransactionListResponse>>(
         '/wallet/me/transactions',
         { params }
       );
-      if (!data.data) {
-        throw new Error('No transaction data received');
-      }
+      const payload = extractData(response, 'No transaction data received');
       return {
-        ...data.data,
-        items: (Array.isArray(data.data.items) ? data.data.items : []).map(normalizeWalletTransaction),
+        ...payload,
+        items: (Array.isArray(payload.items) ? payload.items : []).map(
+          normalizeWalletTransaction
+        ),
       };
     } catch (error) {
       wrapWalletError('Failed to fetch transactions', error);
@@ -117,11 +117,10 @@ const walletService = {
 
   async listPayoutMethods(): Promise<PayoutMethod[]> {
     try {
-      const { data } = await api.get<ApiResponse<PayoutMethod[]>>('/wallet/me/payout-methods');
-      if (!data.data) {
-        throw new Error('No payout methods data received');
-      }
-      return data.data;
+      const response = await api.get<ApiResponse<PayoutMethod[]>>(
+        '/wallet/me/payout-methods'
+      );
+      return extractData(response, 'No payout methods data received');
     } catch (error) {
       wrapWalletError('Failed to fetch payout methods', error);
     }
@@ -132,32 +131,29 @@ const walletService = {
       if (!input.type || !input.label || !input.details) {
         throw new Error('Missing required fields: type, label, details');
       }
-      const { data } = await api.post<ApiResponse<PayoutMethod>>(
+      const response = await api.post<ApiResponse<PayoutMethod>>(
         '/wallet/me/payout-methods',
         input
       );
-      if (!data.data) {
-        throw new Error('No payout method data received');
-      }
-      return data.data;
+      return extractData(response, 'No payout method data received');
     } catch (error) {
       wrapWalletError('Failed to add payout method', error);
     }
   },
 
-  async updatePayoutMethod(methodId: string, input: UpdatePayoutMethodInput): Promise<PayoutMethod> {
+  async updatePayoutMethod(
+    methodId: string,
+    input: UpdatePayoutMethodInput
+  ): Promise<PayoutMethod> {
     try {
       if (!methodId || methodId.trim() === '') {
         throw new Error('Payout method ID is required');
       }
-      const { data } = await api.put<ApiResponse<PayoutMethod>>(
+      const response = await api.put<ApiResponse<PayoutMethod>>(
         `/wallet/me/payout-methods/${methodId}`,
         input
       );
-      if (!data.data) {
-        throw new Error('No payout method data received');
-      }
-      return data.data;
+      return extractData(response, 'No payout method data received');
     } catch (error) {
       wrapWalletError('Failed to update payout method', error);
     }
@@ -179,11 +175,13 @@ const walletService = {
       if (!input.amount || input.amount <= 0) {
         throw new Error('Payout amount must be greater than 0');
       }
-      const { data } = await api.post<ApiResponse<PayoutRequest>>('/wallet/me/payouts', input);
-      if (!data.data) {
-        throw new Error('No payout request data received');
-      }
-      return normalizePayoutRequest(data.data);
+      const response = await api.post<ApiResponse<PayoutRequest>>(
+        '/wallet/me/payouts',
+        input
+      );
+      return normalizePayoutRequest(
+        extractData(response, 'No payout request data received')
+      );
     } catch (error) {
       wrapWalletError('Failed to request payout', error);
     }
@@ -195,15 +193,16 @@ const walletService = {
     status?: PayoutRequestStatus;
   }): Promise<WalletPayoutListResponse> {
     try {
-      const { data } = await api.get<ApiResponse<WalletPayoutListResponse>>('/wallet/me/payouts', {
-        params,
-      });
-      if (!data.data) {
-        throw new Error('No payout data received');
-      }
+      const response = await api.get<ApiResponse<WalletPayoutListResponse>>(
+        '/wallet/me/payouts',
+        { params }
+      );
+      const payload = extractData(response, 'No payout data received');
       return {
-        ...data.data,
-        items: (Array.isArray(data.data.items) ? data.data.items : []).map(normalizePayoutRequest),
+        ...payload,
+        items: (Array.isArray(payload.items) ? payload.items : []).map(
+          normalizePayoutRequest
+        ),
       };
     } catch (error) {
       wrapWalletError('Failed to fetch payouts', error);
@@ -216,16 +215,16 @@ const walletService = {
     offset?: number;
   }): Promise<WalletPayoutListResponse> {
     try {
-      const { data } = await api.get<ApiResponse<WalletPayoutListResponse>>(
+      const response = await api.get<ApiResponse<WalletPayoutListResponse>>(
         '/admin/wallet/payouts',
         { params }
       );
-      if (!data.data) {
-        throw new Error('No admin payout data received');
-      }
+      const payload = extractData(response, 'No admin payout data received');
       return {
-        ...data.data,
-        items: (Array.isArray(data.data.items) ? data.data.items : []).map(normalizePayoutRequest),
+        ...payload,
+        items: (Array.isArray(payload.items) ? payload.items : []).map(
+          normalizePayoutRequest
+        ),
       };
     } catch (error) {
       wrapWalletError('Failed to fetch payout requests', error);
@@ -244,14 +243,13 @@ const walletService = {
       if (!payoutId.trim()) {
         throw new Error('Payout ID is required');
       }
-      const { data } = await api.post<ApiResponse<PayoutRequest>>(
+      const response = await api.post<ApiResponse<PayoutRequest>>(
         `/admin/wallet/payouts/${payoutId}/review`,
         payload
       );
-      if (!data.data) {
-        throw new Error('No payout review response received');
-      }
-      return normalizePayoutRequest(data.data);
+      return normalizePayoutRequest(
+        extractData(response, 'No payout review response received')
+      );
     } catch (error) {
       wrapWalletError('Failed to review payout request', error);
     }

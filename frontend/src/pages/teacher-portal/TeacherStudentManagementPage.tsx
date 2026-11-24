@@ -255,7 +255,9 @@ const TeacherStudentManagementPage = () => {
                   const raw = e.target.value;
                   setProgressMin(raw === '' ? 0 : Math.min(100, Math.max(0, Number(raw))));
                 }}
-                className="input w-20 tabular-nums"
+                aria-invalid={progressMin > progressMax}
+                aria-describedby={progressMin > progressMax ? 'student-progress-range-error' : undefined}
+                className={`input w-20 tabular-nums ${progressMin > progressMax ? 'input-error' : ''}`}
                 aria-label="Minimum progress percentage"
               />
               <span>&ndash;</span>
@@ -268,9 +270,16 @@ const TeacherStudentManagementPage = () => {
                   const raw = e.target.value;
                   setProgressMax(raw === '' ? 100 : Math.min(100, Math.max(0, Number(raw))));
                 }}
-                className="input w-20 tabular-nums"
+                aria-invalid={progressMin > progressMax}
+                aria-describedby={progressMin > progressMax ? 'student-progress-range-error' : undefined}
+                className={`input w-20 tabular-nums ${progressMin > progressMax ? 'input-error' : ''}`}
                 aria-label="Maximum progress percentage"
               />
+              {progressMin > progressMax && (
+                <p id="student-progress-range-error" className="text-xs font-medium text-danger-600">
+                  Min progress cannot exceed max progress.
+                </p>
+              )}
               {hasActiveFilters && (
                 <button
                   type="button"

@@ -816,7 +816,8 @@ class WalletService {
         MAX_EXTERNAL_REFERENCE_LENGTH,
       ) || null;
 
-    return prisma.$transaction(async (tx) => {
+    const { updatedPayout, teacherUserId, amount } =
+      await prisma.$transaction(async (tx) => {
       const payout = await tx.payoutRequest.findUnique({
         where: { id: payoutId },
         include: { wallet: true },
@@ -926,34 +927,35 @@ class WalletService {
         where: { id: payoutId },
       });
       return { updatedPayout, teacherUserId: payout.wallet.userId, amount };
-    }).then(async ({ updatedPayout, teacherUserId, amount }) => {
-      const titlesByAction: Record<PayoutAction, string> = {
-        approve: "Payout Request Approved",
-        processing: "Payout Transfer Processing",
-        reject: "Payout Request Rejected",
-        paid: "Payout Settled",
-      };
-      const messagesByAction: Record<PayoutAction, string> = {
-        approve: `Your payout request of $${amount.toFixed(2)} has been approved.`,
-        processing: `Your payout of $${amount.toFixed(2)} is now being processed.`,
-        reject: `Your payout request of $${amount.toFixed(2)} was rejected and returned to your available balance${adminNote ? `: ${adminNote}` : "."}`,
-        paid: `Your payout of $${amount.toFixed(2)} has been marked paid${externalReference ? ` (Ref: ${externalReference})` : ""}.`,
-      };
-      try {
-        await notificationService.createNotification(
-          teacherUserId,
-          titlesByAction[action],
-          messagesByAction[action],
-          "payout",
-        );
-      } catch (error) {
-        logger.warn("Failed to create payout review notification", {
-          teacherUserId,
-          error,
-        });
-      }
-      return updatedPayout;
     });
+
+    const titlesByAction: Record<PayoutAction, string> = {
+      approve: "Payout Request Approved",
+      processing: "Payout Transfer Processing",
+      reject: "Payout Request Rejected",
+      paid: "Payout Settled",
+    };
+    const messagesByAction: Record<PayoutAction, string> = {
+      approve: `Your payout request of $${amount.toFixed(2)} has been approved.`,
+      processing: `Your payout of $${amount.toFixed(2)} is now being processed.`,
+      reject: `Your payout request of $${amount.toFixed(2)} was rejected and returned to your available balance${adminNote ? `: ${adminNote}` : "."}`,
+      paid: `Your payout of $${amount.toFixed(2)} has been marked paid${externalReference ? ` (Ref: ${externalReference})` : ""}.`,
+    };
+    try {
+      await notificationService.createNotification(
+        teacherUserId,
+        titlesByAction[action],
+        messagesByAction[action],
+        "payout",
+      );
+    } catch (error) {
+      logger.warn("Failed to create payout review notification", {
+        teacherUserId,
+        error,
+      });
+    }
+
+    return updatedPayout;
   }
 
   async creditForTeacherInTransaction(

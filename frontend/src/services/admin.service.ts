@@ -1,5 +1,6 @@
 import api from './api';
-import { ApiResponse, PaginatedResponse, User, Course, PaymentWithDetails, Report } from '@/types';
+import { ApiResponse, PaginatedResponse, PaginationMeta, User, Course, PaymentWithDetails, Report } from '@/types';
+export type { PaginationMeta };
 import { extractData, extractPaginatedData } from './response-utils';
 import {
   normalizeCourseAssets,
@@ -41,13 +42,6 @@ export interface FinancialStats {
     transactionCount: number;
   };
   recentPayments: PaymentWithDetails[];
-}
-
-export interface PaginationMeta {
-  total: number;
-  page: number;
-  limit: number;
-  totalPages: number;
 }
 
 interface AdminPaginatedData<T> {
@@ -195,11 +189,16 @@ interface FinancialExportData {
   summary: FinancialPeriodSummary;
 }
 
-interface BatchUserOperationResult {
+interface BatchUserOperationFailure {
+  userId: string;
+  reason: string;
+}
+
+export interface BatchUserOperationResult {
   affected?: number;
   count?: number;
   succeeded?: string[];
-  failed?: Array<{ id: string; reason: string }>;
+  failed?: BatchUserOperationFailure[];
 }
 
 export interface AutoVerificationStats {

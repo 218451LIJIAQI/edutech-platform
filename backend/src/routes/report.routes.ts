@@ -83,8 +83,8 @@ const updateReportStatusValidation = [
   body("resolution")
     .optional({ values: "falsy" })
     .trim()
-    .isLength({ max: 1000 })
-    .withMessage("Resolution must not exceed 1000 characters"),
+    .isLength({ max: 2000 })
+    .withMessage("Resolution must not exceed 2000 characters"),
 ];
 
 router.post(

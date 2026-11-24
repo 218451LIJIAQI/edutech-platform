@@ -21,7 +21,7 @@ const DEFAULT_PAGE = 1;
 const DEFAULT_LIMIT = 10;
 const MAX_LIMIT = 100;
 const MAX_DESCRIPTION_LENGTH = 1000;
-const MAX_RESOLUTION_LENGTH = 3000;
+const MAX_RESOLUTION_LENGTH = 2000;
 
 class ReportController {
   submitReport = asyncHandler(async (req: Request, res: Response) => {

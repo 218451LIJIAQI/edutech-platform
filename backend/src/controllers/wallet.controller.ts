@@ -27,7 +27,7 @@ const DEFAULT_LIMIT = 50;
 const MAX_LIMIT = 100;
 const MAX_OFFSET = 100000;
 const MAX_LABEL_LENGTH = 100;
-const MAX_NOTE_LENGTH = 1000;
+const MAX_NOTE_LENGTH = 2000;
 
 const validateJsonDetails = (value: unknown, required: boolean): unknown => {
   if (value === undefined) {

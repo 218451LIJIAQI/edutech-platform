@@ -50,7 +50,7 @@ const refundRequestValidation = [
   body("bankDetails")
     .optional({ values: "falsy" })
     .trim()
-    .isLength({ max: 1000 })
+    .isLength({ max: 2000 })
     .withMessage("bankDetails too long"),
   body("notes")
     .optional({ values: "falsy" })

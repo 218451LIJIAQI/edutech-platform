@@ -7,7 +7,7 @@ import teacherService from '@/services/teacher.service';
 import adminService, { type AutoVerificationStats } from '@/services/admin.service';
 import { TeacherProfile, VerificationStatus, RegistrationStatus, TeacherVerification } from '@/types';
 import { extractErrorMessage } from '@/utils/error-handler';
-import { formatDate, parseStringArray } from '@/utils/helpers';
+import { formatDate, getNextHorizontalTabId, parseStringArray } from '@/utils/helpers';
 import { useOverlayAccessibility, usePageTitle, useTimeoutManager } from '@/hooks';
 import {
   buildTeacherCertificateAssetAccessUrl,
@@ -37,21 +37,20 @@ const VerificationTeachersManagement = () => {
   const autoStatsRequestRef = useRef(0);
 
   const [searchParams, setSearchParams] = useSearchParams();
-  const requestedTab = searchParams.get('tab');
-  const activeTab: 'registrations' | 'profiles' | 'certificates' =
-    requestedTab === 'profiles' || requestedTab === 'certificates'
-      ? requestedTab
+  const [activeTab, setActiveTabState] = useState<'registrations' | 'profiles' | 'certificates'>(() => {
+    const requested = searchParams.get('tab');
+    return requested === 'registrations' || requested === 'profiles' || requested === 'certificates'
+      ? requested
       : 'registrations';
+  });
+
   const setActiveTab = useCallback(
     (nextTab: 'registrations' | 'profiles' | 'certificates') => {
+      setActiveTabState(nextTab);
       setSearchParams(
         (prev) => {
           const next = new URLSearchParams(prev);
-          if (nextTab === 'registrations') {
-            next.delete('tab');
-          } else {
-            next.set('tab', nextTab);
-          }
+          next.set('tab', nextTab);
           return next;
         },
         { replace: true }
@@ -476,36 +475,55 @@ const VerificationTeachersManagement = () => {
         {/* Tabs */}
         <div
           role="tablist"
-          aria-label="Teacher verification sections"
+          aria-label="Teacher verification queues"
           className="flex flex-wrap items-center gap-2 mb-6"
         >
-          <button
-            type="button"
-            role="tab"
-            aria-selected={activeTab === 'registrations'}
-            className={`px-4 py-2 rounded-lg font-semibold transition-all ${activeTab === 'registrations' ? 'bg-primary-600 text-white' : 'bg-white border border-gray-200 text-gray-700 hover:bg-gray-100'}`}
-            onClick={() => setActiveTab('registrations')}
-          >
-            Registrations
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={activeTab === 'profiles'}
-            className={`px-4 py-2 rounded-lg font-semibold transition-all ${activeTab === 'profiles' ? 'bg-primary-600 text-white' : 'bg-white border border-gray-200 text-gray-700 hover:bg-gray-100'}`}
-            onClick={() => setActiveTab('profiles')}
-          >
-            Profile Verifications
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={activeTab === 'certificates'}
-            className={`px-4 py-2 rounded-lg font-semibold transition-all tabular-nums ${activeTab === 'certificates' ? 'bg-primary-600 text-white' : 'bg-white border border-gray-200 text-gray-700 hover:bg-gray-100'}`}
-            onClick={() => setActiveTab('certificates')}
-          >
-            Certificates ({pendingCertificates.length})
-          </button>
+          {(
+            [
+              { id: 'registrations', label: 'Registrations' },
+              { id: 'profiles', label: 'Profile Verifications' },
+              {
+                id: 'certificates',
+                label: `Certificates (${pendingCertificates.length})`,
+                tabular: true,
+              },
+            ] as const
+          ).map((item) => {
+            const isSelected = activeTab === item.id;
+            return (
+              <button
+                key={item.id}
+                id={`verifications-tab-${item.id}`}
+                type="button"
+                role="tab"
+                aria-selected={isSelected}
+                aria-controls={`verifications-panel-${item.id}`}
+                tabIndex={isSelected ? 0 : -1}
+                className={`px-4 py-2 rounded-lg font-semibold transition-all ${
+                  'tabular' in item ? 'tabular-nums ' : ''
+                }${
+                  isSelected
+                    ? 'bg-primary-600 text-white'
+                    : 'bg-white border border-gray-200 text-gray-700 hover:bg-gray-100'
+                }`}
+                onClick={() => setActiveTab(item.id)}
+                onKeyDown={(event) => {
+                  const nextTab = getNextHorizontalTabId(
+                    ['registrations', 'profiles', 'certificates'] as const,
+                    activeTab,
+                    event.key
+                  );
+                  if (nextTab) {
+                    event.preventDefault();
+                    setActiveTab(nextTab);
+                    document.getElementById(`verifications-tab-${nextTab}`)?.focus();
+                  }
+                }}
+              >
+                {item.label}
+              </button>
+            );
+          })}
         </div>
 
         {successMessage && (
@@ -521,6 +539,11 @@ const VerificationTeachersManagement = () => {
           </div>
         )}
 
+        <div
+          id={`verifications-panel-${activeTab}`}
+          role="tabpanel"
+          aria-labelledby={`verifications-tab-${activeTab}`}
+        >
         {/* Registrations Tab */}
         {activeTab === 'registrations' && (
           <>
@@ -960,6 +983,7 @@ const VerificationTeachersManagement = () => {
             })()}
           </>
         )}
+        </div>
       </div>
 
       {/* Registration Rejection Modal */}
@@ -980,7 +1004,7 @@ const VerificationTeachersManagement = () => {
               aria-modal="true"
               aria-labelledby="registration-reject-title"
               tabIndex={-1}
-              className="bg-white rounded-2xl shadow-modal max-w-lg w-full overflow-hidden"
+              className="bg-white rounded-2xl shadow-modal max-w-lg w-full max-h-[90vh] overflow-y-auto"
             >
             <div className="bg-gradient-to-r from-red-600 to-red-700 text-white px-6 py-4 flex items-center justify-between">
               <h2 id="registration-reject-title" className="text-xl font-bold text-white">Reject Registration</h2>
@@ -1074,7 +1098,7 @@ const VerificationTeachersManagement = () => {
               aria-modal="true"
               aria-labelledby="certificate-reject-title"
               tabIndex={-1}
-              className="bg-white rounded-2xl shadow-modal max-w-lg w-full overflow-hidden"
+              className="bg-white rounded-2xl shadow-modal max-w-lg w-full max-h-[90vh] overflow-y-auto"
             >
             <div className="bg-gradient-to-r from-red-600 to-red-700 text-white px-6 py-4 flex items-center justify-between">
               <h2 id="certificate-reject-title" className="text-xl font-bold text-white">Reject Certificate</h2>

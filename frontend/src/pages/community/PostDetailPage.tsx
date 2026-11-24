@@ -9,7 +9,7 @@ import toast from 'react-hot-toast';
 import ReportSubmissionModal from '@/components/common/ReportSubmissionModal';
 import UniversalVideoPlayer from '@/components/common/UniversalVideoPlayer';
 import { extractErrorMessage } from '@/utils/error-handler';
-import { shareLink } from '@/utils/clipboard';
+import { shareCommunityPost } from '@/utils/clipboard';
 import { resolveBackendAssetUrl } from '@/utils/runtime';
 import { usePageTitle } from '@/hooks';
 
@@ -84,22 +84,7 @@ const PostDetailPage = () => {
 
   const onShare = async () => {
     if (!post) return;
-    const url = `${window.location.origin}/community/post/${post.id}`;
-    const result = await shareLink(url, {
-      title: post.title || 'Community post',
-      text: 'Check out this post in the community.',
-    });
-    if (result === 'shared') {
-      toast.success('Sharing options opened');
-      return;
-    }
-    if (result === 'copied') {
-      toast.success('Link copied to clipboard');
-      return;
-    }
-    if (result === 'unavailable') {
-      toast.error('Unable to share this link right now. Please copy it from the address bar.');
-    }
+    await shareCommunityPost(post);
   };
 
   const toggleLike = async () => {
@@ -268,6 +253,8 @@ const PostDetailPage = () => {
             <div className="flex items-center gap-3">
               <button
                 type="button"
+                aria-pressed={Boolean(post.hasLiked)}
+                aria-label={`${post.hasLiked ? 'Unlike' : 'Like'} post (${post.likes} likes)`}
                 disabled={isTogglingAction}
                 onClick={() => void toggleLike()}
                 className={`px-3 py-1 rounded-lg border text-sm inline-flex items-center gap-1 disabled:opacity-50 ${post.hasLiked ? 'bg-red-50 border-red-200 text-red-600' : 'bg-white border-gray-200 hover:bg-gray-50'}`}
@@ -276,6 +263,8 @@ const PostDetailPage = () => {
               </button>
               <button
                 type="button"
+                aria-pressed={Boolean(post.hasBookmarked)}
+                aria-label={`${post.hasBookmarked ? 'Remove bookmark' : 'Bookmark'} post (${post.bookmarks} bookmarks)`}
                 disabled={isTogglingAction}
                 onClick={() => void toggleBookmark()}
                 className={`px-3 py-1 rounded-lg border text-sm inline-flex items-center gap-1 disabled:opacity-50 ${post.hasBookmarked ? 'bg-yellow-50 border-yellow-200 text-yellow-700' : 'bg-white border-gray-200 hover:bg-gray-50'}`}

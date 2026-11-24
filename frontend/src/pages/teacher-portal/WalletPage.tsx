@@ -906,7 +906,7 @@ const WalletPage = () => {
               </p>
 
               {methodFormError && (
-                <div role="alert" className="rounded-xl border border-red-200 bg-red-50 px-3.5 py-2.5 text-sm text-red-700">
+                <div id="wallet-method-form-error" role="alert" className="rounded-xl border border-red-200 bg-red-50 px-3.5 py-2.5 text-sm text-red-700">
                   {methodFormError}
                 </div>
               )}
@@ -939,6 +939,9 @@ const WalletPage = () => {
                 <input
                   id="wallet-method-label"
                   ref={methodLabelInputRef}
+                  maxLength={100}
+                  aria-invalid={Boolean(methodFormError)}
+                  aria-describedby={methodFormError ? 'wallet-method-form-error' : undefined}
                   className="input"
                   value={methodLabel}
                   onChange={(e) => {
@@ -1081,7 +1084,7 @@ const WalletPage = () => {
               </p>
 
               {payoutFormError && (
-                <div role="alert" className="rounded-xl border border-red-200 bg-red-50 px-3.5 py-2.5 text-sm text-red-700">
+                <div id="wallet-payout-form-error" role="alert" className="rounded-xl border border-red-200 bg-red-50 px-3.5 py-2.5 text-sm text-red-700">
                   {payoutFormError}
                 </div>
               )}
@@ -1109,6 +1112,8 @@ const WalletPage = () => {
                   min={0.01}
                   step="0.01"
                   max={withdrawableBalance}
+                  aria-invalid={Boolean(payoutFormError)}
+                  aria-describedby={payoutFormError ? 'wallet-payout-form-error' : undefined}
                   value={payoutAmountInput}
                   onChange={(e) => {
                     setPayoutAmountInput(e.target.value);
@@ -1148,6 +1153,7 @@ const WalletPage = () => {
                 </label>
                 <textarea
                   id="payout-note-textarea"
+                  maxLength={2000}
                   className="input"
                   rows={3}
                   placeholder="Optional note for the finance settlement team"

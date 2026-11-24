@@ -8,7 +8,7 @@ import CommunityMediaPreview from '@/components/community/CommunityMediaPreview'
 import toast from 'react-hot-toast';
 import { useAuthStore } from '@/store/auth-store';
 import { extractErrorMessage } from '@/utils/error-handler';
-import { shareLink } from '@/utils/clipboard';
+import { shareCommunityPost } from '@/utils/clipboard';
 import { usePageTitle } from '@/hooks';
 
 const CommunityUserProfilePage = () => {
@@ -131,25 +131,7 @@ const CommunityUserProfilePage = () => {
   };
 
   const onShare = async (post: CommunityPost) => {
-    const url = `${window.location.origin}/community/post/${post.id}`;
-    const result = await shareLink(url, {
-      title: post.title || 'Community post',
-      text: 'Check out this post in the community.',
-    });
-
-    if (result === 'shared') {
-      toast.success('Sharing options opened');
-      return;
-    }
-
-    if (result === 'copied') {
-      toast.success('Link copied to clipboard');
-      return;
-    }
-
-    if (result === 'unavailable') {
-      toast.error('Unable to share this link right now. Please copy it from the address bar.');
-    }
+    await shareCommunityPost(post);
   };
 
   if (isLoading) {
@@ -285,6 +267,8 @@ const CommunityUserProfilePage = () => {
                     <div className="flex items-center gap-3 tabular-nums">
                       <button
                         type="button"
+                        aria-pressed={Boolean(post.hasLiked)}
+                        aria-label={`${post.hasLiked ? 'Unlike' : 'Like'} post (${post.likes} likes)`}
                         disabled={isPendingPostAction}
                         onClick={() => void toggleLike(post.id)}
                         className={`px-3 py-1 rounded-lg border text-sm inline-flex items-center gap-1 disabled:opacity-50 ${
@@ -301,6 +285,8 @@ const CommunityUserProfilePage = () => {
                       </button>
                       <button
                         type="button"
+                        aria-pressed={Boolean(post.hasBookmarked)}
+                        aria-label={`${post.hasBookmarked ? 'Remove bookmark' : 'Bookmark'} post (${post.bookmarks} bookmarks)`}
                         disabled={isPendingPostAction}
                         onClick={() => void toggleBookmark(post.id)}
                         className={`px-3 py-1 rounded-lg border text-sm inline-flex items-center gap-1 disabled:opacity-50 ${

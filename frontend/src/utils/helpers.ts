@@ -1,23 +1,13 @@
 /**
  * Utility helper functions for the FlexiLearn Platform
  */
-
-const toSafeFiniteNumber = (value: unknown, fallback = 0): number => {
-  const parsed =
-    typeof value === 'number'
-      ? value
-      : typeof value === 'string'
-        ? Number(value.trim())
-        : Number(value ?? fallback);
-
-  return Number.isFinite(parsed) ? parsed : fallback;
-};
+import { toFiniteNumber } from './asset-normalizers';
 
 /**
  * Round a currency value to 2 decimal places safely without -0 drift.
  */
 export const roundCurrency = (value: unknown): number => {
-  const safeValue = toSafeFiniteNumber(value, 0);
+  const safeValue = toFiniteNumber(value, 0);
   const rounded = Math.round((safeValue + Number.EPSILON) * 100) / 100;
   return Object.is(rounded, -0) ? 0 : rounded;
 };
@@ -64,7 +54,7 @@ export const formatDate = (date?: string | Date | null): string => {
  * Format duration from minutes to human-readable format
  */
 export const formatDuration = (minutes: number): string => {
-  const safeMinutes = Math.max(0, Math.round(toSafeFiniteNumber(minutes, 0)));
+  const safeMinutes = Math.max(0, Math.round(toFiniteNumber(minutes, 0)));
   const hours = Math.floor(safeMinutes / 60);
   const mins = safeMinutes % 60;
 
@@ -154,5 +144,102 @@ export const getHomePathForRole = (role?: string | null): string => {
       return '/student';
     default:
       return '/';
+  }
+};
+
+export const COMMUNITY_DRAFT_LEGACY_KEY = 'community-create-post-draft-v1';
+
+export const buildCommunityDraftStorageKey = (
+  userId?: string | null
+): string | null => {
+  const normalized = userId?.trim();
+  return normalized ? `${COMMUNITY_DRAFT_LEGACY_KEY}:${normalized}` : null;
+};
+
+export const readUserScopedCommunityDraft = (
+  userId?: string | null,
+  storage?: Pick<Storage, 'getItem' | 'removeItem'> | null
+): string | null => {
+  const targetStorage =
+    storage ?? (typeof window !== 'undefined' ? window.localStorage : null);
+  const scopedKey = buildCommunityDraftStorageKey(userId);
+  if (!targetStorage || !scopedKey) {
+    return null;
+  }
+
+  try {
+    targetStorage.removeItem(COMMUNITY_DRAFT_LEGACY_KEY);
+    return targetStorage.getItem(scopedKey);
+  } catch {
+    return null;
+  }
+};
+
+export const writeUserScopedCommunityDraft = (
+  userId: string | null | undefined,
+  value: string,
+  storage?: Pick<Storage, 'setItem' | 'removeItem'> | null
+): boolean => {
+  const targetStorage =
+    storage ?? (typeof window !== 'undefined' ? window.localStorage : null);
+  const scopedKey = buildCommunityDraftStorageKey(userId);
+  if (!targetStorage || !scopedKey) {
+    return false;
+  }
+
+  try {
+    targetStorage.removeItem(COMMUNITY_DRAFT_LEGACY_KEY);
+    targetStorage.setItem(scopedKey, value);
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+export const clearUserScopedCommunityDraft = (
+  userId?: string | null,
+  storage?: Pick<Storage, 'removeItem'> | null
+): void => {
+  const targetStorage =
+    storage ?? (typeof window !== 'undefined' ? window.localStorage : null);
+  if (!targetStorage) {
+    return;
+  }
+
+  try {
+    targetStorage.removeItem(COMMUNITY_DRAFT_LEGACY_KEY);
+    const scopedKey = buildCommunityDraftStorageKey(userId);
+    if (scopedKey) {
+      targetStorage.removeItem(scopedKey);
+    }
+  } catch {
+    // Ignore storage quota or access errors during cleanup.
+  }
+};
+
+/**
+ * Resolve next horizontal tab ID on WAI-ARIA ArrowRight / ArrowLeft / Home / End keys.
+ */
+export const getNextHorizontalTabId = <T extends string>(
+  tabs: readonly T[],
+  currentTab: T,
+  key: string
+): T | null => {
+  if (tabs.length === 0) {
+    return null;
+  }
+
+  const currentIndex = Math.max(0, tabs.indexOf(currentTab));
+  switch (key) {
+    case 'ArrowRight':
+      return tabs[(currentIndex + 1) % tabs.length];
+    case 'ArrowLeft':
+      return tabs[(currentIndex - 1 + tabs.length) % tabs.length];
+    case 'Home':
+      return tabs[0];
+    case 'End':
+      return tabs[tabs.length - 1];
+    default:
+      return null;
   }
 };

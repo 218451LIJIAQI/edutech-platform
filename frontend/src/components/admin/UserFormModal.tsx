@@ -227,10 +227,14 @@ const UserFormModal = ({
 
     if (!firstName) {
       nextErrors.firstName = 'First name is required.';
+    } else if (firstName.length < 2 || firstName.length > 50) {
+      nextErrors.firstName = 'First name must be between 2 and 50 characters.';
     }
 
     if (!lastName) {
       nextErrors.lastName = 'Last name is required.';
+    } else if (lastName.length < 2 || lastName.length > 50) {
+      nextErrors.lastName = 'Last name must be between 2 and 50 characters.';
     }
 
     if (phone && !PHONE_PATTERN.test(phone)) {
@@ -434,6 +438,8 @@ const UserFormModal = ({
               disabled={isLoading}
               className={getInputClassName('firstName')}
               placeholder="John"
+              minLength={2}
+              maxLength={50}
               autoComplete="given-name"
               aria-invalid={Boolean(errors.firstName)}
               aria-describedby={
@@ -463,6 +469,8 @@ const UserFormModal = ({
               disabled={isLoading}
               className={getInputClassName('lastName')}
               placeholder="Doe"
+              minLength={2}
+              maxLength={50}
               autoComplete="family-name"
               aria-invalid={Boolean(errors.lastName)}
               aria-describedby={

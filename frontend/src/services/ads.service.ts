@@ -7,16 +7,10 @@ import {
   AdTheme,
   UserRole,
   ApiResponse,
+  PaginationMeta,
 } from '@/types';
 import { extractData } from './response-utils';
 import { normalizeAdAssets } from '@/utils/asset-normalizers';
-
-interface PaginationMeta {
-  total: number;
-  page: number;
-  limit: number;
-  totalPages: number;
-}
 
 interface AdminAdListResponse {
   items: AdCampaign[];

@@ -328,7 +328,7 @@ const NotificationCenter = () => {
                                     type="button"
                                     onClick={() => void handleMarkAsRead(notification.id)}
                                     disabled={isActionLoading}
-                                    className="p-1 text-gray-400 transition-colors hover:text-primary-600 disabled:cursor-not-allowed disabled:opacity-60"
+                                    className="p-1 text-slate-500 transition-colors hover:text-primary-600 disabled:cursor-not-allowed disabled:opacity-60"
                                     title="Mark as read"
                                     aria-label={`Mark "${notification.title}" as read`}
                                   >
@@ -340,7 +340,7 @@ const NotificationCenter = () => {
                                   type="button"
                                   onClick={() => void handleDelete(notification.id)}
                                   disabled={isActionLoading}
-                                  className="p-1 text-gray-400 transition-colors hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-60"
+                                  className="p-1 text-slate-500 transition-colors hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-60"
                                   title="Delete notification"
                                   aria-label={`Delete "${notification.title}"`}
                                 >
@@ -353,7 +353,7 @@ const NotificationCenter = () => {
                               {notification.message}
                             </p>
 
-                            <p className="mt-1 text-xs text-gray-400">
+                            <p className="mt-1 text-xs text-slate-500">
                               {formatNotificationTime(notification.createdAt)}
                             </p>
                           </div>

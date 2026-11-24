@@ -1,6 +1,7 @@
 import prisma from "../config/database";
 import { NotFoundError, ValidationError } from "../utils/errors";
 import { sanitizeUserPlainText } from "../utils/sanitize-user-content";
+import { normalizePagination as normalizeSharedPagination } from "./shared/pagination";
 import type { Notification, Prisma } from "@prisma/client";
 
 const DEFAULT_PAGE = 1;
@@ -40,20 +41,11 @@ const normalizeRequiredId = (value: string, fieldName: string): string => {
 const normalizePagination = (
   page: number = DEFAULT_PAGE,
   limit: number = DEFAULT_LIMIT,
-) => {
-  const safePage =
-    Number.isFinite(page) && page > 0 ? Math.floor(page) : DEFAULT_PAGE;
-
-  const safeLimit = Number.isFinite(limit)
-    ? Math.min(Math.max(Math.floor(limit), 1), MAX_LIMIT)
-    : DEFAULT_LIMIT;
-
-  return {
-    page: safePage,
-    limit: safeLimit,
-    skip: (safePage - 1) * safeLimit,
-  };
-};
+) =>
+  normalizeSharedPagination(page, limit, {
+    defaultLimit: DEFAULT_LIMIT,
+    maxLimit: MAX_LIMIT,
+  });
 
 const normalizeRequiredText = (
   value: string,

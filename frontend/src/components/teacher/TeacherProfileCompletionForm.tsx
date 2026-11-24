@@ -32,6 +32,8 @@ interface TeacherProfileFormState {
 type ListField = 'awards' | 'specialties' | 'languages';
 
 const MAX_SELF_INTRODUCTION_LENGTH = 500;
+const MAX_EDUCATION_EXPERIENCE_LENGTH = 2000;
+const MAX_TEACHING_STYLE_LENGTH = 1000;
 const MAX_YEARS_OF_EXPERIENCE = 70;
 const MAX_IMAGE_SIZE_MB = 5;
 const MAX_CERTIFICATE_SIZE_MB = 10;
@@ -555,6 +557,8 @@ const TeacherProfileCompletionForm = ({
         label="Education background"
         value={formData.educationBackground}
         placeholder="Describe your educational qualifications, degrees, and institutions..."
+        maxLength={MAX_EDUCATION_EXPERIENCE_LENGTH}
+        helpText={`${formData.educationBackground.length}/${MAX_EDUCATION_EXPERIENCE_LENGTH} characters`}
         disabled={isBusy}
         onChange={handleInputChange}
       />
@@ -565,6 +569,8 @@ const TeacherProfileCompletionForm = ({
         label="Teaching experience"
         value={formData.teachingExperience}
         placeholder="Describe your teaching experience, previous positions, and achievements..."
+        maxLength={MAX_EDUCATION_EXPERIENCE_LENGTH}
+        helpText={`${formData.teachingExperience.length}/${MAX_EDUCATION_EXPERIENCE_LENGTH} characters`}
         disabled={isBusy}
         onChange={handleInputChange}
       />
@@ -597,6 +603,8 @@ const TeacherProfileCompletionForm = ({
         label="Teaching style"
         value={formData.teachingStyle}
         placeholder="Describe your teaching approach, methods, and how you engage students..."
+        maxLength={MAX_TEACHING_STYLE_LENGTH}
+        helpText={`${formData.teachingStyle.length}/${MAX_TEACHING_STYLE_LENGTH} characters`}
         disabled={isBusy}
         onChange={handleInputChange}
       />

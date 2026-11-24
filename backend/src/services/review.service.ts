@@ -11,7 +11,11 @@ import {
 } from "./enrollment.service";
 import { isEnrollmentCurrentlyActive } from "./shared/enrollment-access";
 import { sanitizeUserPlainText } from "../utils/sanitize-user-content";
-import { isUniqueConstraintError } from "./shared/service-helpers";
+import { buildPaginationMeta, normalizePagination } from "./shared/pagination";
+import {
+  isUniqueConstraintError,
+  normalizeRequiredSanitizedText,
+} from "./shared/service-helpers";
 
 const reviewWithRelationsInclude = {
   reviewer: {
@@ -95,16 +99,7 @@ const MAX_COMMENT_LENGTH = 2000;
 const normalizeRequiredText = (
   value: string | undefined,
   fieldName: string,
-): string => {
-  const normalizedValue =
-    value === undefined ? undefined : sanitizeUserPlainText(value);
-
-  if (!normalizedValue) {
-    throw new ValidationError(`${fieldName} is required`);
-  }
-
-  return normalizedValue;
-};
+): string => normalizeRequiredSanitizedText(value, fieldName);
 
 const normalizeOptionalComment = (
   comment?: string | null,
@@ -424,11 +419,11 @@ class ReviewService {
     };
   }> {
     const normalizedTeacherId = normalizeRequiredText(teacherId, "Teacher ID");
-    const safePage = Number.isFinite(page) && page > 0 ? Math.floor(page) : 1;
-    const safeLimit = Number.isFinite(limit)
-      ? Math.min(Math.max(Math.floor(limit), 1), 100)
-      : 10;
-    const skip = (safePage - 1) * safeLimit;
+    const { page: safePage, limit: safeLimit, skip } = normalizePagination(
+      page,
+      limit,
+      { defaultLimit: 10, maxLimit: 100 },
+    );
 
     let resolvedTeacherUserId = normalizedTeacherId;
     const teacher = await prisma.user.findUnique({
@@ -479,12 +474,7 @@ class ReviewService {
 
     return {
       reviews,
-      pagination: {
-        total,
-        page: safePage,
-        limit: safeLimit,
-        totalPages: Math.ceil(total / safeLimit),
-      },
+      pagination: buildPaginationMeta(total, safePage, safeLimit),
     };
   }
 
@@ -505,11 +495,11 @@ class ReviewService {
     };
   }> {
     const normalizedCourseId = normalizeRequiredText(courseId, "Course ID");
-    const safePage = Number.isFinite(page) && page > 0 ? Math.floor(page) : 1;
-    const safeLimit = Number.isFinite(limit)
-      ? Math.min(Math.max(Math.floor(limit), 1), 100)
-      : 10;
-    const skip = (safePage - 1) * safeLimit;
+    const { page: safePage, limit: safeLimit, skip } = normalizePagination(
+      page,
+      limit,
+      { defaultLimit: 10, maxLimit: 100 },
+    );
 
     const course = await prisma.course.findUnique({
       where: {
@@ -562,12 +552,7 @@ class ReviewService {
 
     return {
       reviews,
-      pagination: {
-        total,
-        page: safePage,
-        limit: safeLimit,
-        totalPages: Math.ceil(total / safeLimit),
-      },
+      pagination: buildPaginationMeta(total, safePage, safeLimit),
     };
   }
 

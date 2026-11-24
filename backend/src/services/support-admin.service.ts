@@ -51,7 +51,7 @@ const SUPPORT_TICKET_PRIORITIES = Object.values(
 ) as SupportTicketPriority[];
 
 const MAX_MESSAGE_LENGTH = 5000;
-const MAX_RESOLUTION_LENGTH = 5000;
+const MAX_RESOLUTION_LENGTH = 3000;
 
 const parseOptionalTicketEnum = <T extends string>(
   raw: string | undefined,
@@ -204,7 +204,8 @@ class SupportAdminService {
     );
     const normalizedAttachment = normalizeSupportAttachment(attachment);
 
-    return prisma.$transaction(async (tx) => {
+    const { createdMessage, ticketUserId, ticketNo } =
+      await prisma.$transaction(async (tx) => {
       const ticket = await tx.supportTicket.findUnique({
         where: { id: normalizedTicketId },
         select: {
@@ -248,19 +249,20 @@ class SupportAdminService {
       });
 
       return { createdMessage, ticketUserId: ticket.userId, ticketNo: ticket.ticketNo };
-    }).then(async ({ createdMessage, ticketUserId, ticketNo }) => {
-      try {
-        await notificationService.createNotification(
-          ticketUserId,
-          `New Reply on Ticket ${ticketNo}`,
-          "Support has replied to your ticket. Open Support Center to view the update.",
-          "support",
-        );
-      } catch (error) {
-        logger.warn("Failed to create support reply notification", { ticketUserId, error });
-      }
-      return createdMessage;
     });
+
+    try {
+      await notificationService.createNotification(
+        ticketUserId,
+        `New Reply on Ticket ${ticketNo}`,
+        "Support has replied to your ticket. Open Support Center to view the update.",
+        "support",
+      );
+    } catch (error) {
+      logger.warn("Failed to create support reply notification", { ticketUserId, error });
+    }
+
+    return createdMessage;
   }
 
   async resolveTicket(

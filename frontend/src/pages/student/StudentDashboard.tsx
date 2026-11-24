@@ -7,7 +7,7 @@ import enrollmentService from '@/services/enrollment.service';
 import toast from 'react-hot-toast';
 import { useAuthStore } from '@/store/auth-store';
 import { usePageTitle, useSmoothLoading } from '@/hooks';
-import { StatsSkeleton } from '@/components/common';
+import { StatsSkeleton } from '@/components/common/Skeleton';
 import { extractErrorMessage } from '@/utils/error-handler';
 import { getPreferredCourseEnrollments } from '@/utils/enrollment';
 

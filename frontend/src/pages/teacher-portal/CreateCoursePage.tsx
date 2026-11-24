@@ -19,8 +19,8 @@ import {
   buildDeleteSuccessMessage,
 } from '@/features/course-editor/course-persistence';
 import { usePageTitle } from '@/hooks';
-import { courseEditorTabs } from '@/features/course-editor/constants';
 import CourseEditorHeader from '@/features/course-editor/header';
+import { courseEditorTabs } from '@/features/course-editor/constants';
 import CourseEditorTabsNav from '@/features/course-editor/tabs-nav';
 import CourseEditorBasicTab from '@/features/course-editor/basic-tab';
 import CourseEditorLessonsTab from '@/features/course-editor/lessons-tab';
@@ -35,29 +35,28 @@ import type {
 const CreateCoursePage = () => {
   const { courseId } = useParams<{ courseId?: string }>();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const isEditMode = !!courseId;
   usePageTitle(isEditMode ? 'Edit Course' : 'Create Course');
 
   const [course, setCourse] = useState<Course | null>(null);
   const [lessons, setLessons] = useState<Lesson[]>([]);
   const [packages, setPackages] = useState<LessonPackage[]>([]);
-  const [searchParams, setSearchParams] = useSearchParams();
   const [materials, setMaterials] = useState<Material[]>([]);
-  const requestedTab = searchParams.get('tab');
-  const activeTab: CourseEditorTabId =
-    isEditMode && courseEditorTabs.some((item) => item.id === requestedTab)
-      ? (requestedTab as CourseEditorTabId)
+  const [activeTab, setActiveTabState] = useState<CourseEditorTabId>(() => {
+    const requested = searchParams.get('tab');
+    return courseEditorTabs.some((item) => item.id === requested)
+      ? (requested as CourseEditorTabId)
       : 'basic';
+  });
+
   const setActiveTab = useCallback(
     (nextTab: CourseEditorTabId) => {
+      setActiveTabState(nextTab);
       setSearchParams(
         (prev) => {
           const next = new URLSearchParams(prev);
-          if (nextTab === 'basic') {
-            next.delete('tab');
-          } else {
-            next.set('tab', nextTab);
-          }
+          next.set('tab', nextTab);
           return next;
         },
         { replace: true }
@@ -373,7 +372,12 @@ const CreateCoursePage = () => {
           onTabChange={setActiveTab}
         />
 
-        <div className="card shadow-xl border border-gray-100 rounded-2xl">
+        <div
+          id={`course-editor-panel-${activeTab}`}
+          role="tabpanel"
+          aria-labelledby={`course-editor-tab-${activeTab}`}
+          className="card shadow-xl border border-gray-100 rounded-2xl"
+        >
           {activeTab === 'basic' && (
             <CourseEditorBasicTab
               register={register}

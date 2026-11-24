@@ -282,6 +282,7 @@ const ReportsManagement = () => {
                               }))
                             }
                             placeholder="Resolution note (optional)"
+                            maxLength={2000}
                             className="input py-1.5 text-sm sm:w-56"
                             disabled={isBusy}
                           />

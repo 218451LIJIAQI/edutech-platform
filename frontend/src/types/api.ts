@@ -5,6 +5,13 @@ export interface ApiResponse<T> {
   readonly errors?: Record<string, string[]>;
 }
 
+export interface PaginationMeta {
+  readonly total: number;
+  readonly page: number;
+  readonly limit: number;
+  readonly totalPages: number;
+}
+
 export interface PaginatedResponse<T> {
   readonly status: 'success';
   readonly data: {
@@ -13,11 +20,6 @@ export interface PaginatedResponse<T> {
     readonly courses?: T[];
     readonly reviews?: T[];
     readonly reports?: T[];
-    readonly pagination: {
-      readonly total: number;
-      readonly page: number;
-      readonly limit: number;
-      readonly totalPages: number;
-    };
+    readonly pagination: PaginationMeta;
   };
 }

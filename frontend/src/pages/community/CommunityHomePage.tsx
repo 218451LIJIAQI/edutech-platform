@@ -19,7 +19,8 @@ import CommunityMediaPreview from '@/components/community/CommunityMediaPreview'
 import { usePageTitle } from '@/hooks';
 import toast from 'react-hot-toast';
 import { extractErrorMessage } from '@/utils/error-handler';
-import { shareLink } from '@/utils/clipboard';
+import { getNextHorizontalTabId } from '@/utils/helpers';
+import { shareCommunityPost } from '@/utils/clipboard';
 
 const TABS: {
   key: NonNullable<FeedQuery['tab']>;
@@ -52,17 +53,7 @@ const CommunityHomePage = () => {
   const query: FeedQuery = useMemo(() => ({ tab, tag, page, limit: 9 }), [tab, tag, page]);
 
   useEffect(() => {
-    const rawTab = params.get('tab');
-    const nextTab: NonNullable<FeedQuery['tab']> =
-      rawTab === 'hot' || rawTab === 'new' || rawTab === 'weekly' ? rawTab : 'hot';
     const nextTag = params.get('tag') || undefined;
-    setTab((current) => {
-      if (current === nextTab) {
-        return current;
-      }
-      setPage(1);
-      return nextTab;
-    });
     setTag((current) => {
       if (current === nextTag) {
         return current;
@@ -176,25 +167,7 @@ const CommunityHomePage = () => {
   };
 
   const onShare = async (post: CommunityPost) => {
-    const url = `${window.location.origin}/community/post/${post.id}`;
-    const result = await shareLink(url, {
-      title: post.title || 'Community post',
-      text: 'Check out this post in the FlexiLearn community.',
-    });
-
-    if (result === 'shared') {
-      toast.success('Sharing options opened');
-      return;
-    }
-
-    if (result === 'copied') {
-      toast.success('Link copied to clipboard');
-      return;
-    }
-
-    if (result === 'unavailable') {
-      toast.error('Unable to share this link right now. Please copy it from the address bar.');
-    }
+    await shareCommunityPost(post);
   };
 
   return (
@@ -230,28 +203,47 @@ const CommunityHomePage = () => {
 
         <div
           role="tablist"
-          aria-label="Community feed sections"
+          aria-label="Community feed sort order"
           className="flex items-center gap-2.5 mb-5 flex-wrap"
         >
-          {TABS.map((item) => (
-            <button
-              key={item.key}
-              type="button"
-              role="tab"
-              aria-selected={tab === item.key}
-              onClick={() => {
-                setTab(item.key);
-                setPage(1);
-              }}
-              className={`px-4 py-2 rounded-xl border text-sm font-semibold transition-colors inline-flex items-center gap-2 ${
-                tab === item.key
-                  ? 'bg-primary-600 text-white border-primary-600 shadow-sm'
-                  : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
-              }`}
-            >
-              <item.icon className="w-4 h-4" /> {item.label}
-            </button>
-          ))}
+          {TABS.map((item) => {
+            const isSelected = tab === item.key;
+            return (
+              <button
+                key={item.key}
+                id={`community-tab-${item.key}`}
+                type="button"
+                role="tab"
+                aria-selected={isSelected}
+                aria-controls={`community-panel-${item.key}`}
+                tabIndex={isSelected ? 0 : -1}
+                onClick={() => {
+                  setTab(item.key);
+                  setPage(1);
+                }}
+                onKeyDown={(event) => {
+                  const nextTab = getNextHorizontalTabId(
+                    ['hot', 'new', 'weekly'] as const,
+                    tab,
+                    event.key
+                  );
+                  if (nextTab) {
+                    event.preventDefault();
+                    setTab(nextTab);
+                    setPage(1);
+                    document.getElementById(`community-tab-${nextTab}`)?.focus();
+                  }
+                }}
+                className={`px-4 py-2 rounded-xl border text-sm font-semibold transition-colors inline-flex items-center gap-2 ${
+                  isSelected
+                    ? 'bg-primary-600 text-white border-primary-600 shadow-sm'
+                    : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+                }`}
+              >
+                <item.icon className="w-4 h-4" aria-hidden="true" /> {item.label}
+              </button>
+            );
+          })}
         </div>
 
         <div className="flex items-center gap-2 flex-wrap mb-6">
@@ -288,6 +280,11 @@ const CommunityHomePage = () => {
           ))}
         </div>
 
+        <div
+          id={`community-panel-${tab}`}
+          role="tabpanel"
+          aria-labelledby={`community-tab-${tab}`}
+        >
         {isLoading ? (
           <div className="text-center py-20 text-slate-600 font-medium">
             <div className="spinner mx-auto mb-3" /> Loading discussions...
@@ -384,6 +381,8 @@ const CommunityHomePage = () => {
                   <div className="flex items-center gap-2">
                     <button
                       type="button"
+                      aria-pressed={Boolean(post.hasLiked)}
+                      aria-label={`${post.hasLiked ? 'Unlike' : 'Like'} post (${post.likes} likes)`}
                       onClick={() => void toggleLike(post.id)}
                       className={`px-3 py-1.5 rounded-lg border text-xs inline-flex items-center gap-1.5 font-semibold transition-colors ${
                         post.hasLiked
@@ -400,6 +399,8 @@ const CommunityHomePage = () => {
                     </button>
                     <button
                       type="button"
+                      aria-pressed={Boolean(post.hasBookmarked)}
+                      aria-label={`${post.hasBookmarked ? 'Remove bookmark' : 'Bookmark'} post (${post.bookmarks} bookmarks)`}
                       onClick={() => void toggleBookmark(post.id)}
                       className={`px-3 py-1.5 rounded-lg border text-xs inline-flex items-center gap-1.5 font-semibold transition-colors ${
                         post.hasBookmarked
@@ -451,6 +452,7 @@ const CommunityHomePage = () => {
             </button>
           </div>
         )}
+        </div>
       </div>
     </div>
   );

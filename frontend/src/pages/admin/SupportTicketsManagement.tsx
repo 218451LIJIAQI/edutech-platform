@@ -156,6 +156,24 @@ const SupportTicketsManagement = () => {
     lockBodyScroll: true,
   });
 
+  const refreshTicketDetails = useCallback(async (ticketId: string) => {
+    const requestId = ++detailRequestRef.current;
+    try {
+      const ticket = await adminSupportService.getTicketById(ticketId);
+      if (requestId !== detailRequestRef.current) {
+        return;
+      }
+      setSelectedTicket(ticket);
+      setTicketLoadError(null);
+    } catch (error) {
+      if (requestId !== detailRequestRef.current) {
+        return;
+      }
+      clientLogger.error(`Failed to refresh support ticket ${ticketId}:`, error);
+      toast.error(extractErrorMessage(error, 'Failed to refresh ticket details'));
+    }
+  }, []);
+
   const openTicketDetails = useCallback(async (ticketId: string) => {
     const requestId = ++detailRequestRef.current;
     setIsTicketModalOpen(true);
@@ -163,7 +181,9 @@ const SupportTicketsManagement = () => {
     setTicketLoadError(null);
     setSelectedTicket(null);
     setSelectedTicketId(ticketId);
+    setResponseMessage('');
     setResponseAttachment(null);
+    setResolutionText('');
 
     try {
       const ticket = await adminSupportService.getTicketById(ticketId);
@@ -194,7 +214,7 @@ const SupportTicketsManagement = () => {
       toast.success('Ticket assigned to you');
       await Promise.all([
         loadData(),
-        openTicketDetails(selectedTicket.id),
+        refreshTicketDetails(selectedTicket.id),
       ]);
     } catch (error) {
       clientLogger.error(`Failed to assign support ticket ${selectedTicket.id}:`, error);
@@ -221,7 +241,7 @@ const SupportTicketsManagement = () => {
       setResponseAttachment(null);
       await Promise.all([
         loadData(),
-        openTicketDetails(selectedTicket.id),
+        refreshTicketDetails(selectedTicket.id),
       ]);
     } catch (error) {
       clientLogger.error(`Failed to add response to support ticket ${selectedTicket.id}:`, error);
@@ -283,7 +303,7 @@ const SupportTicketsManagement = () => {
       setResolutionText('');
       await Promise.all([
         loadData(),
-        openTicketDetails(selectedTicket.id),
+        refreshTicketDetails(selectedTicket.id),
       ]);
     } catch (error) {
       clientLogger.error(`Failed to resolve support ticket ${selectedTicket.id}:`, error);
@@ -301,7 +321,7 @@ const SupportTicketsManagement = () => {
       toast.success('Ticket closed');
       setShowCloseTicketModal(false);
       await loadData();
-      await openTicketDetails(selectedTicket.id);
+      await refreshTicketDetails(selectedTicket.id);
     } catch (error) {
       clientLogger.error(`Failed to close support ticket ${selectedTicket.id}:`, error);
       toast.error(extractErrorMessage(error, 'Failed to close ticket'));
@@ -790,8 +810,8 @@ const SupportTicketsManagement = () => {
                         value={responseMessage}
                         onChange={(e) => setResponseMessage(e.target.value)}
                         placeholder="Type your response..."
-                        className="w-full h-20 px-4 py-3 border border-gray-200 rounded-xl resize-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
                         maxLength={5000}
+                        className="w-full h-20 px-4 py-3 border border-gray-200 rounded-xl resize-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
                         disabled={working || isUploadingResponseAttachment}
                       />
                       <input
@@ -856,8 +876,8 @@ const SupportTicketsManagement = () => {
                         value={resolutionText}
                         onChange={(e) => setResolutionText(e.target.value)}
                         placeholder="Describe the resolution..."
+                        maxLength={3000}
                         className="w-full h-20 px-4 py-3 border border-gray-200 rounded-xl resize-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all"
-                        maxLength={5000}
                         disabled={working}
                       />
                       <button

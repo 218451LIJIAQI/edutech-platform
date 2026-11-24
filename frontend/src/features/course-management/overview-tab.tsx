@@ -1,5 +1,6 @@
 import { Eye, Edit } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { resolveBackendAssetUrl } from '@/utils/runtime';
 import type { Course } from '@/types';
 
 interface CourseManagementOverviewTabProps {
@@ -22,7 +23,7 @@ export default function CourseManagementOverviewTab({
         <div>
           <h3 className="text-xl font-bold text-gray-900 mb-4">Course Thumbnail</h3>
           <img
-            src={course.thumbnail}
+            src={resolveBackendAssetUrl(course.thumbnail) || course.thumbnail}
             alt={course.title}
             className="w-full max-w-md h-auto rounded-lg shadow-lg"
           />

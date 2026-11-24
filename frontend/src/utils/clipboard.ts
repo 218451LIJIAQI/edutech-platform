@@ -1,3 +1,5 @@
+import toast from 'react-hot-toast';
+
 function fallbackCopyTextToClipboard(text: string): boolean {
   if (typeof document === 'undefined') {
     return false;
@@ -83,4 +85,29 @@ export async function shareLink(
 
   const copied = await copyTextToClipboard(normalizedUrl);
   return copied ? 'copied' : 'unavailable';
+}
+
+export async function shareCommunityPost(
+  post: { id: string; title?: string | null },
+  origin?: string
+): Promise<ShareLinkResult> {
+  const baseOrigin =
+    origin ?? (typeof window !== 'undefined' ? window.location.origin : '');
+  const url = baseOrigin ? `${baseOrigin}/community/post/${post.id}` : '';
+  const result = await shareLink(url, {
+    title: post.title || 'Community post',
+    text: 'Check out this post in the FlexiLearn community.',
+  });
+
+  if (result === 'shared') {
+    toast.success('Sharing options opened');
+  } else if (result === 'copied') {
+    toast.success('Link copied to clipboard');
+  } else if (result === 'unavailable') {
+    toast.error(
+      'Unable to share this link right now. Please copy it from the address bar.'
+    );
+  }
+
+  return result;
 }

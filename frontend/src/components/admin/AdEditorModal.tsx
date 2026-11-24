@@ -405,7 +405,7 @@ export default function AdEditorModal({
         aria-modal="true"
         aria-labelledby="ad-editor-modal-title"
         tabIndex={-1}
-        className="w-full max-w-5xl overflow-hidden rounded-3xl bg-white shadow-2xl"
+        className="w-full max-w-5xl max-h-[90vh] overflow-y-auto rounded-3xl bg-white shadow-2xl"
       >
         <div className="grid lg:grid-cols-[1.05fr,1.25fr]">
           <div
@@ -482,10 +482,11 @@ export default function AdEditorModal({
             <div className="space-y-5">
               <div className="grid gap-4 md:grid-cols-2">
                 <div>
-                  <label className="mb-2 block text-sm font-semibold text-gray-700">
+                  <label htmlFor="ad-internal-name" className="mb-2 block text-sm font-semibold text-gray-700">
                     Internal name
                   </label>
                   <input
+                    id="ad-internal-name"
                     ref={initialFocusRef}
                     type="text"
                     className="input"
@@ -500,10 +501,11 @@ export default function AdEditorModal({
                 </div>
 
                 <div>
-                  <label className="mb-2 block text-sm font-semibold text-gray-700">
+                  <label htmlFor="ad-badge" className="mb-2 block text-sm font-semibold text-gray-700">
                     Badge
                   </label>
                   <input
+                    id="ad-badge"
                     type="text"
                     className="input"
                     value={form.badge}
@@ -514,10 +516,12 @@ export default function AdEditorModal({
               </div>
 
               <div>
-                <label className="mb-2 block text-sm font-semibold text-gray-700">
+                <label htmlFor="ad-title" className="mb-2 block text-sm font-semibold text-gray-700">
                   Title
                 </label>
                 <input
+                  id="ad-title"
+                  maxLength={160}
                   type="text"
                   className="input"
                   value={form.title}
@@ -528,10 +532,12 @@ export default function AdEditorModal({
               </div>
 
               <div>
-                <label className="mb-2 block text-sm font-semibold text-gray-700">
+                <label htmlFor="ad-description" className="mb-2 block text-sm font-semibold text-gray-700">
                   Description
                 </label>
                 <textarea
+                  id="ad-description"
+                  maxLength={1000}
                   rows={4}
                   className="input"
                   value={form.description}
@@ -542,10 +548,11 @@ export default function AdEditorModal({
               </div>
 
               <div>
-                <label className="mb-2 block text-sm font-semibold text-gray-700">
+                <label htmlFor="ad-supporting-text" className="mb-2 block text-sm font-semibold text-gray-700">
                   Supporting text
                 </label>
                 <textarea
+                  id="ad-supporting-text"
                   rows={3}
                   className="input"
                   value={form.supportingText}
@@ -556,10 +563,11 @@ export default function AdEditorModal({
 
               <div className="grid gap-4 md:grid-cols-2">
                 <div>
-                  <label className="mb-2 block text-sm font-semibold text-gray-700">
+                  <label htmlFor="ad-sponsor-name" className="mb-2 block text-sm font-semibold text-gray-700">
                     Sponsor name
                   </label>
                   <input
+                    id="ad-sponsor-name"
                     type="text"
                     className="input"
                     value={form.sponsorName}
@@ -569,10 +577,11 @@ export default function AdEditorModal({
                 </div>
 
                 <div>
-                  <label className="mb-2 block text-sm font-semibold text-gray-700">
+                  <label htmlFor="ad-theme" className="mb-2 block text-sm font-semibold text-gray-700">
                     Theme
                   </label>
                   <select
+                    id="ad-theme"
                     className="input"
                     value={form.theme}
                     onChange={(event) => updateForm('theme', event.target.value as AdTheme)}
@@ -617,6 +626,8 @@ export default function AdEditorModal({
                 </div>
 
                 <input
+                  id="ad-image-url"
+                  aria-label="Ad image URL or upload path"
                   type="text"
                   className="input mt-4"
                   value={form.imageUrl}
@@ -627,10 +638,12 @@ export default function AdEditorModal({
 
               <div className="grid gap-4 md:grid-cols-2">
                 <div>
-                  <label className="mb-2 block text-sm font-semibold text-gray-700">
+                  <label htmlFor="ad-cta-label" className="mb-2 block text-sm font-semibold text-gray-700">
                     CTA label
                   </label>
                   <input
+                    id="ad-cta-label"
+                    maxLength={80}
                     type="text"
                     className="input"
                     value={form.ctaLabel}
@@ -641,10 +654,11 @@ export default function AdEditorModal({
                 </div>
 
                 <div>
-                  <label className="mb-2 block text-sm font-semibold text-gray-700">
+                  <label htmlFor="ad-destination-type" className="mb-2 block text-sm font-semibold text-gray-700">
                     Destination type
                   </label>
                   <select
+                    id="ad-destination-type"
                     className="input"
                     value={form.destinationType}
                     onChange={(event) =>
@@ -658,10 +672,11 @@ export default function AdEditorModal({
               </div>
 
               <div>
-                <label className="mb-2 block text-sm font-semibold text-gray-700">
+                <label htmlFor="ad-destination-url" className="mb-2 block text-sm font-semibold text-gray-700">
                   Destination URL
                 </label>
                 <input
+                  id="ad-destination-url"
                   type="text"
                   className="input"
                   value={form.ctaUrl}
@@ -692,10 +707,11 @@ export default function AdEditorModal({
 
               <div className="grid gap-4 md:grid-cols-2">
                 <div>
-                  <label className="mb-2 block text-sm font-semibold text-gray-700">
+                  <label htmlFor="ad-status" className="mb-2 block text-sm font-semibold text-gray-700">
                     Status
                   </label>
                   <select
+                    id="ad-status"
                     className="input"
                     value={form.status}
                     onChange={(event) => updateForm('status', event.target.value as AdStatus)}
@@ -709,10 +725,11 @@ export default function AdEditorModal({
                 </div>
 
                 <div>
-                  <label className="mb-2 block text-sm font-semibold text-gray-700">
+                  <label htmlFor="ad-placement" className="mb-2 block text-sm font-semibold text-gray-700">
                     Placement
                   </label>
                   <select
+                    id="ad-placement"
                     className="input"
                     value={form.placement}
                     onChange={(event) =>
@@ -725,11 +742,11 @@ export default function AdEditorModal({
               </div>
 
               <div>
-                <label className="mb-2 block text-sm font-semibold text-gray-700">
+                <span id="ad-target-roles-label" className="mb-2 block text-sm font-semibold text-gray-700">
                   Target roles
-                </label>
+                </span>
 
-                <div className="flex flex-wrap gap-3 rounded-2xl border border-gray-200 p-4">
+                <div role="group" aria-labelledby="ad-target-roles-label" className="flex flex-wrap gap-3 rounded-2xl border border-gray-200 p-4">
                   {roleOptions.map((role) => (
                     <label
                       key={role.value}
@@ -752,10 +769,11 @@ export default function AdEditorModal({
 
               <div className="grid gap-4 md:grid-cols-2">
                 <div>
-                  <label className="mb-2 block text-sm font-semibold text-gray-700">
+                  <label htmlFor="ad-starts-at" className="mb-2 block text-sm font-semibold text-gray-700">
                     Starts at
                   </label>
                   <input
+                    id="ad-starts-at"
                     type="datetime-local"
                     className="input"
                     value={form.startsAt}
@@ -764,10 +782,11 @@ export default function AdEditorModal({
                 </div>
 
                 <div>
-                  <label className="mb-2 block text-sm font-semibold text-gray-700">
+                  <label htmlFor="ad-ends-at" className="mb-2 block text-sm font-semibold text-gray-700">
                     Ends at
                   </label>
                   <input
+                    id="ad-ends-at"
                     type="datetime-local"
                     className="input"
                     value={form.endsAt}

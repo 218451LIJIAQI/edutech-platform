@@ -11,6 +11,7 @@ import { usePageTitle } from '@/hooks';
 import { extractErrorMessage } from '@/utils/error-handler';
 
 const CONVERSATION_TIMEOUT_MS = 8000;
+const MAX_MESSAGE_LENGTH = 5000;
 
 const withTimeout = async <T,>(
   promise: Promise<T>,
@@ -48,14 +49,15 @@ const MessagesPage = () => {
   const [contactsError, setContactsError] = useState<string | null>(null);
   const [loadingThread, setLoadingThread] = useState(false);
   const [threadError, setThreadError] = useState<string | null>(null);
-  const [isSending, setIsSending] = useState(false);
+  const [sendingContactId, setSendingContactId] = useState<string | null>(null);
   const requestedContactId = searchParams.get('contactId');
+  const isSending = Boolean(activeContact && sendingContactId === activeContact.id);
 
   const listRef = useRef<HTMLDivElement | null>(null);
   const isMountedRef = useRef(true);
+  const activeContactIdRef = useRef<string | null>(null);
   const conversationRequestRef = useRef(0);
   const scrollFrameRef = useRef<number | null>(null);
-  const appliedUrlContactIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     isMountedRef.current = true;
@@ -90,10 +92,21 @@ const MessagesPage = () => {
     return contacts.filter((c) => `${c.firstName} ${c.lastName}`.toLowerCase().includes(q));
   }, [contacts, searchText]);
 
-  const openConversation = useCallback(async (contact: Contact) => {
+  const openConversation = useCallback(async (contact: Contact, syncUrl = true) => {
     const requestId = conversationRequestRef.current + 1;
     conversationRequestRef.current = requestId;
+    activeContactIdRef.current = contact.id;
     setActiveContact(contact);
+    if (syncUrl) {
+      setSearchParams(
+        (prev) => {
+          const next = new URLSearchParams(prev);
+          next.set('contactId', contact.id);
+          return next;
+        },
+        { replace: true }
+      );
+    }
     setThreadId(null);
     setThreadError(null);
     setMessages([]);
@@ -137,7 +150,7 @@ const MessagesPage = () => {
         setLoadingThread(false);
       }
     }
-  }, [scheduleScrollToBottom]);
+  }, [scheduleScrollToBottom, setSearchParams]);
 
   const loadContacts = useCallback(async () => {
     setLoadingContacts(true);
@@ -176,46 +189,30 @@ const MessagesPage = () => {
     void loadContacts();
   }, [loadContacts]);
 
-  const handleSelectContact = useCallback(
-    (contact: Contact) => {
-      appliedUrlContactIdRef.current = contact.id;
-      setSearchParams(
-        (prev) => {
-          const next = new URLSearchParams(prev);
-          next.set('contactId', contact.id);
-          return next;
-        },
-        { replace: true }
-      );
-      void openConversation(contact);
-    },
-    [openConversation, setSearchParams]
-  );
-
   useEffect(() => {
-    if (!requestedContactId) {
-      appliedUrlContactIdRef.current = null;
+    if (!requestedContactId || contacts.length === 0) {
       return;
     }
-    if (contacts.length === 0 || appliedUrlContactIdRef.current === requestedContactId) {
+    if (activeContact?.id === requestedContactId) {
       return;
     }
     const matched = contacts.find((item) => item.id === requestedContactId);
     if (matched) {
-      appliedUrlContactIdRef.current = requestedContactId;
-      void openConversation(matched);
+      void openConversation(matched, false);
     }
-  }, [contacts, openConversation, requestedContactId]);
+  }, [activeContact?.id, contacts, openConversation, requestedContactId]);
 
   const handleSend = async () => {
     const text = input.trim();
     if (!text || !activeContact || !user || isSending) return;
-    setIsSending(true);
+    const targetContactId = activeContact.id;
+    const snapshotThreadId = threadId;
+    setSendingContactId(targetContactId);
 
     const optimisticId = `local-${Date.now()}-${Math.random().toString(36).slice(2)}`;
     const optimisticMessage: Message = {
       id: optimisticId,
-      threadId: threadId || `contact-${activeContact.id}`,
+      threadId: snapshotThreadId || `contact-${targetContactId}`,
       senderId: user.id,
       content: text,
       createdAt: new Date().toISOString(),
@@ -227,15 +224,15 @@ const MessagesPage = () => {
     scheduleScrollToBottom('smooth');
 
     void withTimeout(
-      messageService.sendMessageToContact(activeContact.id, text),
+      messageService.sendMessageToContact(targetContactId, text),
       CONVERSATION_TIMEOUT_MS,
       'Message sending timed out'
     )
       .then((msg) => {
-        if (!isMountedRef.current) {
+        if (!isMountedRef.current || activeContactIdRef.current !== targetContactId) {
           return;
         }
-        if (!threadId && msg.threadId) {
+        if (!snapshotThreadId && msg.threadId) {
           setThreadId(msg.threadId);
         }
         setMessages((prev) =>
@@ -243,16 +240,21 @@ const MessagesPage = () => {
         );
       })
       .catch((error) => {
-        if (isMountedRef.current) {
-          clientLogger.error('Failed to send message:', error);
-          toast.error(extractErrorMessage(error, 'Failed to send message'));
+        if (!isMountedRef.current) {
+          return;
+        }
+        clientLogger.error('Failed to send message:', error);
+        toast.error(extractErrorMessage(error, 'Failed to send message'));
+        if (activeContactIdRef.current === targetContactId) {
           setMessages((prev) => prev.filter((item) => item.id !== optimisticId));
-          setInput(text);
+          setInput((current) => current || text);
         }
       })
       .finally(() => {
         if (isMountedRef.current) {
-          setIsSending(false);
+          setSendingContactId((current) =>
+            current === targetContactId ? null : current
+          );
         }
       });
   };
@@ -319,8 +321,7 @@ const MessagesPage = () => {
                     <li key={c.id}>
                       <button
                         type="button"
-                        aria-current={activeContact?.id === c.id ? 'true' : undefined}
-                        onClick={() => handleSelectContact(c)}
+                        onClick={() => openConversation(c)}
                         className={`w-full flex items-center gap-3 p-3 rounded-lg hover:bg-gray-50 border ${
                           activeContact?.id === c.id ? 'border-primary-200 bg-primary-50' : 'border-transparent'
                         }`}
@@ -425,7 +426,7 @@ const MessagesPage = () => {
                       value={input}
                       onChange={(e) => setInput(e.target.value)}
                       placeholder="Type a message..."
-                      maxLength={2000}
+                      maxLength={MAX_MESSAGE_LENGTH}
                       className="input flex-1"
                       onKeyDown={(e) => {
                         if (e.key === 'Enter' && !e.shiftKey) {

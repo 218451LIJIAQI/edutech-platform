@@ -12,7 +12,6 @@ import { LessonType } from '@/types';
 import type { Course, QuizAttempt } from '@/types';
 import CourseManagementHeader from '@/features/course-management/header';
 import CourseManagementStatsGrid from '@/features/course-management/stats-grid';
-import { courseManagementTabs } from '@/features/course-management/constants';
 import CourseManagementTabsNav from '@/features/course-management/tabs-nav';
 import CourseManagementOverviewTab from '@/features/course-management/overview-tab';
 import CourseManagementLiveTab from '@/features/course-management/live-tab';
@@ -20,6 +19,7 @@ import CourseManagementNotificationsTab from '@/features/course-management/notif
 import CourseManagementMaterialsTab from '@/features/course-management/materials-tab';
 import CourseManagementRecordingsTab from '@/features/course-management/recordings-tab';
 import CourseManagementQuizResultsTab from '@/features/course-management/quiz-results-tab';
+import { courseManagementTabs } from '@/features/course-management/constants';
 import { buildQuizMetrics } from '@/features/course-management/helpers';
 import { usePageTitle } from '@/hooks';
 import type {
@@ -41,22 +41,20 @@ const CourseManagementPage = () => {
   const [course, setCourse] = useState<Course | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const requestedTab = searchParams.get('tab');
-  const activeTab: CourseManagementTabId = courseManagementTabs.some(
-    (item) => item.id === requestedTab
-  )
-    ? (requestedTab as CourseManagementTabId)
-    : 'overview';
+  const [activeTab, setActiveTabState] = useState<CourseManagementTabId>(() => {
+    const requested = searchParams.get('tab');
+    return courseManagementTabs.some((item) => item.id === requested)
+      ? (requested as CourseManagementTabId)
+      : 'overview';
+  });
+
   const setActiveTab = useCallback(
     (nextTab: CourseManagementTabId) => {
+      setActiveTabState(nextTab);
       setSearchParams(
         (prev) => {
           const next = new URLSearchParams(prev);
-          if (nextTab === 'overview') {
-            next.delete('tab');
-          } else {
-            next.set('tab', nextTab);
-          }
+          next.set('tab', nextTab);
           return next;
         },
         { replace: true }
@@ -322,7 +320,12 @@ const CourseManagementPage = () => {
             onTabChange={setActiveTab}
           />
 
-          <div className="p-6">
+          <div
+            id={`course-mgmt-panel-${activeTab}`}
+            role="tabpanel"
+            aria-labelledby={`course-mgmt-tab-${activeTab}`}
+            className="p-6"
+          >
             {activeTab === 'overview' ? (
               <CourseManagementOverviewTab course={course} courseId={courseId} />
             ) : null}

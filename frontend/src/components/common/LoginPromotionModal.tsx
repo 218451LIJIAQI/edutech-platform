@@ -370,7 +370,7 @@ export default function LoginPromotionModal() {
         onFocusCapture={() => setIsPaused(true)}
         onBlurCapture={() => setIsPaused(false)}
         className={clsx(
-          'relative w-full max-w-5xl overflow-hidden rounded-[2rem] border shadow-[0_40px_120px_rgba(15,23,42,0.45)]',
+          'relative w-full max-w-5xl max-h-[90vh] overflow-y-auto rounded-[2rem] border shadow-[0_40px_120px_rgba(15,23,42,0.45)]',
           'bg-gradient-to-br',
           currentTheme.shell
         )}

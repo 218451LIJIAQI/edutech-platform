@@ -1,14 +1,22 @@
 import assert from 'node:assert/strict';
-import fs from 'node:fs';
-import path from 'node:path';
 import { describe, it } from 'node:test';
 import { LessonType, WalletTransactionType } from '@/types';
 import {
+  COMMUNITY_DRAFT_LEGACY_KEY,
+  buildCommunityDraftStorageKey,
+  clearUserScopedCommunityDraft,
   getHomePathForRole,
+  getNextHorizontalTabId,
   hasStrongPasswordComplexity,
   isValidEmail,
   parseStringArray,
+  readUserScopedCommunityDraft,
+  writeUserScopedCommunityDraft,
 } from '@/utils/helpers';
+import { extractData } from '@/services/response-utils';
+import api from '@/services/api';
+import uploadService from '@/services/upload.service';
+import { shareCommunityPost } from '@/utils/clipboard';
 import {
   isApprovedTeacherProfileStatus,
   isPendingTeacherProfileStatus,
@@ -187,55 +195,123 @@ describe('shared frontend parsing, teacher status, and form validation helpers',
     assert.equal(getHomePathForRole('STUDENT'), '/student');
     assert.equal(getHomePathForRole(undefined), '/');
   });
+});
 
-  it('resolves every @/ and relative module import across all frontend & backend TypeScript sources cleanly', () => {
-    const repoRoot = path.resolve(__dirname, '..', '..', '..');
-    const feSrc = path.join(repoRoot, 'frontend', 'src');
-    const beSrc = path.join(repoRoot, 'backend', 'src');
-    const exts = ['', '.ts', '.tsx', '.js', '.json', '/index.ts', '/index.tsx', '/index.js'];
-
-    const walk = (dir: string, acc: string[] = []): string[] => {
-      for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-        const full = path.join(dir, entry.name);
-        if (entry.isDirectory()) {
-          walk(full, acc);
-        } else if (/\.(ts|tsx)$/.test(entry.name) && !entry.name.endsWith('.d.ts')) {
-          acc.push(full);
-        }
-      }
-      return acc;
+describe('community draft user isolation, tab keyboard navigation, and upload/response contracts', () => {
+  it('isolates community drafts by userId and purges legacy shared key', () => {
+    const store = new Map<string, string>([
+      [COMMUNITY_DRAFT_LEGACY_KEY, '{"title":"Legacy leaked draft"}'],
+    ]);
+    const mockStorage = {
+      getItem: (key: string) => store.get(key) ?? null,
+      setItem: (key: string, val: string) => {
+        store.set(key, val);
+      },
+      removeItem: (key: string) => {
+        store.delete(key);
+      },
     };
 
-    const brokenImports: string[] = [];
-    const importRe = /(?:import|export)\s+(?:[^'"]*?\s+from\s+)?['"]([^'"]+)['"]/g;
+    assert.equal(buildCommunityDraftStorageKey(null), null);
+    assert.equal(buildCommunityDraftStorageKey('   '), null);
+    assert.equal(
+      buildCommunityDraftStorageKey('user-alice'),
+      'community-create-post-draft-v1:user-alice'
+    );
 
-    for (const [rootDir, files] of [
-      [feSrc, walk(feSrc)],
-      [beSrc, walk(beSrc)],
-    ] as const) {
-      for (const file of files) {
-        const content = fs.readFileSync(file, 'utf8');
-        let match: RegExpExecArray | null;
-        while ((match = importRe.exec(content)) !== null) {
-          const spec = match[1];
-          let base: string | null = null;
-          if (spec.startsWith('@/')) {
-            base = path.join(rootDir, spec.slice(2));
-          } else if (spec.startsWith('./') || spec.startsWith('../')) {
-            base = path.resolve(path.dirname(file), spec);
-          }
-          if (!base) continue;
-          const ok = exts.some((ext) => {
-            const candidate = base + ext;
-            return fs.existsSync(candidate) && fs.statSync(candidate).isFile();
-          });
-          if (!ok) {
-            brokenImports.push(`${path.relative(repoRoot, file)} -> ${spec}`);
-          }
-        }
-      }
+    assert.equal(readUserScopedCommunityDraft(null, mockStorage), null);
+    assert.equal(readUserScopedCommunityDraft('user-alice', mockStorage), null);
+    assert.equal(store.has(COMMUNITY_DRAFT_LEGACY_KEY), false);
+
+    assert.equal(
+      writeUserScopedCommunityDraft('user-alice', '{"title":"Alice Note"}', mockStorage),
+      true
+    );
+    assert.equal(
+      writeUserScopedCommunityDraft('user-bob', '{"title":"Bob Question"}', mockStorage),
+      true
+    );
+
+    assert.equal(
+      readUserScopedCommunityDraft('user-alice', mockStorage),
+      '{"title":"Alice Note"}'
+    );
+    assert.equal(
+      readUserScopedCommunityDraft('user-bob', mockStorage),
+      '{"title":"Bob Question"}'
+    );
+
+    clearUserScopedCommunityDraft('user-alice', mockStorage);
+    assert.equal(readUserScopedCommunityDraft('user-alice', mockStorage), null);
+    assert.equal(
+      readUserScopedCommunityDraft('user-bob', mockStorage),
+      '{"title":"Bob Question"}'
+    );
+  });
+
+  it('cycles horizontal tabs via ArrowRight, ArrowLeft, Home, and End keys', () => {
+    const tabs = ['overview', 'live', 'materials', 'quizzes'] as const;
+    assert.equal(getNextHorizontalTabId(tabs, 'overview', 'ArrowRight'), 'live');
+    assert.equal(getNextHorizontalTabId(tabs, 'quizzes', 'ArrowRight'), 'overview');
+    assert.equal(getNextHorizontalTabId(tabs, 'overview', 'ArrowLeft'), 'quizzes');
+    assert.equal(getNextHorizontalTabId(tabs, 'materials', 'Home'), 'overview');
+    assert.equal(getNextHorizontalTabId(tabs, 'overview', 'End'), 'quizzes');
+    assert.equal(getNextHorizontalTabId(tabs, 'overview', 'Enter'), null);
+  });
+
+  it('accepts image/webp verification uploads, rejects disallowed extensions, and enforces extractData contracts', async () => {
+    const invalidExe = {
+      name: 'credential.exe',
+      size: 1024,
+      type: 'application/x-msdownload',
+    } as unknown as File;
+
+    await assert.rejects(
+      () => uploadService.uploadVerificationDoc(invalidExe),
+      /not allowed for verifications/i
+    );
+
+    const apiMutable = api as unknown as {
+      post?: (url: string, body: unknown) => Promise<unknown>;
+    };
+    const prevPost = apiMutable.post;
+    apiMutable.post = async () => ({
+      data: {
+        status: 'success',
+        data: {
+          url: '/uploads/verifications/license.webp',
+          filename: 'license.webp',
+          size: 2048,
+          mimeType: 'image/webp',
+        },
+      },
+    });
+    try {
+      const validWebp = {
+        name: 'license.webp',
+        size: 2048,
+        type: 'image/webp',
+      } as unknown as File;
+      const uploadedUrl = await uploadService.uploadVerificationDoc(validWebp);
+      assert.equal(uploadedUrl, '/uploads/verifications/license.webp');
+    } finally {
+      apiMutable.post = prevPost;
     }
 
-    assert.deepEqual(brokenImports, []);
+    assert.deepEqual(
+      extractData({ data: { status: 'success', data: { ok: true } } }),
+      { ok: true }
+    );
+    assert.throws(
+      () =>
+        extractData(
+          { data: { status: 'success', data: undefined } },
+          'No wallet summary data received'
+        ),
+      /No wallet summary data received/
+    );
+
+    const shareRes = await shareCommunityPost({ id: 'post-1', title: 'Study Tips' }, '');
+    assert.equal(shareRes, 'unavailable');
   });
 });

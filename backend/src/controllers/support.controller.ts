@@ -15,9 +15,9 @@ import {
   sendSuccess,
 } from "../utils/http";
 
-const MAX_SUBJECT_LENGTH = 200;
+const MAX_SUBJECT_LENGTH = 150;
 const MAX_DESCRIPTION_LENGTH = 5000;
-const MAX_CATEGORY_LENGTH = 100;
+const MAX_CATEGORY_LENGTH = 80;
 const MAX_MESSAGE_LENGTH = 5000;
 const MAX_RESOLUTION_LENGTH = 3000;
 const MAX_ATTACHMENT_LENGTH = 1000;

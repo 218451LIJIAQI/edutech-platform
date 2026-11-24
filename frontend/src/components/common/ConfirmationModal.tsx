@@ -154,7 +154,7 @@ const ConfirmationModal = ({
         aria-modal="true"
         aria-labelledby={titleId}
         aria-describedby={descriptionId}
-        className={`w-full max-w-lg rounded-2xl border bg-white shadow-2xl ${toneConfig.border}`}
+        className={`w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-2xl border bg-white shadow-2xl ${toneConfig.border}`}
       >
         <div className="border-b border-gray-100 p-6">
           <div className="flex items-start gap-4">

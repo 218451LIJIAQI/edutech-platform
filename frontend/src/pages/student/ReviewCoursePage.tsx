@@ -266,7 +266,7 @@ const ReviewCoursePage = () => {
 
             <form onSubmit={handleSubmitReview} className="space-y-8" noValidate>
               {validationError && (
-                <div role="alert" className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+                <div id="review-course-validation-error" role="alert" className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
                   {validationError}
                 </div>
               )}
@@ -315,6 +315,8 @@ const ReviewCoursePage = () => {
                 </label>
                 <textarea
                   id="course-review-comment"
+                  aria-invalid={Boolean(validationError)}
+                  aria-describedby={validationError ? 'review-course-validation-error' : undefined}
                   value={comment}
                   onChange={(e) => {
                     setComment(e.target.value);

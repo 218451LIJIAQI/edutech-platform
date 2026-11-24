@@ -68,7 +68,7 @@ const NotFoundPage = () => {
 
         {/* Helpful Links */}
         <div className="mt-16 pt-10 border-t border-gray-200/60">
-          <p className="text-sm text-gray-400 mb-6 font-medium">Maybe these links can help:</p>
+          <p className="text-sm text-slate-500 mb-6 font-medium">Maybe these links can help:</p>
           <div className="flex flex-wrap justify-center gap-4">
             <Link to="/courses" className="inline-flex items-center gap-2 px-4 py-2 bg-gray-100 hover:bg-primary-100 text-gray-600 hover:text-primary-600 rounded-xl font-medium text-sm transition-colors">
               <BookOpen className="w-4 h-4" />

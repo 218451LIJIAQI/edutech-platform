@@ -29,8 +29,13 @@ const DEFAULT_PAGE = 1;
 const DEFAULT_LIMIT = 10;
 const MAX_LIMIT = 100;
 const MAX_SHORT_TEXT_LENGTH = 200;
-const MAX_LONG_TEXT_LENGTH = 5000;
-const MAX_ARRAY_ITEMS = 30;
+const MAX_CREDENTIAL_ID_LENGTH = 100;
+const MAX_SELF_INTRO_LENGTH = 500;
+const MAX_REVIEW_NOTES_LENGTH = 500;
+const MAX_TEACHING_STYLE_LENGTH = 1000;
+const MAX_EXPERIENCE_TEXT_LENGTH = 2000;
+const MAX_PROFILE_LIST_ITEMS = 20;
+const MAX_CERTIFICATE_PHOTOS = 10;
 const MAX_URL_LENGTH = 1000;
 
 const REVIEW_VERIFICATION_STATUSES = [
@@ -58,39 +63,39 @@ const parseExtendedProfilePayload = (body: Request["body"]) => ({
   selfIntroduction: parseOptionalString(
     body?.selfIntroduction,
     "selfIntroduction",
-    MAX_LONG_TEXT_LENGTH,
+    MAX_SELF_INTRO_LENGTH,
   ),
   educationBackground: parseNullableString(
     body?.educationBackground,
     "educationBackground",
-    MAX_LONG_TEXT_LENGTH,
+    MAX_EXPERIENCE_TEXT_LENGTH,
   ),
   teachingExperience: parseNullableString(
     body?.teachingExperience,
     "teachingExperience",
-    MAX_LONG_TEXT_LENGTH,
+    MAX_EXPERIENCE_TEXT_LENGTH,
   ),
   awards:
     body?.awards === null
       ? []
       : parseStringArray(body?.awards, "awards", {
-          maxItems: MAX_ARRAY_ITEMS,
+          maxItems: MAX_PROFILE_LIST_ITEMS,
         }),
   specialties: parseStringArray(body?.specialties, "specialties", {
-    maxItems: MAX_ARRAY_ITEMS,
+    maxItems: MAX_PROFILE_LIST_ITEMS,
   }),
   teachingStyle: parseNullableString(
     body?.teachingStyle,
     "teachingStyle",
-    MAX_LONG_TEXT_LENGTH,
+    MAX_TEACHING_STYLE_LENGTH,
   ),
   languages: parseStringArray(body?.languages, "languages", {
-    maxItems: MAX_ARRAY_ITEMS,
+    maxItems: MAX_PROFILE_LIST_ITEMS,
   }),
   yearsOfExperience: parseNumber(
     body?.yearsOfExperience,
     "yearsOfExperience",
-    { min: 0, integer: true },
+    { min: 0, max: 70, integer: true },
   ),
   profilePhoto: parseNullableString(
     body?.profilePhoto,
@@ -101,7 +106,7 @@ const parseExtendedProfilePayload = (body: Request["body"]) => ({
     body?.certificatePhotos === null
       ? []
       : parseStringArray(body?.certificatePhotos, "certificatePhotos", {
-          maxItems: 10,
+          maxItems: MAX_CERTIFICATE_PHOTOS,
         }),
 });
 
@@ -184,7 +189,7 @@ class TeacherController {
         credentialId: parseOptionalString(
           req.body?.credentialId,
           "credentialId",
-          MAX_SHORT_TEXT_LENGTH,
+          MAX_CREDENTIAL_ID_LENGTH,
         ),
         credentialUrl: parseOptionalString(
           req.body?.credentialUrl,
@@ -287,7 +292,7 @@ class TeacherController {
       parseOptionalString(
         req.body?.reviewNotes,
         "reviewNotes",
-        MAX_LONG_TEXT_LENGTH,
+        MAX_REVIEW_NOTES_LENGTH,
       ),
     );
     sendSuccess(res, verification, "Verification reviewed successfully");
@@ -345,7 +350,7 @@ class TeacherController {
       parseOptionalString(
         req.body?.reviewNotes,
         "reviewNotes",
-        MAX_LONG_TEXT_LENGTH,
+        MAX_REVIEW_NOTES_LENGTH,
       ),
     );
     sendSuccess(res, profile, "Teacher profile reviewed successfully");
@@ -394,7 +399,7 @@ class TeacherController {
       parseOptionalString(
         req.body?.reviewNotes,
         "reviewNotes",
-        MAX_LONG_TEXT_LENGTH,
+        MAX_REVIEW_NOTES_LENGTH,
       ),
     );
     sendSuccess(res, updated, "Teacher registration reviewed successfully");

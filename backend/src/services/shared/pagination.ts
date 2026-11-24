@@ -9,7 +9,7 @@ interface OffsetPaginationWindow {
   offset: number;
 }
 
-export interface PaginationMeta {
+interface PaginationMeta {
   total: number;
   page: number;
   limit: number;

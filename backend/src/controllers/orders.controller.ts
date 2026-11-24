@@ -14,9 +14,9 @@ import {
 } from "../utils/http";
 
 const MAX_CANCEL_REASON_LENGTH = 500;
-const MAX_REASON_LENGTH = 1000;
-const MAX_BANK_DETAILS_LENGTH = 1000;
-const MAX_NOTES_LENGTH = 1000;
+const MAX_REFUND_REASON_LENGTH = 1000;
+const MAX_REFUND_NOTES_LENGTH = 1000;
+const MAX_BANK_DETAILS_LENGTH = 2000;
 const ALLOWED_STUDENT_REFUND_METHODS = [
   RefundMethod.ORIGINAL_PAYMENT,
   RefundMethod.BANK_TRANSFER,
@@ -73,11 +73,11 @@ class OrdersController {
       userId,
       orderId,
       amount,
-      parseOptionalString(req.body?.reason, "reason", MAX_REASON_LENGTH),
+      parseOptionalString(req.body?.reason, "reason", MAX_REFUND_REASON_LENGTH),
       parseOptionalString(req.body?.reasonCategory, "reasonCategory", 100),
       refundMethod,
       bankDetails,
-      parseOptionalString(req.body?.notes, "notes", MAX_NOTES_LENGTH),
+      parseOptionalString(req.body?.notes, "notes", MAX_REFUND_NOTES_LENGTH),
     );
 
     sendCreated(res, refund, "Refund requested successfully");

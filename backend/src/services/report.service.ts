@@ -69,6 +69,7 @@ type ReportContentType =
   | "community_comment";
 
 const REPORT_TYPES = Object.values(ReportType) as ReportType[];
+const MAX_REPORT_RESOLUTION_LENGTH = 2000;
 const REPORT_STATUSES = Object.values(ReportStatus) as ReportStatus[];
 const FINAL_REPORT_STATUSES = new Set<ReportStatus>([
   ReportStatus.RESOLVED,
@@ -389,7 +390,11 @@ class ReportService {
       REPORT_STATUSES,
       "report status",
     );
-    const normalizedResolution = normalizeOptionalSanitizedText(resolution);
+    const normalizedResolution = normalizeOptionalSanitizedText(
+      resolution,
+      "Resolution",
+      MAX_REPORT_RESOLUTION_LENGTH,
+    );
     const isFinalStatus = FINAL_REPORT_STATUSES.has(normalizedStatus);
 
     if (isFinalStatus && !normalizedResolution) {

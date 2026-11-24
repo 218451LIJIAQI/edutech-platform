@@ -123,6 +123,15 @@ const ProfilePage = () => {
       toast.error('First name and last name are required');
       return;
     }
+    if (
+      trimmedFirstName.length < 2 ||
+      trimmedFirstName.length > 50 ||
+      trimmedLastName.length < 2 ||
+      trimmedLastName.length > 50
+    ) {
+      toast.error('First name and last name must be between 2 and 50 characters');
+      return;
+    }
 
     setIsSaving(true);
     try {
@@ -337,76 +346,100 @@ const ProfilePage = () => {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 {/* First Name */}
                 <div>
-                  <label
-                    htmlFor={isEditing ? 'profile-first-name' : undefined}
-                    className="block text-sm font-bold text-gray-700 mb-3 flex items-center space-x-2"
-                  >
-                    <div className="p-2 bg-primary-100 rounded-lg">
-                      <User className="w-4 h-4 text-primary-600" />
-                    </div>
-                    <span>First Name</span>
-                  </label>
                   {isEditing ? (
-                    <input
-                      id="profile-first-name"
-                      type="text"
-                      name="firstName"
-                      value={formData.firstName}
-                      onChange={handleChange}
-                      className="input"
-                      placeholder="Enter first name"
-                    />
+                    <>
+                      <label
+                        htmlFor="profile-first-name"
+                        className="block text-sm font-bold text-gray-700 mb-3 flex items-center space-x-2"
+                      >
+                        <div className="p-2 bg-primary-100 rounded-lg">
+                          <User className="w-4 h-4 text-primary-600" />
+                        </div>
+                        <span>First Name</span>
+                      </label>
+                      <input
+                        id="profile-first-name"
+                        type="text"
+                        name="firstName"
+                        minLength={2}
+                        maxLength={50}
+                        value={formData.firstName}
+                        onChange={handleChange}
+                        className="input"
+                        placeholder="Enter first name"
+                      />
+                    </>
                   ) : (
-                    <p className="text-lg font-semibold text-gray-900">{user?.firstName}</p>
+                    <>
+                      <div className="text-sm font-bold text-gray-700 mb-3 flex items-center space-x-2">
+                        <div className="p-2 bg-primary-100 rounded-lg">
+                          <User className="w-4 h-4 text-primary-600" />
+                        </div>
+                        <span>First Name</span>
+                      </div>
+                      <p className="text-lg font-semibold text-gray-900">{user?.firstName}</p>
+                    </>
                   )}
                 </div>
 
                 {/* Last Name */}
                 <div>
-                  <label
-                    htmlFor={isEditing ? 'profile-last-name' : undefined}
-                    className="block text-sm font-bold text-gray-700 mb-3 flex items-center space-x-2"
-                  >
-                    <div className="p-2 bg-primary-100 rounded-lg">
-                      <User className="w-4 h-4 text-primary-600" />
-                    </div>
-                    <span>Last Name</span>
-                  </label>
                   {isEditing ? (
-                    <input
-                      id="profile-last-name"
-                      type="text"
-                      name="lastName"
-                      value={formData.lastName}
-                      onChange={handleChange}
-                      className="input"
-                      placeholder="Enter last name"
-                    />
+                    <>
+                      <label
+                        htmlFor="profile-last-name"
+                        className="block text-sm font-bold text-gray-700 mb-3 flex items-center space-x-2"
+                      >
+                        <div className="p-2 bg-primary-100 rounded-lg">
+                          <User className="w-4 h-4 text-primary-600" />
+                        </div>
+                        <span>Last Name</span>
+                      </label>
+                      <input
+                        id="profile-last-name"
+                        type="text"
+                        name="lastName"
+                        minLength={2}
+                        maxLength={50}
+                        value={formData.lastName}
+                        onChange={handleChange}
+                        className="input"
+                        placeholder="Enter last name"
+                      />
+                    </>
                   ) : (
-                    <p className="text-lg font-semibold text-gray-900">{user?.lastName}</p>
+                    <>
+                      <div className="text-sm font-bold text-gray-700 mb-3 flex items-center space-x-2">
+                        <div className="p-2 bg-primary-100 rounded-lg">
+                          <User className="w-4 h-4 text-primary-600" />
+                        </div>
+                        <span>Last Name</span>
+                      </div>
+                      <p className="text-lg font-semibold text-gray-900">{user?.lastName}</p>
+                    </>
                   )}
                 </div>
 
                 {/* Email (Read-only) */}
                 <div>
-                  <label className="block text-sm font-bold text-gray-700 mb-3 flex items-center space-x-2">
+                  <div className="text-sm font-bold text-gray-700 mb-3 flex items-center space-x-2">
                     <div className="p-2 bg-blue-100 rounded-lg">
                       <Mail className="w-4 h-4 text-blue-600" />
                     </div>
                     <span>Email Address</span>
-                  </label>
+                  </div>
                   <p className="text-lg font-semibold text-gray-900">{user?.email}</p>
                   <p className="text-xs text-gray-500 mt-2">Email cannot be changed</p>
                 </div>
 
                 {/* Role (Read-only) */}
                 <div>
-                  <label className="block text-sm font-bold text-gray-700 mb-3 flex items-center space-x-2">
+                  <div className="text-sm font-bold text-gray-700 mb-3 flex items-center space-x-2">
                     <div className="p-2 bg-purple-100 rounded-lg">
                       <Shield className="w-4 h-4 text-purple-600" />
                     </div>
                     <span>Account Type</span>
-                  </label>
+                  </div>
                   <div className="inline-block">
                     <span className="badge-primary capitalize">
                       {user?.role.toLowerCase()}
@@ -535,6 +568,7 @@ const ProfilePage = () => {
                 id="profile-current-password"
                 ref={currentPasswordInputRef}
                 type="password"
+                maxLength={72}
                 className="input"
                 value={currentPassword}
                 onChange={(e) => setCurrentPassword(e.target.value)}
@@ -546,6 +580,10 @@ const ProfilePage = () => {
               <input
                 id="profile-new-password"
                 type="password"
+                minLength={8}
+                maxLength={72}
+                aria-invalid={Boolean(passwordValidationMessage)}
+                aria-describedby={passwordValidationMessage ? 'profile-password-error' : undefined}
                 className="input"
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
@@ -557,6 +595,10 @@ const ProfilePage = () => {
               <input
                 id="profile-confirm-password"
                 type="password"
+                minLength={8}
+                maxLength={72}
+                aria-invalid={Boolean(passwordValidationMessage)}
+                aria-describedby={passwordValidationMessage ? 'profile-password-error' : undefined}
                 className="input"
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
@@ -602,7 +644,7 @@ const ProfilePage = () => {
             </button>
           </div>
           {passwordValidationMessage ? (
-            <p className="mt-3 text-sm text-danger-600" role="alert">
+            <p id="profile-password-error" className="mt-3 text-sm text-danger-600" role="alert">
               {passwordValidationMessage}
             </p>
           ) : null}

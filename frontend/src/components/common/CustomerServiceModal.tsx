@@ -27,6 +27,7 @@ import {
   SupportTicketStatus,
 } from '@/types';
 import { extractErrorMessage } from '@/utils/error-handler';
+import { getNextHorizontalTabId } from '@/utils/helpers';
 import { openProtectedAsset } from '@/utils/protected-assets';
 import { toStorableBackendAssetPath } from '@/utils/runtime';
 import {
@@ -504,14 +505,33 @@ const CustomerServiceModal = ({
           conversations.
         </p>
 
-        <div className="flex border-b bg-gray-50" role="tablist">
+        <div
+          className="flex border-b bg-gray-50"
+          role="tablist"
+          aria-label="Customer support views"
+        >
           {(['tickets', 'create'] as const).map((tab) => (
             <button
               key={tab}
+              id={`support-modal-tab-${tab}`}
               type="button"
               role="tab"
               aria-selected={activeTab === tab}
+              aria-controls={`support-modal-panel-${tab}`}
+              tabIndex={activeTab === tab ? 0 : -1}
               onClick={() => handleChangeTab(tab)}
+              onKeyDown={(event) => {
+                const nextTab = getNextHorizontalTabId(
+                  ['tickets', 'create'] as const,
+                  activeTab,
+                  event.key
+                );
+                if (nextTab) {
+                  event.preventDefault();
+                  handleChangeTab(nextTab);
+                  document.getElementById(`support-modal-tab-${nextTab}`)?.focus();
+                }
+              }}
               disabled={isBusy}
               className={`flex-1 px-6 py-4 font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
                 activeTab === tab
@@ -528,7 +548,12 @@ const CustomerServiceModal = ({
 
         <div className="flex-1 overflow-y-auto">
           {activeTab === 'tickets' ? (
-            <div className="p-6">
+            <div
+              id="support-modal-panel-tickets"
+              role="tabpanel"
+              aria-labelledby="support-modal-tab-tickets"
+              className="p-6"
+            >
               {loading ? (
                 <div className="flex items-center justify-center py-12">
                   <Loader2 className="h-6 w-6 animate-spin text-primary-600" />
@@ -750,7 +775,12 @@ const CustomerServiceModal = ({
               )}
             </div>
           ) : (
-            <div className="space-y-4 p-6">
+            <div
+              id="support-modal-panel-create"
+              role="tabpanel"
+              aria-labelledby="support-modal-tab-create"
+              className="space-y-4 p-6"
+            >
               {createFormError ? (
                 <div
                   role="alert"

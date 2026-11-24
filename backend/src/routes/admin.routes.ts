@@ -23,9 +23,58 @@ const supportResponseValidation = [
     .notEmpty()
     .withMessage("message is required")
     .bail()
-    .isLength({ max: 2000 })
+    .isLength({ max: 5000 })
     .withMessage("message too long"),
   supportAttachmentBodyField({ nullableOnly: true }),
+];
+
+const supportResolveValidation = [
+  idParam,
+  body("resolution")
+    .trim()
+    .notEmpty()
+    .withMessage("resolution is required")
+    .bail()
+    .isLength({ max: 3000 })
+    .withMessage("resolution too long"),
+];
+
+const reportStatusValidation = [
+  idParam,
+  body("resolution")
+    .optional({ nullable: true, checkFalsy: true })
+    .isString()
+    .withMessage("resolution must be a string")
+    .bail()
+    .trim()
+    .isLength({ max: 2000 })
+    .withMessage("resolution must not exceed 2000 characters"),
+];
+
+const refundAdminNotesValidation = [
+  idParam,
+  body("adminNotes")
+    .optional({ nullable: true, checkFalsy: true })
+    .isString()
+    .withMessage("adminNotes must be a string")
+    .bail()
+    .trim()
+    .isLength({ max: 2000 })
+    .withMessage("adminNotes must not exceed 2000 characters"),
+];
+
+const refundRejectValidation = [
+  idParam,
+  body("rejectionReason")
+    .isString()
+    .withMessage("rejectionReason must be a string")
+    .bail()
+    .trim()
+    .notEmpty()
+    .withMessage("rejectionReason is required")
+    .bail()
+    .isLength({ max: 1000 })
+    .withMessage("rejectionReason must not exceed 1000 characters"),
 ];
 
 router.use(adminOnly);
@@ -70,15 +119,35 @@ router.get("/verifications", adminController.getAllVerifications);
 router.put("/verifications/:id", validate(idParam), adminController.reviewVerification);
 
 router.get("/reports", adminController.getAllReports);
-router.put("/reports/:id", validate(idParam), adminController.updateReportStatus);
+router.put(
+  "/reports/:id",
+  validate(reportStatusValidation),
+  adminController.updateReportStatus,
+);
 
 router.get("/refunds/stats", refundAdminController.getStats);
 router.get("/refunds", refundAdminController.getAllRefunds);
 router.get("/refunds/:id", validate(idParam), refundAdminController.getRefundById);
-router.post("/refunds/:id/approve", validate(idParam), refundAdminController.approveRefund);
-router.post("/refunds/:id/reject", validate(idParam), refundAdminController.rejectRefund);
-router.post("/refunds/:id/processing", validate(idParam), refundAdminController.markAsProcessing);
-router.post("/refunds/:id/complete", validate(idParam), refundAdminController.completeRefund);
+router.post(
+  "/refunds/:id/approve",
+  validate(refundAdminNotesValidation),
+  refundAdminController.approveRefund,
+);
+router.post(
+  "/refunds/:id/reject",
+  validate(refundRejectValidation),
+  refundAdminController.rejectRefund,
+);
+router.post(
+  "/refunds/:id/processing",
+  validate(refundAdminNotesValidation),
+  refundAdminController.markAsProcessing,
+);
+router.post(
+  "/refunds/:id/complete",
+  validate(refundAdminNotesValidation),
+  refundAdminController.completeRefund,
+);
 
 router.get("/support/stats", supportAdminController.getStats);
 router.get("/support", supportAdminController.getAllTickets);
@@ -89,7 +158,11 @@ router.post(
   validate(supportResponseValidation),
   supportAdminController.addResponse,
 );
-router.post("/support/:id/resolve", validate(idParam), supportAdminController.resolveTicket);
+router.post(
+  "/support/:id/resolve",
+  validate(supportResolveValidation),
+  supportAdminController.resolveTicket,
+);
 router.post("/support/:id/close", validate(idParam), supportAdminController.closeTicket);
 
 router.get("/wallet/payouts", walletAdminController.listPayouts);

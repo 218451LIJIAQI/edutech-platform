@@ -72,6 +72,8 @@ type TeacherRefundAdjustment = {
 };
 
 const REFUND_STATUSES = Object.values(RefundStatus) as RefundStatus[];
+const MAX_ADMIN_NOTES_LENGTH = 2000;
+const MAX_REJECTION_REASON_LENGTH = 1000;
 const CREDITED_TO_PLATFORM_WALLET_NOTE =
   "Refund amount was credited to the student's platform wallet.";
 
@@ -211,7 +213,11 @@ class RefundAdminService {
     refundId: string,
     adminNotes?: string,
   ): Promise<RefundWithOrderUser> {
-    const note = normalizeOptionalSanitizedText(adminNotes);
+    const note = normalizeOptionalSanitizedText(
+      adminNotes,
+      "Admin notes",
+      MAX_ADMIN_NOTES_LENGTH,
+    );
     const updated = await transitionRefundStatus(
       normalizeRequiredSanitizedText(refundId, "Refund ID"),
       RefundStatus.PENDING,
@@ -238,6 +244,7 @@ class RefundAdminService {
     const sanitizedReason = normalizeRequiredSanitizedText(
       rejectionReason,
       "Rejection reason",
+      MAX_REJECTION_REASON_LENGTH,
     );
     const updated = await transitionRefundStatus(
       normalizeRequiredSanitizedText(refundId, "Refund ID"),
@@ -262,7 +269,11 @@ class RefundAdminService {
     refundId: string,
     adminNotes?: string,
   ): Promise<RefundWithOrderUser> {
-    const note = normalizeOptionalSanitizedText(adminNotes);
+    const note = normalizeOptionalSanitizedText(
+      adminNotes,
+      "Admin notes",
+      MAX_ADMIN_NOTES_LENGTH,
+    );
     return transitionRefundStatus(
       normalizeRequiredSanitizedText(refundId, "Refund ID"),
       RefundStatus.APPROVED,
@@ -279,7 +290,11 @@ class RefundAdminService {
       refundId,
       "Refund ID",
     );
-    const note = normalizeOptionalSanitizedText(adminNotes);
+    const note = normalizeOptionalSanitizedText(
+      adminNotes,
+      "Admin notes",
+      MAX_ADMIN_NOTES_LENGTH,
+    );
 
     await prisma.$transaction(async (tx) => {
       const completionTime = new Date();

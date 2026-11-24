@@ -14,13 +14,17 @@ import { extractErrorMessage } from '@/utils/error-handler';
 import { getTeacherDisplayPhoto } from '@/utils/asset-normalizers';
 import { getAccessToken, hasRecoverableAuthState } from '@/utils/auth-storage';
 import { isProtectedUploadAssetUrl } from '@/utils/protected-assets';
+import { resolveBackendAssetUrl } from '@/utils/runtime';
 import { normalizeSafeHttpUrl, normalizeSafeInternalPath } from '@/utils/safe-url';
 import { usePageTitle } from '@/hooks';
 
 const normalizePublicAssetUrl = (url?: string): string => {
   const safeUrl = normalizeSafeHttpUrl(url) || normalizeSafeInternalPath(url);
+  if (!safeUrl || isProtectedUploadAssetUrl(safeUrl)) {
+    return '';
+  }
 
-  return safeUrl && !isProtectedUploadAssetUrl(safeUrl) ? safeUrl : '';
+  return resolveBackendAssetUrl(safeUrl) || safeUrl;
 };
 
 const isPdfCertificateUrl = (url: string): boolean => {

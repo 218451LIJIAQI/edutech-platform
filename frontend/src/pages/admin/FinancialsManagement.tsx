@@ -3,12 +3,25 @@ import { useSearchParams } from 'react-router-dom';
 import clientLogger from '@/utils/logger';
 import adminService, { FinancialStats, PaginationMeta, SettlementSummaryRow, TeacherCommissionListItem, FinancialReportSummaryData, TeacherSettlementsData, TeacherSettlementItem } from '@/services/admin.service';
 import { AlertCircle, DollarSign, TrendingUp, PieChart, Receipt, Calendar, RefreshCcw, Percent, Search, Download, Zap, FileText } from 'lucide-react';
-import { AdminPayoutsPanel, RevenueAnalytics } from '@/components/admin';
+import AdminPayoutsPanel from '@/components/admin/AdminPayoutsPanel';
+import RevenueAnalytics from '@/components/admin/RevenueAnalytics';
 import toast from 'react-hot-toast';
 import { extractErrorMessage } from '@/utils/error-handler';
 import { buildCsvContent, downloadCsvFile } from '@/utils/download';
-import { formatCurrency as formatMoney } from '@/utils/helpers';
+import { formatCurrency as formatMoney, getNextHorizontalTabId } from '@/utils/helpers';
 import { usePageTitle } from '@/hooks';
+
+const FINANCIAL_TABS = [
+  { id: 'payments', label: 'Payments' },
+  { id: 'commissions', label: 'Commissions' },
+  { id: 'settlements', label: 'Settlements' },
+  { id: 'payouts', label: 'Payouts' },
+  { id: 'analytics', label: 'Analytics' },
+  { id: 'auto-reports', label: 'Auto Reports', isAuto: true },
+] as const;
+
+type FinancialTabId = (typeof FINANCIAL_TABS)[number]['id'];
+const FINANCIAL_TAB_IDS = FINANCIAL_TABS.map((item) => item.id);
 
 const pageSizes = [10, 20, 50];
 
@@ -42,26 +55,23 @@ const getPaymentStatusClass = (status?: string): string => {
   }
 };
 
-const FINANCIAL_TAB_IDS = ['payments', 'commissions', 'settlements', 'payouts', 'analytics', 'auto-reports'] as const;
-type FinancialTabId = (typeof FINANCIAL_TAB_IDS)[number];
-
 const FinancialsManagement = () => {
   usePageTitle('Financial Management');
   const [searchParams, setSearchParams] = useSearchParams();
-  const rawTab = searchParams.get('tab');
-  const tab: FinancialTabId = FINANCIAL_TAB_IDS.includes(rawTab as FinancialTabId)
-    ? (rawTab as FinancialTabId)
-    : 'payments';
+  const [tab, setTabState] = useState<FinancialTabId>(() => {
+    const requested = searchParams.get('tab');
+    return FINANCIAL_TAB_IDS.includes(requested as FinancialTabId)
+      ? (requested as FinancialTabId)
+      : 'payments';
+  });
+
   const setTab = useCallback(
     (nextTab: FinancialTabId) => {
+      setTabState(nextTab);
       setSearchParams(
         (prev) => {
           const next = new URLSearchParams(prev);
-          if (nextTab === 'payments') {
-            next.delete('tab');
-          } else {
-            next.set('tab', nextTab);
-          }
+          next.set('tab', nextTab);
           return next;
         },
         { replace: true }
@@ -380,36 +390,50 @@ const FinancialsManagement = () => {
           aria-label="Financial management sections"
           className="mb-6 flex flex-wrap items-center gap-2.5"
         >
-          {(
-            [
-              { id: 'payments', label: 'Payments' },
-              { id: 'commissions', label: 'Commissions' },
-              { id: 'settlements', label: 'Settlements' },
-              { id: 'payouts', label: 'Payouts' },
-              { id: 'analytics', label: 'Analytics' },
-              { id: 'auto-reports', label: 'Auto Reports', isAuto: true },
-            ] as const
-          ).map((item) => (
-            <button
-              key={item.id}
-              type="button"
-              role="tab"
-              aria-selected={tab === item.id}
-              onClick={() => setTab(item.id)}
-              className={`px-4 py-2 rounded-lg font-semibold flex items-center gap-1.5 ${
-                tab === item.id
-                  ? 'isAuto' in item
-                    ? 'bg-gradient-to-r from-green-600 to-emerald-600 text-white shadow-md'
-                    : 'bg-primary-600 text-white'
-                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-              }`}
-            >
-              {'isAuto' in item && <Zap className="w-4 h-4" />}
-              {item.label}
-            </button>
-          ))}
+          {FINANCIAL_TABS.map((item) => {
+            const isSelected = tab === item.id;
+            return (
+              <button
+                key={item.id}
+                id={`financials-tab-${item.id}`}
+                type="button"
+                role="tab"
+                aria-selected={isSelected}
+                aria-controls={`financials-panel-${item.id}`}
+                tabIndex={isSelected ? 0 : -1}
+                onClick={() => setTab(item.id)}
+                onKeyDown={(event) => {
+                  const nextTab = getNextHorizontalTabId(
+                    FINANCIAL_TAB_IDS,
+                    tab,
+                    event.key
+                  );
+                  if (nextTab) {
+                    event.preventDefault();
+                    setTab(nextTab);
+                    document.getElementById(`financials-tab-${nextTab}`)?.focus();
+                  }
+                }}
+                className={`px-4 py-2 rounded-lg font-semibold flex items-center gap-1.5 ${
+                  isSelected
+                    ? 'isAuto' in item
+                      ? 'bg-gradient-to-r from-green-600 to-emerald-600 text-white shadow-md'
+                      : 'bg-primary-600 text-white'
+                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                }`}
+              >
+                {'isAuto' in item && <Zap className="w-4 h-4" />}
+                {item.label}
+              </button>
+            );
+          })}
         </div>
 
+        <div
+          id={`financials-panel-${tab}`}
+          role="tabpanel"
+          aria-labelledby={`financials-tab-${tab}`}
+        >
         {tab === 'payments' ? (
           <>
             {/* Filters */}
@@ -439,10 +463,11 @@ const FinancialsManagement = () => {
                       onChange={(e) => setEndDate(e.target.value)}
                       className={`input py-2 ${hasPaymentDateRangeError ? 'border-red-500 focus:ring-red-500' : ''}`}
                       aria-invalid={hasPaymentDateRangeError}
+                      aria-describedby={hasPaymentDateRangeError ? 'payment-date-range-error' : undefined}
                     />
                   </div>
                   {hasPaymentDateRangeError && (
-                    <p className="mt-1 text-sm text-red-600">End date must be the same as or later than start date.</p>
+                    <p id="payment-date-range-error" className="mt-1 text-sm text-red-600">End date must be the same as or later than start date.</p>
                   )}
                 </div>
                 <div className="flex gap-2">
@@ -685,8 +710,9 @@ const FinancialsManagement = () => {
                 )}
               </div>
               <div className="flex items-center gap-2">
-                <label className="text-sm text-gray-600">Per page</label>
+                <label htmlFor="commission-limit-select" className="text-sm text-gray-600">Per page</label>
                 <select
+                  id="commission-limit-select"
                   value={commissionLimit}
                   onChange={(e) => { setCommissionPage(1); setCommissionLimit(Number.parseInt(e.target.value, 10)); }}
                   className="px-2 py-1 border rounded-lg text-sm"
@@ -891,10 +917,11 @@ const FinancialsManagement = () => {
                     onChange={(e) => setSettEnd(e.target.value)}
                     className={`input py-2 ${hasSettlementDateRangeError ? 'border-red-500 focus:ring-red-500' : ''}`}
                     aria-invalid={hasSettlementDateRangeError}
+                    aria-describedby={hasSettlementDateRangeError ? 'settlement-date-range-error' : undefined}
                   />
                 </div>
                 {hasSettlementDateRangeError && (
-                  <p className="mt-1 text-sm text-red-600">End date must be the same as or later than start date.</p>
+                  <p id="settlement-date-range-error" className="mt-1 text-sm text-red-600">End date must be the same as or later than start date.</p>
                 )}
               </div>
               <div className="flex items-center gap-3">
@@ -1154,6 +1181,7 @@ const FinancialsManagement = () => {
             )}
           </div>
         )}
+        </div>
       </div>
     </div>
   );

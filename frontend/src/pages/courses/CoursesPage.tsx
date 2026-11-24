@@ -14,7 +14,8 @@ import {
   BookOpen,
   AlertCircle,
 } from 'lucide-react';
-import { CardSkeleton, EmptyState } from '@/components/common';
+import EmptyState from '@/components/common/EmptyState';
+import { CardSkeleton } from '@/components/common/Skeleton';
 
 const PAGE_LIMIT = 12;
 
@@ -377,6 +378,8 @@ const CoursesPage = () => {
                       setPage(1);
                     }}
                     placeholder="0"
+                    aria-invalid={hasPriceRangeError}
+                    aria-describedby={hasPriceRangeError ? 'courses-price-range-error' : undefined}
                     className={`input py-2 tabular-nums ${hasPriceRangeError ? 'input-error' : ''}`}
                   />
                 </div>
@@ -397,6 +400,8 @@ const CoursesPage = () => {
                       setPage(1);
                     }}
                     placeholder="500"
+                    aria-invalid={hasPriceRangeError}
+                    aria-describedby={hasPriceRangeError ? 'courses-price-range-error' : undefined}
                     className={`input py-2 tabular-nums ${hasPriceRangeError ? 'input-error' : ''}`}
                   />
                 </div>
@@ -404,7 +409,7 @@ const CoursesPage = () => {
             </div>
 
             {hasPriceRangeError && (
-              <p className="mt-3 text-sm text-red-600 font-medium">
+              <p id="courses-price-range-error" className="mt-3 text-sm text-red-600 font-medium">
                 Minimum price cannot be greater than maximum price.
               </p>
             )}

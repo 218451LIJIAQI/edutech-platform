@@ -302,14 +302,15 @@ const QuickStartGuide = ({ isOpen, onClose }: QuickStartGuideProps) => {
               </div>
 
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                <span id="qs-course-type-label" className="block text-sm font-semibold text-gray-700 mb-2">
                   Course Type <span className="text-red-500">*</span>
-                </label>
-                <div className="grid grid-cols-3 gap-3">
+                </span>
+                <div role="group" aria-labelledby="qs-course-type-label" className="grid grid-cols-3 gap-3">
                   {COURSE_TYPES.map((ct) => (
                     <button
                       key={ct.value}
                       type="button"
+                      aria-pressed={courseType === ct.value}
                       onClick={() => setCourseType(ct.value)}
                       className={`p-3 rounded-xl border-2 text-center transition-all ${
                         courseType === ct.value

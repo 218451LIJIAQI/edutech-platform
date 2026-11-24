@@ -4,12 +4,10 @@ import { UserRole, User } from '@/types';
 import adminService from '@/services/admin.service';
 import SearchFilter from '@/components/common/SearchFilter';
 import ConfirmationModal from '@/components/common/ConfirmationModal';
-import {
-  BatchOperationsModal,
-  UserActionsMenu,
-  UserDetailsModal,
-  UserFormModal,
-} from '@/components/admin';
+import BatchOperationsModal from '@/components/admin/BatchOperationsModal';
+import UserActionsMenu from '@/components/admin/UserActionsMenu';
+import UserDetailsModal from '@/components/admin/UserDetailsModal';
+import UserFormModal from '@/components/admin/UserFormModal';
 import { AlertCircle, Users, Plus, RefreshCcw, Trash2, CheckCircle, XCircle, Download, Lock, Star } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { extractErrorMessage } from '@/utils/error-handler';

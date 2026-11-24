@@ -311,9 +311,10 @@ const LessonModal: FC<LessonModalProps> = ({
               className="input"
               placeholder="e.g., Introduction to JavaScript"
               aria-invalid={Boolean(errors.title)}
+              aria-describedby={errors.title ? `${titleId}-error` : undefined}
             />
             {errors.title && (
-              <p className="mt-1 text-sm text-red-600">{errors.title.message}</p>
+              <p id={`${titleId}-error`} className="mt-1 text-sm text-red-600">{errors.title.message}</p>
             )}
           </div>
 

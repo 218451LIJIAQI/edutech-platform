@@ -131,8 +131,8 @@ const requestPayoutValidation = [
     .withMessage("note must be a string")
     .bail()
     .trim()
-    .isLength({ max: 500 })
-    .withMessage("note too long"),
+    .isLength({ max: 2000 })
+    .withMessage("note must not exceed 2000 characters"),
 ];
 
 router.use(authenticate);

@@ -12,10 +12,6 @@ import paymentService, {
   lockLessonPackagesForUpdate,
 } from "../services/payment.service";
 import ordersController from "../controllers/orders.controller";
-import authController from "../controllers/auth.controller";
-import adsController from "../controllers/ads.controller";
-import adsService from "../services/ads.service";
-import supportService from "../services/support.service";
 import communityService from "../services/community.service";
 import adminService from "../services/admin.service";
 import authService from "../services/auth.service";
@@ -29,6 +25,15 @@ import {
 import LiveSessionHandler, {
   broadcastLiveSessionStatusChange,
 } from "../socket/live-session.handler";
+import adsController from "../controllers/ads.controller";
+import adsService from "../services/ads.service";
+import teacherService from "../services/teacher.service";
+import supportService from "../services/support.service";
+import reportService from "../services/report.service";
+import refundAdminService from "../services/refund-admin.service";
+import reportController from "../controllers/report.controller";
+import walletController from "../controllers/wallet.controller";
+import { parseOptionalString } from "../utils/http";
 
 describe("out-of-order lesson completion persistence and curriculum recalculation", () => {
   it("preserves exact out-of-order completedLessonIds instead of slicing prefix lessons", () => {
@@ -673,31 +678,51 @@ describe("Track 2 & Track 3 concurrency, account lifecycle, and partial-update i
     assert.equal(approvedUpdate.yearsOfExperience, 8);
     assert.equal(approvedUpdate.awards, JSON.stringify(["Best Lecturer 2024"]));
   });
+});
 
-  it("blocks teacher deactivation across updateUserStatus, updateUser & batchUpdateUserStatus when active students exist, and enforces null/audit/length guards", async () => {
+describe("teacher deactivation guardrails, admin ad deletion audit, and cross-layer bounds", () => {
+  it("enforces active-student teacher protection across single, edit, and batch deactivation", async () => {
     const prismaMutable = prisma as unknown as Record<string, unknown>;
     const prevUser = prismaMutable.user;
     const prevEnrollment = prismaMutable.enrollment;
     const prevTransaction = prismaMutable.$transaction;
 
-    prismaMutable.user = {
-      findUnique: async (args: { where?: { id?: string } }) => ({
-        id: args.where?.id || "teacher-active-1",
-        email: "teacher@flexilearn.com",
+    const usersById: Record<string, Record<string, unknown>> = {
+      "teacher-busy": {
+        id: "teacher-busy",
+        email: "busy@flexilearn.com",
         role: "TEACHER",
-        firstName: "Marcus",
-        lastName: "Tan",
-        phone: null,
-        address: null,
-        department: null,
-        avatar: null,
+        firstName: "Busy",
+        lastName: "Teacher",
         isActive: true,
         isLocked: false,
-      }),
-      findMany: async () => [
-        { id: "teacher-active-1", role: "TEACHER" },
-        { id: "student-ok-1", role: "STUDENT" },
-      ],
+      },
+      "stu-active": {
+        id: "stu-active",
+        email: "stu@flexilearn.com",
+        role: "STUDENT",
+        firstName: "Active",
+        lastName: "Student",
+        isActive: true,
+        isLocked: false,
+      },
+      "admin-root": {
+        id: "admin-root",
+        email: "admin@flexilearn.com",
+        role: "ADMIN",
+        firstName: "Root",
+        lastName: "Admin",
+        isActive: true,
+        isLocked: false,
+      },
+    };
+
+    let updatedIdsInBatch: string[] = [];
+    prismaMutable.user = {
+      findUnique: async (args: { where: { id: string } }) =>
+        usersById[args.where.id] ?? null,
+      findMany: async (args: { where: { id: { in: string[] } } }) =>
+        args.where.id.in.map((id) => usersById[id]).filter(Boolean),
     };
     prismaMutable.enrollment = {
       count: async () => 3,
@@ -706,96 +731,243 @@ describe("Track 2 & Track 3 concurrency, account lifecycle, and partial-update i
     prismaMutable.$transaction = async (fn: (tx: unknown) => Promise<unknown>) =>
       fn({
         user: {
-          updateMany: async () => ({ count: 1 }),
+          updateMany: async (args: { where: { id: { in: string[] } } }) => {
+            updatedIdsInBatch = args.where.id.in;
+            return { count: updatedIdsInBatch.length };
+          },
         },
         userAuditLog: {
-          createMany: async () => ({ count: 1 }),
+          createMany: async () => ({ count: updatedIdsInBatch.length }),
         },
       });
 
     try {
       await assert.rejects(
-        () => adminService.updateUserStatus("teacher-active-1", false, "admin-1"),
-        /Cannot deactivate teacher with active students/,
+        () => adminService.updateUserStatus("teacher-busy", false, "admin-root"),
+        /Cannot deactivate teacher Busy Teacher with active students/i,
       );
+
       await assert.rejects(
         () =>
           adminService.updateUser(
-            "teacher-active-1",
+            "teacher-busy",
             { isActive: false },
-            "admin-1",
+            "admin-root",
           ),
-        /Cannot deactivate teacher with active students/,
+        /Cannot deactivate teacher Busy Teacher with active students/i,
       );
 
-      const batchRes = await adminService.batchUpdateUserStatus(
-        ["teacher-active-1", "student-ok-1"],
-        false,
-        "admin-1",
-      );
-      assert.deepEqual(batchRes.succeeded, ["student-ok-1"]);
-      assert.equal(batchRes.failed.length, 1);
-      assert.equal(batchRes.failed[0].userId, "teacher-active-1");
-      assert.match(batchRes.failed[0].reason, /active students/i);
-
-      // authController.updateProfile rejects explicit null firstName with BadRequestError
-      let profileErr: unknown = null;
-      await new Promise<void>((resolve) => {
-        authController.updateProfile(
-          {
-            user: { id: "stu-1", email: "s@example.com", role: "STUDENT" },
-            body: { firstName: null },
-          } as unknown as Request,
-          { status: () => ({ json: () => ({}) }) } as never,
-          (err?: unknown) => {
-            profileErr = err;
-            resolve();
-          },
-        );
-      });
-      assert.ok(profileErr instanceof Error);
-      assert.match(profileErr.message, /firstName cannot be null/);
-
-      // adsController.deleteAd forwards authenticated adminId to adsService.deleteAd
-      let capturedDeleteArgs: [string, string | undefined] | null = null;
-      const origDeleteAd = adsService.deleteAd.bind(adsService);
-      adsService.deleteAd = (async (adId: string, adminId?: string) => {
-        capturedDeleteArgs = [adId, adminId];
-        return { deleted: true };
-      }) as typeof adsService.deleteAd;
-      try {
-        await new Promise<void>((resolve, reject) => {
-          adsController.deleteAd(
-            {
-              user: { id: "admin-99", email: "a@example.com", role: "ADMIN" },
-              params: { id: "ad-123" },
-            } as unknown as Request,
-            {
-              status() {
-                return this;
-              },
-              json() {
-                resolve();
-                return this;
-              },
-            } as never,
-            reject,
-          );
-        });
-        assert.deepEqual(capturedDeleteArgs, ["ad-123", "admin-99"]);
-      } finally {
-        adsService.deleteAd = origDeleteAd;
-      }
-
-      // supportService.closeTicket enforces 5000-character resolution cap
       await assert.rejects(
-        () => supportService.closeTicket("stu-1", "tkt-1", "x".repeat(5001)),
-        /Resolution must not exceed 5000 characters/,
+        () =>
+          adminService.batchUpdateUserStatus(
+            ["teacher-busy"],
+            false,
+            "admin-root",
+          ),
+        /Cannot deactivate teacher Busy Teacher with active students/i,
       );
+
+      const batchResult = await adminService.batchUpdateUserStatus(
+        ["stu-active", "teacher-busy", "admin-root", "missing-id"],
+        false,
+        "admin-root",
+      );
+
+      assert.equal(batchResult.affected, 1);
+      assert.deepEqual(batchResult.succeeded, ["stu-active"]);
+      assert.deepEqual(updatedIdsInBatch, ["stu-active"]);
+      assert.equal(batchResult.failed.length, 3);
+      assert.deepEqual(
+        batchResult.failed.map((f) => f.userId),
+        ["teacher-busy", "admin-root", "missing-id"],
+      );
+      assert.match(batchResult.failed[0].reason, /active students/i);
+      assert.match(batchResult.failed[1].reason, /Admin accounts/i);
+      assert.match(batchResult.failed[2].reason, /User not found/i);
     } finally {
       prismaMutable.user = prevUser;
       prismaMutable.enrollment = prevEnrollment;
       prismaMutable.$transaction = prevTransaction;
     }
+  });
+
+  it("propagates authenticated adminId through adsController.deleteAd for placement reorder auditing", async () => {
+    const adsServiceMutable = adsService as unknown as {
+      deleteAd: (adId: string, adminId?: string) => Promise<{ deleted: boolean }>;
+    };
+    const originalDeleteAd = adsServiceMutable.deleteAd;
+    let capturedArgs: { adId: string; adminId?: string } | null = null;
+
+    adsServiceMutable.deleteAd = async (adId: string, adminId?: string) => {
+      capturedArgs = { adId, adminId };
+      return { deleted: true };
+    };
+
+    try {
+      const req = {
+        params: { id: "ad-campaign-99" },
+        user: {
+          id: "admin-auditor-7",
+          email: "auditor@flexilearn.com",
+          role: "ADMIN",
+        },
+      } as unknown as Request;
+
+      let statusCode = 0;
+      const res = {
+        status(code: number) {
+          statusCode = code;
+          return this;
+        },
+        json() {
+          return this;
+        },
+      };
+
+      await new Promise<void>((resolve, reject) => {
+        adsController.deleteAd(req, res as never, (err?: unknown) => {
+          if (err) reject(err);
+          else resolve();
+        });
+        setImmediate(resolve);
+      });
+
+      assert.equal(statusCode, 200);
+      assert.deepEqual(capturedArgs, {
+        adId: "ad-campaign-99",
+        adminId: "admin-auditor-7",
+      });
+    } finally {
+      adsServiceMutable.deleteAd = originalDeleteAd;
+    }
+  });
+
+  it("enforces aligned name (2..50), certificate count (<=10), support/report resolution, and refund note bounds", async () => {
+    assert.equal(
+      parseOptionalString("   Mei  ", "firstName", {
+        minLength: 2,
+        maxLength: 50,
+        rejectBlank: true,
+        rejectNull: true,
+      }),
+      "Mei",
+    );
+    assert.throws(
+      () =>
+        parseOptionalString("A", "firstName", {
+          minLength: 2,
+          maxLength: 50,
+        }),
+      /at least 2 characters/i,
+    );
+    assert.throws(
+      () =>
+        parseOptionalString(null, "firstName", {
+          minLength: 2,
+          maxLength: 50,
+          rejectNull: true,
+        }),
+      /cannot be null/i,
+    );
+
+    await assert.rejects(
+      () => authService.updateProfile("u-1", { firstName: "X" }),
+      /First name must be between 2 and 50 characters/i,
+    );
+    await assert.rejects(
+      () =>
+        adminService.createUser({
+          email: "new@flexilearn.com",
+          password: "Password123",
+          firstName: "X".repeat(51),
+          lastName: "Valid",
+          role: "STUDENT" as never,
+          createdBy: "admin-1",
+        }),
+      /First name must be between 2 and 50 characters/i,
+    );
+
+    const prismaMutable = prisma as unknown as Record<string, unknown>;
+    const prevTeacherProfile = prismaMutable.teacherProfile;
+    prismaMutable.teacherProfile = {
+      findUnique: async () => ({
+        id: "tp-1",
+        userId: "teacher-u1",
+        registrationStatus: "APPROVED",
+      }),
+    };
+    const elevenCerts = Array.from(
+      { length: 11 },
+      (_, idx) => `/uploads/teacher-certificates/cert-${idx}.webp`,
+    );
+    try {
+      await assert.rejects(
+        () =>
+          teacherService.submitExtendedProfile("teacher-u1", {
+            selfIntroduction: "Experienced lecturer",
+            specialties: ["Mathematics"],
+            languages: ["English"],
+            yearsOfExperience: 5,
+            certificatePhotos: elevenCerts,
+          }),
+        /Certificate photos must not exceed 10 items/i,
+      );
+    } finally {
+      prismaMutable.teacherProfile = prevTeacherProfile;
+    }
+
+    await assert.rejects(
+      () =>
+        supportService.closeTicket(
+          "u-1",
+          "ticket-1",
+          "R".repeat(3001),
+        ),
+      /Resolution must not exceed 3000 characters/i,
+    );
+
+    await assert.rejects(
+      () =>
+        reportService.updateReportStatus(
+          "report-1",
+          "RESOLVED",
+          "R".repeat(2001),
+        ),
+      /Resolution must not exceed 2000 characters/i,
+    );
+
+    const nextReportErr = await new Promise<unknown>((resolve) => {
+      reportController.updateReportStatus(
+        {
+          user: { id: "admin-1", userId: "admin-1", email: "admin@test.com", role: "ADMIN" },
+          params: { id: "11111111-1111-4111-8111-111111111111" },
+          body: { status: "RESOLVED", resolution: "R".repeat(2001) },
+        } as never,
+        {} as never,
+        (err?: unknown) => resolve(err ?? null),
+      );
+    });
+    assert.match(String((nextReportErr as Error | null)?.message || ""), /2000 characters/i);
+
+    const nextWalletErr = await new Promise<unknown>((resolve) => {
+      walletController.requestPayout(
+        {
+          user: { id: "teacher-1", userId: "teacher-1", email: "teacher@test.com", role: "TEACHER" },
+          body: { amount: 50, note: "N".repeat(2001) },
+        } as never,
+        {} as never,
+        (err?: unknown) => resolve(err ?? null),
+      );
+    });
+    assert.match(String((nextWalletErr as Error | null)?.message || ""), /2000 characters/i);
+
+    await assert.rejects(
+      () => refundAdminService.rejectRefund("ref-1", "R".repeat(1001)),
+      /Rejection reason must not exceed 1000 characters/i,
+    );
+    await assert.rejects(
+      () => refundAdminService.approveRefund("ref-1", "N".repeat(2001)),
+      /Admin notes must not exceed 2000 characters/i,
+    );
   });
 });

@@ -1,28 +1,10 @@
 import type { PackageUpdatePayload } from '@/services/course.service';
+import { toFiniteNumber } from '@/utils/asset-normalizers';
+import { roundCurrency } from '@/utils/helpers';
 import type { PackageFormData } from './types';
 
-const DECIMAL_PLACES = 2;
-
-const roundCurrency = (value: number): number =>
-  Number(value.toFixed(DECIMAL_PLACES));
-
-const parseNumber = (value: number | string | null | undefined): number => {
-  if (typeof value === 'number') {
-    return Number.isFinite(value) ? value : 0;
-  }
-
-  if (typeof value === 'string') {
-    const normalizedValue = value.trim();
-    if (!normalizedValue) {
-      return 0;
-    }
-
-    const parsedValue = Number(normalizedValue);
-    return Number.isFinite(parsedValue) ? parsedValue : 0;
-  }
-
-  return 0;
-};
+const parseNumber = (value: number | string | null | undefined): number =>
+  toFiniteNumber(value, 0);
 
 const parseInteger = (value: number | string | null | undefined): number => {
   const parsedValue = parseNumber(value);

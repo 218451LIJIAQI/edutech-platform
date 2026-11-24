@@ -16,13 +16,14 @@ import {
 import { sanitizeUserPlainText } from "../utils/sanitize-user-content";
 import { assertPackageHasAvailableCapacity } from "./cart.service";
 import { buildCurrentEnrollmentWhere } from "./shared/enrollment-access";
+import { toNumber } from "./shared/payment-utils";
 import { isUniqueConstraintError } from "./shared/service-helpers";
 
 const ORDER_NO_RETRY_ATTEMPTS = 5;
 const MAX_REFUND_NOTE_LENGTH = 1000;
 const MAX_REFUND_REASON_LENGTH = 1000;
 const MAX_REASON_CATEGORY_LENGTH = 100;
-const MAX_BANK_DETAILS_LENGTH = 1000;
+const MAX_BANK_DETAILS_LENGTH = 2000;
 const MAX_CANCEL_REASON_LENGTH = 500;
 const MAX_ORDER_AMOUNT = 99999999.99;
 
@@ -93,22 +94,8 @@ const normalizeOptionalText = (
   return normalized;
 };
 
-const toCurrencyNumber = (value: unknown): number => {
-  if (
-    value &&
-    typeof value === "object" &&
-    "toNumber" in value &&
-    typeof (value as { toNumber: () => number }).toNumber === "function"
-  ) {
-    return (value as { toNumber: () => number }).toNumber();
-  }
-
-  const numericValue = Number(value);
-  return Number.isFinite(numericValue) ? numericValue : 0;
-};
-
 const roundCurrency = (value: unknown): number =>
-  roundBaseCurrency(toCurrencyNumber(value));
+  roundBaseCurrency(toNumber(value));
 
 const normalizePositiveCurrency = (
   value: unknown,

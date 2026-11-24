@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useState } from 'react';
 import toast from 'react-hot-toast';
 import ConfirmationModal from '@/components/common/ConfirmationModal';
-import adminService from '@/services/admin.service';
+import adminService, { type BatchUserOperationResult } from '@/services/admin.service';
 import { extractErrorMessage } from '@/utils/error-handler';
 
 type BatchOperation = 'activate' | 'deactivate' | 'delete';
@@ -98,7 +98,7 @@ const BatchOperationsModal = ({
 
     setIsLoading(true);
     try {
-      const result =
+      const result: BatchUserOperationResult =
         operation === 'delete'
           ? await adminService.batchDeleteUsers(selectedUserIds)
           : await adminService.batchUpdateUserStatus(

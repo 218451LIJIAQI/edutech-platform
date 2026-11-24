@@ -175,8 +175,8 @@ const LoginPage = () => {
                     setEmail(e.target.value);
                     if (error) setError('');
                   }}
-                  aria-invalid={error && !email.trim() ? 'true' : undefined}
-                  aria-describedby={error && !email.trim() ? 'login-form-error' : undefined}
+                  aria-invalid={error ? 'true' : undefined}
+                  aria-describedby={error ? 'login-form-error' : undefined}
                 />
                 <div className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-primary-500 transition-colors">
                   <Mail className="w-5 h-5" />
@@ -200,6 +200,7 @@ const LoginPage = () => {
                   required
                   autoComplete="current-password"
                   minLength={8}
+                  maxLength={72}
                   className="input pl-12 pr-12 group-hover:border-primary-300 transition-colors"
                   placeholder="Enter password"
                   value={password}
@@ -207,8 +208,8 @@ const LoginPage = () => {
                     setPassword(e.target.value);
                     if (error) setError('');
                   }}
-                  aria-invalid={error && !password ? 'true' : undefined}
-                  aria-describedby={error && !password ? 'login-form-error' : undefined}
+                  aria-invalid={error ? 'true' : undefined}
+                  aria-describedby={error ? 'login-form-error' : undefined}
                 />
                 <div className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-primary-500 transition-colors">
                   <Lock className="w-5 h-5" />
@@ -249,7 +250,7 @@ const LoginPage = () => {
               <div className="w-full border-t border-gray-200/80"></div>
             </div>
             <div className="relative flex justify-center text-sm">
-              <span className="px-4 bg-white text-gray-400 font-medium">New to FlexiLearn?</span>
+              <span className="px-4 bg-white text-slate-500 font-medium">New to FlexiLearn?</span>
             </div>
           </div>
 

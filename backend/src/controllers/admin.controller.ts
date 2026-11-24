@@ -205,7 +205,7 @@ class AdminController {
         "status",
         "status must be APPROVED or REJECTED.",
       ),
-      parseOptionalString(req.body?.reviewNotes),
+      parseOptionalString(req.body?.reviewNotes, "reviewNotes", 500),
     );
     sendSuccess(res, verification, "Verification reviewed successfully");
   });
@@ -225,7 +225,7 @@ class AdminController {
     const report = await reportService.updateReportStatus(
       req.params.id,
       parseRequiredEnum(req.body?.status, ReportStatus, "status"),
-      parseOptionalString(req.body?.resolution),
+      parseOptionalString(req.body?.resolution, "resolution", 2000),
     );
     sendSuccess(res, report, "Report updated successfully");
   });
@@ -266,8 +266,14 @@ class AdminController {
       password: parseRequiredString(req.body?.password, "password", {
         trim: false,
       }),
-      firstName: parseRequiredString(req.body?.firstName, "firstName"),
-      lastName: parseRequiredString(req.body?.lastName, "lastName"),
+      firstName: parseRequiredString(req.body?.firstName, "firstName", {
+        minLength: 2,
+        maxLength: 50,
+      }),
+      lastName: parseRequiredString(req.body?.lastName, "lastName", {
+        minLength: 2,
+        maxLength: 50,
+      }),
       role:
         parseOptionalEnum(req.body?.role, UserRole, "role") ?? UserRole.STUDENT,
       phone: parseNullableString(req.body?.phone, "phone") ?? undefined,
@@ -285,10 +291,14 @@ class AdminController {
       req.params.id,
       {
         firstName: parseOptionalString(req.body?.firstName, "firstName", {
+          minLength: 2,
+          maxLength: 50,
           rejectBlank: true,
           rejectNull: true,
         }),
         lastName: parseOptionalString(req.body?.lastName, "lastName", {
+          minLength: 2,
+          maxLength: 50,
           rejectBlank: true,
           rejectNull: true,
         }),

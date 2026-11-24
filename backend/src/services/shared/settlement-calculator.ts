@@ -33,7 +33,7 @@ interface SettlementTeacherRecord {
   };
 }
 
-export interface SettlementPaymentRecord {
+interface SettlementPaymentRecord {
   amount: unknown;
   teacherEarning: unknown;
   package?: {

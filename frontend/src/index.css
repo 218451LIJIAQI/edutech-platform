@@ -351,6 +351,19 @@
     scroll-behavior: auto !important;
   }
 
+  .animate-float,
+  .animate-float-slow,
+  .animate-pulse-slow,
+  .animate-bounce-soft,
+  .animate-fadeInUp,
+  .animate-scaleIn,
+  .skeleton-breathe,
+  .skeleton {
+    animation: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+  }
+
   .card-smooth:hover {
     transform: none !important;
   }

@@ -18,8 +18,8 @@ import { LessonType } from '@/types';
 import type { Course, LiveSession, LiveSessionStatus } from '@/types';
 import courseService from '@/services/course.service';
 import { extractErrorMessage } from '@/utils/error-handler';
-import { toStorableBackendAssetPath } from '@/utils/runtime';
 import { isProtectedUploadAssetUrl, openProtectedAsset } from '@/utils/protected-assets';
+import { resolveBackendAssetUrl, toStorableBackendAssetPath } from '@/utils/runtime';
 import { normalizeSafeHttpUrl, normalizeSafeInternalPath } from '@/utils/safe-url';
 import clientLogger from '@/utils/logger';
 
@@ -502,11 +502,8 @@ export default function CourseManagementLiveTab({
                             <button
                               type="button"
                               onClick={() => {
-                                if (!session.recordingUrl) return;
-                                void openProtectedAsset(session.recordingUrl).catch((err) => {
-                                  toast.error(
-                                    extractErrorMessage(err, 'Failed to open session replay')
-                                  );
+                                void openProtectedAsset(session.recordingUrl!).catch((err) => {
+                                  toast.error(extractErrorMessage(err, 'Failed to open session replay'));
                                 });
                               }}
                               className="inline-flex items-center gap-1 font-semibold text-emerald-700 hover:underline"
@@ -516,7 +513,7 @@ export default function CourseManagementLiveTab({
                             </button>
                           ) : (
                             <a
-                              href={session.recordingUrl}
+                              href={resolveBackendAssetUrl(session.recordingUrl) || session.recordingUrl}
                               target="_blank"
                               rel="noopener noreferrer"
                               className="inline-flex items-center gap-1 font-semibold text-emerald-700 hover:underline"

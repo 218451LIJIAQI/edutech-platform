@@ -1,8 +1,11 @@
 import { ApiResponse, PaginatedResponse } from '@/types';
 
-export function extractData<T>(response: { data: ApiResponse<T> }): T {
-  if (response.data.data === undefined) {
-    throw new Error(response.data.message || 'No data received from server');
+export function extractData<T>(
+  response: { data: ApiResponse<T> },
+  missingMessage = 'No data received from server'
+): T {
+  if (response.data.data === undefined || response.data.data === null) {
+    throw new Error(response.data.message || missingMessage);
   }
   return response.data.data;
 }

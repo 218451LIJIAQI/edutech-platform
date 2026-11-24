@@ -227,6 +227,9 @@ const StudentsPage = () => {
               onChange={(e) => {
                 const course = courses.find((c) => c.id === e.target.value);
                 setSelectedCourse(course || null);
+                if (course) {
+                  navigate(`/teacher/students/${course.id}`, { replace: true });
+                }
               }}
               className="input max-w-md"
             >
