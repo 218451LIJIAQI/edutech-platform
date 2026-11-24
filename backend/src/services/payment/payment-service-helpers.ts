@@ -1,7 +1,6 @@
 import { PaymentStatus, Prisma } from "@prisma/client";
 import prisma from "../../config/database";
 import { NotFoundError, ValidationError } from "../../utils/errors";
-import { assertPackageHasCapacity } from "../shared/enrollment-access";
 import {
   teacherEarningsPaymentInclude,
   type TeacherEarningsPaymentRecord,
@@ -133,8 +132,6 @@ export const requireAvailableLessonPackage = async (
     throw new ValidationError("This package is no longer available");
   }
 
-  await assertPackageHasCapacity(client, lessonPackage, new Date());
-
   return {
     normalizedPackageId,
     lessonPackage,
@@ -169,7 +166,7 @@ export const findCompletedTeacherPayments = async (
 
   return client.payment.findMany({
     where: {
-      status: PaymentStatus.COMPLETED,
+      status: { in: [PaymentStatus.COMPLETED, PaymentStatus.REFUNDED] },
       paidAt: { not: null },
       OR: [
         {

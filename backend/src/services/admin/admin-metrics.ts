@@ -1,4 +1,13 @@
-import { PaymentStatus, RefundStatus, type Prisma } from "@prisma/client";
+import {
+  PaymentStatus,
+  RefundStatus,
+  type Prisma,
+} from "@prisma/client";
+import {
+  calculatePlatformCommission,
+  calculateTeacherNetEarning,
+} from "../shared/payment-utils";
+import { roundCurrency } from "../shared/settlement-calculator";
 
 export const recentUserSelect = {
   id: true,
@@ -118,13 +127,8 @@ export const settlementPaymentInclude = {
   order: {
     include: {
       refunds: {
-        where: {
-          status: RefundStatus.COMPLETED,
-        },
-        select: {
-          amount: true,
-          completedAt: true,
-        },
+        where: { status: RefundStatus.COMPLETED },
+        select: { amount: true },
       },
       items: {
         include: {
@@ -183,9 +187,7 @@ const decimalToNumber = (
   return typeof value === "number" ? value : value.toNumber();
 };
 
-const roundMoney = (value: number): number => {
-  return Number(value.toFixed(2));
-};
+const roundMoney = roundCurrency;
 
 const formatMoney = (value: Prisma.Decimal | number | null | undefined) => {
   return roundMoney(decimalToNumber(value)).toFixed(2);
@@ -250,52 +252,6 @@ const getFirstPaymentCourseTitle = (payment: RecentPaymentRecord): string => {
   return firstOrderItemCourseTitle || "a course";
 };
 
-export const getPaymentRetainedRatio = (
-  payment: Pick<SettlementPaymentRecord, "amount" | "status" | "orderId" | "order">,
-): number => {
-  if (payment.status === PaymentStatus.REFUNDED && !payment.orderId && !payment.order) {
-    return 0;
-  }
-
-  const grossAmount = decimalToNumber(payment.amount);
-  if (grossAmount <= 0) {
-    return payment.status === PaymentStatus.REFUNDED ? 0 : 1;
-  }
-
-  const completedOrderRefunds = (payment.order?.refunds ?? []).reduce(
-    (sum, refund) => sum + Math.max(0, decimalToNumber(refund.amount)),
-    0,
-  );
-
-  if (completedOrderRefunds <= 0) {
-    return payment.status === PaymentStatus.REFUNDED ? 0 : 1;
-  }
-
-  return Math.max(0, Math.min(1, (grossAmount - completedOrderRefunds) / grossAmount));
-};
-
-export const createPaidPaymentWhere = (
-  startDate?: Date,
-  endDate?: Date,
-): Prisma.PaymentWhereInput => {
-  const paidAt: Prisma.DateTimeNullableFilter = {
-    not: null,
-  };
-
-  if (startDate) {
-    paidAt.gte = startDate;
-  }
-
-  if (endDate) {
-    paidAt.lte = endDate;
-  }
-
-  return {
-    status: { in: [PaymentStatus.COMPLETED, PaymentStatus.REFUNDED] },
-    paidAt,
-  };
-};
-
 export const createCompletedPaymentWhere = (
   startDate?: Date,
   endDate?: Date,
@@ -314,6 +270,28 @@ export const createCompletedPaymentWhere = (
 
   return {
     status: PaymentStatus.COMPLETED,
+    paidAt,
+  };
+};
+
+export const createPaidOrRefundedPaymentWhere = (
+  startDate?: Date,
+  endDate?: Date,
+): Prisma.PaymentWhereInput => {
+  const paidAt: Prisma.DateTimeNullableFilter = {
+    not: null,
+  };
+
+  if (startDate) {
+    paidAt.gte = startDate;
+  }
+
+  if (endDate) {
+    paidAt.lte = endDate;
+  }
+
+  return {
+    status: { in: [PaymentStatus.COMPLETED, PaymentStatus.REFUNDED] },
     paidAt,
   };
 };
@@ -517,6 +495,91 @@ const normalizeSettlementRows = (rows: SettlementRow[]): SettlementRow[] => {
   }));
 };
 
+const getNetOrderItemsWithSplits = (
+  payment: SettlementPaymentRecord,
+  defaultCommissionRate: number,
+) => {
+  const items = payment.order?.items ?? [];
+  if (items.length === 0) return [];
+
+  const orderItemsTotal = roundMoney(
+    items.reduce(
+      (sum, item) => sum + Math.max(0, decimalToNumber(item.finalPrice)),
+      0,
+    ),
+  );
+  const completedRefundTotal = roundMoney(
+    (payment.order?.refunds ?? []).reduce(
+      (sum, refund) => sum + Math.max(0, decimalToNumber(refund.amount)),
+      0,
+    ),
+  );
+
+  if (
+    payment.status === PaymentStatus.REFUNDED ||
+    (orderItemsTotal > 0 && completedRefundTotal >= orderItemsTotal)
+  ) {
+    return [];
+  }
+
+  let allocatedRefund = 0;
+  return items.map((item, index) => {
+    const isLastItem = index === items.length - 1;
+    const itemPrice = roundMoney(Math.max(0, decimalToNumber(item.finalPrice)));
+    const itemRefundPortion =
+      completedRefundTotal > 0 && orderItemsTotal > 0
+        ? isLastItem
+          ? roundMoney(completedRefundTotal - allocatedRefund)
+          : roundMoney((itemPrice / orderItemsTotal) * completedRefundTotal)
+        : 0;
+    allocatedRefund = roundMoney(allocatedRefund + itemRefundPortion);
+
+    const netGross = Math.max(0, roundMoney(itemPrice - itemRefundPortion));
+    const teacherProfile = item.package.course?.teacherProfile ?? null;
+    const grossCommission = calculatePlatformCommission(
+      itemPrice,
+      teacherProfile,
+      defaultCommissionRate,
+    );
+    const grossTeacher = calculateTeacherNetEarning(
+      itemPrice,
+      teacherProfile,
+      defaultCommissionRate,
+    );
+    const refundCommission =
+      itemRefundPortion > 0
+        ? calculatePlatformCommission(
+            itemRefundPortion,
+            teacherProfile,
+            defaultCommissionRate,
+          )
+        : 0;
+    const refundTeacher =
+      itemRefundPortion > 0
+        ? calculateTeacherNetEarning(
+            itemRefundPortion,
+            teacherProfile,
+            defaultCommissionRate,
+          )
+        : 0;
+    const platformCommission = Math.max(
+      0,
+      roundMoney(grossCommission - refundCommission),
+    );
+    const teacherEarning = Math.max(
+      0,
+      roundMoney(grossTeacher - refundTeacher),
+    );
+
+    return {
+      item,
+      netGross,
+      platformCommission,
+      teacherEarning,
+    };
+  });
+};
+
 export const buildSettlementRows = ({
   payments,
   defaultCommissionRate,
@@ -531,25 +594,27 @@ export const buildSettlementRows = ({
   const rows = new Map<string, SettlementRow>();
 
   for (const payment of payments) {
-    const retainedRatio = getPaymentRetainedRatio(payment);
-    if (retainedRatio <= 0) {
+    if (payment.status === PaymentStatus.REFUNDED) {
       continue;
     }
 
     if (payment.orderId && payment.order) {
-      for (const item of payment.order.items) {
+      const netItems = getNetOrderItemsWithSplits(
+        payment,
+        defaultCommissionRate,
+      );
+      for (const {
+        item,
+        netGross,
+        platformCommission,
+        teacherEarning,
+      } of netItems) {
         const course = item.package.course;
         const teacherProfile = course?.teacherProfile;
 
         if (!teacherProfile) {
           continue;
         }
-
-        const effectiveFinalPrice =
-          decimalToNumber(item.finalPrice) * retainedRatio;
-        const rate = decimalToNumber(
-          teacherProfile.commissionRate ?? defaultCommissionRate,
-        );
 
         const settlementRow = getOrCreateSettlementRow(
           rows,
@@ -562,9 +627,9 @@ export const buildSettlementRows = ({
           teacherProfile.user.email || undefined,
         );
 
-        settlementRow.totalGross += effectiveFinalPrice;
-        settlementRow.platformCommission += (effectiveFinalPrice * rate) / 100;
-        settlementRow.teacherEarning += effectiveFinalPrice * (1 - rate / 100);
+        settlementRow.totalGross += netGross;
+        settlementRow.platformCommission += platformCommission;
+        settlementRow.teacherEarning += teacherEarning;
         settlementRow.transactions += 1;
       }
 
@@ -588,11 +653,9 @@ export const buildSettlementRows = ({
       directTeacherProfile.user.email || undefined,
     );
 
-    directRow.totalGross += decimalToNumber(payment.amount) * retainedRatio;
-    directRow.platformCommission +=
-      decimalToNumber(payment.platformCommission) * retainedRatio;
-    directRow.teacherEarning +=
-      decimalToNumber(payment.teacherEarning) * retainedRatio;
+    directRow.totalGross += decimalToNumber(payment.amount);
+    directRow.platformCommission += decimalToNumber(payment.platformCommission);
+    directRow.teacherEarning += decimalToNumber(payment.teacherEarning);
     directRow.transactions += 1;
   }
 
@@ -689,14 +752,16 @@ export const buildRevenueAnalytics = ({
   const breakdownMap = new Map<string, RevenueBreakdownRow>();
 
   const accumulateTrend = (
-    payment: SettlementPaymentRecord,
-    retainedRatio: number,
+    paidAt: Date | null,
+    totalRevenue: number,
+    platformEarnings: number,
+    teacherEarnings: number,
   ) => {
-    if (!payment.paidAt || retainedRatio <= 0) {
+    if (!paidAt) {
       return;
     }
 
-    const trendKey = getRevenueGroupKey(payment.paidAt, groupBy);
+    const trendKey = getRevenueGroupKey(paidAt, groupBy);
 
     if (!trendMap.has(trendKey)) {
       trendMap.set(trendKey, {
@@ -708,11 +773,9 @@ export const buildRevenueAnalytics = ({
     }
 
     const trend = trendMap.get(trendKey)!;
-    trend.totalRevenue += decimalToNumber(payment.amount) * retainedRatio;
-    trend.platformEarnings +=
-      decimalToNumber(payment.platformCommission) * retainedRatio;
-    trend.teacherEarnings +=
-      decimalToNumber(payment.teacherEarning) * retainedRatio;
+    trend.totalRevenue += totalRevenue;
+    trend.platformEarnings += platformEarnings;
+    trend.teacherEarnings += teacherEarnings;
   };
 
   const accumulateCourseRevenue = ({
@@ -732,12 +795,13 @@ export const buildRevenueAnalytics = ({
     const teacher = teacherProfile.user;
     const teacherId = teacher.id;
 
-    const rate = decimalToNumber(
-      teacherProfile.commissionRate ?? defaultCommissionRate,
-    );
-
     const calculatedTeacherEarning =
-      teacherEarning ?? finalPrice * (1 - rate / 100);
+      teacherEarning ??
+      calculateTeacherNetEarning(
+        finalPrice,
+        teacherProfile,
+        defaultCommissionRate,
+      );
 
     if (!teacherMap.has(teacherId)) {
       teacherMap.set(teacherId, {
@@ -774,28 +838,65 @@ export const buildRevenueAnalytics = ({
   };
 
   for (const payment of payments) {
-    const retainedRatio = getPaymentRetainedRatio(payment);
-    if (retainedRatio <= 0) {
+    if (payment.status === PaymentStatus.REFUNDED) {
       continue;
     }
 
-    accumulateTrend(payment, retainedRatio);
-
     if (payment.order) {
-      for (const item of payment.order.items) {
+      const netItems = getNetOrderItemsWithSplits(
+        payment,
+        defaultCommissionRate,
+      );
+      if (netItems.length === 0) {
+        continue;
+      }
+
+      const netOrderTotal = netItems.reduce(
+        (sum, entry) => sum + entry.netGross,
+        0,
+      );
+      const netPlatformTotal = netItems.reduce(
+        (sum, entry) => sum + entry.platformCommission,
+        0,
+      );
+      const netTeacherTotal = netItems.reduce(
+        (sum, entry) => sum + entry.teacherEarning,
+        0,
+      );
+
+      accumulateTrend(
+        payment.paidAt,
+        netOrderTotal,
+        netPlatformTotal,
+        netTeacherTotal,
+      );
+
+      for (const entry of netItems) {
         accumulateCourseRevenue({
-          finalPrice: decimalToNumber(item.finalPrice) * retainedRatio,
-          course: item.package.course,
+          finalPrice: entry.netGross,
+          teacherEarning: entry.teacherEarning,
+          course: entry.item.package.course,
         });
       }
 
       continue;
     }
 
+    const directRevenue = decimalToNumber(payment.amount);
+    const directPlatform = decimalToNumber(payment.platformCommission);
+    const directTeacher = decimalToNumber(payment.teacherEarning);
+
+    accumulateTrend(
+      payment.paidAt,
+      directRevenue,
+      directPlatform,
+      directTeacher,
+    );
+
     if (payment.package?.course) {
       accumulateCourseRevenue({
-        finalPrice: decimalToNumber(payment.amount) * retainedRatio,
-        teacherEarning: decimalToNumber(payment.teacherEarning) * retainedRatio,
+        finalPrice: directRevenue,
+        teacherEarning: directTeacher,
         course: payment.package.course,
       });
     }

@@ -35,6 +35,7 @@ type NavItem = {
   label: string;
   icon: LucideIcon;
   highlight?: boolean;
+  exact?: boolean;
 };
 
 /**
@@ -144,7 +145,7 @@ const Navbar = () => {
 
     if (user?.role === UserRole.ADMIN) {
       return [
-        { to: '/admin', label: 'Overview', icon: LayoutDashboard },
+        { to: '/admin', label: 'Overview', icon: LayoutDashboard, exact: true },
         { to: '/admin/users', label: 'Users', icon: Users },
         { to: '/admin/ads', label: 'Ads', icon: Megaphone },
         { to: '/admin/financials', label: 'Finance', icon: DollarSign },
@@ -179,7 +180,15 @@ const Navbar = () => {
   }, [isApprovedTeacher, teacherRegistrationStatus, user?.role]);
 
   const isActive = useCallback(
-    (path: string) => location.pathname === path || location.pathname.startsWith(`${path}/`),
+    (path: string, exact = false) => {
+      if (exact) {
+        return location.pathname === path;
+      }
+      if (path === '/teacher/courses' && location.pathname === '/teacher/courses/new') {
+        return false;
+      }
+      return location.pathname === path || location.pathname.startsWith(`${path}/`);
+    },
     [location.pathname]
   );
 
@@ -269,8 +278,8 @@ const Navbar = () => {
             </div>
 
             <div className="flex flex-col">
-              <span className="bg-gradient-to-r from-gray-900 to-gray-600 bg-clip-text text-xl font-bold text-transparent">
-                Edutech
+              <span className="bg-gradient-to-r from-slate-900 to-indigo-700 bg-clip-text text-xl font-bold text-transparent">
+                FlexiLearn
               </span>
 
               {isSessionReady && (
@@ -292,7 +301,7 @@ const Navbar = () => {
               >
                 {navItems.map((item) => {
                   const Icon = item.icon;
-                  const active = isActive(item.to);
+                  const active = isActive(item.to, item.exact);
 
                   return (
                     <Link

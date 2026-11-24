@@ -44,7 +44,7 @@ const PrivacyPolicyPage = () => {
           <article className="prose prose-lg max-w-none">
             <h2 className="text-2xl font-bold text-gray-900 mt-8 mb-4">1. Introduction</h2>
             <p className="text-gray-700 leading-relaxed">
-              Welcome to Edutech. We respect your privacy and are committed to protecting your personal data. This privacy policy explains how we collect, use, store, and protect your information when you use our Platform.
+              Welcome to FlexiLearn. We respect your privacy and are committed to protecting your personal data. This privacy policy explains how we collect, use, store, and protect your information when you use our Platform.
             </p>
 
             <h2 className="text-2xl font-bold text-gray-900 mt-8 mb-4">2. Information We Collect</h2>
@@ -250,7 +250,7 @@ const PrivacyPolicyPage = () => {
             <hr className="my-8" />
 
             <p className="text-sm text-gray-600">
-              By using Edutech, you acknowledge that you have read and understood this Privacy Policy and agree to the collection, use, and disclosure of your information as described herein.
+              By using FlexiLearn, you acknowledge that you have read and understood this Privacy Policy and agree to the collection, use, and disclosure of your information as described herein.
             </p>
           </article>
         </div>

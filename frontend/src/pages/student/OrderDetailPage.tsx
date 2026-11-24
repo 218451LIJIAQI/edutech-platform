@@ -152,19 +152,14 @@ const OrderDetailPage = () => {
     );
   }
 
-  const isFreeOrder = order.totalAmount <= 0;
   const completedRefundAmount = refunds
     .filter((item) => item.status === 'COMPLETED')
     .reduce((sum, item) => sum + Number(item.amount || 0), 0);
-  const remainingRefundableAmount =
-    order.refundableAmount !== undefined
-      ? Math.max(0, order.refundableAmount)
-      : Math.max(0, order.totalAmount - completedRefundAmount);
+  const remainingRefundableAmount = Math.max(0, order.totalAmount - completedRefundAmount);
   const activeRefund =
     refunds.find((item) => ['PENDING', 'APPROVED', 'PROCESSING'].includes(item.status)) || null;
   const latestRefund = refunds[0] || null;
   const canRequestRefund =
-    !isFreeOrder &&
     order.status === 'PAID' &&
     remainingRefundableAmount > 0 &&
     activeRefund === null;
@@ -218,21 +213,19 @@ const OrderDetailPage = () => {
                   </div>
                 </div>
 
-                {order.paidAt && (
+                    {order.paidAt && (
                   <div className="flex items-start gap-4">
                     <div className="w-3 h-3 rounded-full bg-green-500 mt-2"></div>
                     <div>
-                      <p className="font-semibold text-gray-900">
-                        {isFreeOrder ? 'Free Enrollment Activated' : 'Payment Completed'}
-                      </p>
+                      <p className="font-semibold text-gray-900">Payment Completed</p>
                       <p className="text-sm text-gray-600">
                         {new Date(order.paidAt).toLocaleString()}
                       </p>
                     </div>
                   </div>
-                )}
+                    )}
 
-                {order.canceledAt && (
+                    {order.canceledAt && (
                   <div className="flex items-start gap-4">
                     <div className="w-3 h-3 rounded-full bg-red-500 mt-2"></div>
                     <div>
@@ -247,9 +240,9 @@ const OrderDetailPage = () => {
                       )}
                     </div>
                   </div>
-                )}
+                    )}
 
-                {order.refundedAt && (
+                    {order.refundedAt && (
                   <div className="flex items-start gap-4">
                     <div className="w-3 h-3 rounded-full bg-blue-500 mt-2"></div>
                     <div>
@@ -261,9 +254,9 @@ const OrderDetailPage = () => {
                         <p className="text-sm text-gray-700 mt-1">
                           <span className="font-semibold">Amount:</span> ${order.refundAmount.toFixed(2)}
                         </p>
-                      )}
-                    </div>
+                    )}
                   </div>
+                </div>
                 )}
               </div>
             </div>
@@ -278,7 +271,7 @@ const OrderDetailPage = () => {
                       key={item.id}
                       className="flex items-center justify-between p-4 bg-gradient-to-r from-gray-50 to-gray-100 rounded-xl hover:shadow-md transition-shadow"
                     >
-                      <div className="flex-1">
+                    <div className="flex-1">
                         <div className="font-bold text-gray-900 mb-1">
                           {item.package?.name || 'Package'}
                         </div>
@@ -290,11 +283,11 @@ const OrderDetailPage = () => {
                             {item.package.description}
                           </div>
                         )}
-                      </div>
-                      <div className="text-right">
+                    </div>
+                    <div className="text-right">
                         <div className="text-sm text-gray-600 mb-1">
                           Price: ${item.price.toFixed(2)}
-                        </div>
+                    </div>
                         {item.discount && item.discount > 0 && (
                           <div className="text-sm text-green-600 font-semibold mb-1">
                             Discount: -${item.discount.toFixed(2)}
@@ -302,8 +295,8 @@ const OrderDetailPage = () => {
                         )}
                         <div className="font-bold text-lg text-primary-600">
                           ${item.finalPrice.toFixed(2)}
-                        </div>
-                      </div>
+              </div>
+            </div>
                     </div>
                   ))
                 ) : (
@@ -429,17 +422,7 @@ const OrderDetailPage = () => {
               </div>
             )}
 
-            {/* Free Order Non-Refundable Notice */}
-            {isFreeOrder && order.status === 'PAID' && (
-              <div className="card shadow-lg border-2 border-slate-200 bg-slate-50">
-                <h3 className="font-bold text-lg text-gray-900 mb-2">Free Enrollment</h3>
-                <p className="text-sm text-gray-600">
-                  This order was fulfilled at $0.00 and does not carry a refundable payment balance.
-                </p>
-              </div>
-            )}
-
-            {/* Request Refund (PAID > $0 only) */}
+            {/* Request Refund (PAID only) */}
             {canRequestRefund && (
               <div className="card shadow-lg border-2 border-blue-200 bg-blue-50">
                 <h3 className="font-bold text-lg text-gray-900 mb-4">Request Refund</h3>
@@ -466,6 +449,7 @@ const OrderDetailPage = () => {
                 </p>
                 <button
                   type="button"
+                  className="btn-outline w-full"
                   onClick={() => setShowCustomerService(true)}
                 >
                   Contact Support

@@ -1,4 +1,4 @@
-import { LiveSessionStatus, Prisma } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 import config from "../../config/env";
 import prisma from "../../config/database";
 import {
@@ -7,10 +7,7 @@ import {
   ValidationError,
 } from "../../utils/errors";
 import { extractUploadPathFromUrlOrPath } from "../../utils/url-or-path";
-import {
-  buildCurrentEnrollmentWhere,
-  parseCompletedLessonIdsJson,
-} from "../shared/enrollment-access";
+import { buildCurrentEnrollmentWhere } from "../shared/enrollment-access";
 import {
   normalizeLessonQuiz,
   normalizeQuizAttemptResults,
@@ -21,23 +18,6 @@ type PrismaClientLike = Prisma.TransactionClient | typeof prisma;
 type LessonOrderReader = Pick<PrismaClientLike, "lesson">;
 
 const LESSON_ORDER_RENUMBER_OFFSET = 1000000;
-
-export const liveSessionSelectFields = {
-  id: true,
-  lessonId: true,
-  title: true,
-  description: true,
-  scheduledAt: true,
-  startedAt: true,
-  endedAt: true,
-  duration: true,
-  meetingUrl: true,
-  roomId: true,
-  maxParticipants: true,
-  status: true,
-  recordingUrl: true,
-  createdAt: true,
-} satisfies Prisma.LiveSessionSelect;
 
 export const courseDetailInclude = {
   teacherProfile: {
@@ -66,12 +46,6 @@ export const courseDetailInclude = {
       isFree: true,
       videoUrl: true,
       quiz: true,
-      liveSessions: {
-        orderBy: {
-          scheduledAt: "asc",
-        },
-        select: liveSessionSelectFields,
-      },
     },
   },
   packages: {
@@ -90,6 +64,12 @@ export const courseDetailInclude = {
       fileSize: true,
       isDownloadable: true,
       uploadedAt: true,
+    },
+  },
+  _count: {
+    select: {
+      lessons: true,
+      materials: true,
     },
   },
 } satisfies Prisma.CourseInclude;
@@ -141,12 +121,6 @@ export const teacherCourseInclude = {
       type: true,
       duration: true,
       orderIndex: true,
-      liveSessions: {
-        orderBy: {
-          scheduledAt: "asc",
-        },
-        select: liveSessionSelectFields,
-      },
     },
     orderBy: {
       orderIndex: "asc",
@@ -477,81 +451,84 @@ export const resequenceCourseLessons = async (
   }
 };
 
-/**
- * Recalculates enrolled students' `completedLessonIds`, `completedLessons`, and `progress`
- * whenever a teacher adds or deletes lessons on a course.
- */
 export const recalculateCourseEnrollmentsProgress = async (
   tx: Prisma.TransactionClient,
   courseId: string,
-  validOrderedLessonIds: string[],
-): Promise<void> => {
+  totalLessons: number,
+) => {
+  const remainingLessons =
+    typeof tx.lesson?.findMany === "function"
+      ? await tx.lesson.findMany({
+          where: { courseId },
+          orderBy: { orderIndex: "asc" },
+          select: { id: true },
+        })
+      : null;
+  const orderedLessonIds = remainingLessons?.map((lesson) => lesson.id) ?? null;
+  const validLessonIdSet = orderedLessonIds ? new Set(orderedLessonIds) : null;
+  const resolvedTotalLessons = orderedLessonIds
+    ? orderedLessonIds.length
+    : totalLessons;
+
   const enrollments = await tx.enrollment.findMany({
     where: {
-      package: {
-        courseId,
-      },
+      isActive: true,
+      package: { courseId },
     },
     select: {
       id: true,
-      progress: true,
       completedLessons: true,
       completedLessonIds: true,
+      progress: true,
     },
   });
 
-  if (enrollments.length === 0) {
-    return;
-  }
-
-  const totalLessons = validOrderedLessonIds.length;
-  const orderRank = new Map(
-    validOrderedLessonIds.map((id, idx) => [id, idx]),
-  );
-
   for (const enrollment of enrollments) {
-    const storedIds = parseCompletedLessonIdsJson(
-      enrollment.completedLessonIds,
-    );
+    const storedIds = Array.isArray(enrollment.completedLessonIds)
+      ? enrollment.completedLessonIds.filter(
+          (item): item is string =>
+            typeof item === "string" && item.trim().length > 0,
+        )
+      : [];
 
-    let nextCompletedIds: string[];
-    let nextCompletedCount: number;
+    const hasTrackedLessonIds = storedIds.length > 0;
+    const prunedIds =
+      hasTrackedLessonIds && validLessonIdSet && orderedLessonIds
+        ? orderedLessonIds.filter(
+            (id) => validLessonIdSet.has(id) && storedIds.includes(id),
+          )
+        : storedIds;
 
-    if (storedIds.length > 0) {
-      nextCompletedIds = storedIds
-        .filter((id) => orderRank.has(id))
-        .sort((a, b) => (orderRank.get(a) ?? 0) - (orderRank.get(b) ?? 0));
-      nextCompletedCount = nextCompletedIds.length;
-    } else if (enrollment.completedLessons > 0) {
-      nextCompletedIds = [];
-      nextCompletedCount = Math.min(enrollment.completedLessons, totalLessons);
-    } else {
-      nextCompletedIds = [];
-      nextCompletedCount = 0;
-    }
+    const clampedCompleted = hasTrackedLessonIds
+      ? Math.min(prunedIds.length, resolvedTotalLessons)
+      : Math.min(Math.max(0, enrollment.completedLessons), resolvedTotalLessons);
 
     const nextProgress =
-      totalLessons > 0
+      resolvedTotalLessons > 0
         ? Math.min(
             100,
-            Math.max(0, Math.round((nextCompletedCount / totalLessons) * 100)),
+            Math.max(
+              0,
+              Math.round((clampedCompleted / resolvedTotalLessons) * 100),
+            ),
           )
         : 0;
 
     const idsChanged =
-      nextCompletedIds.length !== storedIds.length ||
-      nextCompletedIds.some((id, index) => id !== storedIds[index]);
+      hasTrackedLessonIds &&
+      (prunedIds.length !== storedIds.length ||
+        prunedIds.some((id, index) => id !== storedIds[index]));
 
     if (
       idsChanged ||
-      nextCompletedCount !== enrollment.completedLessons ||
+      clampedCompleted !== enrollment.completedLessons ||
       nextProgress !== enrollment.progress
     ) {
       await tx.enrollment.update({
         where: { id: enrollment.id },
         data: {
-          completedLessonIds: nextCompletedIds,
-          completedLessons: nextCompletedCount,
+          completedLessons: clampedCompleted,
+          ...(hasTrackedLessonIds ? { completedLessonIds: prunedIds } : {}),
           progress: nextProgress,
         },
       });
@@ -559,36 +536,7 @@ export const recalculateCourseEnrollmentsProgress = async (
   }
 };
 
-export const sanitizeLiveSessionForViewer = <
-  T extends {
-    status: LiveSessionStatus;
-    meetingUrl: string | null;
-    recordingUrl: string | null;
-  },
->(
-  session: T,
-  options: {
-    canAccessLessonContent: boolean;
-    canManageCourse: boolean;
-  },
-): T => {
-  const canSeeMeetingUrl =
-    options.canManageCourse ||
-    (options.canAccessLessonContent &&
-      session.status === LiveSessionStatus.ONGOING);
-  const canSeeRecordingUrl =
-    options.canManageCourse ||
-    (options.canAccessLessonContent &&
-      session.status === LiveSessionStatus.COMPLETED);
-
-  return {
-    ...session,
-    meetingUrl: canSeeMeetingUrl ? session.meetingUrl : null,
-    recordingUrl: canSeeRecordingUrl ? session.recordingUrl : null,
-  };
-};
-
-export const mapProtectedMaterialResponse = <
+export const mapMaterialAccessForViewer = <
   T extends {
     id: string;
     fileUrl: string;
@@ -616,6 +564,44 @@ export const mapProtectedMaterialResponse = <
   };
 };
 
+export const sanitizeStudentEnrollmentCourse = <
+  TCourse extends {
+    lessons?: Array<{
+      id: string;
+      isFree: boolean;
+      videoUrl: string | null;
+      quiz: Prisma.JsonValue;
+    }>;
+    materials?: Array<{
+      id: string;
+      fileUrl: string;
+      isDownloadable: boolean;
+    }>;
+  },
+>(
+  course: TCourse,
+): TCourse => ({
+  ...course,
+  ...(course.lessons
+    ? {
+        lessons: course.lessons.map((lesson) => ({
+          ...lesson,
+          quiz: sanitizeLessonQuiz(normalizeLessonQuiz(lesson.quiz)),
+        })),
+      }
+    : {}),
+  ...(course.materials
+    ? {
+        materials: course.materials.map((material) =>
+          mapMaterialAccessForViewer(material, {
+            canAccessPaidContent: true,
+            canManageMaterials: false,
+          }),
+        ),
+      }
+    : {}),
+});
+
 export const mapCourseDetailResponse = (
   course: CourseDetailRecord,
   options: {
@@ -626,51 +612,23 @@ export const mapCourseDetailResponse = (
 ) => {
   const canAccessPaidContent = options.isEnrolled || options.canManageMaterials;
 
-  const mappedLessons = course.lessons.map((lesson) => {
-    const canAccessLessonContent = lesson.isFree || canAccessPaidContent;
-    const mappedSessions = (lesson.liveSessions ?? []).map((session) =>
-      sanitizeLiveSessionForViewer(session, {
-        canAccessLessonContent,
-        canManageCourse: options.canManageMaterials,
-      }),
-    );
-
-    return {
-      ...lesson,
-      videoUrl: canAccessLessonContent ? lesson.videoUrl : undefined,
-      quiz: options.canViewQuizAnswers
-        ? normalizeLessonQuiz(lesson.quiz)
-        : canAccessLessonContent
-          ? sanitizeLessonQuiz(normalizeLessonQuiz(lesson.quiz))
-          : undefined,
-      liveSessions: mappedSessions,
-    };
-  });
-
-  const liveSessions = mappedLessons
-    .flatMap((lesson) =>
-      (lesson.liveSessions ?? []).map((session) => ({
-        ...session,
-        lesson: {
-          id: lesson.id,
-          title: lesson.title,
-          orderIndex: lesson.orderIndex,
-          isFree: lesson.isFree,
-          courseId: course.id,
-        },
-      })),
-    )
-    .sort(
-      (left, right) =>
-        left.scheduledAt.getTime() - right.scheduledAt.getTime(),
-    );
-
   return {
     ...course,
-    lessons: mappedLessons,
-    liveSessions,
+    lessons: course.lessons.map((lesson) => {
+      const canAccessLessonContent = lesson.isFree || canAccessPaidContent;
+
+      return {
+        ...lesson,
+        videoUrl: canAccessLessonContent ? lesson.videoUrl : undefined,
+        quiz: options.canViewQuizAnswers
+          ? normalizeLessonQuiz(lesson.quiz)
+          : canAccessLessonContent
+            ? sanitizeLessonQuiz(normalizeLessonQuiz(lesson.quiz))
+            : undefined,
+      };
+    }),
     materials: course.materials.map((material) =>
-      mapProtectedMaterialResponse(material, {
+      mapMaterialAccessForViewer(material, {
         canAccessPaidContent,
         canManageMaterials: options.canManageMaterials,
       }),
@@ -693,12 +651,23 @@ export const mapCourseQuizAttempt = (attempt: CourseQuizAttemptRecord) => ({
   results: normalizeQuizAttemptResults(attempt.results),
 });
 
-export const attachEnrollmentCountsToTeacherCourses = async (
-  courses: TeacherCourseRecord[],
+export const attachEnrollmentCountsToCourses = async <
+  T extends {
+    id: string;
+    _count?: Record<string, number>;
+  },
+>(
+  courses: T[],
   client: PrismaClientLike = prisma,
 ) => {
   if (!courses.length) {
-    return courses;
+    return courses.map((course) => ({
+      ...course,
+      _count: {
+        ...(course._count ?? {}),
+        enrollments: 0,
+      },
+    }));
   }
 
   const courseIds = Array.from(new Set(courses.map((course) => course.id)));
@@ -740,31 +709,16 @@ export const attachEnrollmentCountsToTeacherCourses = async (
     enrolledStudentIdsByCourseId.get(courseId)!.add(enrollment.userId);
   }
 
-  return courses.map((course) => {
-    const liveSessions = course.lessons
-      .flatMap((lesson) =>
-        (lesson.liveSessions ?? []).map((session) => ({
-          ...session,
-          lesson: {
-            id: lesson.id,
-            title: lesson.title,
-            orderIndex: lesson.orderIndex,
-            courseId: course.id,
-          },
-        })),
-      )
-      .sort(
-        (left, right) =>
-          left.scheduledAt.getTime() - right.scheduledAt.getTime(),
-      );
-
-    return {
-      ...course,
-      liveSessions,
-      _count: {
-        ...course._count,
-        enrollments: enrolledStudentIdsByCourseId.get(course.id)?.size ?? 0,
-      },
-    };
-  });
+  return courses.map((course) => ({
+    ...course,
+    _count: {
+      ...(course._count ?? {}),
+      enrollments: enrolledStudentIdsByCourseId.get(course.id)?.size ?? 0,
+    },
+  }));
 };
+
+export const attachEnrollmentCountsToTeacherCourses = (
+  courses: TeacherCourseRecord[],
+  client: PrismaClientLike = prisma,
+) => attachEnrollmentCountsToCourses(courses, client);

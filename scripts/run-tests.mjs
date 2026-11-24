@@ -7,7 +7,6 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const repoRoot = path.resolve(__dirname, '..');
 const frontendSrcDir = path.join(repoRoot, 'frontend', 'src');
-const prismaSchemaPath = path.join(repoRoot, 'backend', 'prisma', 'schema.prisma');
 const require = createRequire(import.meta.url);
 const Module = require('node:module');
 
@@ -18,176 +17,6 @@ process.env.JWT_REFRESH_SECRET ||=
   'test-jwt-refresh-secret-at-least-32-chars-67890';
 
 const SOURCE_EXTENSIONS = ['.ts', '.tsx', '.js', '.json'];
-
-let cachedPrismaShim = null;
-const buildPrismaClientShim = () => {
-  if (cachedPrismaShim) {
-    return cachedPrismaShim;
-  }
-
-  const enums = {};
-  if (fs.existsSync(prismaSchemaPath)) {
-    const schemaText = fs.readFileSync(prismaSchemaPath, 'utf8');
-    const enumRegex = /enum\s+([A-Za-z0-9_]+)\s*\{([^}]*)\}/g;
-    let match;
-    while ((match = enumRegex.exec(schemaText)) !== null) {
-      const enumName = match[1];
-      const members = match[2]
-        .split('\n')
-        .map((line) => line.replace(/\/\/.*$/, '').trim())
-        .filter((line) => line && !line.startsWith('@'));
-      enums[enumName] = Object.freeze(
-        Object.fromEntries(members.map((member) => [member, member]))
-      );
-    }
-  }
-
-  class PrismaClientKnownRequestError extends Error {
-    constructor(message, meta = {}) {
-      super(message);
-      this.name = 'PrismaClientKnownRequestError';
-      this.code = meta.code || 'P0000';
-      this.clientVersion = meta.clientVersion || 'test';
-    }
-  }
-
-  cachedPrismaShim = {
-    __esModule: true,
-    ...enums,
-    Prisma: {
-      JsonNull: Symbol.for('prisma.jsonNull'),
-      DbNull: Symbol.for('prisma.dbNull'),
-      AnyNull: Symbol.for('prisma.anyNull'),
-      PrismaClientKnownRequestError,
-    },
-    PrismaClient: class PrismaClientShim {},
-  };
-
-  return cachedPrismaShim;
-};
-
-const buildMulterShim = () => {
-  const multerFactory = (options = {}) => ({
-    options,
-    single: () => (_req, _res, next) => next?.(),
-    array: () => (_req, _res, next) => next?.(),
-    fields: () => (_req, _res, next) => next?.(),
-    any: () => (_req, _res, next) => next?.(),
-    none: () => (_req, _res, next) => next?.(),
-  });
-  multerFactory.diskStorage = (storageOpts) => storageOpts;
-  multerFactory.memoryStorage = () => ({});
-  multerFactory.MulterError = class MulterError extends Error {
-    constructor(code, field) {
-      super(code);
-      this.code = code;
-      this.field = field;
-    }
-  };
-  return {
-    __esModule: true,
-    default: multerFactory,
-    ...multerFactory,
-  };
-};
-
-let cachedAxiosShim = null;
-const buildAxiosShim = () => {
-  if (cachedAxiosShim) {
-    return cachedAxiosShim;
-  }
-
-  const createAxiosInstance = (defaults = {}) => {
-    const requestHandlers = [];
-    const responseHandlers = [];
-
-    const dispatch = async (inputConfig) => {
-      let config = {
-        ...defaults,
-        ...inputConfig,
-        headers: {
-          ...(defaults.headers || {}),
-          ...(inputConfig?.headers || {}),
-        },
-      };
-
-      for (const handler of requestHandlers) {
-        if (handler?.fulfilled) {
-          config = await handler.fulfilled(config);
-        }
-      }
-
-      const adapter =
-        config.adapter ||
-        instance.defaults.adapter ||
-        axiosObject.defaults.adapter;
-
-      let promise = Promise.resolve().then(() => {
-        if (typeof adapter !== 'function') {
-          throw new Error('No mock axios adapter configured in offline test environment');
-        }
-        return adapter(config);
-      });
-
-      for (const handler of responseHandlers) {
-        promise = promise.then(handler.fulfilled, handler.rejected);
-      }
-
-      return promise;
-    };
-
-    const instance = (config) => dispatch(config);
-    instance.defaults = { ...defaults, headers: { ...(defaults.headers || {}) } };
-    instance.interceptors = {
-      request: {
-        use: (fulfilled, rejected) => {
-          requestHandlers.push({ fulfilled, rejected });
-          return requestHandlers.length - 1;
-        },
-      },
-      response: {
-        use: (fulfilled, rejected) => {
-          responseHandlers.push({ fulfilled, rejected });
-          return responseHandlers.length - 1;
-        },
-      },
-    };
-    instance.get = (url, config = {}) => dispatch({ ...config, method: 'get', url });
-    instance.delete = (url, config = {}) => dispatch({ ...config, method: 'delete', url });
-    instance.post = (url, data, config = {}) =>
-      dispatch({ ...config, method: 'post', url, data });
-    instance.put = (url, data, config = {}) =>
-      dispatch({ ...config, method: 'put', url, data });
-    instance.patch = (url, data, config = {}) =>
-      dispatch({ ...config, method: 'patch', url, data });
-
-    return instance;
-  };
-
-  const axiosObject = createAxiosInstance();
-  axiosObject.create = (defaults = {}) => createAxiosInstance(defaults);
-  axiosObject.isAxiosError = (payload) => Boolean(payload && payload.isAxiosError === true);
-
-  cachedAxiosShim = {
-    __esModule: true,
-    default: axiosObject,
-    ...axiosObject,
-  };
-  return cachedAxiosShim;
-};
-
-const buildToastShim = () => {
-  const toastFn = () => 'toast-id';
-  toastFn.success = () => 'toast-id';
-  toastFn.error = () => 'toast-id';
-  toastFn.loading = () => 'toast-id';
-  toastFn.dismiss = () => undefined;
-  return {
-    __esModule: true,
-    default: toastFn,
-    toast: toastFn,
-  };
-};
 
 const tryLoadCompiler = () => {
   const tsCandidates = [
@@ -321,29 +150,18 @@ Module._resolveFilename = function resolveWithTypeScriptSupport(
 };
 
 Module._load = function loadWithFallbacks(request, parent, isMain) {
-  try {
-    return originalLoad.call(this, request, parent, isMain);
-  } catch (error) {
-    if (error?.code === 'MODULE_NOT_FOUND') {
-      if (request === 'dotenv') {
+  if (request === 'dotenv') {
+    try {
+      return originalLoad.call(this, request, parent, isMain);
+    } catch (error) {
+      if (error?.code === 'MODULE_NOT_FOUND') {
         const shim = { config: () => ({ parsed: {} }) };
         return { __esModule: true, ...shim, default: shim };
       }
-      if (request === '@prisma/client') {
-        return buildPrismaClientShim();
-      }
-      if (request === 'multer') {
-        return buildMulterShim();
-      }
-      if (request === 'axios') {
-        return buildAxiosShim();
-      }
-      if (request === 'react-hot-toast') {
-        return buildToastShim();
-      }
+      throw error;
     }
-    throw error;
   }
+  return originalLoad.call(this, request, parent, isMain);
 };
 
 const compileSourceModule = (module, filename) => {

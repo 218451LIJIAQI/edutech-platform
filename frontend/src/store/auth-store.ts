@@ -1,4 +1,3 @@
-import axios from 'axios';
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import toast from 'react-hot-toast';
@@ -42,15 +41,6 @@ let authSessionGeneration = 0;
 const invalidateProfileHydration = () => {
   authSessionGeneration += 1;
   profileHydrationPromise = null;
-};
-
-const isTerminalAuthError = (error: unknown): boolean => {
-  if (axios.isAxiosError(error)) {
-    const status = error.response?.status;
-    return status === 401 || status === 403;
-  }
-  const maybeStatus = (error as { response?: { status?: number } })?.response?.status;
-  return maybeStatus === 401 || maybeStatus === 403;
 };
 
 export const useAuthStore = create<AuthState>()(
@@ -195,12 +185,10 @@ export const useAuthStore = create<AuthState>()(
                   return;
                 }
                 clientLogger.error('Profile fetch failed:', error);
-                if (isTerminalAuthError(error)) {
-                  try {
-                    await get().logout({ silent: true, skipServer: true });
-                  } catch (logoutError) {
-                    clientLogger.error('Failed to logout after profile fetch error:', logoutError);
-                  }
+                try {
+                  await get().logout({ silent: true, skipServer: true });
+                } catch (logoutError) {
+                  clientLogger.error('Failed to logout after profile fetch error:', logoutError);
                 }
                 throw new Error(extractErrorMessage(error, 'Failed to fetch profile'));
               } finally {

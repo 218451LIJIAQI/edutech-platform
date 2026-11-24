@@ -14,6 +14,7 @@ import asyncHandler from "../utils/async-handler";
 import { ValidationError } from "../utils/errors";
 import { isHttpUrl } from "../utils/url-or-path";
 import {
+  parseNullableString,
   parseOptionalBoolean,
   parseOptionalDate,
   parseOptionalEnum,
@@ -33,6 +34,26 @@ type AdPayloadOptions = {
   requireRequiredFields?: boolean;
 };
 
+const hasOwn = (target: unknown, key: string): boolean =>
+  Boolean(
+    target &&
+      typeof target === "object" &&
+      Object.prototype.hasOwnProperty.call(target, key),
+  );
+
+const parseNullableDate = (
+  value: unknown,
+  fieldName: string,
+): Date | null | undefined => {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (value === null || value === "") {
+    return null;
+  }
+  return parseOptionalDate(value, fieldName) ?? null;
+};
+
 const resolvePromotionRole = (req: Request): UserRole | undefined => {
   if (req.user?.role) {
     return req.user.role;
@@ -46,8 +67,12 @@ const parseTargetRoles = (
   value: unknown,
   options: AdPayloadOptions,
 ): UserRole[] | undefined => {
-  if (value === undefined || value === null || value === "") {
+  if (value === undefined) {
     return options.requireRequiredFields ? [] : undefined;
+  }
+
+  if (value === null || value === "") {
+    return [];
   }
 
   if (!Array.isArray(value)) {
@@ -78,49 +103,152 @@ function parseAdPayload(
   body: Request["body"],
   options: AdPayloadOptions = {},
 ): CreateAdCampaignInput | UpdateAdCampaignInput {
-  const parseField = (value: unknown, fieldName: string) =>
-    options.requireRequiredFields
-      ? parseRequiredString(value, fieldName)
-      : parseOptionalString(value, fieldName, { rejectBlank: true });
-
   const destinationType = parseOptionalEnum(
     body?.destinationType,
     AdDestinationType,
     "destinationType",
   );
-  const ctaUrl = parseField(body?.ctaUrl, "ctaUrl");
-  const startsAt = parseOptionalDate(body?.startsAt, "startsAt");
-  const endsAt = parseOptionalDate(body?.endsAt, "endsAt");
+  const startsAt = parseNullableDate(body?.startsAt, "startsAt");
+  const endsAt = parseNullableDate(body?.endsAt, "endsAt");
 
   if (startsAt && endsAt && startsAt > endsAt) {
     throw new ValidationError("startsAt cannot be later than endsAt");
   }
 
-  if (ctaUrl && destinationType === AdDestinationType.EXTERNAL && !isHttpUrl(ctaUrl)) {
-    throw new ValidationError(
-      "ctaUrl must be a valid HTTP or HTTPS URL for external ads",
-    );
+  if (options.requireRequiredFields) {
+    const ctaUrl = parseRequiredString(body?.ctaUrl, "ctaUrl");
+    if (destinationType === AdDestinationType.EXTERNAL && !isHttpUrl(ctaUrl)) {
+      throw new ValidationError(
+        "ctaUrl must be a valid HTTP or HTTPS URL for external ads",
+      );
+    }
+
+    return {
+      name: parseRequiredString(body?.name, "name"),
+      title: parseRequiredString(body?.title, "title"),
+      badge: parseNullableString(body?.badge, "badge"),
+      description: parseRequiredString(body?.description, "description"),
+      supportingText: parseNullableString(
+        body?.supportingText,
+        "supportingText",
+      ),
+      sponsorName: parseNullableString(body?.sponsorName, "sponsorName"),
+      imageUrl: parseNullableString(body?.imageUrl, "imageUrl"),
+      ctaLabel: parseRequiredString(body?.ctaLabel, "ctaLabel"),
+      ctaUrl,
+      destinationType,
+      openInNewTab: parseOptionalBoolean(body?.openInNewTab, "openInNewTab"),
+      placement: parseOptionalEnum(body?.placement, AdPlacement, "placement"),
+      status: parseOptionalEnum(body?.status, AdStatus, "status"),
+      theme: parseOptionalEnum(body?.theme, AdTheme, "theme"),
+      targetRoles: parseTargetRoles(body?.targetRoles, options),
+      startsAt,
+      endsAt,
+    };
   }
 
-  return {
-    name: parseField(body?.name, "name"),
-    title: parseField(body?.title, "title"),
-    badge: parseOptionalString(body?.badge, "badge"),
-    description: parseField(body?.description, "description"),
-    supportingText: parseOptionalString(body?.supportingText, "supportingText"),
-    sponsorName: parseOptionalString(body?.sponsorName, "sponsorName"),
-    imageUrl: parseOptionalString(body?.imageUrl, "imageUrl"),
-    ctaLabel: parseField(body?.ctaLabel, "ctaLabel"),
-    ctaUrl,
-    destinationType,
-    openInNewTab: parseOptionalBoolean(body?.openInNewTab, "openInNewTab"),
-    placement: parseOptionalEnum(body?.placement, AdPlacement, "placement"),
-    status: parseOptionalEnum(body?.status, AdStatus, "status"),
-    theme: parseOptionalEnum(body?.theme, AdTheme, "theme"),
-    targetRoles: parseTargetRoles(body?.targetRoles, options),
-    startsAt,
-    endsAt,
-  };
+  const updatePayload: UpdateAdCampaignInput = {};
+
+  if (hasOwn(body, "name")) {
+    updatePayload.name = parseOptionalString(body?.name, "name", {
+      rejectBlank: true,
+    });
+  }
+  if (hasOwn(body, "title")) {
+    updatePayload.title = parseOptionalString(body?.title, "title", {
+      rejectBlank: true,
+    });
+  }
+  if (hasOwn(body, "badge")) {
+    updatePayload.badge = parseNullableString(body?.badge, "badge");
+  }
+  if (hasOwn(body, "description")) {
+    updatePayload.description = parseOptionalString(
+      body?.description,
+      "description",
+      { rejectBlank: true },
+    );
+  }
+  if (hasOwn(body, "supportingText")) {
+    updatePayload.supportingText = parseNullableString(
+      body?.supportingText,
+      "supportingText",
+    );
+  }
+  if (hasOwn(body, "sponsorName")) {
+    updatePayload.sponsorName = parseNullableString(
+      body?.sponsorName,
+      "sponsorName",
+    );
+  }
+  if (hasOwn(body, "imageUrl")) {
+    updatePayload.imageUrl = parseNullableString(body?.imageUrl, "imageUrl");
+  }
+  if (hasOwn(body, "ctaLabel")) {
+    updatePayload.ctaLabel = parseOptionalString(body?.ctaLabel, "ctaLabel", {
+      rejectBlank: true,
+    });
+  }
+  if (hasOwn(body, "ctaUrl")) {
+    const ctaUrl = parseOptionalString(body?.ctaUrl, "ctaUrl", {
+      rejectBlank: true,
+    });
+    if (
+      ctaUrl &&
+      destinationType === AdDestinationType.EXTERNAL &&
+      !isHttpUrl(ctaUrl)
+    ) {
+      throw new ValidationError(
+        "ctaUrl must be a valid HTTP or HTTPS URL for external ads",
+      );
+    }
+    updatePayload.ctaUrl = ctaUrl;
+  }
+  if (hasOwn(body, "destinationType") && destinationType !== undefined) {
+    updatePayload.destinationType = destinationType;
+  }
+  if (hasOwn(body, "openInNewTab")) {
+    const openInNewTab = parseOptionalBoolean(
+      body?.openInNewTab,
+      "openInNewTab",
+    );
+    if (openInNewTab !== undefined) {
+      updatePayload.openInNewTab = openInNewTab;
+    }
+  }
+  if (hasOwn(body, "placement")) {
+    const placement = parseOptionalEnum(
+      body?.placement,
+      AdPlacement,
+      "placement",
+    );
+    if (placement !== undefined) {
+      updatePayload.placement = placement;
+    }
+  }
+  if (hasOwn(body, "status")) {
+    const status = parseOptionalEnum(body?.status, AdStatus, "status");
+    if (status !== undefined) {
+      updatePayload.status = status;
+    }
+  }
+  if (hasOwn(body, "theme")) {
+    const theme = parseOptionalEnum(body?.theme, AdTheme, "theme");
+    if (theme !== undefined) {
+      updatePayload.theme = theme;
+    }
+  }
+  if (hasOwn(body, "targetRoles")) {
+    updatePayload.targetRoles = parseTargetRoles(body?.targetRoles, options);
+  }
+  if (hasOwn(body, "startsAt")) {
+    updatePayload.startsAt = startsAt;
+  }
+  if (hasOwn(body, "endsAt")) {
+    updatePayload.endsAt = endsAt;
+  }
+
+  return updatePayload;
 }
 
 class AdsController {

@@ -1,7 +1,9 @@
 import { useEffect, useState, useCallback } from 'react';
 import clientLogger from '@/utils/logger';
 import { Link } from 'react-router-dom';
-import { DollarSign, Users, BookOpen, Star, TrendingUp, Award, ArrowRight, Plus, Sparkles, CheckCircle, Clock, Zap } from 'lucide-react';
+import { DollarSign, Users, BookOpen, Star, TrendingUp, Award, ArrowRight, Plus, Sparkles, CheckCircle, Clock, Zap, AlertCircle, RefreshCcw } from 'lucide-react';
+import toast from 'react-hot-toast';
+import { extractErrorMessage } from '@/utils/error-handler';
 import teacherService from '@/services/teacher.service';
 import paymentService from '@/services/payment.service';
 import { formatCurrency } from '@/utils/helpers';
@@ -52,10 +54,12 @@ const TeacherDashboard = () => {
   }>>([]);
   const [totalEarnings, setTotalEarnings] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [isQuickStartOpen, setIsQuickStartOpen] = useState(false);
 
   const fetchDashboardData = useCallback(async () => {
     setIsLoading(true);
+    setLoadError(null);
     try {
       const [statsData, earningsData] = await Promise.all([
         teacherService.getStats(),
@@ -67,6 +71,9 @@ const TeacherDashboard = () => {
       setEarnings((earningsData.recentPayments || []).slice(0, 5));
     } catch (error) {
       clientLogger.error('Failed to fetch dashboard data:', error);
+      const message = extractErrorMessage(error, 'Failed to load dashboard data');
+      setLoadError(message);
+      toast.error(message);
     } finally {
       setIsLoading(false);
     }
@@ -118,8 +125,28 @@ const TeacherDashboard = () => {
           </div>
         </div>
 
+        {loadError && (
+          <div
+            role="alert"
+            className="mb-8 rounded-2xl border border-red-200 bg-red-50 p-5 text-red-800 flex flex-wrap items-center justify-between gap-4"
+          >
+            <div className="flex items-center gap-3">
+              <AlertCircle className="w-5 h-5 text-red-600 shrink-0" />
+              <span className="text-sm font-medium">{loadError}</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => void fetchDashboardData()}
+              className="btn-outline btn-sm inline-flex items-center gap-1.5"
+            >
+              <RefreshCcw className="w-4 h-4" />
+              Retry
+            </button>
+          </div>
+        )}
+
         {/* Quick Start Card */}
-        {stats.totalCourses === 0 && (
+        {!loadError && stats.totalCourses === 0 && (
           <div className="bg-gradient-to-r from-green-50 via-emerald-50 to-teal-50 rounded-2xl p-6 mb-8 border border-green-200/60 shadow-lg relative overflow-hidden">
             <div className="absolute top-0 right-0 w-32 h-32 bg-green-400/10 rounded-full -translate-y-1/2 translate-x-1/2"></div>
             <div className="flex items-start gap-4 relative">

@@ -491,7 +491,14 @@ const RefundsManagement = () => {
 
       {/* Refund Detail Modal */}
       {selectedRefund && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div
+          className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget && !working) {
+              closeRefundDetails();
+            }
+          }}
+        >
           <div
             ref={refundDetailModalRef}
             tabIndex={-1}
@@ -687,7 +694,14 @@ const RefundsManagement = () => {
 
       {/* Approve Modal */}
       {showApproveModal && selectedRefund && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div
+          className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget && !working) {
+              closeApproveModal();
+            }
+          }}
+        >
           <div
             ref={approveModalRef}
             tabIndex={-1}
@@ -741,7 +755,14 @@ const RefundsManagement = () => {
 
       {/* Reject Modal */}
       {showRejectModal && selectedRefund && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div
+          className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget && !working) {
+              closeRejectModal();
+            }
+          }}
+        >
           <div
             ref={rejectModalRef}
             tabIndex={-1}

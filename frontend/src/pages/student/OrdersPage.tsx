@@ -187,7 +187,7 @@ const OrdersPage = () => {
               <Link
                 to={`/orders/${order.id}`}
                 key={order.id}
-                className="card block p-6 hover:shadow-2xl transition-all duration-300 transform hover:scale-102 border border-gray-100 hover:border-primary-200 rounded-2xl shadow-lg"
+                className="card card-smooth block p-6"
               >
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 items-center">
                   {/* Order Number and Status */}
@@ -214,7 +214,7 @@ const OrdersPage = () => {
                   {/* Amount */}
                   <div className="hidden lg:block">
                     <div className="text-sm text-gray-600 mb-1">Amount</div>
-                    <div className="text-2xl font-bold text-primary-600">
+                    <div className="text-2xl font-bold text-primary-700 tabular-nums">
                       ${order.totalAmount.toFixed(2)}
                     </div>
                   </div>

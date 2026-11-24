@@ -17,10 +17,13 @@ const courseIdParam = uuidParam("courseId");
 const paginationValidation = paginationQueryValidators(50);
 
 const commentField = body("comment")
-  .optional({ values: "falsy" })
+  .optional({ values: "null" })
+  .isString()
+  .withMessage("Comment must be a string")
+  .bail()
   .trim()
-  .isLength({ max: 1000 })
-  .withMessage("Comment must not exceed 1000 characters");
+  .isLength({ max: 2000 })
+  .withMessage("Comment must not exceed 2000 characters");
 
 const createReviewValidation = [
   uuidBodyField("enrollmentId", "enrollment ID"),

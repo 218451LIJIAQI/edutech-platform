@@ -95,6 +95,18 @@ export const buildPublishedCourseWhere = (
     {
       isPublished: true,
     },
+    {
+      teacherProfile: {
+        is: {
+          registrationStatus: "APPROVED",
+          user: {
+            is: {
+              isActive: true,
+            },
+          },
+        },
+      },
+    },
   ];
 
   const category = filters.category?.trim();
@@ -200,20 +212,10 @@ export const buildPublishedCourseWhere = (
       packages: {
         some: {
           isActive: true,
-          ...(filters.minPrice !== undefined
-            ? {
-                finalPrice: {
-                  gte: filters.minPrice,
-                },
-              }
-            : {}),
-          ...(filters.maxPrice !== undefined
-            ? {
-                finalPrice: {
-                  lte: filters.maxPrice,
-                },
-              }
-            : {}),
+          finalPrice: {
+            ...(filters.minPrice !== undefined ? { gte: filters.minPrice } : {}),
+            ...(filters.maxPrice !== undefined ? { lte: filters.maxPrice } : {}),
+          },
         },
       },
     });

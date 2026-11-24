@@ -2,6 +2,7 @@ import { VerificationStatus } from "@prisma/client";
 import prisma from "../../config/database";
 import { NotFoundError } from "../../utils/errors";
 import { ensureCourseCanBeSafelyDeleted } from "../course.service";
+import { attachEnrollmentCountsToCourses } from "../course/course-service-helpers";
 import {
   adminCourseListInclude,
   adminVerificationListInclude,
@@ -26,7 +27,7 @@ export const getAllAdminCourses = async (
   });
   const where = buildAdminCourseWhere({ isPublished, category, search });
 
-  const [courses, total] = await Promise.all([
+  const [rawCourses, total] = await Promise.all([
     prisma.course.findMany({
       where,
       skip: pagination.skip,
@@ -36,6 +37,8 @@ export const getAllAdminCourses = async (
     }),
     prisma.course.count({ where }),
   ]);
+
+  const courses = await attachEnrollmentCountsToCourses(rawCourses);
 
   return {
     courses,

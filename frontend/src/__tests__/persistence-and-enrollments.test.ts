@@ -11,7 +11,10 @@ import {
   SupportTicketStatus,
 } from '@/types';
 import type { Enrollment, SupportTicket } from '@/types';
-import { getPreferredCourseEnrollments } from '@/utils/enrollment';
+import {
+  getPreferredCourseEnrollments,
+  selectPreferredCourseEnrollment,
+} from '@/utils/enrollment';
 import {
   buildSupportConversationEntries,
   validateSupportAttachmentFile,
@@ -107,6 +110,38 @@ describe('editor persistence payload builders', () => {
     });
   });
 
+  it('supports $0.00 free lesson packages while rejecting negative prices or discounts exceeding price', () => {
+    const freePkg = buildPackageSavePayload(
+      {
+        name: 'Community Free Tier',
+        description: 'Free intro access',
+        price: 0,
+        discount: 0,
+        duration: 30,
+        maxStudents: 200,
+      },
+      ['Intro Lessons']
+    );
+    assert.equal(freePkg.price, 0);
+    assert.equal(freePkg.finalPrice, 0);
+
+    assert.throws(
+      () =>
+        buildPackageSavePayload(
+          {
+            name: 'Invalid Negative',
+            description: '',
+            price: -5,
+            discount: 0,
+            duration: 0,
+            maxStudents: 10,
+          },
+          ['Feature']
+        ),
+      /cannot be negative/i
+    );
+  });
+
   it('clears existing lesson video and optional fields cleanly when clearExistingVideo is set in edit mode', async () => {
     const payload = await buildLessonSavePayload({
       data: {
@@ -175,59 +210,79 @@ describe('editor persistence payload builders', () => {
 });
 
 describe('enrollment deduplication and support thread helpers', () => {
-  it('selects the highest-progress / lifetime-access enrollment per course', () => {
-    const makeEnrollment = (
-      id: string,
-      courseId: string,
-      progress: number,
-      expiresAt?: string
-    ): Enrollment => ({
-      id,
-      userId: 'u-1',
-      packageId: `pkg-${id}`,
-      enrolledAt: '2026-01-01T00:00:00.000Z',
-      expiresAt,
-      progress,
-      completedLessons: Math.round(progress / 10),
+  const makeEnrollment = (
+    id: string,
+    courseId: string,
+    progress: number,
+    expiresAt?: string,
+    isActive = true
+  ): Enrollment => ({
+    id,
+    userId: 'u-1',
+    packageId: `pkg-${id}`,
+    enrolledAt: '2026-01-01T00:00:00.000Z',
+    expiresAt,
+    progress,
+    completedLessons: Math.round(progress / 10),
+    isActive,
+    package: {
+      id: `pkg-${id}`,
+      courseId,
+      name: 'Standard',
+      price: 50,
+      finalPrice: 50,
+      features: [],
       isActive: true,
-      package: {
-        id: `pkg-${id}`,
-        courseId,
-        name: 'Standard',
-        price: 50,
-        finalPrice: 50,
-        features: [],
-        isActive: true,
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+      course: {
+        id: courseId,
+        teacherProfileId: 'tp-1',
+        title: `Course ${courseId}`,
+        description: 'Desc',
+        category: 'Tech',
+        courseType: CourseType.RECORDED,
+        rating: 5,
+        totalStudents: 1,
+        totalRevenue: 50,
+        isPublished: true,
         createdAt: '2026-01-01T00:00:00.000Z',
         updatedAt: '2026-01-01T00:00:00.000Z',
-        course: {
-          id: courseId,
-          teacherProfileId: 'tp-1',
-          title: `Course ${courseId}`,
-          description: 'Desc',
-          category: 'Tech',
-          courseType: CourseType.RECORDED,
-          rating: 5,
-          totalStudents: 1,
-          totalRevenue: 50,
-          isPublished: true,
-          createdAt: '2026-01-01T00:00:00.000Z',
-          updatedAt: '2026-01-01T00:00:00.000Z',
-        },
       },
-    });
+    },
+  });
 
-    const deduplicated = getPreferredCourseEnrollments([
-      makeEnrollment('enr-old', 'course-a', 30, '2026-06-01T00:00:00.000Z'),
-      makeEnrollment('enr-best', 'course-a', 80, undefined),
-      makeEnrollment('enr-b1', 'course-b', 50, '2026-05-01T00:00:00.000Z'),
-      makeEnrollment('enr-b2', 'course-b', 50, undefined), // lifetime wins tie on progress
-    ]);
+  it('selects the highest-progress / lifetime-access enrollment per course', () => {
+    const refNow = new Date('2026-03-01T00:00:00.000Z').getTime();
+    const deduplicated = getPreferredCourseEnrollments(
+      [
+        makeEnrollment('enr-old', 'course-a', 30, '2026-06-01T00:00:00.000Z'),
+        makeEnrollment('enr-best', 'course-a', 80, undefined),
+        makeEnrollment('enr-b1', 'course-b', 50, '2026-05-01T00:00:00.000Z'),
+        makeEnrollment('enr-b2', 'course-b', 50, undefined), // lifetime wins tie on progress
+      ],
+      refNow
+    );
 
     assert.deepEqual(
       deduplicated.map((item) => item.id),
       ['enr-best', 'enr-b2']
     );
+  });
+
+  it('prioritizes currently active enrollments over expired or deactivated enrollments with higher historical progress', () => {
+    const refNow = new Date('2026-11-23T00:00:00.000Z').getTime();
+    const preferred = selectPreferredCourseEnrollment(
+      [
+        makeEnrollment('enr-expired-90', 'course-x', 90, '2026-05-01T00:00:00.000Z', true),
+        makeEnrollment('enr-refunded-100', 'course-x', 100, undefined, false),
+        makeEnrollment('enr-renewed-20', 'course-x', 20, '2027-05-01T00:00:00.000Z', true),
+      ],
+      'course-x',
+      refNow
+    );
+
+    assert.equal(preferred?.id, 'enr-renewed-20');
   });
 
   it('deduplicates mirrored initial support ticket description and validates attachment MIME/size', () => {
@@ -248,13 +303,15 @@ describe('enrollment deduplication and support thread helpers', () => {
           ticketId: 't-1',
           senderId: 'u-student',
           message: '  Need help with order #42 ',
+          isStaff: false,
           createdAt: '2026-02-01T10:00:01.000Z',
         },
         {
           id: 'm-2',
           ticketId: 't-1',
           senderId: 'u-admin',
-          message: 'Checking this for you now.',
+          message: 'We have approved your refund.',
+          isStaff: true,
           createdAt: '2026-02-01T10:05:00.000Z',
         },
       ],
@@ -262,29 +319,34 @@ describe('enrollment deduplication and support thread helpers', () => {
 
     const entries = buildSupportConversationEntries(ticket);
     assert.equal(entries.length, 2);
+    assert.equal(entries[0]?.id, 'm-1');
     assert.equal(entries[0]?.kind, 'initial_request');
+    assert.equal(entries[1]?.id, 'm-2');
     assert.equal(entries[1]?.kind, 'message');
 
     assert.equal(
       validateSupportAttachmentFile({
+        name: 'receipt.pdf',
         type: 'application/pdf',
-        size: 1024,
+        size: 1024 * 1024,
       } as File),
       null
     );
     assert.match(
       validateSupportAttachmentFile({
+        name: 'malware.exe',
         type: 'application/x-msdownload',
         size: 1024,
       } as File) ?? '',
-      /Only JPG, PNG, WebP, and PDF/
+      /JPG, PNG, WebP, and PDF/i
     );
     assert.match(
       validateSupportAttachmentFile({
-        type: 'image/png',
+        name: 'huge.pdf',
+        type: 'application/pdf',
         size: 11 * 1024 * 1024,
       } as File) ?? '',
-      /10MB or smaller/
+      /10MB/
     );
   });
 });

@@ -8,7 +8,7 @@ import { uuidParam } from "../validators/common.validator";
 
 const router = Router();
 const orderIdParam = uuidParam("id", "order id");
-const SUPPORTED_STUDENT_REFUND_METHODS = [
+const ALLOWED_STUDENT_REFUND_METHODS = [
   RefundMethod.ORIGINAL_PAYMENT,
   RefundMethod.BANK_TRANSFER,
 ] as const;
@@ -43,9 +43,9 @@ const refundRequestValidation = [
   body("refundMethod")
     .optional({ values: "falsy" })
     .trim()
-    .isIn(SUPPORTED_STUDENT_REFUND_METHODS)
+    .isIn(ALLOWED_STUDENT_REFUND_METHODS)
     .withMessage(
-      "Invalid refund method. Supported methods: ORIGINAL_PAYMENT, BANK_TRANSFER",
+      "Invalid refund method. Allowed values: ORIGINAL_PAYMENT, BANK_TRANSFER",
     ),
   body("bankDetails")
     .optional({ values: "falsy" })

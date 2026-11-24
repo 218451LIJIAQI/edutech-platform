@@ -23,8 +23,8 @@ const postValidation = [
     .notEmpty()
     .withMessage("Content is required")
     .bail()
-    .isLength({ max: 2000 })
-    .withMessage("Content too long"),
+    .isLength({ min: 10, max: 2000 })
+    .withMessage("Content must be between 10 and 2000 characters"),
   body("title")
     .optional({ values: "falsy" })
     .trim()

@@ -36,8 +36,6 @@ export const courseCategories = [
   'Other',
 ] as const;
 
-export type CourseCategory = (typeof courseCategories)[number];
-
 export const courseTypeOptions = [
   {
     value: CourseType.LIVE,

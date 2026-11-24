@@ -105,7 +105,7 @@ const CartPage = () => {
         </div>
 
         {items.length === 0 ? (
-          <div className="card text-center py-20 shadow-2xl max-w-md mx-auto border border-gray-100 hover:shadow-3xl transition-all">
+          <div className="card text-center py-20 max-w-md mx-auto">
             <div className="w-24 h-24 bg-gradient-to-br from-primary-100 to-primary-50 rounded-full flex items-center justify-center mx-auto mb-8 shadow-lg">
               <ShoppingCart className="w-10 h-10 text-primary-600" />
             </div>
@@ -116,7 +116,7 @@ const CartPage = () => {
         ) : (
           <div className="space-y-6">
             {items.map((it) => (
-              <div key={it.id} className="card shadow-lg hover:shadow-2xl transition-all duration-300 transform hover:scale-105 border border-gray-100 hover:border-primary-200">
+              <div key={it.id} className="card card-smooth">
                 <div className="flex items-center justify-between">
                   <div className="flex-1">
                     <div className="font-bold text-xl text-gray-900 mb-2">{it.package?.name || 'Package'}</div>

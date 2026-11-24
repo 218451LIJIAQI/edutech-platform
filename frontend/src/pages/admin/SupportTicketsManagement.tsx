@@ -98,6 +98,9 @@ const SupportTicketsManagement = () => {
   }, [selectedTicket?.id]);
 
   const closeTicketModal = useCallback(() => {
+    if (working || isUploadingResponseAttachment) {
+      return;
+    }
     setIsTicketModalOpen(false);
     setSelectedTicket(null);
     setSelectedTicketId(null);
@@ -105,7 +108,7 @@ const SupportTicketsManagement = () => {
     setResponseMessage('');
     setResponseAttachment(null);
     setResolutionText('');
-  }, []);
+  }, [isUploadingResponseAttachment, working]);
 
   useOverlayAccessibility({
     isOpen: isTicketModalOpen,
@@ -520,7 +523,14 @@ const SupportTicketsManagement = () => {
 
       {/* Ticket Detail Modal */}
       {isTicketModalOpen && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div
+          className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget && !working) {
+              closeTicketModal();
+            }
+          }}
+        >
           <div
             ref={ticketModalRef}
             tabIndex={-1}

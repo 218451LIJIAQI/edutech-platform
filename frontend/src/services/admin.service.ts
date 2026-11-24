@@ -1,14 +1,5 @@
 import api from './api';
-import {
-  ApiResponse,
-  PaginatedResponse,
-  User,
-  Course,
-  PaymentWithDetails,
-  Report,
-  AdminPayoutRequest,
-  PayoutRequestStatus,
-} from '@/types';
+import { ApiResponse, PaginatedResponse, User, Course, PaymentWithDetails, Report } from '@/types';
 import { extractData, extractPaginatedData } from './response-utils';
 import {
   normalizeCourseAssets,
@@ -203,6 +194,13 @@ export interface FinancialExportData {
   summary: FinancialPeriodSummary;
 }
 
+export interface BatchUserOperationResult {
+  affected?: number;
+  count?: number;
+  succeeded?: string[];
+  failed?: Array<{ id: string; reason: string }>;
+}
+
 export interface AutoVerificationStats {
   totalProcessed: number;
   autoApproved: number;
@@ -210,26 +208,6 @@ export interface AutoVerificationStats {
   manuallyReviewed: number;
   autoApprovalRate: number;
 }
-
-export type AdminPayoutReviewAction =
-  | 'approve'
-  | 'reject'
-  | 'processing'
-  | 'paid';
-
-export interface AdminPayoutListResponse {
-  items: AdminPayoutRequest[];
-  total: number;
-  limit: number;
-  offset: number;
-}
-
-const normalizeAdminPayoutRequest = (
-  payout: AdminPayoutRequest
-): AdminPayoutRequest => ({
-  ...payout,
-  amount: toFiniteNumber(payout.amount),
-});
 
 const adminService = {
   getStats: async (): Promise<PlatformStats> => {
@@ -415,12 +393,23 @@ const adminService = {
     return normalizeUserAssets(extractData(response)) as User;
   },
 
-  batchDeleteUsers: async (userIds: string[]): Promise<void> => {
-    await api.post('/admin/users/batch/delete', { userIds });
+  batchDeleteUsers: async (userIds: string[]): Promise<BatchUserOperationResult> => {
+    const response = await api.post<ApiResponse<BatchUserOperationResult>>(
+      '/admin/users/batch/delete',
+      { userIds }
+    );
+    return extractData(response);
   },
 
-  batchUpdateUserStatus: async (userIds: string[], isActive: boolean): Promise<void> => {
-    await api.post('/admin/users/batch/status', { userIds, isActive });
+  batchUpdateUserStatus: async (
+    userIds: string[],
+    isActive: boolean
+  ): Promise<BatchUserOperationResult> => {
+    const response = await api.post<ApiResponse<BatchUserOperationResult>>(
+      '/admin/users/batch/status',
+      { userIds, isActive }
+    );
+    return extractData(response);
   },
 
   getTeacherCommissions: async (params?: {
@@ -564,37 +553,6 @@ const adminService = {
       '/admin/financial-reports/auto-verification-stats'
     );
     return extractData(response);
-  },
-
-  listPayouts: async (params?: {
-    status?: PayoutRequestStatus;
-    limit?: number;
-    offset?: number;
-  }): Promise<AdminPayoutListResponse> => {
-    const response = await api.get<ApiResponse<AdminPayoutListResponse>>(
-      '/admin/wallet/payouts',
-      { params }
-    );
-    const data = extractData(response);
-    return {
-      ...data,
-      items: (data.items || []).map(normalizeAdminPayoutRequest),
-    };
-  },
-
-  reviewPayout: async (
-    payoutId: string,
-    payload: {
-      action: AdminPayoutReviewAction;
-      adminNote?: string;
-      externalReference?: string;
-    }
-  ): Promise<AdminPayoutRequest> => {
-    const response = await api.post<ApiResponse<AdminPayoutRequest>>(
-      `/admin/wallet/payouts/${payoutId}/review`,
-      payload
-    );
-    return normalizeAdminPayoutRequest(extractData(response));
   },
 };
 

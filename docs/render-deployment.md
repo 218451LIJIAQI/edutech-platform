@@ -107,7 +107,7 @@ The seed file is intentionally empty, so the deployed database starts without an
 5. Run this SQL, replacing the email:
 
 ```sql
-UPDATE "User"
+UPDATE "users"
 SET role = 'ADMIN'
 WHERE email = 'your-email@example.com';
 ```

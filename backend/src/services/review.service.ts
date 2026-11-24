@@ -102,10 +102,14 @@ const normalizeRequiredText = (
 };
 
 const normalizeOptionalComment = (
-  comment?: string,
+  comment?: string | null,
 ): string | null | undefined => {
   if (comment === undefined) {
     return undefined;
+  }
+
+  if (comment === null) {
+    return null;
   }
 
   const normalizedComment = sanitizeUserPlainText(comment);
@@ -276,7 +280,7 @@ class ReviewService {
     userId: string,
     reviewId: string,
     rating?: number,
-    comment?: string,
+    comment?: string | null,
   ): Promise<Review> {
     const normalizedUserId = normalizeRequiredText(userId, "User ID");
     const normalizedReviewId = normalizeRequiredText(reviewId, "Review ID");

@@ -45,7 +45,7 @@ const HelpCenterPage = () => {
       id: 'faq-2',
       category: 'getting-started',
       question: 'What are the different user roles?',
-      answer: 'Edutech has three roles: Students (learn from courses), Teachers (create and teach courses), and Admins (manage the platform).',
+      answer: 'FlexiLearn has three roles: Students (learn from courses), Teachers (create and teach courses), and Admins (manage the platform).',
     },
     {
       id: 'faq-3',
@@ -80,7 +80,7 @@ const HelpCenterPage = () => {
     {
       id: 'faq-8',
       category: 'teachers',
-      question: 'How do I become a teacher on Edutech?',
+      question: 'How do I become a teacher on FlexiLearn?',
       answer: 'Register as a teacher, complete your profile, submit verification documents, and once approved, you can create and publish courses.',
     },
     {
@@ -99,7 +99,7 @@ const HelpCenterPage = () => {
       id: 'faq-11',
       category: 'technical',
       question: 'What browsers are supported?',
-      answer: 'Edutech works best on the latest versions of Chrome, Firefox, Safari, and Edge. We recommend keeping your browser updated.',
+      answer: 'FlexiLearn works best on the latest versions of Chrome, Firefox, Safari, and Edge. We recommend keeping your browser updated.',
     },
     {
       id: 'faq-12',

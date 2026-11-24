@@ -280,7 +280,6 @@ const ManageCoursesPage = () => {
                 <div className="relative h-40 overflow-hidden">
                   {/* Fallback gradient + icon (visible when no image or image fails) */}
                   <div className="absolute inset-0 bg-gradient-to-br from-primary-400 via-primary-500 to-primary-600">
-                    <div className="absolute inset-0 opacity-10 bg-pattern" />
                     <div className="absolute inset-0 flex items-center justify-center">
                       <BookOpen className="w-16 h-16 text-white opacity-40 group-hover:opacity-60 transition-opacity" />
                     </div>

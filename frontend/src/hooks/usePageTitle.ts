@@ -2,22 +2,15 @@ import { useEffect } from 'react';
 
 /**
  * usePageTitle Hook
- * Sets the document title for better SEO and user experience
- *
- * @param title - The page title (will be appended with site name)
- * @example
- * // Static title
- * usePageTitle('Dashboard');
- * // Result: "Dashboard | Edutech"
+ * Sets the document title with the FlexiLearn platform brand suffix.
  */
 function usePageTitle(title: string): void {
-  const siteName = 'Edutech';
+  const siteName = 'FlexiLearn';
 
   useEffect(() => {
     const previousTitle = document.title;
     document.title = title ? `${title} | ${siteName}` : siteName;
 
-    // Restore previous title on unmount
     return () => {
       document.title = previousTitle;
     };

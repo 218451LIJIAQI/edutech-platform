@@ -3,6 +3,7 @@ import reviewService from "../services/review.service";
 import asyncHandler from "../utils/async-handler";
 import { BadRequestError } from "../utils/errors";
 import {
+  parseNullableString,
   parseNumber,
   parseOptionalString,
   parseQueryPositiveInt,
@@ -37,7 +38,7 @@ class ReviewController {
 
   updateReview = asyncHandler(async (req: Request, res: Response) => {
     const rating = parseRating(req.body?.rating, false);
-    const comment = parseOptionalString(
+    const comment = parseNullableString(
       req.body?.comment,
       "comment",
       MAX_COMMENT_LENGTH,

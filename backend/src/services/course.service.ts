@@ -1,7 +1,6 @@
-import crypto from "crypto";
 import {
-  LessonType,
   CourseType,
+  LessonType,
   LiveSessionStatus,
   Prisma,
 } from "@prisma/client";
@@ -11,18 +10,13 @@ import {
   AuthorizationError,
   ValidationError,
 } from "../utils/errors";
+import { parseOptionalDate } from "../utils/http";
 import { buildProtectedAssetDescriptor } from "../utils/protected-asset";
 import { sanitizeUserPlainText } from "../utils/sanitize-user-content";
-import {
-  ensureUrlOrUploadPathForFolders,
-  isSafeExternalHttpUrl,
-} from "../utils/url-or-path";
+import { ensureUrlOrUploadPathForFolders } from "../utils/url-or-path";
 import notificationService from "./notification.service";
 import { buildPaginationMeta, normalizePagination } from "./shared/pagination";
-import {
-  buildCurrentEnrollmentWhere,
-  countActivePackageEnrollments,
-} from "./shared/enrollment-access";
+import { buildCurrentEnrollmentWhere } from "./shared/enrollment-access";
 import {
   buildCourseListOrderBy,
   buildLessonUpdateData,
@@ -36,13 +30,13 @@ import {
   type LessonQuiz,
 } from "./course/course-helpers";
 import {
+  attachEnrollmentCountsToCourses,
   attachEnrollmentCountsToTeacherCourses,
   calculateNextLessonOrderIndex,
   courseDetailInclude,
   courseQuizAttemptInclude,
   ensureRequiredCourseIdentifier,
   listCourseLessonIdsInOrder,
-  liveSessionSelectFields,
   mapCourseDetailResponse,
   mapCourseQuizAttempt,
   moveLessonIdToOrderIndex,
@@ -53,15 +47,9 @@ import {
   requireOwnedCourse,
   requirePackageWithCourse,
   requireTeacherProfileByUserId,
-  sanitizeLiveSessionForViewer,
   teacherCourseInclude,
 } from "./course/course-service-helpers";
 import { calculateActualTeacherStudentCount } from "./teacher/teacher-service-helpers";
-import {
-  broadcastLiveSessionCancelled,
-  broadcastLiveSessionEnded,
-  broadcastLiveSessionStarted,
-} from "../socket/live-session.handler";
 
 export const COURSE_FIELD_LIMITS = {
   COURSE_TITLE_MIN: 3,
@@ -82,9 +70,11 @@ export const COURSE_FIELD_LIMITS = {
   MATERIAL_FILE_TYPE_MAX: 100,
   NOTIFICATION_TITLE_MAX: 150,
   NOTIFICATION_MESSAGE_MAX: 2000,
+  LIVE_SESSION_TITLE_MIN: 2,
+  LIVE_SESSION_TITLE_MAX: 200,
+  LIVE_SESSION_DESCRIPTION_MAX: 2000,
   MAX_PRICE: 99999999.99,
   MAX_DURATION_MINUTES: 60 * 24 * 365,
-  MAX_PARTICIPANTS: 10000,
   MAX_FILE_SIZE_BYTES: 1024 * 1024 * 1024 * 5,
 } as const;
 
@@ -348,37 +338,27 @@ const normalizeNullableAssetUrl = (
   return ensureUrlOrUploadPathForFolders(normalized, folders, errorMessage);
 };
 
-const normalizeNullableExternalMeetingUrl = (
+const normalizeOptionalHttpUrl = (
   value: string | null | undefined,
-): string | null | undefined => {
-  if (value === undefined) {
-    return undefined;
-  }
-
-  if (value === null) {
-    return null;
-  }
-
-  const trimmed = value.trim();
+  fieldName: string,
+): string | null => {
+  const trimmed = value?.trim();
   if (!trimmed) {
     return null;
   }
 
-  if (!isSafeExternalHttpUrl(trimmed)) {
-    throw new ValidationError(
-      "Meeting URL must be a valid external http or https URL",
-    );
+  let parsed: URL;
+  try {
+    parsed = new URL(trimmed);
+  } catch {
+    throw new ValidationError(`${fieldName} must be a valid HTTP or HTTPS URL`);
   }
 
-  return trimmed;
-};
-
-const parseValidScheduledDate = (value: string | Date): Date => {
-  const parsed = value instanceof Date ? value : new Date(value);
-  if (Number.isNaN(parsed.getTime())) {
-    throw new ValidationError("scheduledAt must be a valid date");
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+    throw new ValidationError(`${fieldName} must use http or https protocol`);
   }
-  return parsed;
+
+  return parsed.toString();
 };
 
 const normalizeCourseCreateData = (data: {
@@ -553,7 +533,7 @@ const normalizePackageCreateData = (data: {
   };
 };
 
-const normalizePackageUpdateData = (
+export const normalizePackageUpdateData = (
   currentPackage: {
     price: unknown;
     discount: unknown | null;
@@ -795,40 +775,6 @@ const ensurePackageCanBeSafelyDeleted = async (packageId: string) => {
   }
 };
 
-const liveSessionDetailInclude = {
-  lesson: {
-    select: {
-      id: true,
-      title: true,
-      orderIndex: true,
-      isFree: true,
-      courseId: true,
-      course: {
-        select: {
-          id: true,
-          title: true,
-          isPublished: true,
-          teacherProfileId: true,
-          teacherProfile: {
-            select: {
-              id: true,
-              userId: true,
-              user: {
-                select: {
-                  id: true,
-                  firstName: true,
-                  lastName: true,
-                  avatar: true,
-                },
-              },
-            },
-          },
-        },
-      },
-    },
-  },
-} satisfies Prisma.LiveSessionInclude;
-
 /**
  * Course Service
  * Handles course, lesson, quiz, package, material, live session, course notification, and protected download management.
@@ -888,9 +834,11 @@ class CourseService {
         pagination,
         sortBy,
       );
+      const coursesWithCounts =
+        await attachEnrollmentCountsToCourses(paginatedCourses);
 
       return {
-        courses: paginatedCourses,
+        courses: coursesWithCounts,
         pagination: buildPaginationMeta(
           total,
           pagination.page,
@@ -910,8 +858,10 @@ class CourseService {
       prisma.course.count({ where }),
     ]);
 
+    const coursesWithCounts = await attachEnrollmentCountsToCourses(rawCourses);
+
     return {
-      courses: rawCourses,
+      courses: coursesWithCounts,
       pagination: buildPaginationMeta(total, pagination.page, pagination.limit),
     };
   }
@@ -970,9 +920,11 @@ class CourseService {
       throw new NotFoundError("Course not found");
     }
 
-    const actualTeacherStudentCount = await calculateActualTeacherStudentCount(
-      course.teacherProfileId,
-    );
+    const [actualTeacherStudentCount, coursesWithCount] = await Promise.all([
+      calculateActualTeacherStudentCount(course.teacherProfileId),
+      attachEnrollmentCountsToCourses([course]),
+    ]);
+    const courseWithCount = coursesWithCount[0];
     const mappedCourse = mapCourseDetailResponse(course, {
       isEnrolled,
       canViewQuizAnswers: isCourseOwnerOrAdmin,
@@ -981,6 +933,7 @@ class CourseService {
 
     return {
       ...mappedCourse,
+      _count: courseWithCount._count,
       teacherProfile: {
         ...mappedCourse.teacherProfile,
         totalStudents: actualTeacherStudentCount,
@@ -1096,17 +1049,12 @@ class CourseService {
           },
         });
 
-        const nextOrderedLessonIds = [...orderedLessonIds, createdLesson.id];
-
-        await resequenceCourseLessons(
-          tx,
-          ownedCourse.id,
-          nextOrderedLessonIds,
-        );
+        const nextOrderedIds = [...orderedLessonIds, createdLesson.id];
+        await resequenceCourseLessons(tx, ownedCourse.id, nextOrderedIds);
         await recalculateCourseEnrollmentsProgress(
           tx,
           ownedCourse.id,
-          nextOrderedLessonIds,
+          nextOrderedIds.length,
         );
 
         const refreshedLesson = await tx.lesson.findUnique({
@@ -1225,20 +1173,6 @@ class CourseService {
     const lesson = await requireLessonWithCourse(lessonId);
     await requireOwnedCourse(userId, lesson.courseId);
 
-    const ongoingLiveSession = await prisma.liveSession.findFirst({
-      where: {
-        lessonId: lesson.id,
-        status: LiveSessionStatus.ONGOING,
-      },
-      select: { id: true },
-    });
-
-    if (ongoingLiveSession) {
-      throw new ValidationError(
-        "Cannot delete a lesson while a live session is currently ongoing. End the live session first.",
-      );
-    }
-
     await withLessonOrderRetry(() =>
       prisma.$transaction(async (tx) => {
         await tx.lesson.delete({
@@ -1253,555 +1187,12 @@ class CourseService {
         await recalculateCourseEnrollmentsProgress(
           tx,
           lesson.courseId,
-          remainingLessonIds,
+          remainingLessonIds.length,
         );
       }),
     );
 
     return { message: "Lesson deleted successfully" };
-  }
-
-  async getCourseLiveSessions(courseId: string, userId?: string) {
-    const normalizedCourseId = ensureRequiredCourseIdentifier(
-      courseId,
-      "Course ID",
-    );
-
-    const course = await prisma.course.findUnique({
-      where: { id: normalizedCourseId },
-      select: {
-        id: true,
-        isPublished: true,
-        teacherProfileId: true,
-      },
-    });
-
-    if (!course) {
-      throw new NotFoundError("Course not found");
-    }
-
-    let canManageCourse = false;
-    let isEnrolled = false;
-
-    if (userId) {
-      const normalizedUserId = userId.trim();
-      const [requester, enrollment] = await Promise.all([
-        prisma.user.findUnique({
-          where: { id: normalizedUserId },
-          select: {
-            role: true,
-            teacherProfile: { select: { id: true } },
-          },
-        }),
-        prisma.enrollment.findFirst({
-          where: buildCurrentEnrollmentWhere(
-            {
-              userId: normalizedUserId,
-              package: { courseId: course.id },
-            },
-            new Date(),
-          ),
-          select: { id: true },
-        }),
-      ]);
-
-      canManageCourse =
-        requester?.role === "ADMIN" ||
-        requester?.teacherProfile?.id === course.teacherProfileId;
-      isEnrolled = Boolean(enrollment);
-    }
-
-    if (!course.isPublished && !canManageCourse && !isEnrolled) {
-      throw new NotFoundError("Course not found");
-    }
-
-    const sessions = await prisma.liveSession.findMany({
-      where: {
-        lesson: {
-          courseId: course.id,
-        },
-      },
-      select: {
-        ...liveSessionSelectFields,
-        lesson: {
-          select: {
-            id: true,
-            title: true,
-            orderIndex: true,
-            isFree: true,
-            courseId: true,
-          },
-        },
-      },
-      orderBy: {
-        scheduledAt: "asc",
-      },
-    });
-
-    return sessions.map((session) =>
-      sanitizeLiveSessionForViewer(session, {
-        canAccessLessonContent:
-          session.lesson.isFree || isEnrolled || canManageCourse,
-        canManageCourse,
-      }),
-    );
-  }
-
-  async getLiveSessionById(sessionId: string, userId: string) {
-    const normalizedSessionId = ensureRequiredCourseIdentifier(
-      sessionId,
-      "Live session ID",
-    );
-    const normalizedUserId = ensureRequiredCourseIdentifier(userId, "User ID");
-
-    const [session, requester] = await Promise.all([
-      prisma.liveSession.findUnique({
-        where: { id: normalizedSessionId },
-        include: liveSessionDetailInclude,
-      }),
-      prisma.user.findUnique({
-        where: { id: normalizedUserId },
-        select: {
-          id: true,
-          role: true,
-          teacherProfile: { select: { id: true } },
-        },
-      }),
-    ]);
-
-    if (!session) {
-      throw new NotFoundError("Live session not found");
-    }
-
-    if (!requester) {
-      throw new NotFoundError("User not found");
-    }
-
-    const isInstructor =
-      requester.teacherProfile?.id === session.lesson.course.teacherProfileId;
-    const isAdmin = requester.role === "ADMIN";
-    const canManageCourse = isInstructor || isAdmin;
-
-    let hasStudentAccess =
-      session.lesson.isFree && session.lesson.course.isPublished;
-
-    if (!canManageCourse && !hasStudentAccess) {
-      const enrollment = await prisma.enrollment.findFirst({
-        where: buildCurrentEnrollmentWhere(
-          {
-            userId: normalizedUserId,
-            package: { courseId: session.lesson.courseId },
-          },
-          new Date(),
-        ),
-        select: { id: true },
-      });
-      hasStudentAccess = Boolean(enrollment);
-    }
-
-    if (!canManageCourse && !hasStudentAccess) {
-      throw new AuthorizationError(
-        "You must be enrolled in this course to access this live session",
-      );
-    }
-
-    const sanitized = sanitizeLiveSessionForViewer(session, {
-      canAccessLessonContent: true,
-      canManageCourse,
-    });
-
-    return {
-      ...sanitized,
-      isInstructor,
-      canManageSession: canManageCourse,
-    };
-  }
-
-  async createLiveSession(
-    userId: string,
-    lessonId: string,
-    data: {
-      title: string;
-      description?: string;
-      scheduledAt: string | Date;
-      duration?: number;
-      maxParticipants?: number;
-      meetingUrl?: string | null;
-    },
-  ) {
-    const lesson = await requireLessonWithCourse(lessonId);
-    await requireOwnedCourse(userId, lesson.courseId);
-
-    const title = normalizeRequiredText(data.title, "Live session title", {
-      minLength: COURSE_FIELD_LIMITS.LESSON_TITLE_MIN,
-      maxLength: COURSE_FIELD_LIMITS.LESSON_TITLE_MAX,
-    });
-    const description = normalizeOptionalText(
-      data.description,
-      "Live session description",
-      {
-        maxLength: COURSE_FIELD_LIMITS.LESSON_DESCRIPTION_MAX,
-        preserveLineBreaks: true,
-      },
-    );
-    const scheduledAt = parseValidScheduledDate(data.scheduledAt);
-    const duration = normalizePositiveInteger(
-      data.duration,
-      "Live session duration",
-      { max: COURSE_FIELD_LIMITS.MAX_DURATION_MINUTES },
-    );
-    const maxParticipants = normalizePositiveInteger(
-      data.maxParticipants,
-      "Maximum participants",
-      { max: COURSE_FIELD_LIMITS.MAX_PARTICIPANTS },
-    );
-    const meetingUrl =
-      normalizeNullableExternalMeetingUrl(data.meetingUrl) ?? null;
-
-    return prisma.liveSession.create({
-      data: {
-        lessonId: lesson.id,
-        title,
-        description,
-        scheduledAt,
-        duration,
-        maxParticipants,
-        meetingUrl,
-        roomId: `room-${crypto.randomUUID()}`,
-        status: LiveSessionStatus.SCHEDULED,
-      },
-      include: {
-        lesson: {
-          select: {
-            id: true,
-            title: true,
-            orderIndex: true,
-            isFree: true,
-            courseId: true,
-          },
-        },
-      },
-    });
-  }
-
-  async updateLiveSession(
-    userId: string,
-    sessionId: string,
-    data: {
-      title?: string;
-      description?: string | null;
-      scheduledAt?: string | Date;
-      duration?: number | null;
-      maxParticipants?: number | null;
-      meetingUrl?: string | null;
-      recordingUrl?: string | null;
-      status?: LiveSessionStatus;
-    },
-  ) {
-    const normalizedSessionId = ensureRequiredCourseIdentifier(
-      sessionId,
-      "Live session ID",
-    );
-
-    const existing = await prisma.liveSession.findUnique({
-      where: { id: normalizedSessionId },
-      include: {
-        lesson: {
-          select: { courseId: true },
-        },
-      },
-    });
-
-    if (!existing) {
-      throw new NotFoundError("Live session not found");
-    }
-
-    await requireOwnedCourse(userId, existing.lesson.courseId);
-
-    const updateData: Prisma.LiveSessionUpdateInput = {};
-
-    if (data.title !== undefined) {
-      updateData.title = normalizeRequiredText(
-        data.title,
-        "Live session title",
-        {
-          minLength: COURSE_FIELD_LIMITS.LESSON_TITLE_MIN,
-          maxLength: COURSE_FIELD_LIMITS.LESSON_TITLE_MAX,
-        },
-      );
-    }
-
-    if (data.description !== undefined) {
-      updateData.description = normalizeNullableOptionalText(
-        data.description,
-        "Live session description",
-        {
-          maxLength: COURSE_FIELD_LIMITS.LESSON_DESCRIPTION_MAX,
-          preserveLineBreaks: true,
-        },
-      );
-    }
-
-    if (data.scheduledAt !== undefined) {
-      if (existing.status !== LiveSessionStatus.SCHEDULED) {
-        throw new ValidationError(
-          "Only scheduled live sessions can be rescheduled",
-        );
-      }
-      updateData.scheduledAt = parseValidScheduledDate(data.scheduledAt);
-    }
-
-    if (data.duration !== undefined) {
-      updateData.duration = normalizeNullablePositiveInteger(
-        data.duration,
-        "Live session duration",
-        { max: COURSE_FIELD_LIMITS.MAX_DURATION_MINUTES },
-      );
-    }
-
-    if (data.maxParticipants !== undefined) {
-      updateData.maxParticipants = normalizeNullablePositiveInteger(
-        data.maxParticipants,
-        "Maximum participants",
-        { max: COURSE_FIELD_LIMITS.MAX_PARTICIPANTS },
-      );
-    }
-
-    if (data.meetingUrl !== undefined) {
-      updateData.meetingUrl = normalizeNullableExternalMeetingUrl(
-        data.meetingUrl,
-      );
-    }
-
-    if (data.recordingUrl !== undefined) {
-      updateData.recordingUrl = normalizeNullableAssetUrl(
-        data.recordingUrl,
-        ["videos"],
-        "Recording URL must be an external URL or use the /uploads/videos/ folder",
-      );
-    }
-
-    let wasCancelled = false;
-    if (data.status !== undefined && data.status !== existing.status) {
-      if (
-        data.status === LiveSessionStatus.CANCELLED &&
-        existing.status === LiveSessionStatus.SCHEDULED
-      ) {
-        updateData.status = LiveSessionStatus.CANCELLED;
-        wasCancelled = true;
-      } else {
-        throw new ValidationError(
-          "Use the start or end endpoints to transition active live sessions, or cancel a scheduled session",
-        );
-      }
-    }
-
-    const updated = await prisma.liveSession.update({
-      where: { id: existing.id },
-      data: updateData,
-      include: {
-        lesson: {
-          select: {
-            id: true,
-            title: true,
-            orderIndex: true,
-            isFree: true,
-            courseId: true,
-          },
-        },
-      },
-    });
-
-    if (wasCancelled) {
-      broadcastLiveSessionCancelled(updated);
-    }
-
-    return updated;
-  }
-
-  async startLiveSession(userId: string, sessionId: string) {
-    const normalizedSessionId = ensureRequiredCourseIdentifier(
-      sessionId,
-      "Live session ID",
-    );
-
-    const existing = await prisma.liveSession.findUnique({
-      where: { id: normalizedSessionId },
-      include: {
-        lesson: {
-          select: {
-            id: true,
-            title: true,
-            courseId: true,
-          },
-        },
-      },
-    });
-
-    if (!existing) {
-      throw new NotFoundError("Live session not found");
-    }
-
-    await requireOwnedCourse(userId, existing.lesson.courseId);
-
-    if (existing.status === LiveSessionStatus.ONGOING) {
-      throw new ValidationError("Live session is already ongoing");
-    }
-
-    if (existing.status !== LiveSessionStatus.SCHEDULED) {
-      throw new ValidationError("Only scheduled live sessions can be started");
-    }
-
-    const startedAt = new Date();
-    const transition = await prisma.liveSession.updateMany({
-      where: {
-        id: existing.id,
-        status: LiveSessionStatus.SCHEDULED,
-      },
-      data: {
-        status: LiveSessionStatus.ONGOING,
-        startedAt,
-      },
-    });
-
-    if (transition.count !== 1) {
-      throw new ValidationError(
-        "Live session status changed. Please refresh and try again.",
-      );
-    }
-
-    const updated = await prisma.liveSession.findUniqueOrThrow({
-      where: { id: existing.id },
-      include: {
-        lesson: {
-          select: {
-            id: true,
-            title: true,
-            orderIndex: true,
-            isFree: true,
-            courseId: true,
-          },
-        },
-      },
-    });
-
-    broadcastLiveSessionStarted(updated);
-
-    return updated;
-  }
-
-  async endLiveSession(
-    userId: string,
-    sessionId: string,
-    data?: { recordingUrl?: string | null },
-  ) {
-    const normalizedSessionId = ensureRequiredCourseIdentifier(
-      sessionId,
-      "Live session ID",
-    );
-
-    const existing = await prisma.liveSession.findUnique({
-      where: { id: normalizedSessionId },
-      include: {
-        lesson: {
-          select: { courseId: true },
-        },
-      },
-    });
-
-    if (!existing) {
-      throw new NotFoundError("Live session not found");
-    }
-
-    await requireOwnedCourse(userId, existing.lesson.courseId);
-
-    if (existing.status !== LiveSessionStatus.ONGOING) {
-      throw new ValidationError("Only ongoing live sessions can be ended");
-    }
-
-    const recordingUrl =
-      data?.recordingUrl !== undefined
-        ? normalizeNullableAssetUrl(
-            data.recordingUrl,
-            ["videos"],
-            "Recording URL must be an external URL or use the /uploads/videos/ folder",
-          )
-        : undefined;
-
-    const now = new Date();
-    const endedAt =
-      existing.startedAt && now < existing.startedAt ? existing.startedAt : now;
-
-    const transition = await prisma.liveSession.updateMany({
-      where: {
-        id: existing.id,
-        status: LiveSessionStatus.ONGOING,
-      },
-      data: {
-        status: LiveSessionStatus.COMPLETED,
-        endedAt,
-        ...(recordingUrl !== undefined ? { recordingUrl } : {}),
-      },
-    });
-
-    if (transition.count !== 1) {
-      throw new ValidationError(
-        "Live session status changed. Please refresh and try again.",
-      );
-    }
-
-    const updated = await prisma.liveSession.findUniqueOrThrow({
-      where: { id: existing.id },
-      include: {
-        lesson: {
-          select: {
-            id: true,
-            title: true,
-            orderIndex: true,
-            isFree: true,
-            courseId: true,
-          },
-        },
-      },
-    });
-
-    broadcastLiveSessionEnded(updated);
-
-    return updated;
-  }
-
-  async deleteLiveSession(userId: string, sessionId: string) {
-    const normalizedSessionId = ensureRequiredCourseIdentifier(
-      sessionId,
-      "Live session ID",
-    );
-
-    const existing = await prisma.liveSession.findUnique({
-      where: { id: normalizedSessionId },
-      include: {
-        lesson: {
-          select: { courseId: true },
-        },
-      },
-    });
-
-    if (!existing) {
-      throw new NotFoundError("Live session not found");
-    }
-
-    await requireOwnedCourse(userId, existing.lesson.courseId);
-
-    if (existing.status === LiveSessionStatus.ONGOING) {
-      throw new ValidationError(
-        "End the ongoing live session before deleting it",
-      );
-    }
-
-    await prisma.liveSession.delete({
-      where: { id: existing.id },
-    });
-
-    return { message: "Live session deleted successfully" };
   }
 
   async submitLessonQuiz(userId: string, lessonId: string, answers: number[]) {
@@ -1909,16 +1300,294 @@ class CourseService {
       "Course ID",
     );
 
+    const [course, activeEnrollment] = await Promise.all([
+      prisma.course.findUnique({
+        where: { id: normalizedCourseId },
+        select: { id: true, isPublished: true },
+      }),
+      prisma.enrollment.findFirst({
+        where: buildCurrentEnrollmentWhere(
+          {
+            userId: normalizedUserId,
+            package: { courseId: normalizedCourseId },
+          },
+          new Date(),
+        ),
+        select: { id: true },
+      }),
+    ]);
+
+    if (!course) {
+      throw new NotFoundError("Course not found");
+    }
+
+    if (!activeEnrollment && !course.isPublished) {
+      throw new AuthorizationError(
+        "You do not have active access to this course",
+      );
+    }
+
     const attempts = await prisma.quizAttempt.findMany({
       where: {
         studentId: normalizedUserId,
-        lesson: { courseId: normalizedCourseId },
+        lesson: activeEnrollment
+          ? { courseId: normalizedCourseId }
+          : { courseId: normalizedCourseId, isFree: true },
       },
       include: courseQuizAttemptInclude,
       orderBy: [{ submittedAt: "desc" }],
     });
 
     return attempts.map(mapCourseQuizAttempt);
+  }
+
+  async getCourseLiveSessions(userId: string, courseId: string) {
+    const normalizedUserId = ensureRequiredCourseIdentifier(userId, "User ID");
+    const normalizedCourseId = ensureRequiredCourseIdentifier(
+      courseId,
+      "Course ID",
+    );
+
+    const [course, requester, activeEnrollment] = await Promise.all([
+      prisma.course.findUnique({
+        where: { id: normalizedCourseId },
+        select: {
+          id: true,
+          isPublished: true,
+          teacherProfileId: true,
+        },
+      }),
+      prisma.user.findUnique({
+        where: { id: normalizedUserId },
+        select: {
+          role: true,
+          teacherProfile: { select: { id: true } },
+        },
+      }),
+      prisma.enrollment.findFirst({
+        where: buildCurrentEnrollmentWhere(
+          {
+            userId: normalizedUserId,
+            package: { courseId: normalizedCourseId },
+          },
+          new Date(),
+        ),
+        select: { id: true },
+      }),
+    ]);
+
+    if (!course) {
+      throw new NotFoundError("Course not found");
+    }
+
+    const isOwnerOrAdmin =
+      requester?.role === "ADMIN" ||
+      requester?.teacherProfile?.id === course.teacherProfileId;
+    const isEnrolled = Boolean(activeEnrollment);
+
+    if (!isOwnerOrAdmin && !isEnrolled && !course.isPublished) {
+      throw new NotFoundError("Course not found");
+    }
+
+    const sessions = await prisma.liveSession.findMany({
+      where: {
+        lesson: {
+          courseId: course.id,
+          ...(isOwnerOrAdmin || isEnrolled ? {} : { isFree: true }),
+        },
+      },
+      include: {
+        lesson: {
+          select: {
+            id: true,
+            title: true,
+            orderIndex: true,
+            type: true,
+            isFree: true,
+          },
+        },
+      },
+      orderBy: [{ scheduledAt: "asc" }, { createdAt: "desc" }],
+    });
+
+    return sessions.map((session) => ({
+      id: session.id,
+      lessonId: session.lessonId,
+      lessonTitle: session.lesson.title,
+      lessonOrderIndex: session.lesson.orderIndex,
+      title: session.title,
+      description: session.description,
+      scheduledAt: session.scheduledAt,
+      startedAt: session.startedAt,
+      endedAt: session.endedAt,
+      duration: session.duration,
+      maxParticipants: session.maxParticipants,
+      status: session.status,
+      meetingUrl:
+        isOwnerOrAdmin || session.status === LiveSessionStatus.ONGOING
+          ? session.meetingUrl
+          : null,
+      recordingUrl:
+        isOwnerOrAdmin || isEnrolled || session.lesson.isFree
+          ? session.recordingUrl
+          : null,
+      createdAt: session.createdAt,
+    }));
+  }
+
+  async createLiveSession(
+    userId: string,
+    lessonId: string,
+    data: {
+      title: string;
+      description?: string;
+      scheduledAt: string;
+      duration?: number;
+      meetingUrl?: string;
+      maxParticipants?: number;
+    },
+  ) {
+    const lesson = await requireLessonWithCourse(lessonId);
+    await requireOwnedCourse(userId, lesson.courseId);
+
+    if (lesson.type !== LessonType.LIVE && lesson.type !== LessonType.HYBRID) {
+      throw new ValidationError(
+        "Live sessions can only be scheduled on LIVE or HYBRID lessons",
+      );
+    }
+
+    const scheduledDate = parseOptionalDate(data.scheduledAt, "scheduledAt");
+    if (!scheduledDate) {
+      throw new ValidationError("scheduledAt is required");
+    }
+
+    return prisma.liveSession.create({
+      data: {
+        lessonId: lesson.id,
+        title: normalizeRequiredText(data.title, "Session title", {
+          minLength: COURSE_FIELD_LIMITS.LIVE_SESSION_TITLE_MIN,
+          maxLength: COURSE_FIELD_LIMITS.LIVE_SESSION_TITLE_MAX,
+        }),
+        description:
+          normalizeOptionalText(data.description, "Session description", {
+            maxLength: COURSE_FIELD_LIMITS.LIVE_SESSION_DESCRIPTION_MAX,
+            preserveLineBreaks: true,
+          }) ?? null,
+        scheduledAt: scheduledDate,
+        duration:
+          normalizePositiveInteger(data.duration, "Session duration", {
+            max: COURSE_FIELD_LIMITS.MAX_DURATION_MINUTES,
+          }) ?? null,
+        meetingUrl: normalizeOptionalHttpUrl(data.meetingUrl, "Meeting URL"),
+        maxParticipants:
+          normalizePositiveInteger(
+            data.maxParticipants,
+            "Maximum participants",
+            { max: 10000 },
+          ) ?? null,
+        status: LiveSessionStatus.SCHEDULED,
+      },
+    });
+  }
+
+  async updateLiveSessionStatus(
+    userId: string,
+    sessionId: string,
+    status: LiveSessionStatus,
+    recordingUrl?: string | null,
+  ) {
+    const normalizedSessionId = ensureRequiredCourseIdentifier(
+      sessionId,
+      "Session ID",
+    );
+    const normalizedRecordingUrl = normalizeNullableAssetUrl(
+      recordingUrl,
+      ["videos"],
+      "Recording URL must be an external URL or use the /uploads/videos/ folder",
+    );
+
+    if (
+      normalizedRecordingUrl !== undefined &&
+      status !== LiveSessionStatus.COMPLETED
+    ) {
+      throw new ValidationError(
+        "Recording URL can only be attached when a live session is completed",
+      );
+    }
+
+    const existingSession = await prisma.liveSession.findUnique({
+      where: { id: normalizedSessionId },
+      include: {
+        lesson: {
+          select: { courseId: true },
+        },
+      },
+    });
+
+    if (!existingSession) {
+      throw new NotFoundError("Live session not found");
+    }
+
+    await requireOwnedCourse(userId, existingSession.lesson.courseId);
+
+    if (
+      status === LiveSessionStatus.COMPLETED &&
+      existingSession.status === LiveSessionStatus.COMPLETED &&
+      normalizedRecordingUrl !== undefined
+    ) {
+      return prisma.liveSession.update({
+        where: { id: normalizedSessionId },
+        data: { recordingUrl: normalizedRecordingUrl },
+      });
+    }
+
+    const now = new Date();
+    let expectedCurrentStatus: LiveSessionStatus;
+    let extraUpdate: Prisma.LiveSessionUpdateManyMutationInput = {};
+
+    if (status === LiveSessionStatus.ONGOING) {
+      expectedCurrentStatus = LiveSessionStatus.SCHEDULED;
+      extraUpdate = { startedAt: now };
+    } else if (status === LiveSessionStatus.COMPLETED) {
+      expectedCurrentStatus = LiveSessionStatus.ONGOING;
+      extraUpdate = {
+        endedAt: now,
+        ...(normalizedRecordingUrl !== undefined
+          ? { recordingUrl: normalizedRecordingUrl }
+          : {}),
+      };
+    } else if (status === LiveSessionStatus.CANCELLED) {
+      expectedCurrentStatus = LiveSessionStatus.SCHEDULED;
+    } else {
+      throw new ValidationError("Unsupported live session status transition");
+    }
+
+    if (existingSession.status !== expectedCurrentStatus) {
+      throw new ValidationError(
+        `Cannot transition live session from ${existingSession.status} to ${status}`,
+      );
+    }
+
+    const updated = await prisma.liveSession.updateMany({
+      where: {
+        id: normalizedSessionId,
+        status: expectedCurrentStatus,
+      },
+      data: {
+        status,
+        ...extraUpdate,
+      },
+    });
+
+    if (updated.count !== 1) {
+      throw new ValidationError(
+        "Live session status changed concurrently. Please refresh.",
+      );
+    }
+
+    return prisma.liveSession.findUniqueOrThrow({
+      where: { id: normalizedSessionId },
+    });
   }
 
   async createPackage(
@@ -1963,22 +1632,6 @@ class CourseService {
     await requireOwnedCourse(userId, lessonPackage.courseId);
 
     const updateData = normalizePackageUpdateData(lessonPackage, data);
-
-    if (
-      typeof updateData.maxStudents === "number" &&
-      updateData.maxStudents > 0
-    ) {
-      const currentActiveEnrollments = await countActivePackageEnrollments(
-        prisma,
-        lessonPackage.id,
-        new Date(),
-      );
-      if (updateData.maxStudents < currentActiveEnrollments) {
-        throw new ValidationError(
-          `Maximum students cannot be less than current active enrollments (${currentActiveEnrollments})`,
-        );
-      }
-    }
 
     return prisma.lessonPackage.update({
       where: { id: lessonPackage.id },

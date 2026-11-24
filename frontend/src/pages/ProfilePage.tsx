@@ -484,7 +484,14 @@ const ProfilePage = () => {
 
     {/* Change Password Modal */}
     {showPwdModal && (
-      <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div
+        className="fixed inset-0 bg-slate-950/55 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+        onMouseDown={(event) => {
+          if (event.target === event.currentTarget && !pwdSaving) {
+            setShowPwdModal(false);
+          }
+        }}
+      >
         <div
           ref={passwordModalRef}
           tabIndex={-1}
@@ -492,7 +499,7 @@ const ProfilePage = () => {
           aria-modal="true"
           aria-labelledby="change-password-title"
           aria-describedby="change-password-description"
-          className="bg-white rounded-2xl p-6 w-full max-w-md shadow-xl"
+          className="bg-white rounded-2xl p-6 w-full max-w-md max-h-[90vh] overflow-y-auto shadow-modal"
         >
           <h3 id="change-password-title" className="text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
             <Lock className="w-5 h-5 text-primary-600" /> Change Password

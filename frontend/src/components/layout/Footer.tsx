@@ -84,7 +84,7 @@ const Footer = () => {
           <div className="flex flex-col items-center gap-2 md:col-span-4 md:items-start">
             <Link
               to="/"
-              aria-label="Go to Edutech homepage"
+              aria-label="Go to FlexiLearn homepage"
               className="group flex items-center gap-3 rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-400 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-950"
             >
               <div className="relative">
@@ -95,8 +95,8 @@ const Footer = () => {
               </div>
 
               <div>
-                <span className="text-lg font-bold text-white">Edutech</span>
-                <span className="ml-2 hidden text-xs text-gray-500 sm:inline">
+                <span className="text-lg font-bold text-white">FlexiLearn</span>
+                <span className="ml-2 hidden text-xs text-slate-300 sm:inline">
                   Platform
                 </span>
               </div>
@@ -105,7 +105,7 @@ const Footer = () => {
             {publicSiteConfig.supportEmail ? (
               <a
                 href={`mailto:${publicSiteConfig.supportEmail}`}
-                className="group flex items-center gap-2 rounded-md text-sm text-gray-400 transition-colors hover:text-primary-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-400 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-950"
+                className="group flex items-center gap-2 rounded-md text-sm text-slate-300 transition-colors hover:text-primary-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-400 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-950"
               >
                 <Mail className="h-4 w-4" aria-hidden="true" />
                 <span>{publicSiteConfig.supportEmail}</span>
@@ -117,7 +117,7 @@ const Footer = () => {
             ) : (
               <Link
                 to="/help"
-                className="group flex items-center gap-2 rounded-md text-sm text-gray-400 transition-colors hover:text-primary-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-400 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-950"
+                className="group flex items-center gap-2 rounded-md text-sm text-slate-300 transition-colors hover:text-primary-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-400 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-950"
               >
                 <Mail className="h-4 w-4" aria-hidden="true" />
                 <span>Help and support</span>
@@ -139,7 +139,7 @@ const Footer = () => {
                 <Link
                   key={link.to}
                   to={link.to}
-                  className="group relative rounded-md text-sm text-gray-400 transition-colors hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-400 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-950"
+                  className="group relative rounded-md text-sm text-slate-300 transition-colors hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-400 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-950"
                 >
                   {link.label}
                   <span
@@ -161,7 +161,7 @@ const Footer = () => {
                     href={social.url}
                     target="_blank"
                     rel="noopener noreferrer"
-                    aria-label={`Visit Edutech on ${social.name}`}
+                    aria-label={`Visit FlexiLearn on ${social.name}`}
                     title={social.name}
                     className="group relative flex h-9 w-9 items-center justify-center rounded-lg bg-white/5 transition-all duration-200 hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-400 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-950"
                   >
@@ -171,7 +171,7 @@ const Footer = () => {
                     />
                     <svg
                       aria-hidden="true"
-                      className="relative h-4 w-4 text-gray-500 transition-colors group-hover:text-white"
+                      className="relative h-4 w-4 text-slate-300 transition-colors group-hover:text-white"
                       fill="currentColor"
                       viewBox="0 0 24 24"
                     >
@@ -186,9 +186,9 @@ const Footer = () => {
 
         {/* Bottom Bar */}
         <div className="border-t border-white/5 py-3">
-          <p className="flex flex-wrap items-center justify-center gap-1.5 text-center text-sm text-gray-500">
+          <p className="flex flex-wrap items-center justify-center gap-1.5 text-center text-sm text-slate-300">
             <Copyright className="h-3.5 w-3.5" aria-hidden="true" />
-            <span>{currentYear} Edutech. Crafted with</span>
+            <span>{currentYear} FlexiLearn. Crafted with</span>
             <Heart
               className="h-3.5 w-3.5 fill-rose-500 text-rose-500"
               aria-hidden="true"

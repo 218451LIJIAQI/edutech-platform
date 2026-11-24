@@ -4,19 +4,9 @@ import {
   AuthorizationError,
   ValidationError,
 } from "../utils/errors";
-import {
-  normalizeLessonQuiz,
-  sanitizeLessonQuiz,
-} from "./course/course-helpers";
-import {
-  liveSessionSelectFields,
-  mapProtectedMaterialResponse,
-  sanitizeLiveSessionForViewer,
-} from "./course/course-service-helpers";
-import {
-  buildCurrentEnrollmentWhere,
-  parseCompletedLessonIdsJson,
-} from "./shared/enrollment-access";
+import { buildCurrentEnrollmentWhere } from "./shared/enrollment-access";
+import { normalizeLessonQuiz } from "./course/course-helpers";
+import { sanitizeStudentEnrollmentCourse } from "./course/course-service-helpers";
 
 const MAX_PROGRESS = 100;
 const MAX_COMPLETED_LESSONS = 10000;
@@ -67,7 +57,7 @@ const normalizeOptionalProgress = (value?: number): number | undefined => {
   return Math.round(value);
 };
 
-const calculateProgressFromLessons = (
+export const calculateProgressFromLessons = (
   completedLessons: number,
   totalLessons: number,
 ): number => {
@@ -79,6 +69,57 @@ const calculateProgressFromLessons = (
     MAX_PROGRESS,
     Math.max(0, Math.round((completedLessons / totalLessons) * MAX_PROGRESS)),
   );
+};
+
+export const parseStoredCompletedLessonIds = (raw: unknown): string[] => {
+  if (!Array.isArray(raw)) {
+    return [];
+  }
+
+  const ids: string[] = [];
+  const seen = new Set<string>();
+  for (const item of raw) {
+    if (typeof item !== "string") {
+      continue;
+    }
+    const trimmed = item.trim();
+    if (!trimmed || seen.has(trimmed)) {
+      continue;
+    }
+    seen.add(trimmed);
+    ids.push(trimmed);
+  }
+  return ids;
+};
+
+export const resolveEnrollmentCompletedLessonIds = (params: {
+  storedCompletedLessonIds: unknown;
+  completedLessonsCount: number;
+  orderedCourseLessonIds: string[];
+}): string[] => {
+  const {
+    storedCompletedLessonIds,
+    completedLessonsCount,
+    orderedCourseLessonIds,
+  } = params;
+  const validSet = new Set(orderedCourseLessonIds);
+  const parsedIds = parseStoredCompletedLessonIds(
+    storedCompletedLessonIds,
+  ).filter((id) => validSet.has(id));
+
+  if (parsedIds.length > 0) {
+    const parsedSet = new Set(parsedIds);
+    return orderedCourseLessonIds.filter((id) => parsedSet.has(id));
+  }
+
+  if (completedLessonsCount > 0) {
+    return orderedCourseLessonIds.slice(
+      0,
+      Math.min(completedLessonsCount, orderedCourseLessonIds.length),
+    );
+  }
+
+  return [];
 };
 
 const normalizeCompletedLessonIds = (lessonIds: string[]): string[] => {
@@ -93,32 +134,61 @@ const normalizeCompletedLessonIds = (lessonIds: string[]): string[] => {
   return normalizedLessonIds;
 };
 
-const sanitizeStudentEnrollmentLesson = <
-  T extends {
-    id: string;
-    quiz: unknown;
-    liveSessions?: Array<{
-      status: "SCHEDULED" | "ONGOING" | "COMPLETED" | "CANCELLED";
-      meetingUrl: string | null;
-      recordingUrl: string | null;
-    }>;
-  },
->(
-  lesson: T,
-) => ({
-  ...lesson,
-  quiz: sanitizeLessonQuiz(normalizeLessonQuiz(lesson.quiz as never)),
-  ...(lesson.liveSessions
-    ? {
-        liveSessions: lesson.liveSessions.map((session) =>
-          sanitizeLiveSessionForViewer(session, {
-            canAccessLessonContent: true,
-            canManageCourse: false,
-          }),
-        ),
+export const assertQuizGateForLessonCompletion = (params: {
+  courseLessons: Array<{ id: string; quiz: unknown }>;
+  passedQuizLessonIds: ReadonlySet<string>;
+  requestedCompletedLessonIds?: string[];
+  requestedCompletedLessonCount?: number;
+}): number => {
+  const {
+    courseLessons,
+    passedQuizLessonIds,
+    requestedCompletedLessonIds,
+    requestedCompletedLessonCount,
+  } = params;
+
+  const lessonById = new Map(courseLessons.map((lesson) => [lesson.id, lesson]));
+  const quizLessonIds = new Set(
+    courseLessons
+      .filter((lesson) => normalizeLessonQuiz(lesson.quiz) !== null)
+      .map((lesson) => lesson.id),
+  );
+
+  if (requestedCompletedLessonIds !== undefined) {
+    for (const lessonId of requestedCompletedLessonIds) {
+      if (!lessonById.has(lessonId)) {
+        throw new ValidationError(
+          "completedLessons contains lessons that do not belong to this course",
+        );
       }
-    : {}),
-});
+      if (quizLessonIds.has(lessonId) && !passedQuizLessonIds.has(lessonId)) {
+        throw new ValidationError(
+          "You must pass the lesson quiz before marking this lesson as complete",
+        );
+      }
+    }
+
+    return Math.min(requestedCompletedLessonIds.length, courseLessons.length);
+  }
+
+  const maxAllowedByQuizzes =
+    courseLessons.length -
+    quizLessonIds.size +
+    Array.from(quizLessonIds).filter((id) => passedQuizLessonIds.has(id)).length;
+
+  const requestedCount = Math.min(
+    requestedCompletedLessonCount ?? 0,
+    courseLessons.length,
+  );
+
+  if (requestedCount > maxAllowedByQuizzes) {
+    throw new ValidationError(
+      "You must pass all required lesson quizzes before completing those lessons",
+    );
+  }
+
+  return requestedCount;
+};
 
 const requireTeacherOwnedCourse = async (userId: string, courseId: string) => {
   const normalizedUserId = normalizeRequiredId(userId, "User ID");
@@ -153,11 +223,11 @@ const requireTeacherOwnedCourse = async (userId: string, courseId: string) => {
 
 /**
  * Enrollment Service
- * Handles student enrollments, access checking, quiz-gated course progress, and teacher course statistics.
+ * Handles student enrollments, access checking, course progress, and teacher course statistics.
  */
 class EnrollmentService {
   /**
-   * Get current active enrollments for a user with quiz answers stripped.
+   * Get current active enrollments for a user, stripping quiz answer keys.
    */
   async getUserEnrollments(userId: string) {
     const normalizedUserId = normalizeRequiredId(userId, "User ID");
@@ -185,12 +255,6 @@ class EnrollmentService {
                 },
                 lessons: {
                   orderBy: { orderIndex: "asc" },
-                  include: {
-                    liveSessions: {
-                      orderBy: { scheduledAt: "asc" },
-                      select: liveSessionSelectFields,
-                    },
-                  },
                 },
               },
             },
@@ -200,26 +264,34 @@ class EnrollmentService {
       orderBy: { enrolledAt: "desc" },
     });
 
-    return enrollments.map((enrollment) => ({
-      ...enrollment,
-      completedLessonIds: parseCompletedLessonIdsJson(
-        enrollment.completedLessonIds,
-      ),
-      package: {
-        ...enrollment.package,
-        course: {
-          ...enrollment.package.course,
-          lessons: enrollment.package.course.lessons.map(
-            sanitizeStudentEnrollmentLesson,
-          ),
+    return enrollments.map((enrollment) => {
+      const orderedCourseLessonIds = enrollment.package.course.lessons.map(
+        (lesson) => lesson.id,
+      );
+      const completedLessonIds = resolveEnrollmentCompletedLessonIds({
+        storedCompletedLessonIds: enrollment.completedLessonIds,
+        completedLessonsCount: enrollment.completedLessons,
+        orderedCourseLessonIds,
+      });
+
+      return {
+        ...enrollment,
+        completedLessonIds,
+        completedLessons: completedLessonIds.length,
+        progress: calculateProgressFromLessons(
+          completedLessonIds.length,
+          orderedCourseLessonIds.length,
+        ),
+        package: {
+          ...enrollment.package,
+          course: sanitizeStudentEnrollmentCourse(enrollment.package.course),
         },
-      },
-    }));
+      };
+    });
   }
 
   /**
-   * Get one active enrollment by ID, scoped to the requesting user,
-   * stripping quiz answer keys and internal upload storage paths.
+   * Get one active enrollment by ID, scoped to the requesting user, with sanitized quizzes and material access URLs.
    */
   async getEnrollmentById(enrollmentId: string, userId: string) {
     const normalizedEnrollmentId = normalizeRequiredId(
@@ -251,12 +323,6 @@ class EnrollmentService {
                 },
                 lessons: {
                   orderBy: { orderIndex: "asc" },
-                  include: {
-                    liveSessions: {
-                      orderBy: { scheduledAt: "asc" },
-                      select: liveSessionSelectFields,
-                    },
-                  },
                 },
                 materials: {
                   where: {
@@ -277,57 +343,51 @@ class EnrollmentService {
       throw new NotFoundError("Enrollment not found");
     }
 
+    const orderedCourseLessonIds = enrollment.package.course.lessons.map(
+      (lesson) => lesson.id,
+    );
+    const completedLessonIds = resolveEnrollmentCompletedLessonIds({
+      storedCompletedLessonIds: enrollment.completedLessonIds,
+      completedLessonsCount: enrollment.completedLessons,
+      orderedCourseLessonIds,
+    });
+
     return {
       ...enrollment,
-      completedLessonIds: parseCompletedLessonIdsJson(
-        enrollment.completedLessonIds,
+      completedLessonIds,
+      completedLessons: completedLessonIds.length,
+      progress: calculateProgressFromLessons(
+        completedLessonIds.length,
+        orderedCourseLessonIds.length,
       ),
       package: {
         ...enrollment.package,
-        course: {
-          ...enrollment.package.course,
-          lessons: enrollment.package.course.lessons.map(
-            sanitizeStudentEnrollmentLesson,
-          ),
-          materials: enrollment.package.course.materials.map((material) =>
-            mapProtectedMaterialResponse(material, {
-              canAccessPaidContent: true,
-              canManageMaterials: false,
-            }),
-          ),
-        },
+        course: sanitizeStudentEnrollmentCourse(enrollment.package.course),
       },
     };
   }
 
   /**
    * Update enrollment progress for the enrolled student.
-   * Enforces server-side quiz passing gates and persists exact out-of-order completedLessonIds.
+   * Enforces server-side quiz pass verification and calculates progress from verified completed lessons.
    */
   async updateProgress(
     enrollmentId: string,
     userId: string,
     completedLessons: number | string[],
     progress?: number,
-    explicitCompletedLessonIds?: string[],
   ) {
     const normalizedEnrollmentId = normalizeRequiredId(
       enrollmentId,
       "Enrollment ID",
     );
     const normalizedUserId = normalizeRequiredId(userId, "User ID");
-
-    const requestedIds =
-      explicitCompletedLessonIds !== undefined
-        ? normalizeCompletedLessonIds(explicitCompletedLessonIds)
-        : Array.isArray(completedLessons)
-          ? normalizeCompletedLessonIds(completedLessons)
-          : undefined;
-
-    const requestedCompletedLessonCount =
-      requestedIds === undefined && typeof completedLessons === "number"
-        ? normalizeNonNegativeInteger(completedLessons, "Completed lessons")
-        : undefined;
+    const requestedCompletedLessonCount = Array.isArray(completedLessons)
+      ? undefined
+      : normalizeNonNegativeInteger(completedLessons, "Completed lessons");
+    const requestedCompletedLessonIds = Array.isArray(completedLessons)
+      ? normalizeCompletedLessonIds(completedLessons)
+      : undefined;
 
     normalizeOptionalProgress(progress);
 
@@ -354,13 +414,12 @@ class EnrollmentService {
         where: {
           courseId: enrollment.package.courseId,
         },
-        select: {
-          id: true,
-          orderIndex: true,
-          quiz: true,
-        },
         orderBy: {
           orderIndex: "asc",
+        },
+        select: {
+          id: true,
+          quiz: true,
         },
       }),
       prisma.quizAttempt.findMany({
@@ -374,107 +433,52 @@ class EnrollmentService {
         select: {
           lessonId: true,
         },
-        distinct: ["lessonId"],
       }),
     ]);
 
-    const totalLessons = courseLessons.length;
-    const courseLessonOrder = new Map(
-      courseLessons.map((lesson, idx) => [lesson.id, idx]),
-    );
-    const quizRequiredLessonIds = new Set(
-      courseLessons
-        .filter((lesson) => normalizeLessonQuiz(lesson.quiz) !== null)
-        .map((lesson) => lesson.id),
-    );
     const passedQuizLessonIds = new Set(
       passedAttempts.map((attempt) => attempt.lessonId),
     );
+    const boundedCompletedLessons = assertQuizGateForLessonCompletion({
+      courseLessons,
+      passedQuizLessonIds,
+      requestedCompletedLessonIds,
+      requestedCompletedLessonCount,
+    });
 
-    let resolvedCompletedIds: string[];
+    const verifiedCompletedLessonIds =
+      requestedCompletedLessonIds !== undefined
+        ? courseLessons
+            .map((lesson) => lesson.id)
+            .filter((id) => requestedCompletedLessonIds.includes(id))
+        : courseLessons
+            .filter(
+              (lesson) =>
+                normalizeLessonQuiz(lesson.quiz) === null ||
+                passedQuizLessonIds.has(lesson.id),
+            )
+            .slice(0, boundedCompletedLessons)
+            .map((lesson) => lesson.id);
 
-    if (requestedIds !== undefined) {
-      for (const lessonId of requestedIds) {
-        if (!courseLessonOrder.has(lessonId)) {
-          throw new ValidationError(
-            "completedLessons contains lessons that do not belong to this course",
-          );
-        }
-        if (
-          quizRequiredLessonIds.has(lessonId) &&
-          !passedQuizLessonIds.has(lessonId)
-        ) {
-          throw new ValidationError(
-            "You must pass the lesson quiz before marking this lesson complete",
-          );
-        }
-      }
-
-      resolvedCompletedIds = [...requestedIds].sort(
-        (left, right) =>
-          (courseLessonOrder.get(left) ?? 0) -
-          (courseLessonOrder.get(right) ?? 0),
-      );
-    } else {
-      const targetCount = Math.min(
-        requestedCompletedLessonCount ?? 0,
-        totalLessons,
-      );
-      const completableLessonIds = courseLessons
-        .filter(
-          (lesson) =>
-            !quizRequiredLessonIds.has(lesson.id) ||
-            passedQuizLessonIds.has(lesson.id),
-        )
-        .map((lesson) => lesson.id);
-
-      if (targetCount > completableLessonIds.length) {
-        throw new ValidationError(
-          "You must pass the required lesson quizzes before completing these lessons",
-        );
-      }
-
-      const completableSet = new Set(completableLessonIds);
-      const existingIds = parseCompletedLessonIdsJson(
-        enrollment.completedLessonIds,
-      ).filter((id) => completableSet.has(id));
-
-      const nextSet = new Set<string>(existingIds.slice(0, targetCount));
-      for (const lessonId of completableLessonIds) {
-        if (nextSet.size >= targetCount) {
-          break;
-        }
-        nextSet.add(lessonId);
-      }
-
-      resolvedCompletedIds = Array.from(nextSet).sort(
-        (left, right) =>
-          (courseLessonOrder.get(left) ?? 0) -
-          (courseLessonOrder.get(right) ?? 0),
-      );
-    }
-
-    const boundedCompletedLessons = Math.min(
-      resolvedCompletedIds.length,
-      totalLessons,
-    );
     const calculatedProgress = calculateProgressFromLessons(
       boundedCompletedLessons,
-      totalLessons,
+      courseLessons.length,
     );
 
     const updated = await prisma.enrollment.update({
       where: { id: enrollment.id },
       data: {
-        completedLessonIds: resolvedCompletedIds,
         completedLessons: boundedCompletedLessons,
+        completedLessonIds: verifiedCompletedLessonIds,
         progress: calculatedProgress,
       },
     });
 
     return {
       ...updated,
-      completedLessonIds: resolvedCompletedIds,
+      completedLessonIds: parseStoredCompletedLessonIds(
+        updated.completedLessonIds,
+      ),
     };
   }
 
@@ -509,7 +513,7 @@ class EnrollmentService {
   async getCourseStudents(userId: string, courseId: string) {
     const course = await requireTeacherOwnedCourse(userId, courseId);
 
-    const enrollments = await prisma.enrollment.findMany({
+    const students = await prisma.enrollment.findMany({
       where: buildCurrentEnrollmentWhere(
         {
           package: {
@@ -539,9 +543,9 @@ class EnrollmentService {
       orderBy: { enrolledAt: "desc" },
     });
 
-    return enrollments.map((enrollment) => ({
+    return students.map((enrollment) => ({
       ...enrollment,
-      completedLessonIds: parseCompletedLessonIdsJson(
+      completedLessonIds: parseStoredCompletedLessonIds(
         enrollment.completedLessonIds,
       ),
     }));

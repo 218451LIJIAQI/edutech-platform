@@ -1,19 +1,12 @@
 import { body, query, type Meta, type ValidationChain } from "express-validator";
-import { CourseType, LessonType, LiveSessionStatus } from "@prisma/client";
-import {
-  isSafeExternalHttpUrl,
-  validateUrlOrUploadPathForFolders,
-} from "../utils/url-or-path";
+import { CourseType, LessonType } from "@prisma/client";
+import { validateUrlOrUploadPathForFolders } from "../utils/url-or-path";
 import { parseFiniteNumber } from "../utils/http";
 import { COURSE_FIELD_LIMITS } from "../services/course.service";
 import { paginationQueryValidators } from "./common.validator";
 
 const COURSE_TYPES = Object.values(CourseType);
 const LESSON_TYPES = Object.values(LessonType);
-const UPDATABLE_LIVE_SESSION_STATUSES = [
-  LiveSessionStatus.SCHEDULED,
-  LiveSessionStatus.CANCELLED,
-] as const;
 
 const SORT_BY_VALUES = [
   "NEWEST",
@@ -114,21 +107,6 @@ const ERROR_MESSAGES = {
 
   IS_DOWNLOADABLE_BOOLEAN: "isDownloadable must be a boolean",
 
-  LIVE_TITLE_STRING: "Live session title must be a string",
-  LIVE_TITLE_REQUIRED: "Live session title is required",
-  LIVE_TITLE_LENGTH: `Live session title must be between ${COURSE_FIELD_LIMITS.LESSON_TITLE_MIN} and ${COURSE_FIELD_LIMITS.LESSON_TITLE_MAX} characters`,
-  LIVE_DESCRIPTION_STRING: "Live session description must be a string",
-  LIVE_DESCRIPTION_LENGTH: `Live session description must not exceed ${COURSE_FIELD_LIMITS.LESSON_DESCRIPTION_MAX} characters`,
-  LIVE_SCHEDULED_AT_REQUIRED: "scheduledAt is required",
-  LIVE_SCHEDULED_AT_VALID: "scheduledAt must be a valid ISO-8601 date",
-  LIVE_MAX_PARTICIPANTS_INTEGER: "maxParticipants must be a positive integer",
-  LIVE_MEETING_URL_STRING: "Meeting URL must be a string",
-  LIVE_MEETING_URL_INVALID: "Meeting URL must be a valid http or https URL",
-  LIVE_RECORDING_URL_STRING: "Recording URL must be a string URL or file path",
-  LIVE_RECORDING_URL_INVALID:
-    "Recording URL must be an external URL or use the /uploads/videos/ folder",
-  LIVE_STATUS_INVALID: "status must be SCHEDULED or CANCELLED",
-
   SEARCH_STRING: "Search must be a string",
   SEARCH_LENGTH: "Search must not exceed 100 characters",
 
@@ -174,9 +152,6 @@ const validateMoneyValue = (message: string) => (value: unknown) => {
 };
 
 const validateDiscountNotAbovePrice = (value: unknown, { req }: Meta) => {
-  if (value === null || value === undefined || value === "") {
-    return true;
-  }
   const price = parseFiniteNumber(req.body?.price);
   const discount = parseFiniteNumber(value);
 
@@ -195,16 +170,6 @@ const validateMaxPriceNotBelowMinPrice = (value: unknown, { req }: Meta) => {
     throw new Error(ERROR_MESSAGES.MAX_PRICE_GREATER);
   }
 
-  return true;
-};
-
-const validateExternalMeetingUrl = (value: unknown) => {
-  if (value === null || value === undefined || value === "") {
-    return true;
-  }
-  if (typeof value !== "string" || !isSafeExternalHttpUrl(value.trim())) {
-    throw new Error(ERROR_MESSAGES.LIVE_MEETING_URL_INVALID);
-  }
   return true;
 };
 
@@ -529,16 +494,12 @@ const packageSharedFields = [
     COURSE_FIELD_LIMITS.PACKAGE_DESCRIPTION_MAX,
   ),
   body("discount")
-    .optional({ values: "null" })
+    .optional({ nullable: true })
     .custom(validateMoneyValue(ERROR_MESSAGES.DISCOUNT_RANGE))
     .bail()
     .custom(validateDiscountNotAbovePrice)
     .bail()
-    .customSanitizer((value) =>
-      value === null || value === undefined || value === ""
-        ? value
-        : Number(value),
-    ),
+    .toFloat(),
   optionalPositiveIntField("duration", ERROR_MESSAGES.DURATION_INTEGER),
   optionalPositiveIntField("maxStudents", ERROR_MESSAGES.MAX_STUDENTS_INTEGER),
 ];
@@ -656,96 +617,6 @@ export const updateMaterialValidation = [
     .bail()
     .toInt(),
   ...materialSharedFields,
-];
-
-export const createLiveSessionValidation = [
-  boundedStringField("title", {
-    stringMsg: ERROR_MESSAGES.LIVE_TITLE_STRING,
-    requiredMsg: ERROR_MESSAGES.LIVE_TITLE_REQUIRED,
-    lengthMsg: ERROR_MESSAGES.LIVE_TITLE_LENGTH,
-    min: COURSE_FIELD_LIMITS.LESSON_TITLE_MIN,
-    max: COURSE_FIELD_LIMITS.LESSON_TITLE_MAX,
-  }),
-  optionalMaxStringField(
-    "description",
-    ERROR_MESSAGES.LIVE_DESCRIPTION_STRING,
-    ERROR_MESSAGES.LIVE_DESCRIPTION_LENGTH,
-    COURSE_FIELD_LIMITS.LESSON_DESCRIPTION_MAX,
-  ),
-  body("scheduledAt")
-    .notEmpty()
-    .withMessage(ERROR_MESSAGES.LIVE_SCHEDULED_AT_REQUIRED)
-    .bail()
-    .isISO8601()
-    .withMessage(ERROR_MESSAGES.LIVE_SCHEDULED_AT_VALID),
-  optionalPositiveIntField("duration", ERROR_MESSAGES.DURATION_INTEGER),
-  optionalPositiveIntField(
-    "maxParticipants",
-    ERROR_MESSAGES.LIVE_MAX_PARTICIPANTS_INTEGER,
-  ),
-  body("meetingUrl")
-    .optional({ nullable: true, checkFalsy: true })
-    .isString()
-    .withMessage(ERROR_MESSAGES.LIVE_MEETING_URL_STRING)
-    .bail()
-    .trim()
-    .custom(validateExternalMeetingUrl),
-];
-
-export const updateLiveSessionValidation = [
-  boundedStringField("title", {
-    optional: true,
-    stringMsg: ERROR_MESSAGES.LIVE_TITLE_STRING,
-    requiredMsg: ERROR_MESSAGES.LIVE_TITLE_REQUIRED,
-    lengthMsg: ERROR_MESSAGES.LIVE_TITLE_LENGTH,
-    min: COURSE_FIELD_LIMITS.LESSON_TITLE_MIN,
-    max: COURSE_FIELD_LIMITS.LESSON_TITLE_MAX,
-  }),
-  optionalMaxStringField(
-    "description",
-    ERROR_MESSAGES.LIVE_DESCRIPTION_STRING,
-    ERROR_MESSAGES.LIVE_DESCRIPTION_LENGTH,
-    COURSE_FIELD_LIMITS.LESSON_DESCRIPTION_MAX,
-  ),
-  body("scheduledAt")
-    .optional({ nullable: true, checkFalsy: true })
-    .isISO8601()
-    .withMessage(ERROR_MESSAGES.LIVE_SCHEDULED_AT_VALID),
-  optionalPositiveIntField("duration", ERROR_MESSAGES.DURATION_INTEGER),
-  optionalPositiveIntField(
-    "maxParticipants",
-    ERROR_MESSAGES.LIVE_MAX_PARTICIPANTS_INTEGER,
-  ),
-  body("meetingUrl")
-    .optional({ nullable: true, checkFalsy: true })
-    .isString()
-    .withMessage(ERROR_MESSAGES.LIVE_MEETING_URL_STRING)
-    .bail()
-    .trim()
-    .custom(validateExternalMeetingUrl),
-  optionalAssetField(
-    "recordingUrl",
-    ERROR_MESSAGES.LIVE_RECORDING_URL_STRING,
-    ERROR_MESSAGES.LIVE_RECORDING_URL_INVALID,
-    ["videos"],
-  ),
-  body("status")
-    .optional({ nullable: true, checkFalsy: true })
-    .isString()
-    .withMessage(ERROR_MESSAGES.LIVE_STATUS_INVALID)
-    .bail()
-    .trim()
-    .isIn([...UPDATABLE_LIVE_SESSION_STATUSES])
-    .withMessage(ERROR_MESSAGES.LIVE_STATUS_INVALID),
-];
-
-export const endLiveSessionValidation = [
-  optionalAssetField(
-    "recordingUrl",
-    ERROR_MESSAGES.LIVE_RECORDING_URL_STRING,
-    ERROR_MESSAGES.LIVE_RECORDING_URL_INVALID,
-    ["videos"],
-  ),
 ];
 
 export const sendCourseNotificationValidation = [

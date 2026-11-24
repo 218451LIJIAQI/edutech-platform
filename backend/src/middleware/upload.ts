@@ -1,6 +1,5 @@
 import type { Request } from "express";
 import fs from "fs";
-import fsPromises from "fs/promises";
 import path from "path";
 import crypto from "crypto";
 import multer from "multer";
@@ -35,14 +34,9 @@ type UploadCategoryConfig = {
 
 type CategorizedMulterFile = Express.Multer.File & {
   resolvedUploadCategory?: UploadCategory;
-  pendingDestinationPath?: string;
 };
 
-type RequestWithTrackedUploads = Request & {
-  _trackedUploadPaths?: Set<string>;
-};
-
-const EXTENSION_MIME_MAP: Readonly<Record<string, ReadonlySet<string>>> = {
+const EXTENSION_COMPATIBLE_MIMES: Record<string, ReadonlySet<string>> = {
   ".jpg": new Set(["image/jpeg"]),
   ".jpeg": new Set(["image/jpeg"]),
   ".png": new Set(["image/png"]),
@@ -54,42 +48,29 @@ const EXTENSION_MIME_MAP: Readonly<Record<string, ReadonlySet<string>>> = {
   ".docx": new Set([
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     "application/octet-stream",
+    "application/zip",
   ]),
   ".xls": new Set(["application/vnd.ms-excel", "application/octet-stream"]),
   ".xlsx": new Set([
     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     "application/octet-stream",
+    "application/zip",
   ]),
-  ".ppt": new Set([
-    "application/vnd.ms-powerpoint",
-    "application/octet-stream",
-  ]),
+  ".ppt": new Set(["application/vnd.ms-powerpoint", "application/octet-stream"]),
   ".pptx": new Set([
     "application/vnd.openxmlformats-officedocument.presentationml.presentation",
     "application/octet-stream",
+    "application/zip",
   ]),
   ".zip": new Set([
     "application/zip",
     "application/x-zip-compressed",
     "application/octet-stream",
   ]),
-  ".txt": new Set(["text/plain"]),
+  ".txt": new Set(["text/plain", "application/octet-stream"]),
   ".mp4": new Set(["video/mp4"]),
   ".webm": new Set(["video/webm"]),
   ".mov": new Set(["video/quicktime"]),
-};
-
-export const isMatchingExtensionAndMimeType = (
-  extension: string,
-  mimeType: string,
-): boolean => {
-  const normalizedExt = extension.trim().toLowerCase();
-  const normalizedMime = mimeType.trim().toLowerCase();
-  const allowedMimesForExt = EXTENSION_MIME_MAP[normalizedExt];
-  if (!allowedMimesForExt) {
-    return false;
-  }
-  return allowedMimesForExt.has(normalizedMime);
 };
 
 const uploadCategoryConfigs: Record<UploadCategory, UploadCategoryConfig> = {
@@ -404,86 +385,39 @@ const createStoredFileName = (originalName: string): string => {
   return `${baseName}-${uniqueId}${extension}`;
 };
 
-export const validateUploadExtensionAndMime = (
-  originalName: string,
+export const isMimeCompatibleWithExtension = (
+  extension: string,
   mimeType: string,
-  uploadConfig: UploadCategoryConfig,
-): void => {
-  const extension = getSafeExtension(originalName);
-  const normalizedMime = (mimeType || "").trim().toLowerCase();
-
-  const isAllowedMimeType = uploadConfig.allowedMimeTypes.has(normalizedMime);
-  const isAllowedExtension = uploadConfig.allowedExtensions.has(extension);
-
-  if (
-    !isAllowedMimeType ||
-    !isAllowedExtension ||
-    !isMatchingExtensionAndMimeType(extension, normalizedMime)
-  ) {
-    throw new ValidationError(
-      `Unsupported or mismatched file type for ${uploadConfig.directory}. Allowed formats: ${Array.from(
-        uploadConfig.allowedExtensions,
-      ).join(", ")}`,
-    );
-  }
+): boolean => {
+  const normalizedExt = extension.trim().toLowerCase();
+  const normalizedMime = mimeType.trim().toLowerCase();
+  const compatibleMimes = EXTENSION_COMPATIBLE_MIMES[normalizedExt];
+  return compatibleMimes ? compatibleMimes.has(normalizedMime) : false;
 };
 
 const validateFileType = (
   file: Express.Multer.File,
   uploadConfig: UploadCategoryConfig,
 ): void => {
-  validateUploadExtensionAndMime(
-    file.originalname,
-    file.mimetype,
-    uploadConfig,
-  );
-};
+  const extension = getSafeExtension(file.originalname);
+  const normalizedMime = (file.mimetype || "").trim().toLowerCase();
 
-const trackRequestUploadPath = (req: Request, filePath: string): void => {
-  const trackedReq = req as RequestWithTrackedUploads;
-  if (!trackedReq._trackedUploadPaths) {
-    trackedReq._trackedUploadPaths = new Set<string>();
-  }
-  trackedReq._trackedUploadPaths.add(filePath);
-};
+  const isAllowedMimeType = uploadConfig.allowedMimeTypes.has(normalizedMime);
+  const isAllowedExtension = uploadConfig.allowedExtensions.has(extension);
 
-/**
- * Unlinks any files written to disk during the current request, including partial
- * batches when a multi-file upload fails mid-stream in Multer or post-validation.
- */
-export const cleanupRequestUploads = async (req: Request): Promise<void> => {
-  const trackedReq = req as RequestWithTrackedUploads;
-  const candidatePaths = new Set<string>(trackedReq._trackedUploadPaths ?? []);
-
-  if (req.file?.path) {
-    candidatePaths.add(req.file.path);
+  if (!isAllowedMimeType || !isAllowedExtension) {
+    throw new ValidationError(
+      `Unsupported file type for ${uploadConfig.directory}. Allowed formats: ${Array.from(
+        uploadConfig.allowedExtensions,
+      ).join(", ")}`,
+    );
   }
 
-  if (req.files) {
-    const fileList = Array.isArray(req.files)
-      ? req.files
-      : Object.values(req.files).flat();
-    for (const file of fileList) {
-      if (file?.path) {
-        candidatePaths.add(file.path);
-      }
-    }
+  if (!isMimeCompatibleWithExtension(extension, normalizedMime)) {
+    throw new ValidationError(
+      `File extension ${extension} does not match declared MIME type ${normalizedMime}`,
+    );
   }
-
-  await Promise.allSettled(
-    Array.from(candidatePaths).map(async (targetPath) => {
-      const resolved = path.resolve(targetPath);
-      if (
-        resolved === uploadRootDir ||
-        !resolved.startsWith(`${uploadRootDir}${path.sep}`)
-      ) {
-        return;
-      }
-      await fsPromises.unlink(resolved);
-    }),
-  );
-
-  trackedReq._trackedUploadPaths?.clear();
 };
 
 const readFileHeader = (filePath: string): Buffer => {
@@ -612,7 +546,7 @@ const hasExpectedFileSignature = (
       return hasSignature(header, [0x1a, 0x45, 0xdf, 0xa3]);
 
     default:
-      return false;
+      return true;
   }
 };
 
@@ -658,12 +592,57 @@ export const validateStoredUpload = (file: Express.Multer.File) => {
   };
 };
 
+export const cleanupRequestUploadedFiles = async (req: Request): Promise<void> => {
+  const collectedPaths = new Set<string>();
+  const recordFile = (candidate?: Express.Multer.File) => {
+    if (candidate?.path) {
+      collectedPaths.add(candidate.path);
+    }
+  };
+
+  recordFile(req.file);
+  if (Array.isArray(req.files)) {
+    req.files.forEach(recordFile);
+  } else if (req.files && typeof req.files === "object") {
+    Object.values(req.files).flat().forEach(recordFile);
+  }
+
+  await Promise.allSettled(
+    Array.from(collectedPaths).map((filePath) => fs.promises.unlink(filePath)),
+  );
+};
+
+const trackUploadedFileOnRequest = (
+  req: Request,
+  filePath: string,
+): void => {
+  const tracked = (
+    req as Request & { __trackedUploadPaths?: string[] }
+  );
+  if (!tracked.__trackedUploadPaths) {
+    tracked.__trackedUploadPaths = [];
+  }
+  tracked.__trackedUploadPaths.push(filePath);
+};
+
+export const cleanupTrackedRequestUploads = async (
+  req: Request,
+): Promise<void> => {
+  const tracked = (req as Request & { __trackedUploadPaths?: string[] })
+    .__trackedUploadPaths;
+  await cleanupRequestUploadedFiles(req);
+  if (Array.isArray(tracked) && tracked.length > 0) {
+    await Promise.allSettled(
+      tracked.map((filePath) => fs.promises.unlink(filePath)),
+    );
+  }
+};
+
 const storage = multer.diskStorage({
   destination: (req, file, callback) => {
     try {
       const uploadConfig = getUploadCategoryConfig(req, file);
       const destinationPath = ensureSafeUploadPath(uploadConfig.directory);
-      (file as CategorizedMulterFile).pendingDestinationPath = destinationPath;
 
       callback(null, destinationPath);
     } catch (error) {
@@ -672,12 +651,17 @@ const storage = multer.diskStorage({
   },
 
   filename: (req, file, callback) => {
-    const storedName = createStoredFileName(file.originalname);
-    const pendingDir = (file as CategorizedMulterFile).pendingDestinationPath;
-    if (pendingDir) {
-      trackRequestUploadPath(req, path.join(pendingDir, storedName));
+    const filename = createStoredFileName(file.originalname);
+    try {
+      const category =
+        getResolvedUploadCategory(file) ||
+        resolveUploadCategory(getUploadCategoryInput(req, file));
+      const destinationPath = path.resolve(uploadRootDir, category, filename);
+      trackUploadedFileOnRequest(req, destinationPath);
+    } catch {
+      // Destination validation will reject invalid categories before writing.
     }
-    callback(null, storedName);
+    callback(null, filename);
   },
 });
 

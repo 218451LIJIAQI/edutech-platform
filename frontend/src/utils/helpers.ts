@@ -1,18 +1,29 @@
 /**
- * Utility helper functions for the Edutech Platform
+ * Utility helper functions for the FlexiLearn Platform
  */
 
 /**
- * Format a number as currency with proper locale and symbol
- * @param amount - The amount to format
- * @param currency - The currency code (default: 'USD')
- * @returns Formatted currency string
+ * Format a numeric or string value as currency with 2 decimal places.
+ * Safely defaults non-finite inputs to 0.
  */
-export const formatCurrency = (amount: number, currency: string = 'USD'): string => {
+export const formatCurrency = (
+  amount?: unknown,
+  currency: string = 'USD'
+): string => {
+  const numericValue =
+    typeof amount === 'number'
+      ? amount
+      : typeof amount === 'string'
+        ? Number(amount.trim())
+        : Number(amount ?? 0);
+  const safeValue = Number.isFinite(numericValue) ? numericValue : 0;
+
   return new Intl.NumberFormat('en-US', {
     style: 'currency',
     currency,
-  }).format(amount);
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(safeValue);
 };
 
 /**

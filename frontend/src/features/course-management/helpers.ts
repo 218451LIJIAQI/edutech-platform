@@ -23,12 +23,16 @@ export const buildQuizMetrics = (
     .filter((lesson) => lesson.quiz?.questions?.length)
     .sort((left, right) => left.orderIndex - right.orderIndex);
   const uniqueQuizStudents = new Set(
-    quizAttempts.map((attempt) => attempt.student.id)
+    quizAttempts
+      .map((attempt) => attempt.student?.id)
+      .filter((studentId): studentId is string => Boolean(studentId))
   ).size;
   const averageQuizScore = quizAttempts.length
     ? Math.round(
-        quizAttempts.reduce((sum, attempt) => sum + attempt.scorePercentage, 0) /
-          quizAttempts.length
+        quizAttempts.reduce(
+          (sum, attempt) => sum + (attempt.scorePercentage || 0),
+          0
+        ) / quizAttempts.length
       )
     : 0;
   const passRate = quizAttempts.length

@@ -293,7 +293,7 @@ const CourseManagementPage = () => {
             ) : null}
 
             {activeTab === 'live' ? (
-              <CourseManagementLiveTab course={course} onRefresh={fetchCourse} />
+              <CourseManagementLiveTab course={course} />
             ) : null}
 
             {activeTab === 'notifications' ? (

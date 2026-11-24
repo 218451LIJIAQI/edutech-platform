@@ -28,6 +28,18 @@ const LoginPage = () => {
   const hasRecoverableSession = hasRecoverableAuthState();
   const isSessionReady = Boolean(isAuthenticated && user);
   const isRestoringSession = hasRecoverableSession && (!hasAccessToken || !user);
+  const previousLocation = (
+    location.state as {
+      from?: { pathname?: string; search?: string; hash?: string };
+    } | null
+  )?.from;
+  const candidatePreviousPath =
+    previousLocation?.pathname &&
+    previousLocation.pathname.startsWith('/') &&
+    !previousLocation.pathname.startsWith('//') &&
+    previousLocation.pathname !== '/login'
+      ? `${previousLocation.pathname}${previousLocation.search ?? ''}${previousLocation.hash ?? ''}`
+      : null;
 
   // Clear error after 5 seconds
   useEffect(() => {
@@ -78,18 +90,8 @@ const LoginPage = () => {
       // Get user role after login completes
       const currentUser = useAuthStore.getState().user;
       const userRole = currentUser?.role;
-      const previousLocation = (
-        location.state as {
-          from?: { pathname?: string; search?: string; hash?: string };
-        } | null
-      )?.from;
-      const previousPath =
-        previousLocation?.pathname && previousLocation.pathname !== '/login'
-          ? `${previousLocation.pathname}${previousLocation.search ?? ''}${previousLocation.hash ?? ''}`
-          : null;
-
-      if (previousPath) {
-        navigate(previousPath, { replace: true });
+      if (candidatePreviousPath) {
+        navigate(candidatePreviousPath, { replace: true });
         return;
       }
 
@@ -119,6 +121,9 @@ const LoginPage = () => {
   }
 
   if (isSessionReady && user) {
+    if (candidatePreviousPath) {
+      return <Navigate to={candidatePreviousPath} replace />;
+    }
     switch (user.role) {
       case UserRole.ADMIN:
         return <Navigate to="/admin" replace />;
@@ -269,7 +274,7 @@ const LoginPage = () => {
               <div className="w-full border-t border-gray-200/80"></div>
             </div>
             <div className="relative flex justify-center text-sm">
-              <span className="px-4 bg-white text-gray-400 font-medium">New to Edutech?</span>
+              <span className="px-4 bg-white text-gray-400 font-medium">New to FlexiLearn?</span>
             </div>
           </div>
 

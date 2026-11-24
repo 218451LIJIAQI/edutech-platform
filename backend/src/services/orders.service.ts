@@ -1,3 +1,4 @@
+import { roundCurrency as roundBaseCurrency } from "./shared/settlement-calculator";
 import { randomInt } from "crypto";
 import {
   OrderStatus,
@@ -13,10 +14,8 @@ import {
   AuthorizationError,
 } from "../utils/errors";
 import { sanitizeUserPlainText } from "../utils/sanitize-user-content";
-import {
-  assertPackageHasCapacity,
-  buildCurrentEnrollmentWhere,
-} from "./shared/enrollment-access";
+import { assertPackageHasAvailableCapacity } from "./cart.service";
+import { buildCurrentEnrollmentWhere } from "./shared/enrollment-access";
 
 const ORDER_NO_RETRY_ATTEMPTS = 5;
 const MAX_REFUND_NOTE_LENGTH = 1000;
@@ -112,10 +111,7 @@ const toCurrencyNumber = (value: unknown): number => {
 };
 
 const roundCurrency = (value: unknown): number =>
-  Math.round(
-    (Number.isFinite(toCurrencyNumber(value)) ? toCurrencyNumber(value) : 0) *
-      100,
-  ) / 100;
+  roundBaseCurrency(toCurrencyNumber(value));
 
 const normalizePositiveCurrency = (
   value: unknown,
@@ -164,7 +160,7 @@ const getCompletedRefundAmount = (
     ),
   );
 
-const normalizeOrderRefundState = <
+export const normalizeOrderRefundState = <
   T extends {
     totalAmount: unknown;
     status: OrderStatus;
@@ -346,7 +342,11 @@ class OrdersService {
     }
 
     for (const item of cartItems) {
-      await assertPackageHasCapacity(prisma, item.package, referenceDate);
+      await assertPackageHasAvailableCapacity(
+        prisma,
+        item.package,
+        referenceDate,
+      );
     }
 
     const normalizedItems = cartItems.map((item) => {
@@ -391,7 +391,11 @@ class OrdersService {
     const order = await createOrderNoWithRetry((orderNo) =>
       prisma.$transaction(async (tx) => {
         for (const item of cartItems) {
-          await assertPackageHasCapacity(tx, item.package, referenceDate);
+          await assertPackageHasAvailableCapacity(
+            tx,
+            item.package,
+            referenceDate,
+          );
         }
 
         const createdOrder = await tx.order.create({
@@ -485,7 +489,11 @@ class OrdersService {
       throw new ValidationError("You are already enrolled in this package");
     }
 
-    await assertPackageHasCapacity(prisma, lessonPackage, referenceDate);
+    await assertPackageHasAvailableCapacity(
+      prisma,
+      lessonPackage,
+      referenceDate,
+    );
 
     const price = normalizeNonNegativeCurrency(
       lessonPackage.price,
@@ -542,8 +550,7 @@ class OrdersService {
     }
 
     const updated = await prisma.$transaction(async (tx) => {
-      const now = new Date();
-      const canceledAt = now < order.createdAt ? order.createdAt : now;
+      const canceledAt = new Date();
 
       const nextOrder = await tx.order.update({
         where: { id: order.id },
@@ -595,20 +602,20 @@ class OrdersService {
       throw new ValidationError("Only paid orders can be refunded");
     }
 
-    const orderTotal = roundCurrency(order.totalAmount);
-    if (orderTotal <= 0) {
-      throw new ValidationError("Free orders cannot be refunded");
-    }
-
     if (!order.payment || order.payment.status !== PaymentStatus.COMPLETED) {
       throw new ValidationError(
         "A completed payment is required before requesting a refund",
       );
     }
 
+    const orderTotal = roundCurrency(order.totalAmount);
+    if (orderTotal <= 0) {
+      throw new ValidationError("Free orders cannot be refunded");
+    }
+
     if (refundMethod === RefundMethod.WALLET) {
       throw new ValidationError(
-        "Platform wallet refunds are not available for student orders; choose ORIGINAL_PAYMENT or BANK_TRANSFER",
+        "Platform wallet refunds are unavailable; please choose original payment or bank transfer",
       );
     }
 
@@ -629,12 +636,11 @@ class OrdersService {
       0,
       roundCurrency(orderTotal - completedRefundAmount),
     );
+    const refundAmount = normalizePositiveCurrency(amount, "Refund amount");
 
     if (remainingRefundAmount <= 0) {
       throw new ValidationError("This order has already been fully refunded");
     }
-
-    const refundAmount = normalizePositiveCurrency(amount, "Refund amount");
 
     if (refundAmount > remainingRefundAmount) {
       throw new ValidationError(
@@ -716,9 +722,9 @@ class OrdersService {
   }
 
   /**
-   * Get all refund records for the current user.
+   * Get all refund records across all orders owned by the current user.
    */
-  async getUserRefunds(userId: string) {
+  async getMyRefunds(userId: string) {
     const normalizedUserId = normalizeRequiredId(userId, "User ID");
 
     return prisma.refund.findMany({
@@ -727,8 +733,8 @@ class OrdersService {
           userId: normalizedUserId,
         },
       },
-      include: refundDetailInclude,
       orderBy: { createdAt: "desc" },
+      include: refundDetailInclude,
     });
   }
 }

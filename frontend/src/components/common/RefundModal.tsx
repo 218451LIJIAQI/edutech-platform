@@ -111,7 +111,11 @@ const RefundModal = ({
     isOpen,
     containerRef: modalRef,
     initialFocusRef: amountInputRef,
-    onClose,
+    onClose: () => {
+      if (!working) {
+        onClose();
+      }
+    },
     trapFocus: true,
     lockBodyScroll: true,
   });
@@ -217,7 +221,14 @@ const RefundModal = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/55 backdrop-blur-sm p-4"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget && !working) {
+          onClose();
+        }
+      }}
+    >
       <div
         ref={modalRef}
         tabIndex={-1}
@@ -225,7 +236,7 @@ const RefundModal = ({
         aria-modal="true"
         aria-labelledby="refund-modal-title"
         aria-describedby="refund-modal-description"
-        className="w-full max-w-2xl overflow-hidden rounded-2xl bg-white shadow-2xl"
+        className="w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-2xl bg-white shadow-modal"
       >
         <div className="flex items-center justify-between bg-gradient-to-r from-blue-600 to-blue-700 p-6 text-white">
           <div className="flex items-center gap-3">

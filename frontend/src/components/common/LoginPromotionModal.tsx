@@ -36,8 +36,8 @@ const themeStyles: Record<AdTheme, ThemeStyle> = {
   MIDNIGHT: {
     shell: 'from-slate-950 via-slate-900 to-indigo-950 text-white',
     orb: 'from-cyan-400/25 via-indigo-400/15 to-fuchsia-400/10',
-    card: 'border-white/10 bg-white/8',
-    badge: 'bg-white/12 text-white border border-white/15',
+    card: 'border-white/10 bg-white/10',
+    badge: 'bg-white/15 text-white border border-white/15',
     button: 'bg-white text-slate-900 hover:bg-slate-100',
     progress: 'from-cyan-300 via-sky-300 to-indigo-300',
   },
@@ -45,39 +45,39 @@ const themeStyles: Record<AdTheme, ThemeStyle> = {
     shell: 'from-rose-700 via-orange-500 to-amber-300 text-white',
     orb: 'from-white/20 via-amber-100/20 to-transparent',
     card: 'border-white/15 bg-black/10',
-    badge: 'bg-white/18 text-white border border-white/20',
+    badge: 'bg-white/20 text-white border border-white/20',
     button: 'bg-white text-rose-700 hover:bg-rose-50',
     progress: 'from-white via-amber-100 to-rose-100',
   },
   AURORA: {
     shell: 'from-emerald-700 via-teal-600 to-cyan-700 text-white',
     orb: 'from-lime-200/20 via-cyan-200/15 to-transparent',
-    card: 'border-white/12 bg-black/10',
-    badge: 'bg-white/18 text-white border border-white/20',
+    card: 'border-white/15 bg-black/10',
+    badge: 'bg-white/20 text-white border border-white/20',
     button: 'bg-white text-emerald-700 hover:bg-emerald-50',
     progress: 'from-lime-200 via-emerald-100 to-cyan-100',
   },
   OCEAN: {
     shell: 'from-sky-700 via-blue-700 to-indigo-900 text-white',
     orb: 'from-cyan-200/20 via-sky-200/15 to-transparent',
-    card: 'border-white/12 bg-black/12',
-    badge: 'bg-white/18 text-white border border-white/20',
+    card: 'border-white/15 bg-black/15',
+    badge: 'bg-white/20 text-white border border-white/20',
     button: 'bg-white text-blue-800 hover:bg-blue-50',
     progress: 'from-cyan-200 via-blue-100 to-indigo-100',
   },
   FOREST: {
     shell: 'from-emerald-900 via-green-800 to-lime-700 text-white',
     orb: 'from-lime-200/20 via-emerald-200/15 to-transparent',
-    card: 'border-white/12 bg-black/12',
-    badge: 'bg-white/18 text-white border border-white/20',
+    card: 'border-white/15 bg-black/15',
+    badge: 'bg-white/20 text-white border border-white/20',
     button: 'bg-white text-emerald-800 hover:bg-emerald-50',
     progress: 'from-lime-200 via-emerald-100 to-green-100',
   },
   ROSE: {
     shell: 'from-fuchsia-800 via-pink-700 to-rose-700 text-white',
     orb: 'from-white/20 via-pink-100/20 to-transparent',
-    card: 'border-white/12 bg-black/12',
-    badge: 'bg-white/18 text-white border border-white/20',
+    card: 'border-white/15 bg-black/15',
+    badge: 'bg-white/20 text-white border border-white/20',
     button: 'bg-white text-pink-700 hover:bg-pink-50',
     progress: 'from-white via-pink-100 to-rose-100',
   },
@@ -114,7 +114,7 @@ const buildDestinationMeta = (ad: AdCampaign) => {
   return {
     isExternal,
     pillLabel: isExternal ? 'External partner ad' : 'Internal promotion',
-    hintLabel: isExternal ? 'Opens advertiser site' : 'Opens inside Edutech',
+    hintLabel: isExternal ? 'Opens advertiser site' : 'Opens inside FlexiLearn',
   };
 };
 
@@ -397,7 +397,7 @@ export default function LoginPromotionModal() {
           <div className="flex items-center justify-between gap-4">
             <div className="flex items-center gap-3">
               <div
-                className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white/12 text-white backdrop-blur"
+                className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white/15 text-white backdrop-blur"
                 aria-hidden="true"
               >
                 <Megaphone className="h-5 w-5" />
@@ -544,13 +544,13 @@ export default function LoginPromotionModal() {
 
               <p
                 id="login-promotion-description"
-                className="mt-4 max-w-xl text-base leading-7 text-white/82"
+                className="mt-4 max-w-xl text-base leading-7 text-white/80"
               >
                 {currentSlide.description}
               </p>
 
               {currentSlide.supportingText ? (
-                <div className="mt-5 rounded-3xl border border-white/12 bg-black/15 p-4 text-sm leading-6 text-white/82 backdrop-blur-sm">
+                <div className="mt-5 rounded-3xl border border-white/15 bg-black/15 p-4 text-sm leading-6 text-white/80 backdrop-blur-sm">
                   {currentSlide.supportingText}
                 </div>
               ) : null}

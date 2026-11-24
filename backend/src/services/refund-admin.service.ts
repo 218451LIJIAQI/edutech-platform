@@ -244,7 +244,7 @@ class RefundAdminService {
     const note = normalizeOptionalSanitizedText(adminNotes);
 
     await prisma.$transaction(async (tx) => {
-      const now = new Date();
+      const completionTime = new Date();
 
       const refund = await tx.refund.findUnique({
         where: { id: normalizedRefundId },
@@ -288,7 +288,9 @@ class RefundAdminService {
 
       const orderTotal = roundMoney(refund.order.totalAmount);
       if (orderTotal <= 0) {
-        throw new ValidationError("Free orders cannot be refunded");
+        throw new ValidationError(
+          "Order total amount must be greater than zero",
+        );
       }
 
       const completedBeforeAggregate = await tx.refund.aggregate({
@@ -318,9 +320,6 @@ class RefundAdminService {
       );
       const fullyRefunded = cumulativeRefundAmount >= orderTotal;
 
-      const minBaseline = refund.processedAt ?? refund.createdAt;
-      const completionTime = now < minBaseline ? minBaseline : now;
-
       const transitionResult = await tx.refund.updateMany({
         where: { id: normalizedRefundId, status: RefundStatus.PROCESSING },
         data: {
@@ -337,16 +336,11 @@ class RefundAdminService {
         );
       }
 
-      const orderRefundedAt =
-        completionTime < refund.order.createdAt
-          ? refund.order.createdAt
-          : completionTime;
-
       await tx.order.update({
         where: { id: refund.orderId },
         data: {
           status: fullyRefunded ? OrderStatus.REFUNDED : OrderStatus.PAID,
-          refundedAt: orderRefundedAt,
+          refundedAt: completionTime,
           refundAmount: cumulativeRefundAmount,
           refundReason:
             refund.reason?.trim() || refund.order.refundReason || null,
@@ -412,7 +406,7 @@ class RefundAdminService {
 
       const totalItemsAmount = roundMoney(
         refund.order.items.reduce(
-          (sum, item) => sum + toNumber(item.finalPrice),
+          (sum, item) => sum + Math.max(0, toNumber(item.finalPrice)),
           0,
         ),
       );
@@ -421,19 +415,22 @@ class RefundAdminService {
 
       const adjustments: TeacherRefundAdjustment[] = [];
       const teacherEarningsAdjustments = new Map<string, number>();
+      const affectedTeacherProfileIds = new Set<string>();
       let allocatedRefundAmount = 0;
 
       refund.order.items.forEach((item, index) => {
-        const teacherProfile = item.package?.course?.teacherProfile;
-        if (!teacherProfile) return;
-
         const isLastItem = index === refund.order.items.length - 1;
-        const itemPrice = roundMoney(item.finalPrice);
+        const itemPrice = roundMoney(Math.max(0, toNumber(item.finalPrice)));
         const itemPortion = isLastItem
           ? roundMoney(refundAmount - allocatedRefundAmount)
           : roundMoney((itemPrice / proportionalBase) * refundAmount);
 
         allocatedRefundAmount = roundMoney(allocatedRefundAmount + itemPortion);
+
+        const teacherProfile = item.package?.course?.teacherProfile;
+        if (!teacherProfile) return;
+
+        affectedTeacherProfileIds.add(teacherProfile.id);
 
         const teacherNet = roundMoney(
           calculateTeacherNetEarning(
@@ -461,16 +458,15 @@ class RefundAdminService {
         );
       });
 
-      // Atomically debit teacher wallets inside the exact same DB transaction
       for (const adjustment of adjustments) {
-        await walletService.debitForRefund(
+        await walletService.debitForRefundInTransaction(
+          tx,
           adjustment.teacherUserId,
           adjustment.amount,
           {
             orderItemId: adjustment.orderItemId,
             refundId: refund.id,
           },
-          tx,
         );
       }
 
@@ -478,20 +474,19 @@ class RefundAdminService {
         teacherProfileId,
         amount,
       ] of teacherEarningsAdjustments.entries()) {
-        const currentTeacher = await tx.teacherProfile.findUnique({
+        const currentProfile = await tx.teacherProfile.findUnique({
           where: { id: teacherProfileId },
           select: { totalEarnings: true },
         });
-        if (!currentTeacher) continue;
 
-        const safeDecrement = Math.min(
-          roundMoney(currentTeacher.totalEarnings),
-          amount,
-        );
-        if (safeDecrement > 0) {
+        if (currentProfile) {
+          const nextEarnings = Math.max(
+            0,
+            roundMoney(toNumber(currentProfile.totalEarnings) - amount),
+          );
           await tx.teacherProfile.update({
             where: { id: teacherProfileId },
-            data: { totalEarnings: { decrement: safeDecrement } },
+            data: { totalEarnings: nextEarnings },
           });
         }
       }
@@ -509,11 +504,7 @@ class RefundAdminService {
           });
         }
 
-        for (const teacherProfileId of new Set(
-          refund.order.items
-            .map((item) => item.package?.course?.teacherProfile?.id)
-            .filter((id): id is string => Boolean(id)),
-        )) {
+        for (const teacherProfileId of affectedTeacherProfileIds) {
           const activeStudentCount =
             await countDistinctActiveStudentsForTeacherProfile(
               tx,

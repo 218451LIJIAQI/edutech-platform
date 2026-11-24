@@ -1,5 +1,6 @@
 import { DollarSign, Plus, Trash2 } from 'lucide-react';
 import type { LessonPackage } from '@/types';
+import { formatCurrency } from '@/utils/helpers';
 
 interface CourseEditorPackagesTabProps {
   courseExists: boolean;
@@ -22,14 +23,6 @@ const toNumber = (value: number | string | null | undefined): number => {
 
   return 0;
 };
-
-const formatCurrency = (value: number | string | null | undefined): string =>
-  new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: 'USD',
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(toNumber(value));
 
 export default function CourseEditorPackagesTab({
   courseExists,

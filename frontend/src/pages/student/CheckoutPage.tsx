@@ -119,8 +119,6 @@ const CheckoutPage = () => {
     );
   }
 
-  const isFreePackage = selectedPackage.finalPrice <= 0;
-
   if (paymentSuccess) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-primary-50/10 to-indigo-50/20">
@@ -168,11 +166,7 @@ const CheckoutPage = () => {
                 <h1 className="text-3xl font-extrabold text-gray-900">
                   <span className="bg-gradient-to-r from-green-600 to-emerald-600 bg-clip-text text-transparent">Checkout</span>
                 </h1>
-                <p className="text-gray-500 font-medium">
-                  {isFreePackage
-                    ? 'Confirm your free enrollment to start learning immediately'
-                    : 'Confirm your enrollment to start learning'}
-                </p>
+                <p className="text-gray-500 font-medium">Confirm your enrollment to start learning</p>
               </div>
             </div>
           </div>
@@ -243,7 +237,7 @@ const CheckoutPage = () => {
                 <div className="flex items-center justify-between mb-6 p-4 bg-gradient-to-r from-primary-50 to-primary-100 rounded-xl">
                   <span className="text-xl font-bold text-gray-900">Total</span>
                   <span className="text-3xl font-bold text-primary-600">
-                    {isFreePackage ? 'Free ($0.00)' : formatCurrency(selectedPackage.finalPrice)}
+                    {formatCurrency(selectedPackage.finalPrice)}
                   </span>
                 </div>
 
@@ -273,41 +267,23 @@ const CheckoutPage = () => {
                     </>
                   )}
 
-                {/* Policy Notice */}
-                {isFreePackage ? (
-                  <div className="mt-6 bg-gradient-to-r from-blue-50 to-indigo-50 border-2 border-blue-200 rounded-xl p-4">
-                    <div className="flex items-start space-x-3">
-                      <div className="p-2 bg-blue-200 rounded-lg flex-shrink-0">
-                        <CheckCircle className="w-5 h-5 text-blue-700" />
-                      </div>
-                      <div>
-                        <p className="text-sm font-bold text-blue-900">
-                          Free Enrollment Access
-                        </p>
-                        <p className="text-xs text-blue-700 mt-1">
-                          No charge applies to this free package. Free enrollments are non-refundable.
-                        </p>
-                      </div>
+                {/* Money Back Guarantee */}
+                <div className="mt-6 bg-gradient-to-r from-green-50 to-green-100 border-2 border-green-200 rounded-xl p-4">
+                  <div className="flex items-start space-x-3">
+                    <div className="p-2 bg-green-200 rounded-lg flex-shrink-0">
+                      <AlertCircle className="w-5 h-5 text-green-700" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-bold text-green-900">
+                        30-Day Money-Back Guarantee
+                      </p>
+                      <p className="text-xs text-green-700 mt-1">
+                        If you're not satisfied, get a full refund within 30
+                        days.
+                      </p>
                     </div>
                   </div>
-                ) : (
-                  <div className="mt-6 bg-gradient-to-r from-green-50 to-green-100 border-2 border-green-200 rounded-xl p-4">
-                    <div className="flex items-start space-x-3">
-                      <div className="p-2 bg-green-200 rounded-lg flex-shrink-0">
-                        <AlertCircle className="w-5 h-5 text-green-700" />
-                      </div>
-                      <div>
-                        <p className="text-sm font-bold text-green-900">
-                          30-Day Money-Back Guarantee
-                        </p>
-                        <p className="text-xs text-green-700 mt-1">
-                          If you're not satisfied, get a full refund within 30
-                          days.
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                )}
+                </div>
               </div>
             </div>
           </div>

@@ -1,14 +1,11 @@
-import {
-  Router,
-  type NextFunction,
-  type Request,
-  type RequestHandler,
-  type Response,
-} from "express";
+import { NextFunction, Request, RequestHandler, Response, Router } from "express";
 
 import uploadController from "../controllers/upload.controller";
 import { authenticate } from "../middleware/auth";
-import { cleanupRequestUploads, uploadAny } from "../middleware/upload";
+import {
+  cleanupTrackedRequestUploads,
+  uploadAny,
+} from "../middleware/upload";
 
 const router = Router();
 
@@ -16,17 +13,17 @@ const SINGLE_FILE_FIELD = "file";
 const MULTIPLE_FILES_FIELD = "files";
 const MAX_FILES_PER_REQUEST = 10;
 
-const withUploadCleanup =
-  (multerMiddleware: RequestHandler): RequestHandler =>
+const withUploadCleanupOnError =
+  (multerHandler: RequestHandler): RequestHandler =>
   (req: Request, res: Response, next: NextFunction) => {
-    multerMiddleware(req, res, (err: unknown) => {
-      if (!err) {
+    multerHandler(req, res, (error?: unknown) => {
+      if (!error) {
         next();
         return;
       }
 
-      void cleanupRequestUploads(req).finally(() => {
-        next(err);
+      void cleanupTrackedRequestUploads(req).finally(() => {
+        next(error);
       });
     });
   };
@@ -35,21 +32,25 @@ const withUploadCleanup =
  * Upload routes.
  *
  * All upload routes require authentication.
- * Any mid-stream Multer rejection or limit failure automatically cleans up
- * files already written earlier in the same request.
+ * Supported upload categories are handled by the upload middleware using either:
+ * - request body folder field sent before file fields,
+ * - folder query parameter, or
+ * - multer file field name.
  */
 
 router.use(authenticate);
 
 router.post(
   "/",
-  withUploadCleanup(uploadAny.single(SINGLE_FILE_FIELD)),
+  withUploadCleanupOnError(uploadAny.single(SINGLE_FILE_FIELD)),
   uploadController.uploadFile,
 );
 
 router.post(
   "/multiple",
-  withUploadCleanup(uploadAny.array(MULTIPLE_FILES_FIELD, MAX_FILES_PER_REQUEST)),
+  withUploadCleanupOnError(
+    uploadAny.array(MULTIPLE_FILES_FIELD, MAX_FILES_PER_REQUEST),
+  ),
   uploadController.uploadMultipleFiles,
 );
 

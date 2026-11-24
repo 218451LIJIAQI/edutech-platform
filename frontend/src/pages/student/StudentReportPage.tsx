@@ -201,7 +201,7 @@ const StudentReportPage = () => {
                 {filteredReports.map((report) => (
                   <div
                     key={report.id}
-                    className={`card cursor-pointer hover:shadow-2xl transition-all duration-300 transform hover:scale-102 border-l-4 rounded-2xl shadow-lg ${getStatusBorderClass(
+                    className={`card card-smooth cursor-pointer border-l-4 ${getStatusBorderClass(
                       report.status
                     )}`}
                     onClick={() => setSelectedReport(report)}
@@ -265,7 +265,14 @@ const StudentReportPage = () => {
         </div>
 
         {selectedReport && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div
+            className="fixed inset-0 bg-slate-950/55 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+            onMouseDown={(event) => {
+              if (event.target === event.currentTarget) {
+                closeReportModal();
+              }
+            }}
+          >
             <div
               ref={reportModalRef}
               tabIndex={-1}

@@ -22,6 +22,7 @@ import adminService, {
   type RevenueBreakdownPoint,
 } from '@/services/admin.service';
 import { extractErrorMessage } from '@/utils/error-handler';
+import { formatCurrency as formatMoney } from '@/utils/helpers';
 import clientLogger from '@/utils/logger';
 
 type GroupBy = 'day' | 'week' | 'month';
@@ -39,22 +40,6 @@ const DEFAULT_FILTERS: RevenueFilters = {
 };
 
 const CHART_COLORS = ['#0284c7', '#0ea5e9', '#38bdf8', '#7dd3fc'];
-
-const moneyFormatter = new Intl.NumberFormat('en-US', {
-  style: 'currency',
-  currency: 'USD',
-  maximumFractionDigits: 2,
-});
-
-const formatMoney = (value: unknown) => {
-  const numericValue = Number(value);
-
-  if (!Number.isFinite(numericValue)) {
-    return moneyFormatter.format(0);
-  }
-
-  return moneyFormatter.format(numericValue);
-};
 
 const formatTooltipValue = (
   value: number | string | readonly (number | string)[] | undefined

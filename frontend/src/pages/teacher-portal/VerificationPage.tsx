@@ -145,7 +145,7 @@ const VerificationPage = () => {
       case VerificationStatus.APPROVED:
         return <span className="badge-success">Approved</span>;
       case VerificationStatus.REJECTED:
-        return <span className="badge-error">Rejected</span>;
+        return <span className="badge-danger">Rejected</span>;
       case VerificationStatus.PENDING:
         return <span className="badge-warning">Pending Review</span>;
       default:

@@ -12,6 +12,7 @@ import {
 
 import type { User } from '@/types';
 import { useOverlayAccessibility } from '@/hooks';
+import { formatCurrency as formatMoney } from '@/utils/helpers';
 
 interface UserDetailsModalProps {
   isOpen: boolean;
@@ -37,13 +38,6 @@ const roleBadgeClasses: Record<string, string> = {
   TEACHER: 'bg-blue-100 text-blue-800',
   STUDENT: 'bg-green-100 text-green-800',
 };
-
-const moneyFormatter = new Intl.NumberFormat('en-US', {
-  style: 'currency',
-  currency: 'USD',
-  minimumFractionDigits: 2,
-  maximumFractionDigits: 2,
-});
 
 const getFullName = (user: User) => {
   const fullName = `${user.firstName ?? ''} ${user.lastName ?? ''}`.trim();
@@ -78,16 +72,6 @@ const formatDate = (value?: string | Date | null): string => {
     hour: '2-digit',
     minute: '2-digit',
   });
-};
-
-const formatMoney = (value?: number | string | null): string => {
-  const numericValue = Number(value ?? 0);
-
-  if (!Number.isFinite(numericValue)) {
-    return moneyFormatter.format(0);
-  }
-
-  return moneyFormatter.format(numericValue);
 };
 
 const InfoItem = ({ icon, label, value }: InfoItemProps) => (

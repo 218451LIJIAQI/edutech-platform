@@ -10,6 +10,7 @@ declare global {
         role: UserRole;
         firstName: string;
         lastName: string;
+        tokenVersion?: number;
       };
     }
   }

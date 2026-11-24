@@ -15,7 +15,7 @@ import {
 
 const MAX_REASON_LENGTH = 1000;
 const MAX_NOTES_LENGTH = 2000;
-const SUPPORTED_STUDENT_REFUND_METHODS: readonly RefundMethod[] = [
+const ALLOWED_STUDENT_REFUND_METHODS = [
   RefundMethod.ORIGINAL_PAYMENT,
   RefundMethod.BANK_TRANSFER,
 ] as const;
@@ -51,8 +51,9 @@ class OrdersController {
     });
     const refundMethod = parseOptionalEnum(
       req.body?.refundMethod,
-      SUPPORTED_STUDENT_REFUND_METHODS,
+      ALLOWED_STUDENT_REFUND_METHODS,
       "refundMethod",
+      "Student wallet refunds are not supported. Choose ORIGINAL_PAYMENT or BANK_TRANSFER.",
     );
     const bankDetails = parseOptionalString(
       req.body?.bankDetails,
@@ -97,7 +98,7 @@ class OrdersController {
   });
 
   getUserRefunds = asyncHandler(async (req: Request, res: Response) => {
-    const refunds = await ordersService.getUserRefunds(requireAuthUserId(req));
+    const refunds = await ordersService.getMyRefunds(requireAuthUserId(req));
     sendSuccess(res, refunds);
   });
 }

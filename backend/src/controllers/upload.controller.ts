@@ -1,9 +1,9 @@
+import fs from "fs/promises";
 import { Request, Response } from "express";
 import asyncHandler from "../utils/async-handler";
 import { ValidationError } from "../utils/errors";
 import { getQueryString, sendCreated } from "../utils/http";
 import {
-  cleanupRequestUploads,
   resolveUploadCategory,
   validateStoredUpload,
   type UploadCategory,
@@ -38,6 +38,15 @@ const getRequestedUploadFolder = (req: Request): string | undefined =>
   getQueryString(req.body?.folder) || getQueryString(req.query?.folder);
 
 class UploadController {
+  private async cleanupUploadedFiles(files: Express.Multer.File[]) {
+    await Promise.allSettled(
+      files
+        .map((file) => file.path)
+        .filter((filePath): filePath is string => Boolean(filePath))
+        .map((filePath) => fs.unlink(filePath)),
+    );
+  }
+
   private assertRequestedFolderMatchesStoredFile(
     req: Request,
     storedCategory: UploadCategory,
@@ -84,7 +93,7 @@ class UploadController {
       const uploadedFile = this.buildUploadedFileResponse(req, file);
       sendCreated(res, uploadedFile, "File uploaded successfully");
     } catch (error) {
-      await cleanupRequestUploads(req);
+      await this.cleanupUploadedFiles([file]);
       throw error;
     }
   });
@@ -105,7 +114,7 @@ class UploadController {
         `${uploadedFiles.length} file${uploadedFiles.length === 1 ? "" : "s"} uploaded successfully`,
       );
     } catch (error) {
-      await cleanupRequestUploads(req);
+      await this.cleanupUploadedFiles(files);
       throw error;
     }
   });

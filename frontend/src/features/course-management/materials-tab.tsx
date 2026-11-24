@@ -1,49 +1,105 @@
-import { FileText, Upload } from 'lucide-react';
+import { Download, FileText, Upload } from 'lucide-react';
+import toast from 'react-hot-toast';
 import type { Course } from '@/types';
+import { downloadProtectedAsset } from '@/utils/protected-assets';
+import { extractErrorMessage } from '@/utils/error-handler';
+import clientLogger from '@/utils/logger';
 
 interface CourseManagementMaterialsTabProps {
   materials: NonNullable<Course['materials']>;
 }
 
+const formatFileSize = (bytes: number): string => {
+  if (!Number.isFinite(bytes) || bytes <= 0) return '0 KB';
+  if (bytes >= 1024 * 1024) {
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  }
+  return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+};
+
 export default function CourseManagementMaterialsTab({
   materials,
 }: CourseManagementMaterialsTabProps) {
+  const handleDownload = async (url: string, title: string) => {
+    try {
+      await downloadProtectedAsset(url, title);
+    } catch (error) {
+      clientLogger.error('Failed to download course material:', error);
+      toast.error(extractErrorMessage(error, 'Failed to download material'));
+    }
+  };
+
   return (
     <div className="space-y-6">
-      <div className="bg-gradient-to-r from-green-50 to-green-100 border-2 border-green-200 p-6 rounded-lg">
-        <h3 className="text-lg font-bold text-green-900 mb-4 flex items-center space-x-2">
-          <Upload className="w-5 h-5" />
-          <span>Course Materials</span>
+      <div className="bg-gradient-to-r from-emerald-50 to-teal-50 border border-emerald-200 p-6 rounded-xl">
+        <h3 className="text-lg font-bold text-emerald-950 mb-1.5 flex items-center gap-2">
+          <Upload className="w-5 h-5 text-emerald-700" />
+          <span>Course Study Materials</span>
         </h3>
-
-        <div className="space-y-4">
-          <p className="text-green-800">
-            Course materials already attached to this course are listed below.
-          </p>
-        </div>
+        <p className="text-sm text-emerald-900">
+          Review downloadable resources attached to this course. Use &ldquo;Edit Course Content&rdquo; above to upload new files or update download permissions.
+        </p>
       </div>
 
-      <div className="bg-gray-50 p-6 rounded-lg">
-        <h4 className="font-bold text-gray-900 mb-4">Uploaded Materials</h4>
+      <div className="bg-slate-50 p-6 rounded-xl border border-slate-200">
+        <div className="flex items-center justify-between mb-4">
+          <h4 className="font-bold text-slate-900">
+            Uploaded Materials ({materials.length})
+          </h4>
+        </div>
         {materials.length > 0 ? (
           <div className="space-y-3">
-            {materials.map((material) => (
-              <div
-                key={material.id}
-                className="flex items-center justify-between p-4 bg-white border border-gray-200 rounded-lg hover:shadow-md transition-shadow"
-              >
-                <div className="flex items-center space-x-3">
-                  <FileText className="w-5 h-5 text-gray-400" />
-                  <div>
-                    <p className="font-medium text-gray-900">{material.title}</p>
-                    <p className="text-sm text-gray-600">{material.description}</p>
+            {materials.map((material) => {
+              const targetUrl = material.accessUrl ?? material.fileUrl;
+              return (
+                <div
+                  key={material.id}
+                  className="flex flex-wrap items-center justify-between gap-4 p-4 bg-white border border-slate-200 rounded-xl hover:border-slate-300 transition-colors"
+                >
+                  <div className="flex items-start gap-3 min-w-0">
+                    <div className="p-2 bg-primary-50 rounded-lg shrink-0">
+                      <FileText className="w-5 h-5 text-primary-600" />
+                    </div>
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="font-semibold text-slate-900">{material.title}</p>
+                        <span className="badge-sm uppercase">{material.fileType}</span>
+                        <span
+                          className={
+                            material.isDownloadable ? 'badge-success' : 'badge-warning'
+                          }
+                        >
+                          {material.isDownloadable ? 'Downloadable' : 'Restricted'}
+                        </span>
+                      </div>
+                      {material.description ? (
+                        <p className="text-sm text-slate-600 mt-1">{material.description}</p>
+                      ) : null}
+                      <p className="text-xs text-slate-500 mt-1 tabular-nums">
+                        {formatFileSize(material.fileSize)} &middot; Uploaded{' '}
+                        {new Date(material.uploadedAt).toLocaleDateString()}
+                      </p>
+                    </div>
                   </div>
+
+                  {targetUrl && material.isDownloadable ? (
+                    <button
+                      type="button"
+                      onClick={() => void handleDownload(targetUrl, material.title)}
+                      className="btn-outline btn-sm shrink-0"
+                    >
+                      <Download className="w-3.5 h-3.5" />
+                      Download
+                    </button>
+                  ) : null}
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         ) : (
-          <p className="text-gray-600">No materials uploaded yet.</p>
+          <p className="text-sm text-slate-600">
+            No study materials have been uploaded for this course yet.
+          </p>
         )}
       </div>
     </div>

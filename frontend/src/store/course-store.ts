@@ -4,81 +4,66 @@ import courseService from '@/services/course.service';
 import toast from 'react-hot-toast';
 import { extractErrorMessage } from '@/utils/error-handler';
 
-/**
- * Course Store
- * Manages course-related state
- */
-
-/**
- * Parameters for fetching courses
- */
-interface FetchCoursesParams {
-  /** Filter by category */
+export interface FetchCoursesParams {
   category?: string;
-  /** Search query */
   search?: string;
-  /** Filter by course type */
   courseType?: 'LIVE' | 'RECORDED' | 'HYBRID';
-  /** Minimum rating filter */
   minRating?: number;
-  /** Minimum price filter */
   minPrice?: number;
-  /** Maximum price filter */
   maxPrice?: number;
-  /** Sort by field */
   sortBy?: 'NEWEST' | 'RATING' | 'POPULARITY' | 'PRICE_ASC' | 'PRICE_DESC';
-  /** Sort order */
   sortOrder?: 'asc' | 'desc';
-  /** Page number for pagination */
   page?: number;
-  /** Number of items per page */
   limit?: number;
 }
 
-/**
- * Course store state interface
- */
+export interface CourseListPagination {
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+}
+
 interface CourseState {
-  /** List of courses */
   courses: Course[];
-  /** Currently selected course */
+  pagination: CourseListPagination | null;
   currentCourse: Course | null;
-  /** Available course categories */
   categories: string[];
-  /** Loading state for async operations */
   isLoading: boolean;
-  /** Error message if operation fails */
   error: string | null;
 
-  // Actions
-  /** Fetch courses with optional filters */
   fetchCourses: (params?: FetchCoursesParams) => Promise<void>;
-  /** Fetch a specific course by ID */
   fetchCourseById: (id: string) => Promise<void>;
-  /** Fetch available course categories */
   fetchCategories: () => Promise<void>;
-  /** Set the current course */
   setCurrentCourse: (course: Course | null) => void;
-  /** Clear all courses and current course */
   clearCourses: () => void;
-  /** Clear error state */
   clearError: () => void;
 }
 
+let latestCoursesRequestId = 0;
+let latestCourseDetailRequestId = 0;
+
 export const useCourseStore = create<CourseState>((set) => ({
   courses: [],
+  pagination: null,
   currentCourse: null,
   categories: [],
   isLoading: false,
   error: null,
 
   fetchCourses: async (params?: FetchCoursesParams) => {
+    const requestId = ++latestCoursesRequestId;
     try {
       set({ isLoading: true, error: null });
       const data = await courseService.getAllCourses(params);
 
-      // Handle both possible response formats with type safety
+      if (requestId !== latestCoursesRequestId) {
+        return;
+      }
+
       let courseList: Course[] = [];
+      let paginationMeta: CourseListPagination | null = null;
+
       if ('items' in data && Array.isArray(data.items)) {
         courseList = data.items;
       } else if ('courses' in data && Array.isArray(data.courses)) {
@@ -89,16 +74,38 @@ export const useCourseStore = create<CourseState>((set) => ({
         throw new Error('Invalid course data format received');
       }
 
-      set({ courses: courseList, isLoading: false });
+      if (
+        !Array.isArray(data) &&
+        'pagination' in data &&
+        data.pagination &&
+        typeof data.pagination === 'object'
+      ) {
+        paginationMeta = {
+          total: Number(data.pagination.total) || courseList.length,
+          page: Number(data.pagination.page) || params?.page || 1,
+          limit: Number(data.pagination.limit) || params?.limit || 12,
+          totalPages: Math.max(1, Number(data.pagination.totalPages) || 1),
+        };
+      }
+
+      set({
+        courses: courseList,
+        pagination: paginationMeta,
+        isLoading: false,
+        error: null,
+      });
     } catch (error) {
+      if (requestId !== latestCoursesRequestId) {
+        return;
+      }
       const errorMessage = extractErrorMessage(error, 'Failed to fetch courses');
       set({ isLoading: false, error: errorMessage });
       toast.error(errorMessage);
-      throw new Error(errorMessage);
     }
   },
 
   fetchCourseById: async (id: string) => {
+    const requestId = ++latestCourseDetailRequestId;
     try {
       if (!id) {
         throw new Error('Course ID is required');
@@ -106,12 +113,19 @@ export const useCourseStore = create<CourseState>((set) => ({
       set({ isLoading: true, error: null });
       const course = await courseService.getCourseById(id);
 
+      if (requestId !== latestCourseDetailRequestId) {
+        return;
+      }
+
       if (!course) {
         throw new Error('Course not found');
       }
 
-      set({ currentCourse: course, isLoading: false });
+      set({ currentCourse: course, isLoading: false, error: null });
     } catch (error) {
+      if (requestId !== latestCourseDetailRequestId) {
+        return;
+      }
       const errorMessage = extractErrorMessage(error, 'Failed to fetch course');
       set({ isLoading: false, error: errorMessage });
       toast.error(errorMessage);
@@ -121,7 +135,6 @@ export const useCourseStore = create<CourseState>((set) => ({
 
   fetchCategories: async () => {
     try {
-      set({ error: null });
       const categories = await courseService.getCategories();
 
       if (!Array.isArray(categories)) {
@@ -131,9 +144,7 @@ export const useCourseStore = create<CourseState>((set) => ({
       set({ categories });
     } catch (error) {
       const errorMessage = extractErrorMessage(error, 'Failed to fetch categories');
-      set({ error: errorMessage });
       toast.error(errorMessage);
-      throw new Error(errorMessage);
     }
   },
 
@@ -142,7 +153,7 @@ export const useCourseStore = create<CourseState>((set) => ({
   },
 
   clearCourses: () => {
-    set({ courses: [], currentCourse: null, error: null });
+    set({ courses: [], pagination: null, currentCourse: null, error: null });
   },
 
   clearError: () => {
