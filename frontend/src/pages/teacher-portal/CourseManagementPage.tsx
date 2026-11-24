@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { BookOpen } from 'lucide-react';
 import toast from 'react-hot-toast';
 import clientLogger from '@/utils/logger';
@@ -12,6 +12,7 @@ import { LessonType } from '@/types';
 import type { Course, QuizAttempt } from '@/types';
 import CourseManagementHeader from '@/features/course-management/header';
 import CourseManagementStatsGrid from '@/features/course-management/stats-grid';
+import { courseManagementTabs } from '@/features/course-management/constants';
 import CourseManagementTabsNav from '@/features/course-management/tabs-nav';
 import CourseManagementOverviewTab from '@/features/course-management/overview-tab';
 import CourseManagementLiveTab from '@/features/course-management/live-tab';
@@ -36,11 +37,33 @@ const CourseManagementPage = () => {
   usePageTitle('Course Management');
   const { courseId } = useParams<{ courseId: string }>();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [course, setCourse] = useState<Course | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] =
-    useState<CourseManagementTabId>('overview');
+  const requestedTab = searchParams.get('tab');
+  const activeTab: CourseManagementTabId = courseManagementTabs.some(
+    (item) => item.id === requestedTab
+  )
+    ? (requestedTab as CourseManagementTabId)
+    : 'overview';
+  const setActiveTab = useCallback(
+    (nextTab: CourseManagementTabId) => {
+      setSearchParams(
+        (prev) => {
+          const next = new URLSearchParams(prev);
+          if (nextTab === 'overview') {
+            next.delete('tab');
+          } else {
+            next.set('tab', nextTab);
+          }
+          return next;
+        },
+        { replace: true }
+      );
+    },
+    [setSearchParams]
+  );
   const [quizAttempts, setQuizAttempts] = useState<QuizAttempt[]>([]);
   const [notificationDraft, setNotificationDraft] = useState<NotificationDraft>({
     title: '',

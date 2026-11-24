@@ -33,7 +33,7 @@ const refundRequestValidation = [
   body("reason")
     .optional({ values: "falsy" })
     .trim()
-    .isLength({ max: 500 })
+    .isLength({ max: 1000 })
     .withMessage("reason too long"),
   body("reasonCategory")
     .optional({ values: "falsy" })

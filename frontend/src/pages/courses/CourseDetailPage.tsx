@@ -15,7 +15,7 @@ import { extractErrorMessage } from '@/utils/error-handler';
 import { useOverlayAccessibility, usePageTitle } from '@/hooks';
 import { getAccessToken, hasRecoverableAuthState } from '@/utils/auth-storage';
 import { getTeacherDisplayPhoto } from '@/utils/asset-normalizers';
-import { resolveBackendAssetUrl } from '@/utils/runtime-url';
+import { resolveBackendAssetUrl } from '@/utils/runtime';
 
 /**
  * Course Detail Page

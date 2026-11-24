@@ -54,6 +54,7 @@ const MAX_SUBJECT_LENGTH = 150;
 const MAX_CATEGORY_LENGTH = 80;
 const MAX_DESCRIPTION_LENGTH = 5000;
 const MAX_MESSAGE_LENGTH = 5000;
+const MAX_RESOLUTION_LENGTH = 5000;
 const MAX_TICKET_NO_CREATE_ATTEMPTS = 5;
 const DEFAULT_TICKET_LIMIT = 20;
 const MAX_TICKET_LIMIT = 100;
@@ -363,7 +364,11 @@ class SupportService {
       ticketId,
       "Ticket ID",
     );
-    const normalizedResolution = normalizeOptionalSanitizedText(resolution);
+    const normalizedResolution = normalizeOptionalSanitizedText(
+      resolution,
+      "Resolution",
+      MAX_RESOLUTION_LENGTH,
+    );
 
     const ticket = await prisma.supportTicket.findFirst({
       where: { id: normalizedTicketId, userId: normalizedUserId },

@@ -286,8 +286,8 @@ class AdsController {
   });
 
   deleteAd = asyncHandler(async (req: Request, res: Response) => {
-    requireAuthUserId(req);
-    await adsService.deleteAd(req.params.id);
+    const adminId = requireAuthUserId(req);
+    await adsService.deleteAd(req.params.id, adminId);
     sendSuccess(res, undefined, "Ad deleted successfully");
   });
 

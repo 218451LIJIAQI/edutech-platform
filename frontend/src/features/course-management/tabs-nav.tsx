@@ -11,14 +11,18 @@ export default function CourseManagementTabsNav({
   onTabChange,
 }: CourseManagementTabsNavProps) {
   return (
-    <div className="flex items-center space-x-2 border-b border-gray-200 overflow-x-auto">
+    <div
+      role="tablist"
+      aria-label="Course management sections"
+      className="flex items-center space-x-2 border-b border-gray-200 overflow-x-auto"
+    >
       {courseManagementTabs.map((tab) => (
         <button
           type="button"
+          role="tab"
           key={tab.id}
           onClick={() => onTabChange(tab.id)}
-          aria-label={`${tab.label} course management tab`}
-          aria-pressed={activeTab === tab.id}
+          aria-selected={activeTab === tab.id}
           className={`px-6 py-4 font-medium transition-all whitespace-nowrap ${
             activeTab === tab.id
               ? 'text-primary-600 border-b-2 border-primary-600'

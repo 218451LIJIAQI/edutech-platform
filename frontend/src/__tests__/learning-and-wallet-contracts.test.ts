@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
 import { describe, it } from 'node:test';
 import { LessonType, WalletTransactionType } from '@/types';
 import {
@@ -184,5 +186,56 @@ describe('shared frontend parsing, teacher status, and form validation helpers',
     assert.equal(getHomePathForRole('TEACHER'), '/teacher');
     assert.equal(getHomePathForRole('STUDENT'), '/student');
     assert.equal(getHomePathForRole(undefined), '/');
+  });
+
+  it('resolves every @/ and relative module import across all frontend & backend TypeScript sources cleanly', () => {
+    const repoRoot = path.resolve(__dirname, '..', '..', '..');
+    const feSrc = path.join(repoRoot, 'frontend', 'src');
+    const beSrc = path.join(repoRoot, 'backend', 'src');
+    const exts = ['', '.ts', '.tsx', '.js', '.json', '/index.ts', '/index.tsx', '/index.js'];
+
+    const walk = (dir: string, acc: string[] = []): string[] => {
+      for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+        const full = path.join(dir, entry.name);
+        if (entry.isDirectory()) {
+          walk(full, acc);
+        } else if (/\.(ts|tsx)$/.test(entry.name) && !entry.name.endsWith('.d.ts')) {
+          acc.push(full);
+        }
+      }
+      return acc;
+    };
+
+    const brokenImports: string[] = [];
+    const importRe = /(?:import|export)\s+(?:[^'"]*?\s+from\s+)?['"]([^'"]+)['"]/g;
+
+    for (const [rootDir, files] of [
+      [feSrc, walk(feSrc)],
+      [beSrc, walk(beSrc)],
+    ] as const) {
+      for (const file of files) {
+        const content = fs.readFileSync(file, 'utf8');
+        let match: RegExpExecArray | null;
+        while ((match = importRe.exec(content)) !== null) {
+          const spec = match[1];
+          let base: string | null = null;
+          if (spec.startsWith('@/')) {
+            base = path.join(rootDir, spec.slice(2));
+          } else if (spec.startsWith('./') || spec.startsWith('../')) {
+            base = path.resolve(path.dirname(file), spec);
+          }
+          if (!base) continue;
+          const ok = exts.some((ext) => {
+            const candidate = base + ext;
+            return fs.existsSync(candidate) && fs.statSync(candidate).isFile();
+          });
+          if (!ok) {
+            brokenImports.push(`${path.relative(repoRoot, file)} -> ${spec}`);
+          }
+        }
+      }
+    }
+
+    assert.deepEqual(brokenImports, []);
   });
 });

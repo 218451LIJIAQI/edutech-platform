@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import clientLogger from '@/utils/logger';
 import adminService, { FinancialStats, PaginationMeta, SettlementSummaryRow, TeacherCommissionListItem, FinancialReportSummaryData, TeacherSettlementsData, TeacherSettlementItem } from '@/services/admin.service';
 import { AlertCircle, DollarSign, TrendingUp, PieChart, Receipt, Calendar, RefreshCcw, Percent, Search, Download, Zap, FileText } from 'lucide-react';
@@ -41,9 +42,33 @@ const getPaymentStatusClass = (status?: string): string => {
   }
 };
 
+const FINANCIAL_TAB_IDS = ['payments', 'commissions', 'settlements', 'payouts', 'analytics', 'auto-reports'] as const;
+type FinancialTabId = (typeof FINANCIAL_TAB_IDS)[number];
+
 const FinancialsManagement = () => {
   usePageTitle('Financial Management');
-  const [tab, setTab] = useState<'payments' | 'commissions' | 'settlements' | 'payouts' | 'analytics' | 'auto-reports'>('payments');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const rawTab = searchParams.get('tab');
+  const tab: FinancialTabId = FINANCIAL_TAB_IDS.includes(rawTab as FinancialTabId)
+    ? (rawTab as FinancialTabId)
+    : 'payments';
+  const setTab = useCallback(
+    (nextTab: FinancialTabId) => {
+      setSearchParams(
+        (prev) => {
+          const next = new URLSearchParams(prev);
+          if (nextTab === 'payments') {
+            next.delete('tab');
+          } else {
+            next.set('tab', nextTab);
+          }
+          return next;
+        },
+        { replace: true }
+      );
+    },
+    [setSearchParams]
+  );
   const [payoutRequestKey, setPayoutRequestKey] = useState(0);
 
   // Financial overview & payments
@@ -350,7 +375,11 @@ const FinancialsManagement = () => {
         </div>
 
         {/* Tabs */}
-        <div className="mb-6 flex flex-wrap items-center gap-2.5">
+        <div
+          role="tablist"
+          aria-label="Financial management sections"
+          className="mb-6 flex flex-wrap items-center gap-2.5"
+        >
           {(
             [
               { id: 'payments', label: 'Payments' },
@@ -364,6 +393,8 @@ const FinancialsManagement = () => {
             <button
               key={item.id}
               type="button"
+              role="tab"
+              aria-selected={tab === item.id}
               onClick={() => setTab(item.id)}
               className={`px-4 py-2 rounded-lg font-semibold flex items-center gap-1.5 ${
                 tab === item.id

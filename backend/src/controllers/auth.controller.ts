@@ -182,10 +182,14 @@ class AuthController {
 
     const user = await authService.updateProfile(requireAuthUserId(req), {
       firstName: parseOptionalString(req.body?.firstName, "firstName", {
+        rejectNull: true,
         rejectBlank: true,
+        maxLength: 50,
       }),
       lastName: parseOptionalString(req.body?.lastName, "lastName", {
+        rejectNull: true,
         rejectBlank: true,
+        maxLength: 50,
       }),
       avatar,
     });

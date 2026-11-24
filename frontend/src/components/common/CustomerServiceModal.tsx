@@ -646,6 +646,7 @@ const CustomerServiceModal = ({
                           placeholder="Type your message..."
                           className="input min-h-[60px] w-full resize-none"
                           disabled={isBusy}
+                          maxLength={5000}
                           rows={3}
                         />
 
@@ -774,7 +775,7 @@ const CustomerServiceModal = ({
                   placeholder="Brief description of your issue"
                   className="input w-full"
                   disabled={isBusy}
-                  maxLength={120}
+                  maxLength={150}
                 />
               </div>
 
@@ -837,7 +838,7 @@ const CustomerServiceModal = ({
                   placeholder="Please provide detailed information about your issue..."
                   className="input h-32 w-full resize-none"
                   disabled={isBusy}
-                  maxLength={2000}
+                  maxLength={5000}
                 />
               </div>
 

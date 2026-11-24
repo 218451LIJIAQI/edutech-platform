@@ -12,6 +12,10 @@ import paymentService, {
   lockLessonPackagesForUpdate,
 } from "../services/payment.service";
 import ordersController from "../controllers/orders.controller";
+import authController from "../controllers/auth.controller";
+import adsController from "../controllers/ads.controller";
+import adsService from "../services/ads.service";
+import supportService from "../services/support.service";
 import communityService from "../services/community.service";
 import adminService from "../services/admin.service";
 import authService from "../services/auth.service";
@@ -668,5 +672,130 @@ describe("Track 2 & Track 3 concurrency, account lifecycle, and partial-update i
     assert.equal(approvedUpdate.teachingStyle, "Problem-driven");
     assert.equal(approvedUpdate.yearsOfExperience, 8);
     assert.equal(approvedUpdate.awards, JSON.stringify(["Best Lecturer 2024"]));
+  });
+
+  it("blocks teacher deactivation across updateUserStatus, updateUser & batchUpdateUserStatus when active students exist, and enforces null/audit/length guards", async () => {
+    const prismaMutable = prisma as unknown as Record<string, unknown>;
+    const prevUser = prismaMutable.user;
+    const prevEnrollment = prismaMutable.enrollment;
+    const prevTransaction = prismaMutable.$transaction;
+
+    prismaMutable.user = {
+      findUnique: async (args: { where?: { id?: string } }) => ({
+        id: args.where?.id || "teacher-active-1",
+        email: "teacher@flexilearn.com",
+        role: "TEACHER",
+        firstName: "Marcus",
+        lastName: "Tan",
+        phone: null,
+        address: null,
+        department: null,
+        avatar: null,
+        isActive: true,
+        isLocked: false,
+      }),
+      findMany: async () => [
+        { id: "teacher-active-1", role: "TEACHER" },
+        { id: "student-ok-1", role: "STUDENT" },
+      ],
+    };
+    prismaMutable.enrollment = {
+      count: async () => 3,
+      findMany: async () => [],
+    };
+    prismaMutable.$transaction = async (fn: (tx: unknown) => Promise<unknown>) =>
+      fn({
+        user: {
+          updateMany: async () => ({ count: 1 }),
+        },
+        userAuditLog: {
+          createMany: async () => ({ count: 1 }),
+        },
+      });
+
+    try {
+      await assert.rejects(
+        () => adminService.updateUserStatus("teacher-active-1", false, "admin-1"),
+        /Cannot deactivate teacher with active students/,
+      );
+      await assert.rejects(
+        () =>
+          adminService.updateUser(
+            "teacher-active-1",
+            { isActive: false },
+            "admin-1",
+          ),
+        /Cannot deactivate teacher with active students/,
+      );
+
+      const batchRes = await adminService.batchUpdateUserStatus(
+        ["teacher-active-1", "student-ok-1"],
+        false,
+        "admin-1",
+      );
+      assert.deepEqual(batchRes.succeeded, ["student-ok-1"]);
+      assert.equal(batchRes.failed.length, 1);
+      assert.equal(batchRes.failed[0].userId, "teacher-active-1");
+      assert.match(batchRes.failed[0].reason, /active students/i);
+
+      // authController.updateProfile rejects explicit null firstName with BadRequestError
+      let profileErr: unknown = null;
+      await new Promise<void>((resolve) => {
+        authController.updateProfile(
+          {
+            user: { id: "stu-1", email: "s@example.com", role: "STUDENT" },
+            body: { firstName: null },
+          } as unknown as Request,
+          { status: () => ({ json: () => ({}) }) } as never,
+          (err?: unknown) => {
+            profileErr = err;
+            resolve();
+          },
+        );
+      });
+      assert.ok(profileErr instanceof Error);
+      assert.match(profileErr.message, /firstName cannot be null/);
+
+      // adsController.deleteAd forwards authenticated adminId to adsService.deleteAd
+      let capturedDeleteArgs: [string, string | undefined] | null = null;
+      const origDeleteAd = adsService.deleteAd.bind(adsService);
+      adsService.deleteAd = (async (adId: string, adminId?: string) => {
+        capturedDeleteArgs = [adId, adminId];
+        return { deleted: true };
+      }) as typeof adsService.deleteAd;
+      try {
+        await new Promise<void>((resolve, reject) => {
+          adsController.deleteAd(
+            {
+              user: { id: "admin-99", email: "a@example.com", role: "ADMIN" },
+              params: { id: "ad-123" },
+            } as unknown as Request,
+            {
+              status() {
+                return this;
+              },
+              json() {
+                resolve();
+                return this;
+              },
+            } as never,
+            reject,
+          );
+        });
+        assert.deepEqual(capturedDeleteArgs, ["ad-123", "admin-99"]);
+      } finally {
+        adsService.deleteAd = origDeleteAd;
+      }
+
+      // supportService.closeTicket enforces 5000-character resolution cap
+      await assert.rejects(
+        () => supportService.closeTicket("stu-1", "tkt-1", "x".repeat(5001)),
+        /Resolution must not exceed 5000 characters/,
+      );
+    } finally {
+      prismaMutable.user = prevUser;
+      prismaMutable.enrollment = prevEnrollment;
+      prismaMutable.$transaction = prevTransaction;
+    }
   });
 });

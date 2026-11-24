@@ -501,6 +501,7 @@ export const assertTeacherHasNoActiveStudents = async (
   teacherUserId: string,
   teacherLabel?: string,
   client: PrismaClientLike = prisma,
+  action: "delete" | "deactivate" = "delete",
 ) => {
   const activeEnrollments = await client.enrollment.count({
     where: buildCurrentEnrollmentWhere(
@@ -518,8 +519,8 @@ export const assertTeacherHasNoActiveStudents = async (
   if (activeEnrollments > 0) {
     throw new ValidationError(
       teacherLabel
-        ? `Cannot delete teacher ${teacherLabel} with active students`
-        : "Cannot delete teacher with active students",
+        ? `Cannot ${action} teacher ${teacherLabel} with active students`
+        : `Cannot ${action} teacher with active students`,
     );
   }
 };

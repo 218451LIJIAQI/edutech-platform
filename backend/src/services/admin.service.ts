@@ -349,6 +349,15 @@ class AdminService {
     const user = await requireUser(userId);
     ensureNotAdminUser(user, "Cannot modify admin user status");
 
+    if (!isActive && user.isActive && user.role === UserRole.TEACHER) {
+      await assertTeacherHasNoActiveStudents(
+        userId,
+        undefined,
+        prisma,
+        "deactivate",
+      );
+    }
+
     const impactedTeacherUserIds =
       user.role === UserRole.STUDENT && user.isActive !== isActive
         ? await collectImpactedTeacherUserIdsForStudent(user.id)
@@ -514,6 +523,19 @@ class AdminService {
 
     if (data.role) {
       ensureAdminManageableRole(data.role);
+    }
+
+    if (
+      data.isActive === false &&
+      user.isActive &&
+      user.role === UserRole.TEACHER
+    ) {
+      await assertTeacherHasNoActiveStudents(
+        userId,
+        undefined,
+        prisma,
+        "deactivate",
+      );
     }
 
     const nextEmail =
@@ -860,6 +882,25 @@ class AdminService {
           reason: "Admin accounts cannot be batch-updated",
         });
         continue;
+      }
+      if (!isActive && target.role === UserRole.TEACHER) {
+        try {
+          await assertTeacherHasNoActiveStudents(
+            userId,
+            undefined,
+            prisma,
+            "deactivate",
+          );
+        } catch (error) {
+          failed.push({
+            userId,
+            reason:
+              error instanceof Error
+                ? error.message
+                : "Cannot deactivate teacher with active students",
+          });
+          continue;
+        }
       }
       eligibleUserIds.push(userId);
     }

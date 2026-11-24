@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import clientLogger from '@/utils/logger';
-import { useLocation } from 'react-router-dom';
+import { useSearchParams } from 'react-router-dom';
 import { Send, Search, Pin, User, ShieldCheck, MessageSquare } from 'lucide-react';
 import { useAuthStore } from '@/store/auth-store';
 import messageService, { Contact, Message } from '@/services/message.service';
@@ -9,11 +9,6 @@ import { UserRole } from '@/types';
 import toast from 'react-hot-toast';
 import { usePageTitle } from '@/hooks';
 import { extractErrorMessage } from '@/utils/error-handler';
-
-function useQuery() {
-  const { search } = useLocation();
-  return useMemo(() => new URLSearchParams(search), [search]);
-}
 
 const CONVERSATION_TIMEOUT_MS = 8000;
 
@@ -41,7 +36,7 @@ const withTimeout = async <T,>(
 const MessagesPage = () => {
   usePageTitle('Messages');
   const { user } = useAuthStore();
-  const query = useQuery();
+  const [searchParams, setSearchParams] = useSearchParams();
 
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [searchText, setSearchText] = useState('');
@@ -54,12 +49,13 @@ const MessagesPage = () => {
   const [loadingThread, setLoadingThread] = useState(false);
   const [threadError, setThreadError] = useState<string | null>(null);
   const [isSending, setIsSending] = useState(false);
-  const requestedContactId = query.get('contactId');
+  const requestedContactId = searchParams.get('contactId');
 
   const listRef = useRef<HTMLDivElement | null>(null);
   const isMountedRef = useRef(true);
   const conversationRequestRef = useRef(0);
   const scrollFrameRef = useRef<number | null>(null);
+  const appliedUrlContactIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     isMountedRef.current = true;
@@ -180,18 +176,36 @@ const MessagesPage = () => {
     void loadContacts();
   }, [loadContacts]);
 
+  const handleSelectContact = useCallback(
+    (contact: Contact) => {
+      appliedUrlContactIdRef.current = contact.id;
+      setSearchParams(
+        (prev) => {
+          const next = new URLSearchParams(prev);
+          next.set('contactId', contact.id);
+          return next;
+        },
+        { replace: true }
+      );
+      void openConversation(contact);
+    },
+    [openConversation, setSearchParams]
+  );
+
   useEffect(() => {
-    if (!requestedContactId || contacts.length === 0) {
+    if (!requestedContactId) {
+      appliedUrlContactIdRef.current = null;
       return;
     }
-    if (activeContact?.id === requestedContactId) {
+    if (contacts.length === 0 || appliedUrlContactIdRef.current === requestedContactId) {
       return;
     }
     const matched = contacts.find((item) => item.id === requestedContactId);
     if (matched) {
+      appliedUrlContactIdRef.current = requestedContactId;
       void openConversation(matched);
     }
-  }, [activeContact?.id, contacts, openConversation, requestedContactId]);
+  }, [contacts, openConversation, requestedContactId]);
 
   const handleSend = async () => {
     const text = input.trim();
@@ -305,7 +319,8 @@ const MessagesPage = () => {
                     <li key={c.id}>
                       <button
                         type="button"
-                        onClick={() => openConversation(c)}
+                        aria-current={activeContact?.id === c.id ? 'true' : undefined}
+                        onClick={() => handleSelectContact(c)}
                         className={`w-full flex items-center gap-3 p-3 rounded-lg hover:bg-gray-50 border ${
                           activeContact?.id === c.id ? 'border-primary-200 bg-primary-50' : 'border-transparent'
                         }`}

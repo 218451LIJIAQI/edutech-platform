@@ -791,6 +791,7 @@ const SupportTicketsManagement = () => {
                         onChange={(e) => setResponseMessage(e.target.value)}
                         placeholder="Type your response..."
                         className="w-full h-20 px-4 py-3 border border-gray-200 rounded-xl resize-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
+                        maxLength={5000}
                         disabled={working || isUploadingResponseAttachment}
                       />
                       <input
@@ -856,6 +857,7 @@ const SupportTicketsManagement = () => {
                         onChange={(e) => setResolutionText(e.target.value)}
                         placeholder="Describe the resolution..."
                         className="w-full h-20 px-4 py-3 border border-gray-200 rounded-xl resize-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all"
+                        maxLength={5000}
                         disabled={working}
                       />
                       <button

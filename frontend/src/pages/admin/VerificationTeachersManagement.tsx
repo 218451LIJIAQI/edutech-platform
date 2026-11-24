@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
+import { useSearchParams } from 'react-router-dom';
 import clientLogger from '@/utils/logger';
 import { CheckCircle, XCircle, Clock, Eye, AlertCircle, Loader, UserPlus, X, Zap, Shield, RefreshCcw } from 'lucide-react';
 import teacherService from '@/services/teacher.service';
@@ -35,7 +36,29 @@ const VerificationTeachersManagement = () => {
   const certRequestRef = useRef(0);
   const autoStatsRequestRef = useRef(0);
 
-  const [activeTab, setActiveTab] = useState<'registrations' | 'profiles' | 'certificates'>('registrations');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const requestedTab = searchParams.get('tab');
+  const activeTab: 'registrations' | 'profiles' | 'certificates' =
+    requestedTab === 'profiles' || requestedTab === 'certificates'
+      ? requestedTab
+      : 'registrations';
+  const setActiveTab = useCallback(
+    (nextTab: 'registrations' | 'profiles' | 'certificates') => {
+      setSearchParams(
+        (prev) => {
+          const next = new URLSearchParams(prev);
+          if (nextTab === 'registrations') {
+            next.delete('tab');
+          } else {
+            next.set('tab', nextTab);
+          }
+          return next;
+        },
+        { replace: true }
+      );
+    },
+    [setSearchParams]
+  );
 
   // Registrations
   const [pendingRegistrations, setPendingRegistrations] = useState<TeacherProfile[]>([]);
@@ -451,9 +474,15 @@ const VerificationTeachersManagement = () => {
         </div>
 
         {/* Tabs */}
-        <div className="flex flex-wrap items-center gap-2 mb-6">
+        <div
+          role="tablist"
+          aria-label="Teacher verification sections"
+          className="flex flex-wrap items-center gap-2 mb-6"
+        >
           <button
             type="button"
+            role="tab"
+            aria-selected={activeTab === 'registrations'}
             className={`px-4 py-2 rounded-lg font-semibold transition-all ${activeTab === 'registrations' ? 'bg-primary-600 text-white' : 'bg-white border border-gray-200 text-gray-700 hover:bg-gray-100'}`}
             onClick={() => setActiveTab('registrations')}
           >
@@ -461,6 +490,8 @@ const VerificationTeachersManagement = () => {
           </button>
           <button
             type="button"
+            role="tab"
+            aria-selected={activeTab === 'profiles'}
             className={`px-4 py-2 rounded-lg font-semibold transition-all ${activeTab === 'profiles' ? 'bg-primary-600 text-white' : 'bg-white border border-gray-200 text-gray-700 hover:bg-gray-100'}`}
             onClick={() => setActiveTab('profiles')}
           >
@@ -468,6 +499,8 @@ const VerificationTeachersManagement = () => {
           </button>
           <button
             type="button"
+            role="tab"
+            aria-selected={activeTab === 'certificates'}
             className={`px-4 py-2 rounded-lg font-semibold transition-all tabular-nums ${activeTab === 'certificates' ? 'bg-primary-600 text-white' : 'bg-white border border-gray-200 text-gray-700 hover:bg-gray-100'}`}
             onClick={() => setActiveTab('certificates')}
           >
@@ -1269,6 +1302,7 @@ const VerificationTeachersManagement = () => {
                   }
                   value={profileReviewNotes}
                   onChange={(e) => setProfileReviewNotes(e.target.value)}
+                  maxLength={500}
                   aria-label="Review notes"
                 />
               </div>

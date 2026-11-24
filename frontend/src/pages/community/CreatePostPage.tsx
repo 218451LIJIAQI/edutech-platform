@@ -21,26 +21,31 @@ const MAX_MEDIA_ITEMS = 10;
 const DRAFT_STORAGE_KEY = 'community-create-post-draft-v1';
 const RESTRICTED_TERMS = ['politics', 'violence', 'hate', 'porn'];
 
-const readDraftFromStorage = () => {
-  if (typeof window === 'undefined') {
+const getDraftStorageKey = (userId?: string) =>
+  userId ? `${DRAFT_STORAGE_KEY}:${userId}` : null;
+
+const readDraftFromStorage = (userId?: string) => {
+  const key = getDraftStorageKey(userId);
+  if (typeof window === 'undefined' || !key) {
     return null;
   }
 
   try {
-    return window.localStorage.getItem(DRAFT_STORAGE_KEY);
+    return window.localStorage.getItem(key);
   } catch (error) {
     clientLogger.warn('Failed to read community draft from storage:', error);
     return null;
   }
 };
 
-const writeDraftToStorage = (value: string) => {
-  if (typeof window === 'undefined') {
+const writeDraftToStorage = (userId: string | undefined, value: string) => {
+  const key = getDraftStorageKey(userId);
+  if (typeof window === 'undefined' || !key) {
     return false;
   }
 
   try {
-    window.localStorage.setItem(DRAFT_STORAGE_KEY, value);
+    window.localStorage.setItem(key, value);
     return true;
   } catch (error) {
     clientLogger.warn('Failed to persist community draft:', error);
@@ -48,13 +53,14 @@ const writeDraftToStorage = (value: string) => {
   }
 };
 
-const clearDraftFromStorage = () => {
-  if (typeof window === 'undefined') {
+const clearDraftFromStorage = (userId?: string) => {
+  const key = getDraftStorageKey(userId);
+  if (typeof window === 'undefined' || !key) {
     return;
   }
 
   try {
-    window.localStorage.removeItem(DRAFT_STORAGE_KEY);
+    window.localStorage.removeItem(key);
   } catch (error) {
     clientLogger.warn('Failed to clear community draft:', error);
   }
@@ -195,13 +201,19 @@ const CreatePostPage = () => {
   }, []);
 
   useEffect(() => {
-    if (typeof window === 'undefined') {
+    setHasLoadedDraft(false);
+    if (typeof window === 'undefined' || !user?.id) {
       return;
     }
 
     try {
-      const savedDraft = readDraftFromStorage();
+      const savedDraft = readDraftFromStorage(user.id);
       if (!savedDraft) {
+        setTitle('');
+        setContent('');
+        setTags([]);
+        setMedia([]);
+        setLinkedCourse(undefined);
         return;
       }
 
@@ -233,10 +245,10 @@ const CreatePostPage = () => {
     } finally {
       setHasLoadedDraft(true);
     }
-  }, []);
+  }, [user?.id]);
 
   useEffect(() => {
-    if (!hasLoadedDraft || typeof window === 'undefined') {
+    if (!hasLoadedDraft || typeof window === 'undefined' || !user?.id) {
       return;
     }
 
@@ -248,11 +260,12 @@ const CreatePostPage = () => {
       linkedCourse;
 
     if (!hasDraftContent) {
-      clearDraftFromStorage();
+      clearDraftFromStorage(user.id);
       return;
     }
 
     writeDraftToStorage(
+      user.id,
       JSON.stringify({
         title,
         content,
@@ -261,7 +274,7 @@ const CreatePostPage = () => {
         linkedCourse,
       })
     );
-  }, [content, hasLoadedDraft, linkedCourse, media, tags, title]);
+  }, [content, hasLoadedDraft, linkedCourse, media, tags, title, user?.id]);
 
   useEffect(() => {
     const trimmedQuery = courseQuery.trim();
@@ -421,7 +434,7 @@ const CreatePostPage = () => {
     setIsPublishing(true);
     try {
       const created = await communityService.createPost(payload);
-      clearDraftFromStorage();
+      clearDraftFromStorage(user.id);
       toast.success('Posted successfully');
       navigate(`/community/post/${created.id}`);
     } catch (error) {

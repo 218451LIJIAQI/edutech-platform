@@ -171,8 +171,13 @@ const uploadCategoryConfigs: Record<UploadCategory, UploadCategoryConfig> = {
   verifications: {
     directory: "verifications",
     maxSize: 10 * MB,
-    allowedMimeTypes: new Set(["image/jpeg", "image/png", "application/pdf"]),
-    allowedExtensions: new Set([".jpg", ".jpeg", ".png", ".pdf"]),
+    allowedMimeTypes: new Set([
+      "image/jpeg",
+      "image/png",
+      "image/webp",
+      "application/pdf",
+    ]),
+    allowedExtensions: new Set([".jpg", ".jpeg", ".png", ".webp", ".pdf"]),
   },
 
   "teacher-profiles": {

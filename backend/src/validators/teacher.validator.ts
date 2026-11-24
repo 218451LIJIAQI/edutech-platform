@@ -72,7 +72,7 @@ const ERROR_MESSAGES = {
     "Profile photo must be an external URL or use the /uploads/teacher-profiles/ folder",
 
   CERTIFICATE_PHOTOS_ARRAY:
-    "Certificate photos must be an array with at most 12 items",
+    "Certificate photos must be an array with at most 10 items",
   CERTIFICATE_PHOTO_STRING:
     "Each certificate photo must be a string URL or file path",
   CERTIFICATE_PHOTO_EMPTY: "Certificate photos cannot contain empty values",
@@ -407,7 +407,7 @@ export const extendedProfileValidation = [
     ),
   body("certificatePhotos")
     .optional({ nullable: true })
-    .isArray({ max: 12 })
+    .isArray({ max: 10 })
     .withMessage(ERROR_MESSAGES.CERTIFICATE_PHOTOS_ARRAY)
     .bail()
     .custom(

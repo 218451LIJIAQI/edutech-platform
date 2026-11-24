@@ -13,8 +13,10 @@ import {
   sendSuccess,
 } from "../utils/http";
 
+const MAX_CANCEL_REASON_LENGTH = 500;
 const MAX_REASON_LENGTH = 1000;
-const MAX_NOTES_LENGTH = 2000;
+const MAX_BANK_DETAILS_LENGTH = 1000;
+const MAX_NOTES_LENGTH = 1000;
 const ALLOWED_STUDENT_REFUND_METHODS = [
   RefundMethod.ORIGINAL_PAYMENT,
   RefundMethod.BANK_TRANSFER,
@@ -38,7 +40,7 @@ class OrdersController {
     const order = await ordersService.cancelOrder(
       requireAuthUserId(req),
       parseRequiredParam(req.params.id, "Order ID"),
-      parseOptionalString(req.body?.reason, "reason", MAX_REASON_LENGTH),
+      parseOptionalString(req.body?.reason, "reason", MAX_CANCEL_REASON_LENGTH),
     );
     sendSuccess(res, order, "Order cancelled successfully");
   });
@@ -58,7 +60,7 @@ class OrdersController {
     const bankDetails = parseOptionalString(
       req.body?.bankDetails,
       "bankDetails",
-      MAX_NOTES_LENGTH,
+      MAX_BANK_DETAILS_LENGTH,
     );
 
     if (refundMethod === RefundMethod.BANK_TRANSFER && !bankDetails) {

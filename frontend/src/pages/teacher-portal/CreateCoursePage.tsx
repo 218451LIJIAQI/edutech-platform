@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import clientLogger from '@/utils/logger';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { AlertCircle, Edit, RefreshCcw } from 'lucide-react';
 import { Course, Lesson, LessonPackage, Material } from '@/types';
@@ -19,6 +19,7 @@ import {
   buildDeleteSuccessMessage,
 } from '@/features/course-editor/course-persistence';
 import { usePageTitle } from '@/hooks';
+import { courseEditorTabs } from '@/features/course-editor/constants';
 import CourseEditorHeader from '@/features/course-editor/header';
 import CourseEditorTabsNav from '@/features/course-editor/tabs-nav';
 import CourseEditorBasicTab from '@/features/course-editor/basic-tab';
@@ -40,8 +41,30 @@ const CreateCoursePage = () => {
   const [course, setCourse] = useState<Course | null>(null);
   const [lessons, setLessons] = useState<Lesson[]>([]);
   const [packages, setPackages] = useState<LessonPackage[]>([]);
+  const [searchParams, setSearchParams] = useSearchParams();
   const [materials, setMaterials] = useState<Material[]>([]);
-  const [activeTab, setActiveTab] = useState<CourseEditorTabId>('basic');
+  const requestedTab = searchParams.get('tab');
+  const activeTab: CourseEditorTabId =
+    isEditMode && courseEditorTabs.some((item) => item.id === requestedTab)
+      ? (requestedTab as CourseEditorTabId)
+      : 'basic';
+  const setActiveTab = useCallback(
+    (nextTab: CourseEditorTabId) => {
+      setSearchParams(
+        (prev) => {
+          const next = new URLSearchParams(prev);
+          if (nextTab === 'basic') {
+            next.delete('tab');
+          } else {
+            next.set('tab', nextTab);
+          }
+          return next;
+        },
+        { replace: true }
+      );
+    },
+    [setSearchParams]
+  );
   const [isLoading, setIsLoading] = useState(isEditMode);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);

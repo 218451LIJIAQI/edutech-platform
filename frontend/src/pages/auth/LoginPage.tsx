@@ -146,6 +146,7 @@ const LoginPage = () => {
           <form onSubmit={handleSubmit} className="space-y-5 relative" noValidate>
             {error && (
               <div
+                id="login-form-error"
                 className="flex items-center gap-3 bg-danger-50 border border-danger-200/60 text-danger-700 px-4 py-3.5 rounded-xl animate-scaleIn"
                 role="alert"
                 aria-live="polite"
@@ -175,7 +176,7 @@ const LoginPage = () => {
                     if (error) setError('');
                   }}
                   aria-invalid={error && !email.trim() ? 'true' : undefined}
-                  aria-describedby={error && !email.trim() ? 'email-error' : undefined}
+                  aria-describedby={error && !email.trim() ? 'login-form-error' : undefined}
                 />
                 <div className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-primary-500 transition-colors">
                   <Mail className="w-5 h-5" />
@@ -207,7 +208,7 @@ const LoginPage = () => {
                     if (error) setError('');
                   }}
                   aria-invalid={error && !password ? 'true' : undefined}
-                  aria-describedby={error && !password ? 'password-error' : undefined}
+                  aria-describedby={error && !password ? 'login-form-error' : undefined}
                 />
                 <div className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-primary-500 transition-colors">
                   <Lock className="w-5 h-5" />

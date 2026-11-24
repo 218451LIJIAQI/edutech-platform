@@ -52,7 +52,17 @@ const CommunityHomePage = () => {
   const query: FeedQuery = useMemo(() => ({ tab, tag, page, limit: 9 }), [tab, tag, page]);
 
   useEffect(() => {
+    const rawTab = params.get('tab');
+    const nextTab: NonNullable<FeedQuery['tab']> =
+      rawTab === 'hot' || rawTab === 'new' || rawTab === 'weekly' ? rawTab : 'hot';
     const nextTag = params.get('tag') || undefined;
+    setTab((current) => {
+      if (current === nextTab) {
+        return current;
+      }
+      setPage(1);
+      return nextTab;
+    });
     setTag((current) => {
       if (current === nextTag) {
         return current;
@@ -218,11 +228,17 @@ const CommunityHomePage = () => {
           </button>
         </div>
 
-        <div className="flex items-center gap-2.5 mb-5 flex-wrap">
+        <div
+          role="tablist"
+          aria-label="Community feed sections"
+          className="flex items-center gap-2.5 mb-5 flex-wrap"
+        >
           {TABS.map((item) => (
             <button
               key={item.key}
               type="button"
+              role="tab"
+              aria-selected={tab === item.key}
               onClick={() => {
                 setTab(item.key);
                 setPage(1);

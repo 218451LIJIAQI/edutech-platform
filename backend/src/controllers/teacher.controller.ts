@@ -101,7 +101,7 @@ const parseExtendedProfilePayload = (body: Request["body"]) => ({
     body?.certificatePhotos === null
       ? []
       : parseStringArray(body?.certificatePhotos, "certificatePhotos", {
-          maxItems: MAX_ARRAY_ITEMS,
+          maxItems: 10,
         }),
 });
 

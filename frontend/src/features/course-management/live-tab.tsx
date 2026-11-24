@@ -19,6 +19,7 @@ import type { Course, LiveSession, LiveSessionStatus } from '@/types';
 import courseService from '@/services/course.service';
 import { extractErrorMessage } from '@/utils/error-handler';
 import { toStorableBackendAssetPath } from '@/utils/runtime';
+import { isProtectedUploadAssetUrl, openProtectedAsset } from '@/utils/protected-assets';
 import { normalizeSafeHttpUrl, normalizeSafeInternalPath } from '@/utils/safe-url';
 import clientLogger from '@/utils/logger';
 
@@ -497,15 +498,33 @@ export default function CourseManagementLiveTab({
                       </p>
                       {session.recordingUrl && (
                         <p className="mt-1.5 text-xs">
-                          <a
-                            href={session.recordingUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1 font-semibold text-emerald-700 hover:underline"
-                          >
-                            <Video className="h-3.5 w-3.5" />
-                            Session Replay Link
-                          </a>
+                          {isProtectedUploadAssetUrl(session.recordingUrl) ? (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (!session.recordingUrl) return;
+                                void openProtectedAsset(session.recordingUrl).catch((err) => {
+                                  toast.error(
+                                    extractErrorMessage(err, 'Failed to open session replay')
+                                  );
+                                });
+                              }}
+                              className="inline-flex items-center gap-1 font-semibold text-emerald-700 hover:underline"
+                            >
+                              <Video className="h-3.5 w-3.5" />
+                              Session Replay Link
+                            </button>
+                          ) : (
+                            <a
+                              href={session.recordingUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1 font-semibold text-emerald-700 hover:underline"
+                            >
+                              <Video className="h-3.5 w-3.5" />
+                              Session Replay Link
+                            </a>
+                          )}
                         </p>
                       )}
                     </div>
