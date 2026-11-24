@@ -6,6 +6,7 @@ import teacherService from '@/services/teacher.service';
 import uploadService from '@/services/upload.service';
 import type { TeacherProfile } from '@/types';
 import { extractErrorMessage } from '@/utils/error-handler';
+import { parseStringArray } from '@/utils/helpers';
 import { resolveBackendAssetUrl, toStorableBackendAssetPath } from '@/utils/runtime';
 
 interface TeacherProfileCompletionFormProps {
@@ -33,30 +34,10 @@ type ListField = 'awards' | 'specialties' | 'languages';
 const MAX_SELF_INTRODUCTION_LENGTH = 500;
 const MAX_YEARS_OF_EXPERIENCE = 70;
 const MAX_IMAGE_SIZE_MB = 5;
+const MAX_CERTIFICATE_SIZE_MB = 10;
 const MAX_CERTIFICATE_PHOTOS = 10;
 const ACCEPTED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
-
-const normalizeStringArray = (value: unknown): string[] => {
-  if (Array.isArray(value)) {
-    return value
-      .filter((item): item is string => typeof item === 'string')
-      .map((item) => item.trim())
-      .filter(Boolean);
-  }
-
-  if (typeof value === 'string' && value.trim()) {
-    try {
-      const parsedValue = JSON.parse(value);
-      return Array.isArray(parsedValue)
-        ? normalizeStringArray(parsedValue)
-        : [value.trim()];
-    } catch {
-      return [value.trim()];
-    }
-  }
-
-  return [];
-};
+const ACCEPTED_CERTIFICATE_TYPES = [...ACCEPTED_IMAGE_TYPES, 'application/pdf'];
 
 const getCertificateDisplayName = (url: string, index: number): string => {
   const fallbackName = `Certificate ${index + 1}`;
@@ -74,6 +55,11 @@ const getCertificateDisplayName = (url: string, index: number): string => {
   }
 };
 
+const isPdfAsset = (url: string): boolean => {
+  const pathWithoutQuery = url.trim().split(/[?#]/, 1)[0] ?? '';
+  return pathWithoutQuery.toLowerCase().endsWith('.pdf');
+};
+
 const clampYearsOfExperience = (value: string): number => {
   const parsedValue = Number.parseInt(value, 10);
   if (!Number.isFinite(parsedValue)) {
@@ -84,10 +70,20 @@ const clampYearsOfExperience = (value: string): number => {
 
 const validateImageFile = (file: File): string | null => {
   if (!ACCEPTED_IMAGE_TYPES.includes(file.type)) {
-    return 'Only JPG, PNG, and WEBP image files are allowed.';
+    return 'Only JPG, PNG, and WEBP image files are allowed for profile photos.';
   }
   if (file.size / (1024 * 1024) > MAX_IMAGE_SIZE_MB) {
-    return `Image size must not exceed ${MAX_IMAGE_SIZE_MB}MB.`;
+    return `Profile photo size must not exceed ${MAX_IMAGE_SIZE_MB}MB.`;
+  }
+  return null;
+};
+
+const validateCertificateFile = (file: File): string | null => {
+  if (!ACCEPTED_CERTIFICATE_TYPES.includes(file.type)) {
+    return 'Only JPG, PNG, WEBP, and PDF files are allowed for certificates.';
+  }
+  if (file.size / (1024 * 1024) > MAX_CERTIFICATE_SIZE_MB) {
+    return `Certificate file size must not exceed ${MAX_CERTIFICATE_SIZE_MB}MB.`;
   }
   return null;
 };
@@ -98,13 +94,13 @@ const createInitialFormState = (
   selfIntroduction: initialData?.selfIntroduction ?? '',
   educationBackground: initialData?.educationBackground ?? '',
   teachingExperience: initialData?.teachingExperience ?? '',
-  awards: normalizeStringArray(initialData?.awards),
-  specialties: normalizeStringArray(initialData?.specialties),
+  awards: parseStringArray(initialData?.awards, { allowSingleStringFallback: true }),
+  specialties: parseStringArray(initialData?.specialties, { allowSingleStringFallback: true }),
   teachingStyle: initialData?.teachingStyle ?? '',
-  languages: normalizeStringArray(initialData?.languages),
+  languages: parseStringArray(initialData?.languages, { allowSingleStringFallback: true }),
   yearsOfExperience: initialData?.yearsOfExperience ?? 0,
   profilePhoto: initialData?.profilePhoto ?? '',
-  certificatePhotos: normalizeStringArray(initialData?.certificatePhotos),
+  certificatePhotos: parseStringArray(initialData?.certificatePhotos, { allowSingleStringFallback: true }),
 });
 
 interface TextareaCardSectionProps {
@@ -121,6 +117,7 @@ interface TextareaCardSectionProps {
   required?: boolean;
   maxLength?: number;
   helpText?: string;
+  errorText?: string;
   onChange: (event: ChangeEvent<HTMLTextAreaElement>) => void;
 }
 
@@ -135,15 +132,18 @@ const TextareaCardSection = ({
   required = false,
   maxLength,
   helpText,
+  errorText,
   onChange,
 }: TextareaCardSectionProps) => {
   const titleId = `${id}-title`;
   const helpId = `${id}-help`;
+  const errorId = `${id}-error`;
 
   return (
     <section className="card shadow-lg" aria-labelledby={titleId}>
       <h3 id={titleId} className="mb-4 text-xl font-bold text-gray-900">
         {title}
+        {required ? <span className="ml-1 text-red-600">*</span> : null}
       </h3>
       <label htmlFor={id} className="sr-only">
         {label}
@@ -154,14 +154,24 @@ const TextareaCardSection = ({
         value={value}
         onChange={onChange}
         placeholder={placeholder}
-        className={`input ${minHeightClass}`}
+        className={`input ${minHeightClass} ${errorText ? 'border-red-400 focus:ring-red-500' : ''}`}
         required={required}
         maxLength={maxLength}
         disabled={disabled}
-        aria-describedby={helpText ? helpId : undefined}
+        aria-invalid={Boolean(errorText)}
+        aria-describedby={
+          [errorText ? errorId : null, helpText ? helpId : null]
+            .filter(Boolean)
+            .join(' ') || undefined
+        }
       />
+      {errorText ? (
+        <p id={errorId} className="mt-2 text-sm font-medium text-red-600">
+          {errorText}
+        </p>
+      ) : null}
       {helpText ? (
-        <p id={helpId} className="mt-2 text-sm text-gray-500">
+        <p id={helpId} className="mt-2 text-sm text-gray-500 tabular-nums">
           {helpText}
         </p>
       ) : null}
@@ -177,6 +187,8 @@ interface EditableStringListSectionProps {
   placeholder: string;
   items: string[];
   disabled: boolean;
+  required?: boolean;
+  errorText?: string;
   variant?: 'badge' | 'row';
   onAdd: (value: string) => void;
   onRemove: (index: number) => void;
@@ -190,6 +202,8 @@ const EditableStringListSection = ({
   placeholder,
   items,
   disabled,
+  required = false,
+  errorText,
   variant = 'badge',
   onAdd,
   onRemove,
@@ -209,6 +223,7 @@ const EditableStringListSection = ({
     <section className="card shadow-lg" aria-labelledby={sectionId}>
       <h3 id={sectionId} className="mb-4 text-xl font-bold text-gray-900">
         {title}
+        {required ? <span className="ml-1 text-red-600">*</span> : null}
       </h3>
 
       <div className="mb-4 flex gap-2">
@@ -221,8 +236,9 @@ const EditableStringListSection = ({
           value={draft}
           onChange={(event) => setDraft(event.target.value)}
           placeholder={placeholder}
-          className="input flex-1"
+          className={`input flex-1 ${errorText ? 'border-red-400 focus:ring-red-500' : ''}`}
           disabled={disabled}
+          aria-invalid={Boolean(errorText)}
           onKeyDown={(event) => {
             if (event.key === 'Enter') {
               event.preventDefault();
@@ -240,6 +256,10 @@ const EditableStringListSection = ({
           Add
         </button>
       </div>
+
+      {errorText ? (
+        <p className="mb-3 text-sm font-medium text-red-600">{errorText}</p>
+      ) : null}
 
       {variant === 'badge' ? (
         <div className="flex flex-wrap gap-2">
@@ -295,6 +315,11 @@ const TeacherProfileCompletionForm = ({
   const [formData, setFormData] = useState<TeacherProfileFormState>(() =>
     createInitialFormState(initialData)
   );
+  const [fieldErrors, setFieldErrors] = useState<{
+    selfIntroduction?: string;
+    specialties?: string;
+    languages?: string;
+  }>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [uploadingCerts, setUploadingCerts] = useState(false);
@@ -308,6 +333,9 @@ const TeacherProfileCompletionForm = ({
     event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
   ) => {
     const { name, value } = event.target;
+    if (name === 'selfIntroduction' && fieldErrors.selfIntroduction) {
+      setFieldErrors((prev) => ({ ...prev, selfIntroduction: undefined }));
+    }
     setFormData((prev) => ({
       ...prev,
       [name]:
@@ -321,6 +349,10 @@ const TeacherProfileCompletionForm = ({
     const trimmedValue = rawValue.trim();
     if (!trimmedValue) {
       return;
+    }
+
+    if (field === 'specialties' || field === 'languages') {
+      setFieldErrors((prev) => ({ ...prev, [field]: undefined }));
     }
 
     setFormData((prev) => {
@@ -385,19 +417,19 @@ const TeacherProfileCompletionForm = ({
       MAX_CERTIFICATE_PHOTOS - formData.certificatePhotos.length;
 
     if (remainingSlots <= 0) {
-      onError(`You can upload up to ${MAX_CERTIFICATE_PHOTOS} certificate photos.`);
+      onError(`You can upload up to ${MAX_CERTIFICATE_PHOTOS} certificate files.`);
       event.target.value = '';
       return;
     }
 
     if (selectedFiles.length > remainingSlots) {
-      onError(`You can only upload ${remainingSlots} more certificate photo(s).`);
+      onError(`You can only upload ${remainingSlots} more certificate file(s).`);
       event.target.value = '';
       return;
     }
 
     const invalidFileMessage = selectedFiles
-      .map(validateImageFile)
+      .map(validateCertificateFile)
       .find((message): message is string => Boolean(message));
 
     if (invalidFileMessage) {
@@ -422,7 +454,7 @@ const TeacherProfileCompletionForm = ({
         ],
       }));
     } catch (error) {
-      onError(extractErrorMessage(error, 'Failed to upload certificate photos'));
+      onError(extractErrorMessage(error, 'Failed to upload certificate files'));
       clientLogger.error('Certificate photos upload error:', error);
     } finally {
       setUploadingCerts(false);
@@ -456,20 +488,34 @@ const TeacherProfileCompletionForm = ({
     }
 
     const payload = buildSubmitPayload();
+    const nextErrors: {
+      selfIntroduction?: string;
+      specialties?: string;
+      languages?: string;
+    } = {};
 
     if (!payload.selfIntroduction) {
-      onError('Self introduction is required.');
-      return;
+      nextErrors.selfIntroduction = 'Self introduction is required.';
     }
     if (payload.specialties.length === 0) {
-      onError('Please add at least one specialty.');
-      return;
+      nextErrors.specialties = 'Please add at least one specialty.';
     }
     if (payload.languages.length === 0) {
-      onError('Please add at least one language.');
+      nextErrors.languages = 'Please add at least one language.';
+    }
+
+    if (Object.keys(nextErrors).length > 0) {
+      setFieldErrors(nextErrors);
+      onError(
+        nextErrors.selfIntroduction ||
+          nextErrors.specialties ||
+          nextErrors.languages ||
+          'Please complete all required fields.'
+      );
       return;
     }
 
+    setFieldErrors({});
     setIsSubmitting(true);
     try {
       const profile = isEditingApproved
@@ -498,6 +544,7 @@ const TeacherProfileCompletionForm = ({
         required
         maxLength={MAX_SELF_INTRODUCTION_LENGTH}
         helpText={`${formData.selfIntroduction.length}/${MAX_SELF_INTRODUCTION_LENGTH} characters`}
+        errorText={fieldErrors.selfIntroduction}
         disabled={isBusy}
         onChange={handleInputChange}
       />
@@ -537,7 +584,7 @@ const TeacherProfileCompletionForm = ({
           onChange={handleInputChange}
           min="0"
           max={MAX_YEARS_OF_EXPERIENCE}
-          className="input"
+          className="input tabular-nums"
           required
           placeholder="Enter your years of experience"
           disabled={isBusy}
@@ -561,6 +608,8 @@ const TeacherProfileCompletionForm = ({
         inputLabel="Add a specialty"
         placeholder="Add a specialty, e.g., Mathematics or Web Development"
         items={formData.specialties}
+        required
+        errorText={fieldErrors.specialties}
         disabled={isBusy}
         onAdd={(value) => addListItem('specialties', value)}
         onRemove={(index) => removeListItem('specialties', index)}
@@ -573,6 +622,8 @@ const TeacherProfileCompletionForm = ({
         inputLabel="Add a language"
         placeholder="Add a language, e.g., English or Malay"
         items={formData.languages}
+        required
+        errorText={fieldErrors.languages}
         disabled={isBusy}
         onAdd={(value) => addListItem('languages', value)}
         onRemove={(index) => removeListItem('languages', index)}
@@ -592,9 +643,12 @@ const TeacherProfileCompletionForm = ({
       />
 
       <section className="card shadow-lg" aria-labelledby="profile-photo-title">
-        <h3 id="profile-photo-title" className="mb-4 text-xl font-bold text-gray-900">
+        <h3 id="profile-photo-title" className="mb-2 text-xl font-bold text-gray-900">
           Profile Photo
         </h3>
+        <p className="mb-4 text-sm text-gray-500">
+          Accepted formats: JPG, PNG, WEBP (max {MAX_IMAGE_SIZE_MB}MB).
+        </p>
 
         <div className="space-y-4">
           {profilePhotoPreviewUrl && (
@@ -648,9 +702,12 @@ const TeacherProfileCompletionForm = ({
       </section>
 
       <section className="card shadow-lg" aria-labelledby="certificate-photos-title">
-        <h3 id="certificate-photos-title" className="mb-4 text-xl font-bold text-gray-900">
-          Certificate Photos
+        <h3 id="certificate-photos-title" className="mb-2 text-xl font-bold text-gray-900">
+          Teaching Certificates
         </h3>
+        <p className="mb-4 text-sm text-gray-500">
+          Accepted formats: JPG, PNG, WEBP, PDF (max {MAX_CERTIFICATE_SIZE_MB}MB each, up to {MAX_CERTIFICATE_PHOTOS} files).
+        </p>
 
         <div className="space-y-4">
           {formData.certificatePhotos.length > 0 && (
@@ -664,6 +721,9 @@ const TeacherProfileCompletionForm = ({
                     <FileText className="h-5 w-5 flex-shrink-0 text-primary-600" />
                     <span className="truncate text-sm font-medium text-gray-700">
                       {getCertificateDisplayName(photo, index)}
+                    </span>
+                    <span className="badge-sm uppercase shrink-0">
+                      {isPdfAsset(photo) ? 'PDF' : 'Image'}
                     </span>
                   </div>
                   <button
@@ -701,7 +761,7 @@ const TeacherProfileCompletionForm = ({
             ) : (
               <>
                 <Upload className="h-4 w-4" aria-hidden="true" />
-                Upload Certificate Photos
+                Upload Certificates
               </>
             )}
           </button>
@@ -709,11 +769,11 @@ const TeacherProfileCompletionForm = ({
           <input
             ref={certificatePhotosInputRef}
             type="file"
-            accept={ACCEPTED_IMAGE_TYPES.join(',')}
+            accept={ACCEPTED_CERTIFICATE_TYPES.join(',')}
             multiple
             onChange={handleCertificatePhotosUpload}
             className="hidden"
-            aria-label="Upload certificate photos"
+            aria-label="Upload teaching certificates"
             disabled={isBusy}
           />
         </div>

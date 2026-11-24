@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { AlertCircle, ArrowLeft, FileText, Headphones, Package, RefreshCcw } from 'lucide-react';
 import ordersService from '@/services/orders.service';
@@ -14,12 +14,7 @@ import { usePageTitle } from '@/hooks';
 
 /**
  * Order Detail Page Component
- * Displays comprehensive order information with:
- * - Order details and timeline
- * - Item information
- * - Refund status and history
- * - Customer service integration
- * - Cancel/Refund actions
+ * Displays comprehensive order information, timeline, items, refund status, and customer support actions.
  */
 const OrderDetailPage = () => {
   const { id } = useParams<{ id: string }>();
@@ -33,13 +28,16 @@ const OrderDetailPage = () => {
   const [showRefundModal, setShowRefundModal] = useState(false);
   const [showCustomerService, setShowCustomerService] = useState(false);
   const [showCancelOrderModal, setShowCancelOrderModal] = useState(false);
+  const requestIdRef = useRef(0);
+
   usePageTitle(order?.orderNo ? `Order ${order.orderNo}` : 'Order Details');
 
-  /**
-   * Load order and refund details
-   */
   const load = useCallback(async () => {
-    if (!id) return;
+    if (!id) {
+      setLoading(false);
+      return;
+    }
+    const requestId = ++requestIdRef.current;
     setLoading(true);
     setLoadError(null);
     try {
@@ -47,31 +45,39 @@ const OrderDetailPage = () => {
         ordersService.getOrderById(id),
         ordersService.getRefundsByOrderId(id),
       ]);
+      if (requestId !== requestIdRef.current) {
+        return;
+      }
       setOrder(orderData);
       setRefunds(refundsData);
     } catch (error) {
+      if (requestId !== requestIdRef.current) {
+        return;
+      }
       clientLogger.error('Failed to load order details:', error);
       const message = extractErrorMessage(error, 'Failed to load order');
       setLoadError(message);
       toast.error(message);
     } finally {
-      setLoading(false);
+      if (requestId === requestIdRef.current) {
+        setLoading(false);
+      }
     }
   }, [id]);
 
   useEffect(() => {
-    load();
+    void load();
+    return () => {
+      requestIdRef.current += 1;
+    };
   }, [load]);
 
-  /**
-   * Handle cancel order
-   */
   const handleCancel = async () => {
-    if (!id) return;
+    if (!id || working) return;
     setWorking(true);
     try {
       const updated = await ordersService.cancelOrder(id, cancelReason || undefined);
-      toast.success('Order cancelled successfully');
+      toast.success('Order cancelled');
       setOrder(updated);
       setCancelReason('');
       setShowCancelOrderModal(false);
@@ -83,9 +89,6 @@ const OrderDetailPage = () => {
     }
   };
 
-  /**
-   * Get status badge color
-   */
   const getStatusBadgeClass = (status: string) => {
     switch (status) {
       case 'PAID':
@@ -101,21 +104,18 @@ const OrderDetailPage = () => {
     }
   };
 
-  /**
-   * Get refund status badge color
-   */
   const getRefundStatusColor = (status: string) => {
     switch (status) {
       case 'PENDING':
-        return 'bg-yellow-100 text-yellow-700';
+        return 'bg-yellow-100 text-yellow-800';
       case 'APPROVED':
-        return 'bg-blue-100 text-blue-700';
+        return 'bg-blue-100 text-blue-800';
       case 'PROCESSING':
-        return 'bg-purple-100 text-purple-700';
+        return 'bg-purple-100 text-purple-800';
       case 'COMPLETED':
-        return 'bg-green-100 text-green-700';
+        return 'bg-green-100 text-green-800';
       case 'REJECTED':
-        return 'bg-red-100 text-red-700';
+        return 'bg-red-100 text-red-800';
       default:
         return 'bg-gray-100 text-gray-700';
     }
@@ -138,7 +138,13 @@ const OrderDetailPage = () => {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-primary-50/10 to-indigo-50/20">
         <div className="flex flex-col items-center space-y-4">
-          <div className="relative"><div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-primary-500 to-indigo-600 animate-pulse flex items-center justify-center"><Package className="w-8 h-8 text-white" /></div><div className="absolute inset-0 rounded-2xl bg-primary-500/20 animate-ping"></div></div><p className="text-gray-600 font-medium">Loading order details...</p>
+          <div className="relative">
+            <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-primary-500 to-indigo-600 animate-pulse motion-reduce:animate-none flex items-center justify-center">
+              <Package className="w-8 h-8 text-white" />
+            </div>
+            <div className="absolute inset-0 rounded-2xl bg-primary-500/20 animate-ping motion-reduce:animate-none"></div>
+          </div>
+          <p className="text-gray-600 font-medium">Loading order details...</p>
         </div>
       </div>
     );
@@ -199,7 +205,6 @@ const OrderDetailPage = () => {
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-primary-50/10 to-indigo-50/20 relative">
       <div className="absolute inset-0 bg-[linear-gradient(rgba(0,0,0,0.015)_1px,transparent_1px),linear-gradient(90deg,rgba(0,0,0,0.015)_1px,transparent_1px)] bg-[size:32px_32px] pointer-events-none"></div>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 relative">
-        {/* Header */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-10">
           <div className="flex items-center gap-3">
             <div className="w-12 h-12 bg-gradient-to-br from-primary-500 to-indigo-600 rounded-2xl flex items-center justify-center shadow-lg shadow-primary-500/25">
@@ -218,22 +223,19 @@ const OrderDetailPage = () => {
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Main Content */}
           <div className="lg:col-span-2 space-y-6">
-            {/* Order Header */}
             <div className="card shadow-xl border border-gray-100 rounded-2xl">
               <div className="flex items-center justify-between mb-6">
                 <div>
                   <div className="text-sm text-gray-600 mb-1">Order Number</div>
-                  <div className="text-2xl font-bold text-gray-900">{order.orderNo}</div>
+                  <div className="text-2xl font-bold text-gray-900 tabular-nums">{order.orderNo}</div>
                 </div>
-                <div className={`badge ${getStatusBadgeClass(order.status)} text-lg px-4 py-2`}>
+                <div className={`badge ${getStatusBadgeClass(order.status)} text-base px-4 py-2`}>
                   {order.status}
                 </div>
               </div>
 
-              {/* Timeline */}
-              <div className="space-y-4 border-t pt-6">
+              <div className="space-y-4 border-t pt-6 tabular-nums">
                 <div className="flex items-start gap-4">
                   <div className="w-3 h-3 rounded-full bg-green-500 mt-2"></div>
                   <div>
@@ -244,7 +246,7 @@ const OrderDetailPage = () => {
                   </div>
                 </div>
 
-                    {order.paidAt && (
+                {order.paidAt && (
                   <div className="flex items-start gap-4">
                     <div className="w-3 h-3 rounded-full bg-green-500 mt-2"></div>
                     <div>
@@ -254,9 +256,9 @@ const OrderDetailPage = () => {
                       </p>
                     </div>
                   </div>
-                    )}
+                )}
 
-                    {order.canceledAt && (
+                {order.canceledAt && (
                   <div className="flex items-start gap-4">
                     <div className="w-3 h-3 rounded-full bg-red-500 mt-2"></div>
                     <div>
@@ -271,9 +273,9 @@ const OrderDetailPage = () => {
                       )}
                     </div>
                   </div>
-                    )}
+                )}
 
-                    {order.refundedAt && (
+                {order.refundedAt && (
                   <div className="flex items-start gap-4">
                     <div className="w-3 h-3 rounded-full bg-blue-500 mt-2"></div>
                     <div>
@@ -281,18 +283,17 @@ const OrderDetailPage = () => {
                       <p className="text-sm text-gray-600">
                         {new Date(order.refundedAt).toLocaleString()}
                       </p>
-                      {order.refundAmount && (
+                      {order.refundAmount != null && (
                         <p className="text-sm text-gray-700 mt-1">
                           <span className="font-semibold">Amount:</span> ${order.refundAmount.toFixed(2)}
                         </p>
-                    )}
+                      )}
+                    </div>
                   </div>
-                </div>
                 )}
               </div>
             </div>
 
-            {/* Order Items */}
             <div className="card shadow-xl border border-gray-100 rounded-2xl">
               <h2 className="text-2xl font-bold mb-6 text-gray-900">Order Items</h2>
               <div className="space-y-4">
@@ -300,9 +301,9 @@ const OrderDetailPage = () => {
                   order.items.map((item) => (
                     <div
                       key={item.id}
-                      className="flex items-center justify-between p-4 bg-gradient-to-r from-gray-50 to-gray-100 rounded-xl hover:shadow-md transition-shadow"
+                      className="flex items-center justify-between p-4 bg-gradient-to-r from-gray-50 to-gray-100 rounded-xl hover:shadow-md transition-shadow gap-4"
                     >
-                    <div className="flex-1">
+                      <div className="flex-1 min-w-0">
                         <div className="font-bold text-gray-900 mb-1">
                           {item.package?.name || 'Package'}
                         </div>
@@ -314,20 +315,20 @@ const OrderDetailPage = () => {
                             {item.package.description}
                           </div>
                         )}
-                    </div>
-                    <div className="text-right">
+                      </div>
+                      <div className="text-right shrink-0 tabular-nums">
                         <div className="text-sm text-gray-600 mb-1">
                           Price: ${item.price.toFixed(2)}
-                    </div>
-                        {item.discount && item.discount > 0 && (
-                          <div className="text-sm text-green-600 font-semibold mb-1">
+                        </div>
+                        {item.discount != null && item.discount > 0 && (
+                          <div className="text-sm text-green-700 font-semibold mb-1">
                             Discount: -${item.discount.toFixed(2)}
                           </div>
                         )}
                         <div className="font-bold text-lg text-primary-600">
                           ${item.finalPrice.toFixed(2)}
-              </div>
-            </div>
+                        </div>
+                      </div>
                     </div>
                   ))
                 ) : (
@@ -336,21 +337,20 @@ const OrderDetailPage = () => {
               </div>
             </div>
 
-            {/* Refund Information */}
             {refunds.length > 0 && (
               <div className="card shadow-lg border-2 border-blue-200 bg-blue-50">
                 <div className="flex items-center justify-between gap-4 mb-4">
                   <h2 className="text-2xl font-bold text-gray-900">Refund History</h2>
-                  <div className="text-sm text-right">
+                  <div className="text-sm text-right tabular-nums">
                     <div className="text-gray-600">Refunded so far</div>
-                    <div className="font-bold text-blue-600">${completedRefundAmount.toFixed(2)}</div>
+                    <div className="font-bold text-blue-700">${completedRefundAmount.toFixed(2)}</div>
                   </div>
                 </div>
                 <div className="space-y-4">
                   {refunds.map((refund) => (
                     <div key={refund.id} className="bg-white rounded-xl p-4 border border-blue-100 shadow-sm">
                       <div className="flex items-start justify-between gap-4 mb-3">
-                        <div>
+                        <div className="tabular-nums">
                           <div className="font-semibold text-gray-900">
                             ${refund.amount.toFixed(2)}
                           </div>
@@ -363,7 +363,7 @@ const OrderDetailPage = () => {
                         </span>
                       </div>
 
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm tabular-nums">
                         <div>
                           <span className="text-gray-600 font-semibold">Method:</span>{' '}
                           <span className="text-gray-900">{getRefundMethodLabel(refund.refundMethod)}</span>
@@ -408,19 +408,16 @@ const OrderDetailPage = () => {
             )}
           </div>
 
-          {/* Sidebar */}
           <div className="space-y-6">
-            {/* Total Amount */}
             <div className="card shadow-lg bg-gradient-to-r from-primary-50 to-primary-100 border-2 border-primary-200">
               <div className="flex items-center justify-between">
                 <span className="text-xl font-bold text-gray-900">Total</span>
-                <span className="text-3xl font-bold text-primary-600">
+                <span className="text-3xl font-bold text-primary-600 tabular-nums">
                   ${order.totalAmount.toFixed(2)}
                 </span>
               </div>
             </div>
 
-            {/* Customer Service Button */}
             <button
               type="button"
               onClick={() => setShowCustomerService(true)}
@@ -431,11 +428,14 @@ const OrderDetailPage = () => {
               <p className="text-xs text-gray-600 mt-1">Get help with this order</p>
             </button>
 
-            {/* Cancel Order (PENDING only) */}
             {order.status === 'PENDING' && (
               <div className="card shadow-lg border-2 border-orange-200 bg-orange-50">
-                <h3 className="font-bold text-lg text-gray-900 mb-4">Cancel Order</h3>
+                <h2 className="font-bold text-lg text-gray-900 mb-3">Cancel Order</h2>
+                <label htmlFor="cancel-order-reason" className="block text-xs font-semibold text-gray-700 mb-1.5">
+                  Cancellation reason (optional)
+                </label>
                 <textarea
+                  id="cancel-order-reason"
                   className="input mb-4 h-20 resize-none"
                   placeholder="Optional reason for cancellation"
                   value={cancelReason}
@@ -454,11 +454,10 @@ const OrderDetailPage = () => {
               </div>
             )}
 
-            {/* Request Refund (PAID only) */}
             {canRequestRefund && (
               <div className="card shadow-lg border-2 border-blue-200 bg-blue-50">
-                <h3 className="font-bold text-lg text-gray-900 mb-4">Request Refund</h3>
-                <p className="text-sm text-gray-600 mb-4">
+                <h2 className="font-bold text-lg text-gray-900 mb-3">Request Refund</h2>
+                <p className="text-sm text-gray-600 mb-4 tabular-nums">
                   Start a refund request for the remaining refundable balance of ${remainingRefundableAmount.toFixed(2)}.
                 </p>
                 <button
@@ -472,12 +471,11 @@ const OrderDetailPage = () => {
               </div>
             )}
 
-            {/* Refund Pending */}
             {activeRefund?.status === 'PENDING' && (
               <div className="card shadow-lg border-2 border-yellow-200 bg-yellow-50">
-                <h3 className="font-bold text-lg text-gray-900 mb-2">Refund Pending</h3>
+                <h2 className="font-bold text-lg text-gray-900 mb-2">Refund Pending</h2>
                 <p className="text-sm text-gray-700 mb-4">
-                  Your refund request is being reviewed. We'll notify you once it's processed.
+                  Your refund request is being reviewed. We&rsquo;ll notify you once it&rsquo;s processed.
                 </p>
                 <button
                   type="button"
@@ -489,11 +487,10 @@ const OrderDetailPage = () => {
               </div>
             )}
 
-            {/* Refund Info */}
             {activeRefund && ['APPROVED', 'PROCESSING'].includes(activeRefund.status) && (
               <div className="card shadow-lg border-2 border-green-200 bg-green-50">
-                <h3 className="font-bold text-lg text-gray-900 mb-2">Refund {activeRefund.status}</h3>
-                <p className="text-sm text-gray-700">
+                <h2 className="font-bold text-lg text-gray-900 mb-2">Refund {activeRefund.status}</h2>
+                <p className="text-sm text-gray-700 tabular-nums">
                   Amount: <span className="font-bold">${activeRefund.amount.toFixed(2)}</span>
                 </p>
                 <p className="text-xs text-green-700 mt-2">
@@ -504,7 +501,7 @@ const OrderDetailPage = () => {
 
             {latestRefund?.status === 'REJECTED' && (
               <div className="card shadow-lg border-2 border-red-200 bg-red-50">
-                <h3 className="font-bold text-lg text-gray-900 mb-2">Latest Refund Rejected</h3>
+                <h2 className="font-bold text-lg text-gray-900 mb-2">Latest Refund Rejected</h2>
                 <p className="text-sm text-gray-700">
                   Your latest refund request was rejected. You can submit a new request if you still have refundable balance remaining.
                 </p>
@@ -512,8 +509,8 @@ const OrderDetailPage = () => {
             )}
 
             {completedRefundAmount > 0 && remainingRefundableAmount > 0 && (
-              <div className="card shadow-lg border-2 border-blue-200 bg-blue-50">
-                <h3 className="font-bold text-lg text-gray-900 mb-2">Partial Refund Completed</h3>
+              <div className="card shadow-lg border-2 border-blue-200 bg-blue-50 tabular-nums">
+                <h2 className="font-bold text-lg text-gray-900 mb-2">Partial Refund Completed</h2>
                 <p className="text-sm text-gray-700">
                   Refunded: <span className="font-bold">${completedRefundAmount.toFixed(2)}</span>
                 </p>
@@ -526,7 +523,6 @@ const OrderDetailPage = () => {
         </div>
       </div>
 
-      {/* Modals */}
       <RefundModal
         isOpen={showRefundModal}
         onClose={() => setShowRefundModal(false)}

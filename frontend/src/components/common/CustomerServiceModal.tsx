@@ -166,14 +166,19 @@ const CustomerServiceModal = ({
   const categorySelectId = useId();
   const prioritySelectId = useId();
   const descriptionInputId = useId();
+  const replyMessageId = useId();
 
   const modalRef = useRef<HTMLDivElement | null>(null);
   const closeButtonRef = useRef<HTMLButtonElement | null>(null);
   const subjectInputRef = useRef<HTMLInputElement | null>(null);
+  const ticketsRequestRef = useRef(0);
+  const detailRequestRef = useRef(0);
 
   const [activeTab, setActiveTab] = useState<ActiveTab>('tickets');
   const [tickets, setTickets] = useState<SupportTicket[]>([]);
   const [selectedTicket, setSelectedTicket] = useState<SupportTicket | null>(null);
+  const [ticketsLoadError, setTicketsLoadError] = useState<string | null>(null);
+  const [createFormError, setCreateFormError] = useState<string | null>(null);
 
   const [loading, setLoading] = useState(false);
   const [working, setWorking] = useState(false);
@@ -207,6 +212,7 @@ const CustomerServiceModal = ({
     setCategory(defaultCategory);
     setPriority(SupportTicketPriority.MEDIUM);
     setNewTicketAttachment(null);
+    setCreateFormError(null);
   }, [defaultCategory]);
 
   const handleClose = useCallback(() => {
@@ -225,9 +231,14 @@ const CustomerServiceModal = ({
   });
 
   const loadTickets = useCallback(async () => {
+    const requestId = ++ticketsRequestRef.current;
     setLoading(true);
+    setTicketsLoadError(null);
     try {
       const data = await supportService.getUserTickets();
+      if (requestId !== ticketsRequestRef.current) {
+        return;
+      }
       setTickets(
         [...data].sort(
           (left, right) =>
@@ -235,21 +246,37 @@ const CustomerServiceModal = ({
         )
       );
     } catch (error) {
-      toast.error(extractErrorMessage(error, 'Failed to load tickets'));
+      if (requestId !== ticketsRequestRef.current) {
+        return;
+      }
+      const message = extractErrorMessage(error, 'Failed to load tickets');
+      setTicketsLoadError(message);
+      toast.error(message);
     } finally {
-      setLoading(false);
+      if (requestId === ticketsRequestRef.current) {
+        setLoading(false);
+      }
     }
   }, []);
 
   const loadTicketDetails = useCallback(async (ticketId: string) => {
+    const requestId = ++detailRequestRef.current;
     setLoading(true);
     try {
       const data = await supportService.getTicketById(ticketId);
+      if (requestId !== detailRequestRef.current) {
+        return;
+      }
       setSelectedTicket(data);
     } catch (error) {
+      if (requestId !== detailRequestRef.current) {
+        return;
+      }
       toast.error(extractErrorMessage(error, 'Failed to load ticket'));
     } finally {
-      setLoading(false);
+      if (requestId === detailRequestRef.current) {
+        setLoading(false);
+      }
     }
   }, []);
 
@@ -258,9 +285,14 @@ const CustomerServiceModal = ({
       setActiveTab('tickets');
       setSelectedTicket(null);
       setMessageAttachment(null);
+      setCreateFormError(null);
       setCategory(defaultCategory);
       void loadTickets();
     }
+    return () => {
+      ticketsRequestRef.current += 1;
+      detailRequestRef.current += 1;
+    };
   }, [defaultCategory, isOpen, loadTickets]);
 
   useEffect(() => {
@@ -302,7 +334,9 @@ const CustomerServiceModal = ({
     const trimmedDescription = description.trim();
 
     if (!trimmedSubject || !trimmedDescription) {
-      toast.error('Please fill in all required fields');
+      const message = 'Please fill in both Subject and Description.';
+      setCreateFormError(message);
+      toast.error(message);
       return;
     }
 
@@ -310,6 +344,7 @@ const CustomerServiceModal = ({
       return;
     }
 
+    setCreateFormError(null);
     setWorking(true);
     try {
       const createdTicket = await supportService.createTicket(
@@ -327,7 +362,9 @@ const CustomerServiceModal = ({
       await loadTickets();
       setSelectedTicket(createdTicket);
     } catch (error) {
-      toast.error(extractErrorMessage(error, 'Failed to create ticket'));
+      const message = extractErrorMessage(error, 'Failed to create ticket');
+      setCreateFormError(message);
+      toast.error(message);
     } finally {
       setWorking(false);
     }
@@ -434,7 +471,7 @@ const CustomerServiceModal = ({
           <div className="flex items-center gap-3">
             <Headphones className="h-7 w-7 text-primary-100" aria-hidden="true" />
             <div>
-              <h2 id={titleId} className="text-2xl font-bold">
+              <h2 id={titleId} className="text-2xl font-bold text-white">
                 Customer Support
               </h2>
               <p className="text-sm text-primary-100">
@@ -477,7 +514,9 @@ const CustomerServiceModal = ({
                   : 'text-gray-600 hover:text-gray-900'
               }`}
             >
-              {tab === 'tickets' ? `My Tickets (${tickets.length})` : 'Create Ticket'}
+              <span className="tabular-nums">
+                {tab === 'tickets' ? `My Tickets (${tickets.length})` : 'Create Ticket'}
+              </span>
             </button>
           ))}
         </div>
@@ -518,7 +557,7 @@ const CustomerServiceModal = ({
                     <p className="mb-1 font-semibold text-gray-700">
                       {selectedTicket.subject}
                     </p>
-                    <p className="text-sm text-gray-600">
+                    <p className="text-sm text-gray-600 tabular-nums">
                       Last updated: {formatDateTime(selectedTicket.updatedAt)}
                     </p>
                   </div>
@@ -557,7 +596,7 @@ const CustomerServiceModal = ({
                                 ) : null}
                               </div>
 
-                              <span className="text-xs text-gray-500">
+                              <span className="text-xs text-gray-500 tabular-nums">
                                 {formatDateTime(entry.createdAt)}
                               </span>
                             </div>
@@ -592,7 +631,11 @@ const CustomerServiceModal = ({
                   {selectedTicket.status !== SupportTicketStatus.CLOSED ? (
                     <>
                       <div className="space-y-3">
+                        <label htmlFor={replyMessageId} className="sr-only">
+                          Reply message
+                        </label>
                         <textarea
+                          id={replyMessageId}
                           value={newMessage}
                           onChange={(event) => setNewMessage(event.target.value)}
                           placeholder="Type your message..."
@@ -638,6 +681,20 @@ const CustomerServiceModal = ({
                     </>
                   ) : null}
                 </div>
+              ) : ticketsLoadError ? (
+                <div className="py-10 text-center space-y-3">
+                  <p className="font-semibold text-red-700">
+                    Unable to load your support tickets
+                  </p>
+                  <p className="text-sm text-gray-600">{ticketsLoadError}</p>
+                  <button
+                    type="button"
+                    onClick={() => void loadTickets()}
+                    className="btn-primary btn-sm"
+                  >
+                    Retry
+                  </button>
+                </div>
               ) : tickets.length === 0 ? (
                 <div className="py-12 text-center">
                   <p className="mb-4 text-gray-500">No support tickets yet</p>
@@ -678,7 +735,7 @@ const CustomerServiceModal = ({
                       <p className="mb-1 truncate text-xs text-gray-600">
                         {getSupportConversationPreview(ticket, 72) || ticket.category}
                       </p>
-                      <p className="text-xs text-gray-500">
+                      <p className="text-xs text-gray-500 tabular-nums">
                         Last updated: {formatDateTime(ticket.updatedAt)}
                       </p>
                     </button>
@@ -688,6 +745,14 @@ const CustomerServiceModal = ({
             </div>
           ) : (
             <div className="space-y-4 p-6">
+              {createFormError ? (
+                <div
+                  role="alert"
+                  className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"
+                >
+                  {createFormError}
+                </div>
+              ) : null}
               <div>
                 <label
                   htmlFor={subjectInputId}

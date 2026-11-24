@@ -1,3 +1,4 @@
+import { WalletTransactionType } from '@/types';
 import type { Enrollment, Lesson, WalletSummary } from '@/types';
 
 const COMPLETED_LESSONS_STORAGE_PREFIX = 'flexilearn:completed-lessons:';
@@ -216,4 +217,39 @@ export const resolveWalletDisputeSummary = (
     reservedForRefunds,
     withdrawableBalance,
   };
+};
+
+export const getTransactionAmountPresentation = (
+  type: WalletTransactionType,
+  amount = 0
+): { amountPrefix: '+' | '-'; amountClassName: string } => {
+  switch (type) {
+    case WalletTransactionType.CREDIT:
+    case WalletTransactionType.UNFREEZE:
+      return {
+        amountPrefix: '+',
+        amountClassName: 'text-emerald-700',
+      };
+    case WalletTransactionType.ADJUSTMENT:
+      return amount < 0
+        ? {
+            amountPrefix: '-',
+            amountClassName: 'text-red-600',
+          }
+        : {
+            amountPrefix: '+',
+            amountClassName: 'text-emerald-700',
+          };
+    case WalletTransactionType.DEBIT:
+    case WalletTransactionType.FREEZE:
+      return {
+        amountPrefix: '-',
+        amountClassName: 'text-red-600',
+      };
+    default:
+      return {
+        amountPrefix: '+',
+        amountClassName: 'text-slate-700',
+      };
+  }
 };

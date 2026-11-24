@@ -100,7 +100,7 @@ const buildNameValidation = (
   messages: { notString: string; required: string; length: string },
   optional = false,
 ) => {
-  const base = optional ? body(field).optional({ nullable: true }) : body(field);
+  const base = optional ? body(field).optional({ values: "undefined" }) : body(field);
   return base
     .isString()
     .withMessage(messages.notString)

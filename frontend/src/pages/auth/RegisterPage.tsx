@@ -4,6 +4,11 @@ import { useAuthStore } from '@/store/auth-store';
 import { UserRole } from '@/types';
 import { usePageTitle } from '@/hooks';
 import { extractErrorMessage } from '@/utils/error-handler';
+import {
+  getHomePathForRole,
+  hasStrongPasswordComplexity,
+  isValidEmail,
+} from '@/utils/helpers';
 import { BookOpen, GraduationCap, Mail, Lock, ShieldCheck, Eye, EyeOff, AlertCircle, ArrowRight, Info } from 'lucide-react';
 import PageLoader from '@/components/common/PageLoader';
 import { getAccessToken, hasRecoverableAuthState } from '@/utils/auth-storage';
@@ -59,21 +64,23 @@ const RegisterPage = () => {
     e.preventDefault();
     setError('');
 
-    // Client-side validation
+    const trimmedFirstName = formData.firstName.trim();
+    const trimmedLastName = formData.lastName.trim();
+    const trimmedEmail = formData.email.trim();
     const errors: Record<string, string> = {};
 
-    if (formData.firstName.length < 2) {
+    if (trimmedFirstName.length < 2) {
       errors.firstName = 'First name must be at least 2 characters';
     }
-    if (formData.lastName.length < 2) {
+    if (trimmedLastName.length < 2) {
       errors.lastName = 'Last name must be at least 2 characters';
     }
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
+    if (!isValidEmail(trimmedEmail)) {
       errors.email = 'Please enter a valid email address';
     }
     if (formData.password.length < 8) {
       errors.password = 'Password must be at least 8 characters';
-    } else if (!/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).+$/.test(formData.password)) {
+    } else if (!hasStrongPasswordComplexity(formData.password)) {
       errors.password = 'Password must contain uppercase, lowercase, and a number';
     }
     if (formData.password !== formData.confirmPassword) {
@@ -87,35 +94,19 @@ const RegisterPage = () => {
     }
 
     setFieldErrors({});
-
     setIsLoading(true);
 
     try {
       await register({
-        firstName: formData.firstName,
-        lastName: formData.lastName,
-        email: formData.email,
+        firstName: trimmedFirstName,
+        lastName: trimmedLastName,
+        email: trimmedEmail,
         password: formData.password,
         role: formData.role,
       });
 
-      // Redirect based on user role - get from store after registration completes
-      const { user } = useAuthStore.getState();
-      const userRole = user?.role;
-
-      switch (userRole) {
-        case UserRole.ADMIN:
-          navigate('/admin');
-          break;
-        case UserRole.TEACHER:
-          navigate('/teacher');
-          break;
-        case UserRole.STUDENT:
-          navigate('/student');
-          break;
-        default:
-          navigate('/');
-      }
+      const currentUser = useAuthStore.getState().user;
+      navigate(getHomePathForRole(currentUser?.role), { replace: true });
     } catch (error: unknown) {
       setError(extractErrorMessage(error, 'Registration failed, please try again'));
     } finally {
@@ -128,16 +119,7 @@ const RegisterPage = () => {
   }
 
   if (isSessionReady && user) {
-    switch (user.role) {
-      case UserRole.ADMIN:
-        return <Navigate to="/admin" replace />;
-      case UserRole.TEACHER:
-        return <Navigate to="/teacher" replace />;
-      case UserRole.STUDENT:
-        return <Navigate to="/student" replace />;
-      default:
-        return <Navigate to="/" replace />;
-    }
+    return <Navigate to={getHomePathForRole(user.role)} replace />;
   }
 
   return (
@@ -165,7 +147,10 @@ const RegisterPage = () => {
         <div className="bg-white/80 backdrop-blur-xl rounded-3xl shadow-2xl shadow-gray-200/50 p-8 border border-white/60">
           <form onSubmit={handleSubmit} className="space-y-5" noValidate>
             {error && (
-              <div className="flex items-center gap-3 bg-danger-50 border border-danger-200/60 text-danger-700 px-4 py-3.5 rounded-xl animate-scaleIn">
+              <div
+                role="alert"
+                className="flex items-center gap-3 bg-danger-50 border border-danger-200/60 text-danger-700 px-4 py-3.5 rounded-xl animate-scaleIn"
+              >
                 <div className="flex-shrink-0 w-10 h-10 bg-danger-100 rounded-xl flex items-center justify-center">
                   <AlertCircle className="w-5 h-5 text-danger-600" />
                 </div>

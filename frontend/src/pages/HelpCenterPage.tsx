@@ -246,7 +246,7 @@ const HelpCenterPage = () => {
               <div className="relative">
                 <div className="flex items-center gap-3 mb-4">
                   <Sparkles className="w-6 h-6" />
-                  <h3 className="text-2xl font-bold">Still Need Help?</h3>
+                  <h3 className="text-2xl font-bold text-white">Still Need Help?</h3>
                 </div>
                 <p className="text-white/80 mb-8 leading-relaxed">
                   Can't find what you're looking for? Published support channels vary by deployment.

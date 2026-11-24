@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { BookOpen } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -53,10 +53,10 @@ const CourseManagementPage = () => {
   const [editingRecordingId, setEditingRecordingId] = useState<
     string | undefined
   >(undefined);
-  const [recordingDefaultVideoType] = useState<'upload' | 'link'>('upload');
   const [deletingLessonId, setDeletingLessonId] = useState<string | null>(null);
   const [recordingPendingDelete, setRecordingPendingDelete] =
     useState<RecordingPendingDelete | null>(null);
+  const requestIdRef = useRef(0);
 
   const fetchCourse = useCallback(async () => {
     if (!courseId) {
@@ -65,6 +65,7 @@ const CourseManagementPage = () => {
       return;
     }
 
+    const requestId = ++requestIdRef.current;
     setIsLoading(true);
     setError(null);
 
@@ -74,6 +75,9 @@ const CourseManagementPage = () => {
         courseService.getCourseQuizAttempts(courseId),
         courseService.getMyCourses(),
       ]);
+      if (requestId !== requestIdRef.current) {
+        return;
+      }
       const teacherCourseStats = teacherCourses.find(
         (teacherCourse) => teacherCourse.id === data.id
       );
@@ -86,6 +90,9 @@ const CourseManagementPage = () => {
       });
       setQuizAttempts(attempts);
     } catch (err) {
+      if (requestId !== requestIdRef.current) {
+        return;
+      }
       const errorMessage = extractErrorMessage(err, 'Failed to load course');
       clientLogger.error('Failed to fetch course:', err);
       setCourse(null);
@@ -93,12 +100,17 @@ const CourseManagementPage = () => {
       setError(errorMessage);
       toast.error(errorMessage);
     } finally {
-      setIsLoading(false);
+      if (requestId === requestIdRef.current) {
+        setIsLoading(false);
+      }
     }
   }, [courseId, navigate]);
 
   useEffect(() => {
-    fetchCourse();
+    void fetchCourse();
+    return () => {
+      requestIdRef.current += 1;
+    };
   }, [fetchCourse]);
 
   const handleSendNotification = async () => {
@@ -214,7 +226,7 @@ const CourseManagementPage = () => {
             <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-primary-500 to-indigo-600 animate-pulse flex items-center justify-center">
               <BookOpen className="w-8 h-8 text-white" />
             </div>
-            <div className="absolute inset-0 rounded-2xl bg-primary-500/20 animate-ping"></div>
+            <div className="absolute inset-0 rounded-2xl bg-primary-500/20 animate-ping motion-reduce:animate-none"></div>
           </div>
           <p className="text-gray-600 font-medium">Loading course details...</p>
         </div>
@@ -336,7 +348,7 @@ const CourseManagementPage = () => {
             courseId={courseId}
             lessonId={editingRecordingId}
             initialLesson={activeLesson}
-            defaultVideoType={recordingDefaultVideoType}
+            defaultVideoType="upload" 
             onClose={() => {
               setShowRecordingModal(false);
               setEditingRecordingId(undefined);

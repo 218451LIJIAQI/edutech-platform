@@ -8,10 +8,6 @@ interface SkeletonProps extends HTMLAttributes<HTMLDivElement> {
   animation?: 'pulse' | 'none';
 }
 
-/**
- * Skeleton Loading Component
- * Displays a visual placeholder while content is loading.
- */
 const Skeleton = ({
   variant = 'text',
   width,
@@ -55,12 +51,6 @@ const Skeleton = ({
   );
 };
 
-export default Skeleton;
-
-/**
- * Card Skeleton
- * For course or content cards.
- */
 export const CardSkeleton = () => (
   <div
     className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-lg"
@@ -86,10 +76,6 @@ export const CardSkeleton = () => (
   </div>
 );
 
-/**
- * Stats Skeleton
- * For dashboard statistic cards.
- */
 export const StatsSkeleton = () => (
   <div
     className="rounded-2xl border border-gray-100 bg-white p-6 shadow-lg"

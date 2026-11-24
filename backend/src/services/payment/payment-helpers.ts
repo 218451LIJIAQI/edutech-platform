@@ -1,6 +1,7 @@
 import { PaymentStatus, Prisma, RefundStatus } from "@prisma/client";
 import type { Course, LessonPackage, TeacherProfile } from "@prisma/client";
 import {
+  allocateOrderItemAmounts,
   calculateTeacherNetEarning,
   roundMoney,
   toNumber,
@@ -184,21 +185,14 @@ const collectTeacherPaymentSlices = (
       continue;
     }
 
-    let allocatedRefund = 0;
-    items.forEach((item, index) => {
-      const isLastItem = index === items.length - 1;
-      const itemPrice = roundMoney(Math.max(0, toNumber(item.finalPrice)));
-      const itemRefundPortion =
-        completedRefundTotal > 0 && orderItemsTotal > 0
-          ? isLastItem
-            ? roundMoney(completedRefundTotal - allocatedRefund)
-            : roundMoney((itemPrice / orderItemsTotal) * completedRefundTotal)
-          : 0;
-      allocatedRefund = roundMoney(allocatedRefund + itemRefundPortion);
-
+    for (const {
+      item,
+      itemPrice,
+      allocatedAmount: itemRefundPortion,
+    } of allocateOrderItemAmounts(items, completedRefundTotal)) {
       const lessonPackage = item.package;
       if (lessonPackage?.course?.teacherProfileId !== teacherProfileId) {
-        return;
+        continue;
       }
 
       const netItemAmount = Math.max(
@@ -236,7 +230,7 @@ const collectTeacherPaymentSlices = (
         lessonPackage,
         user: payment.user,
       });
-    });
+    }
   }
 
   return sortByPaidAtDescending(slices);

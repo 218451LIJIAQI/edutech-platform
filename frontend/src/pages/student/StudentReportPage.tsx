@@ -77,25 +77,38 @@ const StudentReportPage = () => {
   const [showSupportModal, setShowSupportModal] = useState(false);
   const reportModalRef = useRef<HTMLDivElement | null>(null);
   const reportModalCloseButtonRef = useRef<HTMLButtonElement | null>(null);
+  const requestIdRef = useRef(0);
 
   const fetchReports = useCallback(async () => {
+    const requestId = ++requestIdRef.current;
     setIsLoading(true);
     setError(null);
     try {
       const data = await reportService.getMyReports();
+      if (requestId !== requestIdRef.current) {
+        return;
+      }
       setReports(data);
     } catch (err) {
+      if (requestId !== requestIdRef.current) {
+        return;
+      }
       const errorMessage = extractErrorMessage(err, 'Failed to load reports');
       clientLogger.error('Failed to fetch reports:', err);
       setError(errorMessage);
       toast.error(errorMessage);
     } finally {
-      setIsLoading(false);
+      if (requestId === requestIdRef.current) {
+        setIsLoading(false);
+      }
     }
   }, []);
 
   useEffect(() => {
     void fetchReports();
+    return () => {
+      requestIdRef.current += 1;
+    };
   }, [fetchReports]);
 
   const closeReportModal = useCallback(() => {
@@ -124,10 +137,10 @@ const StudentReportPage = () => {
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-primary-50/10 to-indigo-50/20">
         <div className="flex flex-col items-center space-y-4">
           <div className="relative">
-            <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-primary-500 to-indigo-600 animate-pulse flex items-center justify-center">
+            <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-primary-500 to-indigo-600 animate-pulse motion-reduce:animate-none flex items-center justify-center">
               <AlertCircle className="w-8 h-8 text-white" />
             </div>
-            <div className="absolute inset-0 rounded-2xl bg-primary-500/20 animate-ping" />
+            <div className="absolute inset-0 rounded-2xl bg-primary-500/20 animate-ping motion-reduce:animate-none" />
           </div>
           <p className="text-gray-600 font-medium">Loading your reports...</p>
         </div>
@@ -153,8 +166,6 @@ const StudentReportPage = () => {
           </div>
         </div>
 
-
-
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-8">
           <div className="lg:col-span-2">
             <div className="mb-6 flex flex-wrap gap-2">
@@ -164,7 +175,7 @@ const StudentReportPage = () => {
                     type="button"
                     key={status}
                     onClick={() => setFilterStatus(status)}
-                    className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                    className={`px-4 py-2 rounded-lg font-medium transition-colors tabular-nums ${
                       filterStatus === status
                         ? 'bg-primary-600 text-white'
                         : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
@@ -180,9 +191,9 @@ const StudentReportPage = () => {
             </div>
 
             {error ? (
-              <div className="card p-8 bg-red-50 border border-red-200 rounded-2xl text-center space-y-3">
+              <div role="alert" className="card p-8 bg-red-50 border border-red-200 rounded-2xl text-center space-y-3">
                 <AlertCircle className="w-10 h-10 text-red-600 mx-auto" />
-                <h3 className="font-bold text-red-900 text-lg">Error loading reports</h3>
+                <h2 className="font-bold text-red-900 text-lg">Error loading reports</h2>
                 <p className="text-red-700 text-sm">{error}</p>
                 <button
                   type="button"
@@ -232,7 +243,7 @@ const StudentReportPage = () => {
                           </p>
                         )}
 
-                        <p className="text-xs text-gray-500">
+                        <p className="text-xs text-gray-500 tabular-nums">
                           Submitted on {new Date(report.createdAt).toLocaleDateString()}
                         </p>
                       </div>
@@ -245,12 +256,23 @@ const StudentReportPage = () => {
             ) : (
               <div className="card text-center py-16 shadow-lg">
                 <AlertCircle className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-                <h3 className="text-2xl font-bold text-gray-900 mb-2">No reports yet</h3>
-                <p className="text-gray-600">
+                <h2 className="text-2xl font-bold text-gray-900 mb-2">
+                  {reports.length === 0 ? 'No reports yet' : 'No matching reports'}
+                </h2>
+                <p className="text-gray-600 mb-6">
                   {filterStatus === 'ALL'
                     ? "You haven't submitted any reports yet."
-                    : `No ${filterStatus.toLowerCase().replace(/_/g, ' ')} reports.`}
+                    : `No ${filterStatus.toLowerCase().replace(/_/g, ' ')} reports found.`}
                 </p>
+                {reports.length > 0 && filterStatus !== 'ALL' && (
+                  <button
+                    type="button"
+                    onClick={() => setFilterStatus('ALL')}
+                    className="btn-secondary btn-sm"
+                  >
+                    Show All Reports
+                  </button>
+                )}
               </div>
             )}
           </div>
@@ -276,7 +298,7 @@ const StudentReportPage = () => {
               aria-modal="true"
               aria-labelledby="student-report-modal-title"
               aria-describedby="student-report-modal-description"
-              className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto"
+              className="bg-white rounded-2xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto"
             >
               <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
                 <h2 id="student-report-modal-title" className="text-2xl font-bold text-gray-900">Report Details</h2>
@@ -341,7 +363,7 @@ const StudentReportPage = () => {
 
                   <div>
                     <span className="text-sm font-semibold text-gray-900">Submitted Date</span>
-                    <p className="text-gray-700 mt-1">
+                    <p className="text-gray-700 mt-1 tabular-nums">
                       {new Date(selectedReport.createdAt).toLocaleString()}
                     </p>
                   </div>
@@ -349,7 +371,7 @@ const StudentReportPage = () => {
                   {selectedReport.resolvedAt && (
                     <div>
                       <span className="text-sm font-semibold text-gray-900">Resolved Date</span>
-                      <p className="text-gray-700 mt-1">
+                      <p className="text-gray-700 mt-1 tabular-nums">
                         {new Date(selectedReport.resolvedAt).toLocaleString()}
                       </p>
                     </div>
@@ -360,7 +382,7 @@ const StudentReportPage = () => {
                   <button
                     type="button"
                     onClick={closeReportModal}
-                    className="w-full px-4 py-2 bg-primary-600 text-white font-medium rounded-lg hover:bg-primary-700 transition-colors"
+                    className="btn-primary w-full"
                   >
                     Close
                   </button>

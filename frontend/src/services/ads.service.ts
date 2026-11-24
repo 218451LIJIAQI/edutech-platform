@@ -92,4 +92,4 @@ const adsService = {
 };
 
 export default adsService;
-export type { AdCampaignPayload, AdminAdListResponse, PaginationMeta };
+export type { AdCampaignPayload };

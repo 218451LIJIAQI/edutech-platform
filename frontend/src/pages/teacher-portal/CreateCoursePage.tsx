@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import clientLogger from '@/utils/logger';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
@@ -61,6 +61,7 @@ const CreateCoursePage = () => {
   const [editingMaterialId, setEditingMaterialId] = useState<string | undefined>();
   const [pendingDeleteItem, setPendingDeleteItem] = useState<PendingDeleteItem>(null);
   const [isDeletingItem, setIsDeletingItem] = useState(false);
+  const requestIdRef = useRef(0);
 
   const {
     register,
@@ -101,10 +102,17 @@ const CreateCoursePage = () => {
   );
 
   const fetchCourse = useCallback(async () => {
+    if (!courseId) {
+      return;
+    }
+    const requestId = ++requestIdRef.current;
     setIsLoading(true);
     setLoadError(null);
     try {
-      const data = await courseService.getCourseById(courseId!);
+      const data = await courseService.getCourseById(courseId);
+      if (requestId !== requestIdRef.current) {
+        return;
+      }
       setCourse(data);
       setLessons(data.lessons || []);
       setPackages(data.packages || []);
@@ -116,19 +124,27 @@ const CreateCoursePage = () => {
       setValue('courseType', data.courseType);
       syncMediaStateFromCourse(data);
     } catch (error) {
+      if (requestId !== requestIdRef.current) {
+        return;
+      }
       clientLogger.error('Failed to fetch course:', error);
       const message = extractErrorMessage(error, 'Failed to load course');
       setLoadError(message);
       toast.error(message);
     } finally {
-      setIsLoading(false);
+      if (requestId === requestIdRef.current) {
+        setIsLoading(false);
+      }
     }
   }, [courseId, setValue, syncMediaStateFromCourse]);
 
   useEffect(() => {
     if (isEditMode && courseId) {
-      fetchCourse();
+      void fetchCourse();
     }
+    return () => {
+      requestIdRef.current += 1;
+    };
   }, [isEditMode, courseId, fetchCourse]);
 
   const onSubmit = async (data: CourseFormData) => {
@@ -271,7 +287,7 @@ const CreateCoursePage = () => {
             <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-primary-500 to-indigo-600 animate-pulse flex items-center justify-center">
               <Edit className="w-8 h-8 text-white" />
             </div>
-            <div className="absolute inset-0 rounded-2xl bg-primary-500/20 animate-ping"></div>
+            <div className="absolute inset-0 rounded-2xl bg-primary-500/20 animate-ping motion-reduce:animate-none"></div>
           </div>
           <p className="text-gray-600 font-medium">Loading course editor...</p>
         </div>

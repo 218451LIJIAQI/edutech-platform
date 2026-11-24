@@ -1,6 +1,7 @@
 import { CourseType, LessonType, Prisma } from "@prisma/client";
 import { BadRequestError } from "../../utils/errors";
 import { sanitizeUserPlainText } from "../../utils/sanitize-user-content";
+import { roundMoney, toNumber as decimalToNumber } from "../shared/payment-utils";
 
 interface LessonQuizQuestion {
   question: string;
@@ -34,17 +35,7 @@ interface QuizResultItem {
 
 type MoneyValue = Prisma.Decimal | number;
 
-const decimalToNumber = (value: MoneyValue | null | undefined): number => {
-  if (value === null || value === undefined) {
-    return 0;
-  }
 
-  return typeof value === "number" ? value : value.toNumber();
-};
-
-const roundMoney = (value: number): number => {
-  return Number(value.toFixed(2));
-};
 
 const normalizeText = (value: string): string => sanitizeUserPlainText(value);
 
@@ -234,7 +225,7 @@ export const buildCourseListOrderBy = (
 
   if (sortBy === "RATING") {
     return [
-      { teacherProfile: { averageRating: "desc" } },
+      { teacherProfile: { averageRating: sortOrder } },
       { createdAt: "desc" },
       { id: "desc" },
     ];
@@ -242,7 +233,7 @@ export const buildCourseListOrderBy = (
 
   if (sortBy === "POPULARITY") {
     return [
-      { teacherProfile: { totalStudents: "desc" } },
+      { teacherProfile: { totalStudents: sortOrder } },
       { createdAt: "desc" },
       { id: "desc" },
     ];

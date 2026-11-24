@@ -16,6 +16,7 @@ const CoursesManagement = () => {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [togglingCourseId, setTogglingCourseId] = useState<string | null>(null);
   const [searchInput, setSearchInput] = useState('');
+  const [resetFilterSignal, setResetFilterSignal] = useState(0);
   const debouncedSearch = useDebounce(searchInput.trim(), 300);
   const requestIdRef = useRef(0);
   const [pagination, setPagination] = useState<{
@@ -33,6 +34,10 @@ const CoursesManagement = () => {
     page: 1,
     limit: 10,
   });
+
+  const hasActiveFilters = Boolean(
+    debouncedSearch || filters.isPublished !== undefined || filters.category
+  );
 
   const loadCourses = useCallback(async () => {
     const requestId = ++requestIdRef.current;
@@ -67,6 +72,9 @@ const CoursesManagement = () => {
 
   useEffect(() => {
     void loadCourses();
+    return () => {
+      requestIdRef.current += 1;
+    };
   }, [loadCourses]);
 
   const handleTogglePublish = async (id: string, currentStatus: boolean) => {
@@ -108,6 +116,12 @@ const CoursesManagement = () => {
     });
   };
 
+  const handleResetFilters = () => {
+    setSearchInput('');
+    setFilters({ page: 1, limit: 10 });
+    setResetFilterSignal((prev) => prev + 1);
+  };
+
   const handlePageChange = (newPage: number) => {
     setFilters((currentFilters) => ({ ...currentFilters, page: newPage }));
   };
@@ -131,6 +145,7 @@ const CoursesManagement = () => {
         <div className="card mb-8 shadow-xl border border-gray-100 rounded-2xl">
           <SearchFilter
             placeholder="Search courses..."
+            resetSignal={resetFilterSignal}
             onSearch={(q) => {
               setSearchInput(q);
               setFilters((currentFilters) =>
@@ -154,18 +169,18 @@ const CoursesManagement = () => {
             <div className="flex justify-center py-16">
               <div className="flex flex-col items-center space-y-4">
                 <div className="relative">
-                  <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-primary-500 to-indigo-600 animate-pulse flex items-center justify-center">
+                  <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-primary-500 to-indigo-600 animate-pulse motion-reduce:animate-none flex items-center justify-center">
                     <BookOpen className="w-8 h-8 text-white" />
                   </div>
-                  <div className="absolute inset-0 rounded-2xl bg-primary-500/20 animate-ping"></div>
+                  <div className="absolute inset-0 rounded-2xl bg-primary-500/20 animate-ping motion-reduce:animate-none"></div>
                 </div>
                 <p className="text-gray-600 font-medium">Loading courses...</p>
               </div>
             </div>
           ) : loadError ? (
-            <div className="text-center py-14 space-y-3 px-6">
+            <div role="alert" className="text-center py-14 space-y-3 px-6">
               <AlertCircle className="w-12 h-12 text-red-500 mx-auto" />
-              <h3 className="text-lg font-bold text-gray-900">Unable to load courses</h3>
+              <h2 className="text-lg font-bold text-gray-900">Unable to load courses</h2>
               <p className="text-sm text-gray-600">{loadError}</p>
               <button
                 type="button"
@@ -177,10 +192,25 @@ const CoursesManagement = () => {
               </button>
             </div>
           ) : courses.length === 0 ? (
-            <div className="text-center py-16">
-              <BookOpen className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-              <h3 className="text-xl font-bold text-gray-900 mb-2">No courses found</h3>
-              <p className="text-gray-600">Try adjusting your filters</p>
+            <div className="text-center py-16 space-y-3">
+              <BookOpen className="w-16 h-16 text-gray-300 mx-auto mb-2" />
+              <h2 className="text-xl font-bold text-gray-900">
+                {hasActiveFilters ? 'No courses match your filters' : 'No courses created yet'}
+              </h2>
+              <p className="text-gray-600">
+                {hasActiveFilters
+                  ? 'Try clearing your search or status filter.'
+                  : 'Courses created by approved teachers will appear here.'}
+              </p>
+              {hasActiveFilters && (
+                <button
+                  type="button"
+                  onClick={handleResetFilters}
+                  className="btn-secondary btn-sm"
+                >
+                  Reset Filters
+                </button>
+              )}
             </div>
           ) : (
             <div className="overflow-x-auto">
@@ -249,9 +279,8 @@ const CoursesManagement = () => {
             </div>
           )}
 
-          {/* Pagination */}
           {pagination && pagination.totalPages > 1 && (
-            <div className="mt-6 pt-4 border-t flex items-center justify-between">
+            <div className="mt-6 pt-4 border-t flex items-center justify-between tabular-nums">
               <div className="text-sm text-gray-700">
                 Showing page {pagination.page} of {pagination.totalPages} ({pagination.total} total courses)
               </div>

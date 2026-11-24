@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useMemo } from 'react';
+import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import clientLogger from '@/utils/logger';
 import { Link, useNavigate } from 'react-router-dom';
 import { AlertCircle, Plus, Edit, Trash2, Eye, EyeOff, Users, Video, Radio, PlayCircle, RefreshCcw, Search, Filter, BookOpen, TrendingUp, CheckCircle, Zap } from 'lucide-react';
@@ -13,10 +13,8 @@ import QuickStartGuide from '@/components/teacher/QuickStartGuide';
 import { resolveBackendAssetUrl } from '@/utils/runtime';
 import { getCourseLessonCount, getCourseMaterialCount } from '@/utils/course-counts';
 
-/**
- * Manage Courses Page
- * Teacher's course management interface with improved UI
- */
+type CourseWithCount = Course & { _count?: { enrollments?: number } };
+
 const ManageCoursesPage = () => {
   usePageTitle('My Courses');
   const navigate = useNavigate();
@@ -30,26 +28,39 @@ const ManageCoursesPage = () => {
   const [coursePendingDelete, setCoursePendingDelete] = useState<Course | null>(null);
   const [isDeletingCourse, setIsDeletingCourse] = useState(false);
   const [isQuickStartOpen, setIsQuickStartOpen] = useState(false);
+  const requestIdRef = useRef(0);
 
   const fetchMyCourses = useCallback(async () => {
+    const requestId = ++requestIdRef.current;
     setIsLoading(true);
     setLoadError(null);
     try {
       const loadedCourses = await courseService.getMyCourses();
+      if (requestId !== requestIdRef.current) {
+        return;
+      }
       setCourses(loadedCourses);
       setFailedThumbnailCourseIds(new Set());
     } catch (error) {
+      if (requestId !== requestIdRef.current) {
+        return;
+      }
       clientLogger.error('Failed to fetch courses:', error);
       const message = extractErrorMessage(error, 'Failed to load courses');
       setLoadError(message);
       toast.error(message);
     } finally {
-      setIsLoading(false);
+      if (requestId === requestIdRef.current) {
+        setIsLoading(false);
+      }
     }
   }, []);
 
   useEffect(() => {
     void fetchMyCourses();
+    return () => {
+      requestIdRef.current += 1;
+    };
   }, [fetchMyCourses]);
 
   const handleTogglePublish = async (courseId: string, currentStatus: boolean) => {
@@ -60,7 +71,7 @@ const ManageCoursesPage = () => {
         isPublished: !currentStatus,
       });
       toast.success(
-        !currentStatus ? 'Course published successfully' : 'Course unpublished'
+        !currentStatus ? 'Course published' : 'Course unpublished'
       );
       await fetchMyCourses();
     } catch (error) {
@@ -72,14 +83,14 @@ const ManageCoursesPage = () => {
   };
 
   const handleDeleteCourse = async () => {
-    if (!coursePendingDelete) {
+    if (!coursePendingDelete || isDeletingCourse) {
       return;
     }
 
     setIsDeletingCourse(true);
     try {
       await courseService.deleteCourse(coursePendingDelete.id);
-      toast.success('Course deleted successfully');
+      toast.success('Course deleted');
       await fetchMyCourses();
       setCoursePendingDelete(null);
     } catch (error) {
@@ -90,23 +101,21 @@ const ManageCoursesPage = () => {
     }
   };
 
-  // Type helper for course with enrollment count
-  type CourseWithCount = Course & { _count?: { enrollments?: number } };
-
-  // Filter and search courses
   const filteredCourses = useMemo(() => {
-    const query = searchQuery.toLowerCase();
+    const query = searchQuery.trim().toLowerCase();
     return courses.filter((course) => {
-      const matchesSearch = course.title.toLowerCase().includes(query) ||
-                           course.description?.toLowerCase().includes(query);
-      const matchesStatus = filterStatus === 'all' ||
-                           (filterStatus === 'published' && course.isPublished) ||
-                           (filterStatus === 'draft' && !course.isPublished);
+      const matchesSearch =
+        !query ||
+        course.title.toLowerCase().includes(query) ||
+        Boolean(course.description?.toLowerCase().includes(query));
+      const matchesStatus =
+        filterStatus === 'all' ||
+        (filterStatus === 'published' && course.isPublished) ||
+        (filterStatus === 'draft' && !course.isPublished);
       return matchesSearch && matchesStatus;
     });
   }, [courses, searchQuery, filterStatus]);
 
-  // Calculate statistics
   const stats = useMemo(() => ({
     total: courses.length,
     published: courses.filter(c => c.isPublished).length,
@@ -117,7 +126,6 @@ const ManageCoursesPage = () => {
     }, 0),
   }), [courses]);
 
-  // Resolve asset URL (handles absolute and relative paths like /uploads/...)
   const getCourseCover = useCallback((course: Course): string | null => {
     if (!course.thumbnail || failedThumbnailCourseIds.has(course.id)) {
       return null;
@@ -131,12 +139,12 @@ const ManageCoursesPage = () => {
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-primary-50/10 to-indigo-50/20">
         <div className="flex flex-col items-center space-y-4">
           <div className="relative">
-              <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-primary-500 to-indigo-600 animate-pulse flex items-center justify-center">
-                <BookOpen className="w-8 h-8 text-white" />
-              </div>
-              <div className="absolute inset-0 rounded-2xl bg-primary-500/20 animate-ping"></div>
+            <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-primary-500 to-indigo-600 animate-pulse motion-reduce:animate-none flex items-center justify-center">
+              <BookOpen className="w-8 h-8 text-white" />
             </div>
-            <p className="text-gray-600 font-medium">Loading your courses...</p>
+            <div className="absolute inset-0 rounded-2xl bg-primary-500/20 animate-ping motion-reduce:animate-none"></div>
+          </div>
+          <p className="text-gray-600 font-medium">Loading your courses...</p>
         </div>
       </div>
     );
@@ -144,11 +152,9 @@ const ManageCoursesPage = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-primary-50/10 to-indigo-50/20 relative">
-      {/* Background Pattern */}
       <div className="absolute inset-0 bg-[linear-gradient(rgba(0,0,0,0.015)_1px,transparent_1px),linear-gradient(90deg,rgba(0,0,0,0.015)_1px,transparent_1px)] bg-[size:32px_32px] pointer-events-none"></div>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 relative">
-        {/* Header Section */}
         <div className="mb-10">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
             <div className="flex items-center gap-3">
@@ -178,65 +184,66 @@ const ManageCoursesPage = () => {
             </div>
           </div>
 
-          {/* Statistics Cards */}
           {courses.length > 0 && (
             <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-              <div className="card bg-gradient-to-br from-blue-500 to-blue-600 text-white shadow-xl hover:shadow-2xl transition-all duration-300 transform hover:scale-105 border border-blue-400/30 rounded-2xl">
+              <div className="card bg-gradient-to-br from-blue-500 to-blue-600 text-white shadow-xl border border-blue-400/30 rounded-2xl">
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-blue-100 text-sm font-bold mb-2 uppercase">Total Courses</p>
-                    <p className="text-4xl font-bold text-white">{stats.total}</p>
+                    <p className="text-4xl font-bold text-white tabular-nums">{stats.total}</p>
                   </div>
-                  <div className="w-16 h-16 bg-white/20 rounded-xl flex items-center justify-center">
-                    <BookOpen className="w-8 h-8 text-blue-100" />
+                  <div className="w-14 h-14 bg-white/20 rounded-xl flex items-center justify-center">
+                    <BookOpen className="w-7 h-7 text-blue-100" />
                   </div>
                 </div>
               </div>
 
-              <div className="card bg-gradient-to-br from-green-500 to-green-600 text-white shadow-xl hover:shadow-2xl transition-all duration-300 transform hover:scale-105 border border-green-400/30 rounded-2xl">
+              <div className="card bg-gradient-to-br from-green-500 to-green-600 text-white shadow-xl border border-green-400/30 rounded-2xl">
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-green-100 text-sm font-bold mb-2 uppercase">Published</p>
-                    <p className="text-4xl font-bold text-white">{stats.published}</p>
+                    <p className="text-4xl font-bold text-white tabular-nums">{stats.published}</p>
                   </div>
-                  <div className="w-16 h-16 bg-white/20 rounded-xl flex items-center justify-center">
-                    <Eye className="w-8 h-8 text-green-100" />
+                  <div className="w-14 h-14 bg-white/20 rounded-xl flex items-center justify-center">
+                    <Eye className="w-7 h-7 text-green-100" />
                   </div>
                 </div>
               </div>
 
-              <div className="card bg-gradient-to-br from-yellow-500 to-yellow-600 text-white shadow-xl hover:shadow-2xl transition-all duration-300 transform hover:scale-105 border border-yellow-400/30 rounded-2xl">
+              <div className="card bg-gradient-to-br from-amber-500 to-yellow-600 text-white shadow-xl border border-yellow-400/30 rounded-2xl">
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-yellow-100 text-sm font-bold mb-2 uppercase">Drafts</p>
-                    <p className="text-4xl font-bold text-white">{stats.draft}</p>
+                    <p className="text-4xl font-bold text-white tabular-nums">{stats.draft}</p>
                   </div>
-                  <div className="w-16 h-16 bg-white/20 rounded-xl flex items-center justify-center">
-                    <Edit className="w-8 h-8 text-yellow-100" />
+                  <div className="w-14 h-14 bg-white/20 rounded-xl flex items-center justify-center">
+                    <Edit className="w-7 h-7 text-yellow-100" />
                   </div>
                 </div>
               </div>
 
-              <div className="card bg-gradient-to-br from-primary-500 to-primary-600 text-white shadow-xl hover:shadow-2xl transition-all duration-300 transform hover:scale-105 border border-primary-400/30 rounded-2xl">
+              <div className="card bg-gradient-to-br from-primary-500 to-primary-600 text-white shadow-xl border border-primary-400/30 rounded-2xl">
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-primary-100 text-sm font-bold mb-2 uppercase">Total Students</p>
-                    <p className="text-4xl font-bold text-white">{stats.totalStudents}</p>
+                    <p className="text-4xl font-bold text-white tabular-nums">{stats.totalStudents}</p>
                   </div>
-                  <div className="w-16 h-16 bg-white/20 rounded-xl flex items-center justify-center">
-                    <Users className="w-8 h-8 text-primary-100" />
+                  <div className="w-14 h-14 bg-white/20 rounded-xl flex items-center justify-center">
+                    <Users className="w-7 h-7 text-primary-100" />
                   </div>
                 </div>
               </div>
             </div>
           )}
 
-          {/* Search and Filter Bar */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {/* Search Input */}
             <div className="md:col-span-2 relative">
+              <label htmlFor="manage-courses-search" className="sr-only">
+                Search courses by title or description
+              </label>
               <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
               <input
+                id="manage-courses-search"
                 type="text"
                 placeholder="Search courses by title or description..."
                 value={searchQuery}
@@ -245,7 +252,6 @@ const ManageCoursesPage = () => {
               />
             </div>
 
-            {/* Filter Dropdown */}
             <div className="relative">
               <Filter className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400 pointer-events-none" />
               <select
@@ -263,17 +269,27 @@ const ManageCoursesPage = () => {
             </div>
           </div>
 
-          {/* Results Count */}
-          {searchQuery || filterStatus !== 'all' ? (
-            <p className="text-sm text-gray-600 mt-3">
-              Found <span className="font-semibold text-gray-900">{filteredCourses.length}</span> course{filteredCourses.length !== 1 ? 's' : ''}
-            </p>
+          {searchQuery.trim() || filterStatus !== 'all' ? (
+            <div className="mt-3 flex items-center justify-between text-sm text-gray-600 tabular-nums">
+              <p>
+                Found <span className="font-semibold text-gray-900">{filteredCourses.length}</span> course{filteredCourses.length !== 1 ? 's' : ''}
+              </p>
+              <button
+                type="button"
+                onClick={() => {
+                  setSearchQuery('');
+                  setFilterStatus('all');
+                }}
+                className="text-primary-700 hover:underline font-semibold"
+              >
+                Clear filters
+              </button>
+            </div>
           ) : null}
         </div>
 
-        {/* Courses Grid */}
         {loadError ? (
-          <div className="card max-w-lg mx-auto text-center space-y-4 py-12">
+          <div role="alert" className="card max-w-lg mx-auto text-center space-y-4 py-12">
             <AlertCircle className="w-12 h-12 text-red-500 mx-auto" />
             <h2 className="text-xl font-bold text-slate-900">Unable to load your courses</h2>
             <p className="text-sm text-slate-600">{loadError}</p>
@@ -292,168 +308,158 @@ const ManageCoursesPage = () => {
               const courseCover = getCourseCover(course);
 
               return (
-              <div
-                key={course.id}
-                className="card card-smooth p-0 overflow-hidden group border border-slate-200/80 rounded-2xl"
-              >
-                {/* Course Header with Thumbnail */}
-                <div className="relative h-40 overflow-hidden">
-                  {/* Fallback gradient + icon (visible when no image or image fails) */}
-                  <div className="absolute inset-0 bg-gradient-to-br from-primary-400 via-primary-500 to-primary-600">
-                    <div className="absolute inset-0 flex items-center justify-center">
-                      <BookOpen className="w-16 h-16 text-white opacity-40 group-hover:opacity-60 transition-opacity" />
+                <div
+                  key={course.id}
+                  className="card card-smooth p-0 overflow-hidden group border border-slate-200/80 rounded-2xl"
+                >
+                  <div className="relative h-40 overflow-hidden">
+                    <div className="absolute inset-0 bg-gradient-to-br from-primary-400 via-primary-500 to-primary-600">
+                      <div className="absolute inset-0 flex items-center justify-center">
+                        <BookOpen className="w-16 h-16 text-white opacity-40 group-hover:opacity-60 transition-opacity" />
+                      </div>
                     </div>
-                  </div>
 
-                  {/* Course cover image */}
-                  {courseCover ? (
-                    <img
-                      src={courseCover}
-                      alt={`${course.title} cover`}
-                      loading="lazy"
-                      className="absolute inset-0 w-full h-full object-cover"
-                      onError={() => {
-                        setFailedThumbnailCourseIds((currentIds) => {
-                          const nextIds = new Set(currentIds);
-                          nextIds.add(course.id);
-                          return nextIds;
-                        });
-                      }}
-                    />
-                  ) : null}
+                    {courseCover ? (
+                      <img
+                        src={courseCover}
+                        alt={`${course.title} cover`}
+                        loading="lazy"
+                        className="absolute inset-0 w-full h-full object-cover"
+                        onError={() => {
+                          setFailedThumbnailCourseIds((currentIds) => {
+                            const nextIds = new Set(currentIds);
+                            nextIds.add(course.id);
+                            return nextIds;
+                          });
+                        }}
+                      />
+                    ) : null}
 
-                  {/* Overlay to improve contrast over images */}
-                  <div className="absolute inset-0 bg-black/10" />
+                    <div className="absolute inset-0 bg-black/10" />
 
-                  {/* Status Badge */}
-                  <div className="absolute top-4 right-4 flex gap-2">
-                    {course.isPublished ? (
-                      <span className="badge-success text-xs">Published</span>
-                    ) : (
-                      <span className="badge-warning text-xs">Draft</span>
-                    )}
-                  </div>
-                </div>
-
-                {/* Course Content */}
-                <div className="p-6">
-                  {/* Title and Category */}
-                  <div className="mb-4">
-                    <h3 className="text-xl font-bold text-gray-900 mb-2 line-clamp-2 group-hover:text-primary-600 transition-colors">
-                      {course.title}
-                    </h3>
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="badge-primary text-xs">{course.category}</span>
-
-                      {/* Course Type Badge */}
-                      {course.courseType === CourseType.LIVE && (
-                        <span className="badge bg-gradient-to-r from-red-100 to-red-50 text-red-800 border border-red-200 flex items-center gap-1 text-xs">
-                          <Radio className="w-3 h-3" />
-                          Live
-                        </span>
-                      )}
-                      {course.courseType === CourseType.RECORDED && (
-                        <span className="badge bg-gradient-to-r from-blue-100 to-blue-50 text-blue-800 border border-blue-200 flex items-center gap-1 text-xs">
-                          <Video className="w-3 h-3" />
-                          Recorded
-                        </span>
-                      )}
-                      {course.courseType === CourseType.HYBRID && (
-                        <span className="badge bg-gradient-to-r from-purple-100 to-purple-50 text-purple-800 border border-purple-200 flex items-center gap-1 text-xs">
-                          <PlayCircle className="w-3 h-3" />
-                          Hybrid
-                        </span>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Description */}
-                  <p className="text-gray-600 mb-4 line-clamp-2 text-sm">
-                    {course.description}
-                  </p>
-
-                  {/* Stats Grid */}
-                  <div className="grid grid-cols-3 gap-3 mb-6 py-4 border-y border-gray-200">
-                    <div className="text-center">
-                      <p className="text-gray-500 text-xs font-medium mb-1">Students</p>
-                      <p className="text-2xl font-bold text-gray-900">
-                        {(course as CourseWithCount)._count?.enrollments || 0}
-                      </p>
-                    </div>
-                    <div className="text-center">
-                      <p className="text-gray-500 text-xs font-medium mb-1">Lessons</p>
-                      <p className="text-2xl font-bold text-gray-900">
-                        {getCourseLessonCount(course)}
-                      </p>
-                    </div>
-                    <div className="text-center">
-                      <p className="text-gray-500 text-xs font-medium mb-1">Materials</p>
-                      <p className="text-2xl font-bold text-gray-900">
-                        {getCourseMaterialCount(course)}
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* Pricing */}
-                  {course.packages && course.packages.length > 0 && (
-                    <div className="mb-6 p-3 bg-gradient-to-r from-green-50 to-emerald-50 rounded-lg border border-green-200">
-                      <p className="text-xs text-gray-600 mb-1">Starting Price</p>
-                      <p className="text-lg font-bold text-green-700 tabular-nums">
-                        {formatCurrency(Math.min(...course.packages.map((p) => p.finalPrice)))}
-                      </p>
-                    </div>
-                  )}
-
-                  {/* Action Buttons */}
-                  <div className="flex gap-2">
-                    <Link
-                      to={`/teacher/courses/${course.id}/manage`}
-                      className="flex-1 btn-secondary text-center py-2 text-sm font-medium"
-                    >
-                      Manage
-                    </Link>
-                    <button
-                      type="button"
-                      onClick={() => navigate(`/teacher/courses/${course.id}/edit`)}
-                      className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
-                      title="Edit Course"
-                    >
-                      <Edit className="w-5 h-5" />
-                    </button>
-                    <button
-                      type="button"
-                      disabled={togglingCourseId === course.id}
-                      onClick={() => void handleTogglePublish(course.id, course.isPublished)}
-                      className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-all disabled:opacity-50"
-                      title={course.isPublished ? 'Unpublish' : 'Publish'}
-                    >
+                    <div className="absolute top-4 right-4 flex gap-2">
                       {course.isPublished ? (
-                        <EyeOff className="w-5 h-5" />
+                        <span className="badge-success text-xs">Published</span>
                       ) : (
-                        <Eye className="w-5 h-5" />
+                        <span className="badge-warning text-xs">Draft</span>
                       )}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setCoursePendingDelete(course)}
-                      className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-all"
-                      title="Delete Course"
-                    >
-                      <Trash2 className="w-5 h-5" />
-                    </button>
+                    </div>
+                  </div>
+
+                  <div className="p-6">
+                    <div className="mb-4">
+                      <h2 className="text-xl font-bold text-gray-900 mb-2 line-clamp-2 group-hover:text-primary-600 transition-colors">
+                        {course.title}
+                      </h2>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="badge-primary text-xs">{course.category}</span>
+
+                        {course.courseType === CourseType.LIVE && (
+                          <span className="badge bg-gradient-to-r from-red-100 to-red-50 text-red-800 border border-red-200 flex items-center gap-1 text-xs">
+                            <Radio className="w-3 h-3" />
+                            Live
+                          </span>
+                        )}
+                        {course.courseType === CourseType.RECORDED && (
+                          <span className="badge bg-gradient-to-r from-blue-100 to-blue-50 text-blue-800 border border-blue-200 flex items-center gap-1 text-xs">
+                            <Video className="w-3 h-3" />
+                            Recorded
+                          </span>
+                        )}
+                        {course.courseType === CourseType.HYBRID && (
+                          <span className="badge bg-gradient-to-r from-purple-100 to-purple-50 text-purple-800 border border-purple-200 flex items-center gap-1 text-xs">
+                            <PlayCircle className="w-3 h-3" />
+                            Hybrid
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    <p className="text-gray-600 mb-4 line-clamp-2 text-sm">
+                      {course.description}
+                    </p>
+
+                    <div className="grid grid-cols-3 gap-3 mb-6 py-4 border-y border-gray-200 tabular-nums">
+                      <div className="text-center">
+                        <p className="text-gray-500 text-xs font-medium mb-1">Students</p>
+                        <p className="text-2xl font-bold text-gray-900">
+                          {(course as CourseWithCount)._count?.enrollments || 0}
+                        </p>
+                      </div>
+                      <div className="text-center">
+                        <p className="text-gray-500 text-xs font-medium mb-1">Lessons</p>
+                        <p className="text-2xl font-bold text-gray-900">
+                          {getCourseLessonCount(course)}
+                        </p>
+                      </div>
+                      <div className="text-center">
+                        <p className="text-gray-500 text-xs font-medium mb-1">Materials</p>
+                        <p className="text-2xl font-bold text-gray-900">
+                          {getCourseMaterialCount(course)}
+                        </p>
+                      </div>
+                    </div>
+
+                    {course.packages && course.packages.length > 0 && (
+                      <div className="mb-6 p-3 bg-gradient-to-r from-green-50 to-emerald-50 rounded-lg border border-green-200">
+                        <p className="text-xs text-gray-600 mb-1">Starting Price</p>
+                        <p className="text-lg font-bold text-green-700 tabular-nums">
+                          {formatCurrency(Math.min(...course.packages.map((p) => p.finalPrice)))}
+                        </p>
+                      </div>
+                    )}
+
+                    <div className="flex gap-2">
+                      <Link
+                        to={`/teacher/courses/${course.id}/manage`}
+                        className="flex-1 btn-secondary text-center py-2 text-sm font-medium"
+                      >
+                        Manage
+                      </Link>
+                      <button
+                        type="button"
+                        onClick={() => navigate(`/teacher/courses/${course.id}/edit`)}
+                        className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
+                        title="Edit course"
+                        aria-label={`Edit ${course.title}`}
+                      >
+                        <Edit className="w-5 h-5" />
+                      </button>
+                      <button
+                        type="button"
+                        disabled={togglingCourseId === course.id}
+                        onClick={() => void handleTogglePublish(course.id, course.isPublished)}
+                        className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-all disabled:opacity-50"
+                        title={course.isPublished ? 'Unpublish' : 'Publish'}
+                        aria-label={`${course.isPublished ? 'Unpublish' : 'Publish'} ${course.title}`}
+                      >
+                        {course.isPublished ? (
+                          <EyeOff className="w-5 h-5" />
+                        ) : (
+                          <Eye className="w-5 h-5" />
+                        )}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setCoursePendingDelete(course)}
+                        className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-all"
+                        title="Delete course"
+                        aria-label={`Delete ${course.title}`}
+                      >
+                        <Trash2 className="w-5 h-5" />
+                      </button>
+                    </div>
                   </div>
                 </div>
-              </div>
-            );
+              );
             })}
           </div>
         ) : courses.length === 0 ? (
-          // Empty State
           <div className="card text-center py-16 shadow-lg max-w-md mx-auto">
             <div className="w-20 h-20 bg-gradient-to-br from-primary-100 to-primary-200 rounded-full flex items-center justify-center mx-auto mb-6">
               <Plus className="w-10 h-10 text-primary-600" />
             </div>
-            <h3 className="text-2xl font-bold text-gray-900 mb-3">No courses yet</h3>
+            <h2 className="text-2xl font-bold text-gray-900 mb-3">No courses yet</h2>
             <p className="text-gray-600 mb-8 text-lg">
               Create your first course to start teaching
             </p>
@@ -463,12 +469,11 @@ const ManageCoursesPage = () => {
             </Link>
           </div>
         ) : (
-          // No Results State
           <div className="card text-center py-16 shadow-lg max-w-md mx-auto">
             <div className="w-20 h-20 bg-gradient-to-br from-gray-100 to-gray-200 rounded-full flex items-center justify-center mx-auto mb-6">
               <Search className="w-10 h-10 text-gray-600" />
             </div>
-            <h3 className="text-2xl font-bold text-gray-900 mb-3">No courses found</h3>
+            <h2 className="text-2xl font-bold text-gray-900 mb-3">No courses found</h2>
             <p className="text-gray-600 mb-8 text-lg">
               Try adjusting your search or filter criteria
             </p>
@@ -485,7 +490,6 @@ const ManageCoursesPage = () => {
           </div>
         )}
 
-        {/* Help Card */}
         {courses.length > 0 && (
           <div className="card bg-gradient-to-r from-blue-50 to-blue-100 border-2 border-blue-200 mt-8 shadow-lg">
             <div className="flex items-start gap-4">
@@ -493,7 +497,7 @@ const ManageCoursesPage = () => {
                 <TrendingUp className="w-6 h-6 text-blue-600" />
               </div>
               <div>
-                <h3 className="font-bold text-lg text-gray-900 mb-3">Tips to Improve Your Courses</h3>
+                <h2 className="font-bold text-lg text-gray-900 mb-3">Tips to Improve Your Courses</h2>
                 <ul className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm text-gray-700">
                   <li className="flex items-start">
                     <CheckCircle className="w-4 h-4 mr-2 mt-0.5 text-green-600 flex-shrink-0" />
@@ -530,7 +534,7 @@ const ManageCoursesPage = () => {
         isOpen={isQuickStartOpen}
         onClose={() => {
           setIsQuickStartOpen(false);
-          fetchMyCourses();
+          void fetchMyCourses();
         }}
       />
 

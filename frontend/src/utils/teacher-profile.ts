@@ -1,7 +1,7 @@
 const PROFILE_STATUS_INCOMPLETE = 'INCOMPLETE';
 const PROFILE_STATUS_PENDING_REVIEW = 'PENDING_REVIEW';
-export const PROFILE_STATUS_APPROVED = 'APPROVED';
-export const LEGACY_PROFILE_STATUS_COMPLETE = 'COMPLETE';
+const PROFILE_STATUS_APPROVED = 'APPROVED';
+const LEGACY_PROFILE_STATUS_COMPLETE = 'COMPLETE';
 
 export const normalizeTeacherProfileCompletionStatus = (
   status?: string | null
@@ -12,3 +12,9 @@ export const normalizeTeacherProfileCompletionStatus = (
 
   return status ?? PROFILE_STATUS_INCOMPLETE;
 };
+
+export const isApprovedTeacherProfileStatus = (status?: string | null): boolean =>
+  normalizeTeacherProfileCompletionStatus(status) === PROFILE_STATUS_APPROVED;
+
+export const isPendingTeacherProfileStatus = (status?: string | null): boolean =>
+  normalizeTeacherProfileCompletionStatus(status) === PROFILE_STATUS_PENDING_REVIEW;

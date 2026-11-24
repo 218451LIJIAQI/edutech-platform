@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react';
 import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '@/store/auth-store';
-import { UserRole } from '@/types';
 import { usePageTitle, useTimeoutManager } from '@/hooks';
 import { extractErrorMessage } from '@/utils/error-handler';
+import { getHomePathForRole, isValidEmail } from '@/utils/helpers';
 import { BookOpen, AlertCircle, Mail, Lock, ArrowRight, Sparkles, Eye, EyeOff } from 'lucide-react';
 import PageLoader from '@/components/common/PageLoader';
 import { getAccessToken, hasRecoverableAuthState } from '@/utils/auth-storage';
@@ -55,8 +55,7 @@ const LoginPage = () => {
       return false;
     }
 
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email)) {
+    if (!isValidEmail(email)) {
       setError('Please enter a valid email address');
       return false;
     }
@@ -85,30 +84,12 @@ const LoginPage = () => {
     setIsLoading(true);
 
     try {
-      await login({ email, password });
+      await login({ email: email.trim(), password });
 
-      // Get user role after login completes
       const currentUser = useAuthStore.getState().user;
-      const userRole = currentUser?.role;
-      if (candidatePreviousPath) {
-        navigate(candidatePreviousPath, { replace: true });
-        return;
-      }
-
-      // Redirect based on user role
-      switch (userRole) {
-        case UserRole.ADMIN:
-          navigate('/admin', { replace: true });
-          break;
-        case UserRole.TEACHER:
-          navigate('/teacher', { replace: true });
-          break;
-        case UserRole.STUDENT:
-          navigate('/student', { replace: true });
-          break;
-        default:
-          navigate('/', { replace: true });
-      }
+      navigate(candidatePreviousPath ?? getHomePathForRole(currentUser?.role), {
+        replace: true,
+      });
     } catch (error: unknown) {
       setError(extractErrorMessage(error, 'Login failed, please try again'));
     } finally {
@@ -121,19 +102,12 @@ const LoginPage = () => {
   }
 
   if (isSessionReady && user) {
-    if (candidatePreviousPath) {
-      return <Navigate to={candidatePreviousPath} replace />;
-    }
-    switch (user.role) {
-      case UserRole.ADMIN:
-        return <Navigate to="/admin" replace />;
-      case UserRole.TEACHER:
-        return <Navigate to="/teacher" replace />;
-      case UserRole.STUDENT:
-        return <Navigate to="/student" replace />;
-      default:
-        return <Navigate to="/" replace />;
-    }
+    return (
+      <Navigate
+        to={candidatePreviousPath ?? getHomePathForRole(user.role)}
+        replace
+      />
+    );
   }
 
   return (

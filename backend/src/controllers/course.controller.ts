@@ -233,21 +233,21 @@ class CourseController {
       requireAuthUserId(req),
       parseRequiredParam(req.params.id, "Course ID"),
       {
-        title: parseOptionalString(
-          req.body?.title,
-          "title",
-          COURSE_FIELD_LIMITS.COURSE_TITLE_MAX,
-        ),
-        description: parseOptionalString(
-          req.body?.description,
-          "description",
-          COURSE_FIELD_LIMITS.COURSE_DESCRIPTION_MAX,
-        ),
-        category: parseOptionalString(
-          req.body?.category,
-          "category",
-          COURSE_FIELD_LIMITS.COURSE_CATEGORY_MAX,
-        ),
+        title: parseOptionalString(req.body?.title, "title", {
+          maxLength: COURSE_FIELD_LIMITS.COURSE_TITLE_MAX,
+          rejectBlank: true,
+          rejectNull: true,
+        }),
+        description: parseOptionalString(req.body?.description, "description", {
+          maxLength: COURSE_FIELD_LIMITS.COURSE_DESCRIPTION_MAX,
+          rejectBlank: true,
+          rejectNull: true,
+        }),
+        category: parseOptionalString(req.body?.category, "category", {
+          maxLength: COURSE_FIELD_LIMITS.COURSE_CATEGORY_MAX,
+          rejectBlank: true,
+          rejectNull: true,
+        }),
         courseType: parseOptionalEnum(
           req.body?.courseType,
           CourseType,
@@ -314,11 +314,11 @@ class CourseController {
       requireAuthUserId(req),
       parseRequiredParam(req.params.id, "Lesson ID"),
       {
-        title: parseOptionalString(
-          req.body?.title,
-          "title",
-          COURSE_FIELD_LIMITS.LESSON_TITLE_MAX,
-        ),
+        title: parseOptionalString(req.body?.title, "title", {
+          maxLength: COURSE_FIELD_LIMITS.LESSON_TITLE_MAX,
+          rejectBlank: true,
+          rejectNull: true,
+        }),
         description: parseNullableString(
           req.body?.description,
           "description",
@@ -339,6 +339,7 @@ class CourseController {
         orderIndex: parseNumber(req.body?.orderIndex, "orderIndex", {
           min: 1,
           integer: true,
+          rejectNull: true,
         }),
       },
     );
@@ -477,7 +478,10 @@ class CourseController {
   });
 
   updatePackage = asyncHandler(async (req: Request, res: Response) => {
-    const price = parseNumber(req.body?.price, "price", { min: 0 });
+    const price = parseNumber(req.body?.price, "price", {
+      min: 0,
+      rejectNull: true,
+    });
     const discount = parseNullableNumber(req.body?.discount, "discount", {
       min: 0,
     });
@@ -487,11 +491,11 @@ class CourseController {
       requireAuthUserId(req),
       parseRequiredParam(req.params.id, "Package ID"),
       {
-        name: parseOptionalString(
-          req.body?.name,
-          "name",
-          COURSE_FIELD_LIMITS.PACKAGE_NAME_MAX,
-        ),
+        name: parseOptionalString(req.body?.name, "name", {
+          maxLength: COURSE_FIELD_LIMITS.PACKAGE_NAME_MAX,
+          rejectBlank: true,
+          rejectNull: true,
+        }),
         description: parseNullableString(
           req.body?.description,
           "description",
@@ -507,9 +511,12 @@ class CourseController {
           min: 1,
           integer: true,
         }),
-        features: parseStringArray(req.body?.features, "features", {
-          maxItems: MAX_FEATURES,
-        }),
+        features:
+          req.body?.features === null
+            ? []
+            : parseStringArray(req.body?.features, "features", {
+                maxItems: MAX_FEATURES,
+              }),
         isActive: parseOptionalBoolean(req.body?.isActive, "isActive"),
       },
     );
@@ -567,29 +574,30 @@ class CourseController {
       requireAuthUserId(req),
       parseRequiredParam(req.params.id, "Material ID"),
       {
-        title: parseOptionalString(
-          req.body?.title,
-          "title",
-          COURSE_FIELD_LIMITS.MATERIAL_TITLE_MAX,
-        ),
+        title: parseOptionalString(req.body?.title, "title", {
+          maxLength: COURSE_FIELD_LIMITS.MATERIAL_TITLE_MAX,
+          rejectBlank: true,
+          rejectNull: true,
+        }),
         description: parseNullableString(
           req.body?.description,
           "description",
           COURSE_FIELD_LIMITS.MATERIAL_DESCRIPTION_MAX,
         ),
-        fileUrl: parseOptionalString(
-          req.body?.fileUrl,
-          "fileUrl",
-          MAX_URL_OR_PATH_LENGTH,
-        ),
-        fileType: parseOptionalString(
-          req.body?.fileType,
-          "fileType",
-          COURSE_FIELD_LIMITS.MATERIAL_FILE_TYPE_MAX,
-        ),
+        fileUrl: parseOptionalString(req.body?.fileUrl, "fileUrl", {
+          maxLength: MAX_URL_OR_PATH_LENGTH,
+          rejectBlank: true,
+          rejectNull: true,
+        }),
+        fileType: parseOptionalString(req.body?.fileType, "fileType", {
+          maxLength: COURSE_FIELD_LIMITS.MATERIAL_FILE_TYPE_MAX,
+          rejectBlank: true,
+          rejectNull: true,
+        }),
         fileSize: parseNumber(req.body?.fileSize, "fileSize", {
           min: 0,
           integer: true,
+          rejectNull: true,
         }),
         isDownloadable: parseOptionalBoolean(
           req.body?.isDownloadable,

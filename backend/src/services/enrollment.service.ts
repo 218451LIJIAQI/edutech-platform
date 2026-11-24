@@ -557,7 +557,7 @@ class EnrollmentService {
   async getCourseStats(userId: string, courseId: string) {
     const course = await requireTeacherOwnedCourse(userId, courseId);
 
-    const [enrollments, totalLessons] = await Promise.all([
+    const [enrollments, lessons] = await Promise.all([
       prisma.enrollment.findMany({
         where: buildCurrentEnrollmentWhere(
           {
@@ -568,49 +568,112 @@ class EnrollmentService {
           new Date(),
         ),
         select: {
+          userId: true,
           progress: true,
           completedLessons: true,
+          completedLessonIds: true,
+          enrolledAt: true,
         },
       }),
-      prisma.lesson.count({
+      prisma.lesson.findMany({
         where: {
           courseId: course.id,
         },
+        orderBy: { orderIndex: "asc" },
+        select: { id: true },
       }),
     ]);
 
-    const totalStudents = enrollments.length;
-
-    if (totalStudents === 0) {
-      return {
-        totalStudents: 0,
-        totalLessons,
-        averageProgress: 0,
-        completionRate: 0,
-        totalCompletedLessons: 0,
-      };
-    }
-
-    const totalProgress = enrollments.reduce(
-      (sum, enrollment) => sum + enrollment.progress,
-      0,
+    return summarizeCourseEnrollmentStats(
+      enrollments,
+      lessons.map((lesson) => lesson.id),
     );
-    const totalCompletedLessons = enrollments.reduce(
-      (sum, enrollment) => sum + enrollment.completedLessons,
-      0,
-    );
-    const completedStudents = enrollments.filter(
-      (enrollment) => enrollment.progress >= MAX_PROGRESS,
-    ).length;
-
-    return {
-      totalStudents,
-      totalLessons,
-      averageProgress: Math.round(totalProgress / totalStudents),
-      completionRate: Math.round((completedStudents / totalStudents) * 100),
-      totalCompletedLessons,
-    };
   }
 }
+
+export const summarizeCourseEnrollmentStats = (
+  enrollments: ReadonlyArray<{
+    userId: string;
+    progress: number;
+    completedLessons: number;
+    completedLessonIds?: unknown;
+    enrolledAt?: Date | string;
+  }>,
+  orderedCourseLessonIds: string[],
+) => {
+  const totalLessons = orderedCourseLessonIds.length;
+  const bestByStudent = new Map<
+    string,
+    { progress: number; completedCount: number; enrolledTime: number }
+  >();
+
+  for (const enrollment of enrollments) {
+    const resolvedCompletedCount =
+      totalLessons > 0
+        ? resolveEnrollmentCompletedLessonIds({
+            storedCompletedLessonIds: enrollment.completedLessonIds,
+            completedLessonsCount: enrollment.completedLessons,
+            orderedCourseLessonIds,
+          }).length
+        : Math.max(0, enrollment.completedLessons);
+    const resolvedProgress =
+      totalLessons > 0
+        ? calculateProgressFromLessons(resolvedCompletedCount, totalLessons)
+        : Math.min(MAX_PROGRESS, Math.max(0, Math.round(enrollment.progress)));
+    const enrolledTime = enrollment.enrolledAt
+      ? new Date(enrollment.enrolledAt).getTime()
+      : 0;
+
+    const existing = bestByStudent.get(enrollment.userId);
+    if (
+      !existing ||
+      resolvedProgress > existing.progress ||
+      (resolvedProgress === existing.progress &&
+        resolvedCompletedCount > existing.completedCount) ||
+      (resolvedProgress === existing.progress &&
+        resolvedCompletedCount === existing.completedCount &&
+        enrolledTime > existing.enrolledTime)
+    ) {
+      bestByStudent.set(enrollment.userId, {
+        progress: resolvedProgress,
+        completedCount: resolvedCompletedCount,
+        enrolledTime,
+      });
+    }
+  }
+
+  const studentStats = Array.from(bestByStudent.values());
+  const totalStudents = studentStats.length;
+
+  if (totalStudents === 0) {
+    return {
+      totalStudents: 0,
+      totalLessons,
+      averageProgress: 0,
+      completionRate: 0,
+      totalCompletedLessons: 0,
+    };
+  }
+
+  const totalProgress = studentStats.reduce(
+    (sum, item) => sum + item.progress,
+    0,
+  );
+  const totalCompletedLessons = studentStats.reduce(
+    (sum, item) => sum + item.completedCount,
+    0,
+  );
+  const completedStudents = studentStats.filter(
+    (item) => item.progress >= MAX_PROGRESS,
+  ).length;
+
+  return {
+    totalStudents,
+    totalLessons,
+    averageProgress: Math.round(totalProgress / totalStudents),
+    completionRate: Math.round((completedStudents / totalStudents) * 100),
+    totalCompletedLessons,
+  };
+};
 
 export default new EnrollmentService();

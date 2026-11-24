@@ -15,10 +15,9 @@ import toast from 'react-hot-toast';
 import authService from '@/services/auth.service';
 import { usePageTitle } from '@/hooks';
 import { extractErrorMessage } from '@/utils/error-handler';
+import { hasStrongPasswordComplexity, isValidEmail } from '@/utils/helpers';
 
 type Step = 'email' | 'verify' | 'newPassword' | 'success';
-
-const PASSWORD_COMPLEXITY = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).+$/;
 const canShowDevCodeHint = import.meta.env.DEV;
 
 const ForgotPasswordPage = () => {
@@ -37,10 +36,7 @@ const ForgotPasswordPage = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
 
-  const validateEmail = (value: string): boolean => {
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    return emailRegex.test(value);
-  };
+
 
   const resetVerificationState = () => {
     setVerificationCode('');
@@ -57,7 +53,7 @@ const ForgotPasswordPage = () => {
       return;
     }
 
-    if (!validateEmail(email)) {
+    if (!isValidEmail(email)) {
       setError('Please enter a valid email address');
       return;
     }
@@ -132,7 +128,7 @@ const ForgotPasswordPage = () => {
       return;
     }
 
-    if (!PASSWORD_COMPLEXITY.test(newPassword)) {
+    if (!hasStrongPasswordComplexity(newPassword)) {
       setError('Password must contain uppercase, lowercase, and a number');
       return;
     }
@@ -233,7 +229,7 @@ const ForgotPasswordPage = () => {
                       : 'bg-gray-200 text-gray-500'
                 }`}
               >
-                {['email', 'verify', 'newPassword'].indexOf(step) > idx ? 'v' : idx + 1}
+                {['email', 'verify', 'newPassword'].indexOf(step) > idx ? '✓' : idx + 1}
               </div>
               {idx < 2 && (
                 <div
@@ -250,7 +246,10 @@ const ForgotPasswordPage = () => {
 
         <div className="bg-white/90 backdrop-blur-xl rounded-3xl shadow-2xl shadow-gray-900/5 p-8 border border-gray-100/80">
           {error && (
-            <div className="flex items-center gap-3 bg-danger-50 border border-danger-200/60 text-danger-700 px-4 py-3.5 rounded-xl animate-scaleIn mb-5">
+            <div
+              role="alert"
+              className="flex items-center gap-3 bg-danger-50 border border-danger-200/60 text-danger-700 px-4 py-3.5 rounded-xl animate-scaleIn mb-5"
+            >
               <p className="font-medium text-sm">{error}</p>
             </div>
           )}

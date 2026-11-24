@@ -16,6 +16,7 @@ import {
 import { sanitizeUserPlainText } from "../utils/sanitize-user-content";
 import { assertPackageHasAvailableCapacity } from "./cart.service";
 import { buildCurrentEnrollmentWhere } from "./shared/enrollment-access";
+import { isUniqueConstraintError } from "./shared/service-helpers";
 
 const ORDER_NO_RETRY_ATTEMPTS = 5;
 const MAX_REFUND_NOTE_LENGTH = 1000;
@@ -60,10 +61,6 @@ const refundDetailInclude = {
     },
   },
 } satisfies Prisma.RefundInclude;
-
-const isUniqueConstraintError = (error: unknown) =>
-  error instanceof Prisma.PrismaClientKnownRequestError &&
-  error.code === "P2002";
 
 const normalizeRequiredId = (value: string, fieldName: string): string => {
   const normalized = value?.trim();

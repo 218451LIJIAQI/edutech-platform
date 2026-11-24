@@ -88,3 +88,71 @@ export const formatFileSize = (bytes?: number | null): string => {
 
   return `${Math.max(1, Math.round(bytes / 1024))} KB`;
 };
+
+/**
+ * Normalize an array or JSON-serialized string array into trimmed non-empty strings.
+ */
+export const parseStringArray = (
+  value: unknown,
+  options: { allowSingleStringFallback?: boolean } = {}
+): string[] => {
+  if (Array.isArray(value)) {
+    return value
+      .filter((item): item is string => typeof item === 'string')
+      .map((item) => item.trim())
+      .filter(Boolean);
+  }
+
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) {
+      return [];
+    }
+
+    if (/^[\[{]/.test(trimmed)) {
+      try {
+        const parsed = JSON.parse(trimmed);
+        return Array.isArray(parsed)
+          ? parseStringArray(parsed)
+          : [];
+      } catch {
+        return options.allowSingleStringFallback ? [trimmed] : [];
+      }
+    }
+
+    return options.allowSingleStringFallback ? [trimmed] : [];
+  }
+
+  return [];
+};
+
+const EMAIL_VALIDATION_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const STRONG_PASSWORD_REGEX = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).+$/;
+
+/**
+ * Validate standard email address format after trimming whitespace.
+ */
+export const isValidEmail = (value: string): boolean =>
+  EMAIL_VALIDATION_REGEX.test(value.trim());
+
+/**
+ * Check whether a password includes uppercase, lowercase, and numeric characters.
+ */
+export const hasStrongPasswordComplexity = (value: string): boolean =>
+  STRONG_PASSWORD_REGEX.test(value);
+
+/**
+ * Resolve the default workspace landing route for an authenticated user role.
+ */
+export const getHomePathForRole = (role?: string | null): string => {
+  switch (role) {
+    case 'ADMIN':
+      return '/admin';
+    case 'TEACHER':
+      return '/teacher';
+    case 'STUDENT':
+      return '/student';
+    default:
+      return '/';
+  }
+};

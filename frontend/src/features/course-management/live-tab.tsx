@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   Radio,
@@ -74,52 +74,71 @@ export default function CourseManagementLiveTab({
   const [duration, setDuration] = useState('60');
   const [maxParticipants, setMaxParticipants] = useState('100');
   const [isCreating, setIsCreating] = useState(false);
+  const [scheduleError, setScheduleError] = useState<string | null>(null);
+  const requestIdRef = useRef(0);
 
   const loadSessions = useCallback(async () => {
+    const requestId = ++requestIdRef.current;
     setLoadingSessions(true);
     setLoadError(null);
     try {
       const list = await courseService.getCourseLiveSessions(course.id);
+      if (requestId !== requestIdRef.current) {
+        return;
+      }
       setSessions(list);
     } catch (error) {
+      if (requestId !== requestIdRef.current) {
+        return;
+      }
       clientLogger.error('Failed to load course live sessions:', error);
       setLoadError(extractErrorMessage(error, 'Failed to load live sessions'));
     } finally {
-      setLoadingSessions(false);
+      if (requestId === requestIdRef.current) {
+        setLoadingSessions(false);
+      }
     }
   }, [course.id]);
 
   useEffect(() => {
     void loadSessions();
+    return () => {
+      requestIdRef.current += 1;
+    };
   }, [loadSessions]);
 
   const handleScheduleSession = async (event: React.FormEvent) => {
     event.preventDefault();
     if (isCreating) return;
 
+    const failSchedule = (message: string) => {
+      setScheduleError(message);
+      toast.error(message);
+    };
+
     if (!effectiveLessonId) {
-      toast.error('Please select a live or hybrid lesson');
+      failSchedule('Please select a live or hybrid lesson');
       return;
     }
     const trimmedTitle = title.trim();
     if (trimmedTitle.length < 3) {
-      toast.error('Session title must be at least 3 characters');
+      failSchedule('Session title must be at least 3 characters');
       return;
     }
     if (!scheduledAt) {
-      toast.error('Please select a scheduled date and time');
+      failSchedule('Please select a scheduled date and time');
       return;
     }
 
     const parsedDate = new Date(scheduledAt);
     if (Number.isNaN(parsedDate.getTime())) {
-      toast.error('Please provide a valid scheduled date and time');
+      failSchedule('Please provide a valid scheduled date and time');
       return;
     }
 
     const parsedDuration = Number(duration);
     if (!Number.isInteger(parsedDuration) || parsedDuration < 5 || parsedDuration > 480) {
-      toast.error('Duration must be between 5 and 480 minutes');
+      failSchedule('Duration must be between 5 and 480 minutes');
       return;
     }
 
@@ -128,10 +147,11 @@ export default function CourseManagementLiveTab({
       parsedMax !== undefined &&
       (!Number.isInteger(parsedMax) || parsedMax < 1 || parsedMax > 1000)
     ) {
-      toast.error('Max participants must be between 1 and 1000');
+      failSchedule('Max participants must be between 1 and 1000');
       return;
     }
 
+    setScheduleError(null);
     setIsCreating(true);
     try {
       const created = await courseService.createLiveSession(effectiveLessonId, {
@@ -150,7 +170,7 @@ export default function CourseManagementLiveTab({
       toast.success('Live session scheduled successfully');
     } catch (error) {
       clientLogger.error('Failed to schedule live session:', error);
-      toast.error(extractErrorMessage(error, 'Failed to schedule live session'));
+      failSchedule(extractErrorMessage(error, 'Failed to schedule live session'));
     } finally {
       setIsCreating(false);
     }
@@ -256,6 +276,14 @@ export default function CourseManagementLiveTab({
             <Plus className="h-5 w-5 text-primary-600" />
             Schedule a Live Classroom Session
           </h4>
+          {scheduleError ? (
+            <div
+              role="alert"
+              className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"
+            >
+              {scheduleError}
+            </div>
+          ) : null}
           <div className="grid gap-4 md:grid-cols-2">
             <div>
               <label
@@ -560,6 +588,7 @@ export default function CourseManagementLiveTab({
                     <div className="pt-3 border-t border-slate-100 flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
                       <input
                         type="text"
+                        aria-label="Session replay video URL"
                         value={draftUrl}
                         onChange={(e) =>
                           setRecordingDrafts((prev) => ({

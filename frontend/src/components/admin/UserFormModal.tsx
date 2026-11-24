@@ -16,6 +16,7 @@ import { UserRole, type User } from '@/types';
 import { useOverlayAccessibility } from '@/hooks';
 import clientLogger from '@/utils/logger';
 import { extractErrorMessage, extractFieldErrors } from '@/utils/error-handler';
+import { hasStrongPasswordComplexity, isValidEmail } from '@/utils/helpers';
 
 interface ExtendedUser extends User {
   phone?: string;
@@ -59,8 +60,6 @@ const ROLE_OPTIONS = [
   { value: UserRole.TEACHER, label: 'Teacher' },
 ];
 
-const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const PASSWORD_PATTERN = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).+$/;
 const PHONE_PATTERN = /^[+()0-9\s-]{7,20}$/;
 
 const buildFormDataFromUser = (user?: ExtendedUser): UserFormData => {
@@ -210,7 +209,7 @@ const UserFormModal = ({
 
     if (!email) {
       nextErrors.email = 'Email is required.';
-    } else if (!EMAIL_PATTERN.test(email)) {
+    } else if (!isValidEmail(email)) {
       nextErrors.email = 'Please enter a valid email address.';
     }
 
@@ -219,7 +218,7 @@ const UserFormModal = ({
         nextErrors.password = 'Password is required.';
       } else if (formData.password.length < 8) {
         nextErrors.password = 'Password must be at least 8 characters.';
-      } else if (!PASSWORD_PATTERN.test(formData.password)) {
+      } else if (!hasStrongPasswordComplexity(formData.password)) {
         nextErrors.password =
           'Password must include uppercase, lowercase, and a number.';
       }

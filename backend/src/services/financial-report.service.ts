@@ -17,16 +17,6 @@ import {
   type TeacherSettlement,
 } from "./shared/settlement-calculator";
 
-export {
-  computeTeacherSettlementsSummary,
-  resolvePaymentCommissionBreakdown,
-  resolveRefundCommissionBreakdown,
-  type SettlementPaymentRecord,
-  type SettlementPendingPayoutRecord,
-  type SettlementRefundRecord,
-  type SettlementTeacherRecord,
-  type TeacherSettlement,
-} from "./shared/settlement-calculator";
 
 interface DateRangeFilter {
   startDate?: string;

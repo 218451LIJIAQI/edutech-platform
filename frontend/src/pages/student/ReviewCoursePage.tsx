@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import clientLogger from '@/utils/logger';
 import { useParams, useNavigate } from 'react-router-dom';
 import { AlertCircle, Star, ArrowLeft, RefreshCcw, Send, CheckCircle } from 'lucide-react';
@@ -25,9 +25,12 @@ const ReviewCoursePage = () => {
   const [rating, setRating] = useState(0);
   const [hoverRating, setHoverRating] = useState(0);
   const [comment, setComment] = useState('');
+  const [validationError, setValidationError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const requestIdRef = useRef(0);
+
   usePageTitle(course ? `Review ${course.title}` : 'Review Course');
 
   const fetchData = useCallback(async () => {
@@ -37,10 +40,14 @@ const ReviewCoursePage = () => {
       return;
     }
 
+    const requestId = ++requestIdRef.current;
     setIsLoading(true);
     setLoadError(null);
     try {
       const courseData = await courseService.getCourseById(courseId);
+      if (requestId !== requestIdRef.current) {
+        return;
+      }
       setCourse(courseData);
 
       const [enrollments, myReviews, teacherReviews] = await Promise.all([
@@ -48,6 +55,10 @@ const ReviewCoursePage = () => {
         reviewService.getMyReviews(),
         reviewService.getCourseReviews(courseId, { limit: 20 }),
       ]);
+      if (requestId !== requestIdRef.current) {
+        return;
+      }
+
       const currentEnrollment = selectPreferredCourseEnrollment(enrollments, courseId);
 
       if (!currentEnrollment) {
@@ -74,38 +85,47 @@ const ReviewCoursePage = () => {
       setEnrollment(currentEnrollment);
       setCourseReviews(teacherReviews.reviews.filter((item) => item.isPublished));
     } catch (error) {
+      if (requestId !== requestIdRef.current) {
+        return;
+      }
       clientLogger.error('Failed to fetch data:', error);
       const message = extractErrorMessage(error, 'Failed to load course');
       setLoadError(message);
       toast.error(message);
     } finally {
-      setIsLoading(false);
+      if (requestId === requestIdRef.current) {
+        setIsLoading(false);
+      }
     }
   }, [courseId, navigate]);
 
   useEffect(() => {
     void fetchData();
+    return () => {
+      requestIdRef.current += 1;
+    };
   }, [fetchData]);
 
   const handleSubmitReview = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (rating === 0) {
-      toast.error('Please select a rating');
+      setValidationError('Please select a star rating between 1 and 5.');
       return;
     }
 
     const trimmed = comment.trim();
     if (trimmed.length < 50) {
-      toast.error('Please write at least 50 characters');
+      setValidationError('Please write at least 50 characters describing your learning experience.');
       return;
     }
 
     if (!enrollment) {
-      toast.error('Enrollment not found');
+      setValidationError('Enrollment not found.');
       return;
     }
 
+    setValidationError(null);
     setIsSubmitting(true);
     try {
       await reviewService.createReview(enrollment.id, rating, trimmed);
@@ -113,7 +133,9 @@ const ReviewCoursePage = () => {
       navigate('/student/courses');
     } catch (error) {
       clientLogger.error('Failed to submit review:', error);
-      toast.error(extractErrorMessage(error, 'Failed to submit review. Please try again.'));
+      const message = extractErrorMessage(error, 'Failed to submit review. Please try again.');
+      setValidationError(message);
+      toast.error(message);
     } finally {
       setIsSubmitting(false);
     }
@@ -141,10 +163,10 @@ const ReviewCoursePage = () => {
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-primary-50/10 to-indigo-50/20">
         <div className="flex flex-col items-center space-y-4">
           <div className="relative">
-            <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-primary-500 to-indigo-600 animate-pulse flex items-center justify-center">
+            <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-primary-500 to-indigo-600 animate-pulse motion-reduce:animate-none flex items-center justify-center">
               <Star className="w-8 h-8 text-white" />
             </div>
-            <div className="absolute inset-0 rounded-2xl bg-primary-500/20 animate-ping"></div>
+            <div className="absolute inset-0 rounded-2xl bg-primary-500/20 animate-ping motion-reduce:animate-none"></div>
           </div>
           <p className="text-gray-600 font-medium">Loading course...</p>
         </div>
@@ -235,29 +257,39 @@ const ReviewCoursePage = () => {
                 />
               )}
               <div className="flex-1">
-                <h1 className="text-3xl font-bold mb-3 text-gray-900">{course.title}</h1>
-                <p className="text-gray-600 text-lg">
-                  by {course.teacherProfile?.user?.firstName} {course.teacherProfile?.user?.lastName}
+                <h2 className="text-2xl font-bold mb-2 text-gray-900">{course.title}</h2>
+                <p className="text-gray-600 text-base">
+                  by {[course.teacherProfile?.user?.firstName, course.teacherProfile?.user?.lastName].filter(Boolean).join(' ') || 'Instructor'}
                 </p>
               </div>
             </div>
 
-            <form onSubmit={handleSubmitReview} className="space-y-8">
-              <div>
-                <h2 className="text-2xl font-bold mb-6 text-gray-900">
-                  How would you rate this course?
-                </h2>
+            <form onSubmit={handleSubmitReview} className="space-y-8" noValidate>
+              {validationError && (
+                <div role="alert" className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+                  {validationError}
+                </div>
+              )}
 
-                <div className="flex items-center justify-center space-x-3 mb-4">
+              <div>
+                <h3 className="text-xl font-bold mb-6 text-gray-900">
+                  How would you rate this course? <span className="text-red-600">*</span>
+                </h3>
+
+                <div className="flex items-center justify-center space-x-3 mb-4" role="radiogroup" aria-label="Course star rating">
                   {[1, 2, 3, 4, 5].map((starValue) => (
                     <button
                       key={starValue}
                       type="button"
-                      onClick={() => setRating(starValue)}
+                      onClick={() => {
+                        setRating(starValue);
+                        setValidationError(null);
+                      }}
                       onMouseEnter={() => setHoverRating(starValue)}
                       onMouseLeave={() => setHoverRating(0)}
                       className="rounded-lg p-1 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-600 transition-transform hover:scale-110 active:scale-95"
                       aria-label={`Rate ${starValue} star${starValue > 1 ? 's' : ''}`}
+                      aria-pressed={rating === starValue}
                     >
                       <Star
                         className={`w-12 h-12 ${
@@ -270,20 +302,26 @@ const ReviewCoursePage = () => {
                   ))}
                 </div>
 
-                <div className="text-center">
+                <div className="text-center min-h-[32px]">
                   {rating > 0 && (
-                    <p className="text-2xl font-bold text-primary-600">{getRatingLabel(rating)}</p>
+                    <p className="text-xl font-bold text-primary-600">{getRatingLabel(rating)}</p>
                   )}
                 </div>
               </div>
 
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-3">
-                  Share your experience with this course *
+                <label htmlFor="course-review-comment" className="block text-sm font-semibold text-gray-700 mb-3">
+                  Share your experience with this course <span className="text-red-600">*</span>
                 </label>
                 <textarea
+                  id="course-review-comment"
                   value={comment}
-                  onChange={(e) => setComment(e.target.value)}
+                  onChange={(e) => {
+                    setComment(e.target.value);
+                    if (validationError) {
+                      setValidationError(null);
+                    }
+                  }}
                   rows={8}
                   className="input"
                   placeholder="What did you like or dislike about this course? What did you learn? Would you recommend it to others?"
@@ -291,8 +329,8 @@ const ReviewCoursePage = () => {
                   required
                 />
                 <p
-                  className={`text-xs mt-2 font-medium ${
-                    comment.trim().length >= 50 ? 'text-green-600' : 'text-gray-500'
+                  className={`text-xs mt-2 font-medium tabular-nums ${
+                    comment.trim().length >= 50 ? 'text-green-700' : 'text-gray-500'
                   }`}
                 >
                   Minimum 50 characters ({comment.trim().length}/50)
@@ -327,13 +365,8 @@ const ReviewCoursePage = () => {
                 </button>
                 <button
                   type="submit"
-                  disabled={isSubmitting || rating === 0 || comment.trim().length < 50}
-                  className="btn-primary btn-lg disabled:opacity-50 disabled:cursor-not-allowed"
-                  title={
-                    rating === 0 || comment.trim().length < 50
-                      ? 'Select a rating and write at least 50 characters to enable submit'
-                      : ''
-                  }
+                  disabled={isSubmitting}
+                  className="btn-primary btn-lg"
                 >
                   {isSubmitting ? (
                     <span className="flex items-center">
@@ -352,13 +385,11 @@ const ReviewCoursePage = () => {
           </div>
 
           <div className="card mt-8 shadow-lg">
-            <h3 className="text-2xl font-bold mb-6 text-gray-900">What others are saying</h3>
+            <h2 className="text-2xl font-bold mb-6 text-gray-900">What others are saying</h2>
             {courseReviews.length === 0 ? (
-              <div className="space-y-4">
-                <div className="text-center py-12">
-                  <Star className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-                  <p className="text-gray-500 text-lg">Be the first to review this course!</p>
-                </div>
+              <div className="text-center py-12">
+                <Star className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+                <p className="text-gray-500 text-lg">Be the first to review this course!</p>
               </div>
             ) : (
               <div className="space-y-4">
@@ -369,7 +400,7 @@ const ReviewCoursePage = () => {
                         <p className="font-semibold text-gray-900">
                           {[review.reviewer?.firstName, review.reviewer?.lastName].filter(Boolean).join(' ') || 'Student'}
                         </p>
-                        <p className="text-sm text-gray-500">
+                        <p className="text-sm text-gray-500 tabular-nums">
                           {new Date(review.createdAt).toLocaleDateString()}
                         </p>
                       </div>

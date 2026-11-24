@@ -83,6 +83,7 @@ export default function AdminPayoutsPanel({
   } | null>(null);
   const [adminNote, setAdminNote] = useState('');
   const [externalReference, setExternalReference] = useState('');
+  const [modalError, setModalError] = useState<string | null>(null);
   const modalRef = useRef<HTMLDivElement | null>(null);
   const firstInputRef = useRef<HTMLInputElement | HTMLTextAreaElement | null>(null);
   const requestIdRef = useRef(0);
@@ -92,6 +93,7 @@ export default function AdminPayoutsPanel({
     setModalAction(null);
     setAdminNote('');
     setExternalReference('');
+    setModalError(null);
   }, [submittingId]);
 
   useOverlayAccessibility({
@@ -131,6 +133,9 @@ export default function AdminPayoutsPanel({
 
   useEffect(() => {
     void loadPayouts();
+    return () => {
+      requestIdRef.current += 1;
+    };
   }, [loadPayouts, refreshKey]);
 
   const executeReview = async (
@@ -158,11 +163,14 @@ export default function AdminPayoutsPanel({
       setModalAction(null);
       setAdminNote('');
       setExternalReference('');
+      setModalError(null);
       await loadPayouts();
       onPayoutUpdated?.();
     } catch (error) {
       clientLogger.error('Failed to review payout:', error);
-      toast.error(extractErrorMessage(error, 'Failed to update payout status'));
+      const message = extractErrorMessage(error, 'Failed to update payout status');
+      setModalError(message);
+      toast.error(message);
     } finally {
       setSubmittingId(null);
     }
@@ -171,14 +179,19 @@ export default function AdminPayoutsPanel({
   const handleModalSubmit = async () => {
     if (!modalAction || submittingId) return;
     if (modalAction.action === 'reject' && !adminNote.trim()) {
-      toast.error('Please enter an admin note explaining why the payout was rejected');
+      const message = 'Please enter an admin note explaining why the payout was rejected';
+      setModalError(message);
+      toast.error(message);
       return;
     }
     if (modalAction.action === 'paid' && !externalReference.trim()) {
-      toast.error('Please enter the bank or payment transfer reference number');
+      const message = 'Please enter the bank or payment transfer reference number';
+      setModalError(message);
+      toast.error(message);
       return;
     }
 
+    setModalError(null);
     await executeReview(modalAction.payout.id, modalAction.action, {
       adminNote: adminNote.trim() || undefined,
       externalReference: externalReference.trim() || undefined,
@@ -429,6 +442,7 @@ export default function AdminPayoutsPanel({
                               setModalAction({ payout, action: 'paid' });
                               setAdminNote('');
                               setExternalReference('');
+                              setModalError(null);
                             }}
                             className="btn-primary btn-sm"
                           >
@@ -446,6 +460,7 @@ export default function AdminPayoutsPanel({
                               setModalAction({ payout, action: 'reject' });
                               setAdminNote('');
                               setExternalReference('');
+                              setModalError(null);
                             }}
                             className="btn-outline btn-sm text-red-600 border-red-200 hover:bg-red-50"
                           >
@@ -522,6 +537,15 @@ export default function AdminPayoutsPanel({
                 <X className="w-5 h-5" />
               </button>
             </div>
+
+            {modalError ? (
+              <div
+                role="alert"
+                className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"
+              >
+                {modalError}
+              </div>
+            ) : null}
 
             <div className="rounded-xl bg-slate-50 border border-slate-200 p-3 text-sm text-slate-700 space-y-1">
               <p className="tabular-nums">

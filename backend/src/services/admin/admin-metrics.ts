@@ -4,10 +4,12 @@ import {
   type Prisma,
 } from "@prisma/client";
 import {
+  allocateOrderItemAmounts,
   calculatePlatformCommission,
   calculateTeacherNetEarning,
+  roundMoney,
+  toNumber as decimalToNumber,
 } from "../shared/payment-utils";
-import { roundCurrency } from "../shared/settlement-calculator";
 
 export const recentUserSelect = {
   id: true,
@@ -171,23 +173,11 @@ type RecentPaymentRecord = Prisma.PaymentGetPayload<{
   select: typeof recentPaymentSelect;
 }>;
 
-export type SettlementPaymentRecord = Prisma.PaymentGetPayload<{
+type SettlementPaymentRecord = Prisma.PaymentGetPayload<{
   include: typeof settlementPaymentInclude;
 }>;
 
 type RevenueGroupBy = "day" | "week" | "month";
-
-const decimalToNumber = (
-  value: Prisma.Decimal | number | null | undefined,
-): number => {
-  if (value === null || value === undefined) {
-    return 0;
-  }
-
-  return typeof value === "number" ? value : value.toNumber();
-};
-
-const roundMoney = roundCurrency;
 
 const formatMoney = (value: Prisma.Decimal | number | null | undefined) => {
   return roundMoney(decimalToNumber(value)).toFixed(2);
@@ -522,17 +512,8 @@ const getNetOrderItemsWithSplits = (
     return [];
   }
 
-  let allocatedRefund = 0;
-  return items.map((item, index) => {
-    const isLastItem = index === items.length - 1;
-    const itemPrice = roundMoney(Math.max(0, decimalToNumber(item.finalPrice)));
-    const itemRefundPortion =
-      completedRefundTotal > 0 && orderItemsTotal > 0
-        ? isLastItem
-          ? roundMoney(completedRefundTotal - allocatedRefund)
-          : roundMoney((itemPrice / orderItemsTotal) * completedRefundTotal)
-        : 0;
-    allocatedRefund = roundMoney(allocatedRefund + itemRefundPortion);
+  return allocateOrderItemAmounts(items, completedRefundTotal).map(
+    ({ item, itemPrice, allocatedAmount: itemRefundPortion }) => {
 
     const netGross = Math.max(0, roundMoney(itemPrice - itemRefundPortion));
     const teacherProfile = item.package.course?.teacherProfile ?? null;

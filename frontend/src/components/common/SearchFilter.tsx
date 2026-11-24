@@ -19,6 +19,7 @@ interface SearchFilterProps {
   onFilterChange?: (filters: Record<string, string>) => void;
   initialFilters?: Record<string, string>;
   debounceMs?: number;
+  resetSignal?: number;
 }
 
 const safelyParseFilters = (serializedFilters: string): Record<string, string> => {
@@ -48,6 +49,7 @@ const SearchFilter = ({
   onFilterChange,
   initialFilters = {},
   debounceMs = 300,
+  resetSignal,
 }: SearchFilterProps) => {
   const searchInputId = useId();
   const filterPanelId = useId();
@@ -63,6 +65,14 @@ const SearchFilter = ({
   useEffect(() => {
     setSelectedFilters(safelyParseFilters(serializedInitialFilters));
   }, [serializedInitialFilters]);
+
+  useEffect(() => {
+    if (resetSignal === undefined || resetSignal === 0) {
+      return;
+    }
+    setSearchQuery('');
+    setSelectedFilters({});
+  }, [resetSignal]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -162,7 +172,7 @@ const SearchFilter = ({
             <span>Filters</span>
 
             {activeFilterCount > 0 && (
-              <span className="rounded-full bg-primary-600 px-2 py-0.5 text-xs font-semibold text-white">
+              <span className="rounded-full bg-primary-600 px-2 py-0.5 text-xs font-semibold text-white tabular-nums">
                 {activeFilterCount}
               </span>
             )}

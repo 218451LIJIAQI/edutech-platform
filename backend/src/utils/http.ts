@@ -126,7 +126,7 @@ export const parseOptionalString = (
   fieldName?: string,
   optionsOrMaxLength?:
     | number
-    | { maxLength?: number; rejectBlank?: boolean },
+    | { maxLength?: number; rejectBlank?: boolean; rejectNull?: boolean },
 ): string | undefined => {
   const options =
     typeof optionsOrMaxLength === "number"
@@ -134,7 +134,14 @@ export const parseOptionalString = (
       : optionsOrMaxLength;
   const raw = getFirstQueryValue(value);
 
-  if (raw === undefined || raw === null) {
+  if (raw === undefined) {
+    return undefined;
+  }
+
+  if (raw === null) {
+    if (options?.rejectNull) {
+      throw new BadRequestError(`${fieldName || "Field"} cannot be null`);
+    }
     return undefined;
   }
 
@@ -250,12 +257,16 @@ export const parseNumber = (
   fieldName: string,
   options?: {
     required?: boolean;
+    rejectNull?: boolean;
     min?: number;
     max?: number;
     integer?: boolean;
   },
 ): number | undefined => {
   const raw = getFirstQueryValue(value);
+  if (raw === null && options?.rejectNull) {
+    throw new BadRequestError(`${fieldName} cannot be null`);
+  }
   if (raw === undefined || raw === null || raw === "") {
     if (options?.required) {
       throw new BadRequestError(`${fieldName} is required`);

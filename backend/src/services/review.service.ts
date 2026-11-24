@@ -7,6 +7,7 @@ import {
 } from "../utils/errors";
 import { isEnrollmentCurrentlyActive } from "./shared/enrollment-access";
 import { sanitizeUserPlainText } from "../utils/sanitize-user-content";
+import { isUniqueConstraintError } from "./shared/service-helpers";
 
 const reviewWithRelationsInclude = {
   reviewer: {
@@ -141,12 +142,6 @@ const normalizeRating = (rating: number): number => {
 
 const normalizeOptionalRating = (rating?: number): number | undefined =>
   rating === undefined ? undefined : normalizeRating(rating);
-
-const isUniqueConstraintError = (error: unknown): boolean =>
-  typeof error === "object" &&
-  error !== null &&
-  "code" in error &&
-  (error as { code?: string }).code === "P2002";
 
 const buildTeacherReviewWhere = (
   teacherProfileId: string,

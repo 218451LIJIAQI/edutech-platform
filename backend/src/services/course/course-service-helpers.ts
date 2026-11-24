@@ -552,7 +552,8 @@ const mapMaterialAccessForViewer = <
 ) => {
   const internalUploadPath = extractUploadPathFromUrlOrPath(material.fileUrl);
   const canAccessMaterial =
-    material.isDownloadable && options.canAccessPaidContent;
+    options.canManageMaterials ||
+    (material.isDownloadable && options.canAccessPaidContent);
 
   return {
     ...material,

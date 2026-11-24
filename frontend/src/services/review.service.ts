@@ -3,7 +3,7 @@ import { Review, ApiResponse } from '@/types';
 import { extractData } from './response-utils';
 import { normalizeReviewAssets } from '@/utils/asset-normalizers';
 
-export interface TeacherReviewListResponse {
+interface TeacherReviewListResponse {
   reviews: Review[];
   pagination: {
     total: number;

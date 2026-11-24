@@ -29,6 +29,7 @@ import messageService from '@/services/message.service';
 import clientLogger from '@/utils/logger';
 import { getAccessToken, hasRecoverableAuthState } from '@/utils/auth-storage';
 import { normalizeTeacherProfileCompletionStatus } from '@/utils/teacher-profile';
+import { getHomePathForRole } from '@/utils/helpers';
 
 type NavItem = {
   to: string;
@@ -164,22 +165,12 @@ const Navbar = () => {
   }, [isApprovedTeacher, shouldShowSessionRestoreState, teacherRegistrationStatus, user?.role]);
 
   const getDashboardLink = useCallback(() => {
-    switch (user?.role) {
-      case UserRole.STUDENT:
-        return '/student';
-      case UserRole.TEACHER:
-        if (isApprovedTeacher) {
-          return '/teacher';
-        }
-
-        return teacherRegistrationStatus === 'APPROVED'
-          ? '/teacher/profile-completion'
-          : '/teacher/pending';
-      case UserRole.ADMIN:
-        return '/admin';
-      default:
-        return '/';
+    if (user?.role === UserRole.TEACHER && !isApprovedTeacher) {
+      return teacherRegistrationStatus === 'APPROVED'
+        ? '/teacher/profile-completion'
+        : '/teacher/pending';
     }
+    return getHomePathForRole(user?.role);
   }, [isApprovedTeacher, teacherRegistrationStatus, user?.role]);
 
   const isActive = useCallback(
@@ -268,9 +259,9 @@ const Navbar = () => {
       )}
     >
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex min-h-16 flex-wrap items-center justify-between gap-3 py-2">
+        <div className="flex min-h-16 flex-wrap items-center justify-between gap-x-2.5 gap-y-2 py-2">
           {/* Logo */}
-          <Link to="/" aria-label="Go to home page" className="flex items-center gap-3 group shrink-0">
+          <Link to="/" aria-label="Go to home page" className="flex items-center gap-2.5 group shrink-0">
             <div
               className={clsx(
                 'relative p-2.5 rounded-xl shadow-lg transition-all duration-300 group-hover:scale-105',
@@ -293,12 +284,13 @@ const Navbar = () => {
             </div>
           </Link>
 
-          {/* Desktop Navigation (wraps cleanly under narrower desktop windows or browser zoom) */}
+          {/* Desktop Navigation (single row at 1280px+, wraps gracefully under high browser zoom) */}
           {navItems.length > 0 && (
             <div className="flex items-center">
               <div
                 className={clsx(
-                  'flex flex-wrap items-center gap-1 rounded-2xl p-1',
+                  'flex flex-wrap items-center rounded-2xl p-1',
+                  navItems.length > 6 ? 'gap-0.5' : 'gap-1',
                   isSessionReady ? 'bg-gray-100/80' : ''
                 )}
               >
@@ -312,14 +304,17 @@ const Navbar = () => {
                       to={item.to}
                       aria-current={active ? 'page' : undefined}
                       className={clsx(
-                        'flex items-center gap-1.5 rounded-xl px-2.5 py-1.5 text-xs xl:text-sm font-medium transition-all duration-200 whitespace-nowrap',
+                        'flex items-center rounded-xl py-1.5 font-medium transition-all duration-200 whitespace-nowrap',
+                        navItems.length > 6
+                          ? 'gap-1 px-2 text-xs'
+                          : 'gap-1.5 px-2.5 text-xs xl:text-sm',
                         active
                           ? `bg-white shadow-sm ${theme.text}`
                           : 'text-gray-600 hover:bg-white/60 hover:text-gray-900',
                         item.highlight && !active && `${theme.text} font-semibold`
                       )}
                     >
-                      <Icon className={clsx('h-4 w-4', item.highlight && 'animate-pulse')} aria-hidden="true" />
+                      <Icon className={clsx('h-4 w-4 shrink-0', item.highlight && 'animate-pulse motion-reduce:animate-none')} aria-hidden="true" />
                       {item.label}
                     </Link>
                   );
@@ -329,7 +324,7 @@ const Navbar = () => {
           )}
 
           {/* Right Section */}
-          <div className="flex items-center gap-1 shrink-0">
+          <div className="ml-auto sm:ml-0 flex items-center gap-1 shrink-0">
             {shouldShowSessionRestoreState ? (
               <div className="flex items-center gap-3 pl-3">
                 <div
@@ -398,20 +393,22 @@ const Navbar = () => {
                   </div>
                 )}
 
-                <div className="ml-2 flex items-center gap-1 border-l border-gray-200 pl-2">
-                  <Link
-                    to={getDashboardLink()}
-                    aria-label="Dashboard"
-                    className="flex rounded-xl p-2 text-gray-500 transition-all duration-200 hover:bg-gray-100 hover:text-gray-700"
-                    title="Dashboard"
-                  >
-                    <LayoutDashboard className="h-5 w-5" aria-hidden="true" />
-                  </Link>
+                <div className="ml-1.5 flex items-center gap-1 border-l border-gray-200 pl-2">
+                  {user?.role !== UserRole.ADMIN && (
+                    <Link
+                      to={getDashboardLink()}
+                      aria-label="Dashboard"
+                      className="flex rounded-xl p-2 text-gray-500 transition-all duration-200 hover:bg-gray-100 hover:text-gray-700"
+                      title="Dashboard"
+                    >
+                      <LayoutDashboard className="h-5 w-5" aria-hidden="true" />
+                    </Link>
+                  )}
 
                   <Link
                     to="/profile"
                     aria-label="Profile settings"
-                    className="flex items-center gap-2 rounded-xl p-1.5 pr-3 transition-all duration-200 hover:bg-gray-100"
+                    className="flex items-center gap-2 rounded-xl p-1.5 pr-2.5 transition-all duration-200 hover:bg-gray-100"
                   >
                     <div
                       className={clsx(

@@ -5,6 +5,8 @@ import asyncHandler from "../utils/async-handler";
 import { BadRequestError } from "../utils/errors";
 import { sendProtectedAsset } from "../utils/protected-asset";
 import {
+  parseNullableNumber,
+  parseNullableString,
   parseNumber,
   parseOptionalBoolean,
   parseOptionalDate,
@@ -142,13 +144,15 @@ class TeacherController {
     const teacher = await teacherService.updateTeacherProfile(
       requireAuthUserId(req),
       {
-        bio: parseOptionalString(req.body?.bio, "bio", MAX_LONG_TEXT_LENGTH),
-        headline: parseOptionalString(
+        bio: parseNullableString(req.body?.bio, "bio", 1000),
+        headline: parseNullableString(
           req.body?.headline,
           "headline",
           MAX_SHORT_TEXT_LENGTH,
         ),
-        hourlyRate: parseNumber(req.body?.hourlyRate, "hourlyRate", { min: 0 }),
+        hourlyRate: parseNullableNumber(req.body?.hourlyRate, "hourlyRate", {
+          min: 0,
+        }),
       },
     );
     sendSuccess(res, teacher, "Profile updated successfully");

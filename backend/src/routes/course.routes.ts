@@ -10,6 +10,7 @@ import {
   updateCourseValidation,
   createLessonValidation,
   updateLessonValidation,
+  createLiveSessionValidation,
   createPackageValidation,
   updatePackageValidation,
   uploadMaterialValidation,
@@ -80,7 +81,7 @@ router.get(
 router.post(
   "/lessons/:id/live-sessions",
   approvedTeacherOnly,
-  validate(lessonIdParam),
+  validate([lessonIdParam, ...createLiveSessionValidation]),
   courseController.createLiveSession,
 );
 

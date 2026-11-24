@@ -72,17 +72,18 @@ import {
 const SUPERSEDED_PROFILE_SUBMISSION_REVIEW_NOTE =
   "Superseded by a newer profile submission review";
 const TEACHER_CERTIFICATE_UPLOAD_FOLDER = "teacher-certificates";
-const MAX_SHORT_TEXT_LENGTH = 150;
+const MAX_SHORT_TEXT_LENGTH = 200;
+const MAX_BIO_TEXT_LENGTH = 1000;
 const MAX_LONG_TEXT_LENGTH = 5000;
 const MAX_TEXT_LIST_ITEMS = 30;
 
 type ReviewVerificationStatus = "APPROVED" | "REJECTED";
 type ReviewRegistrationStatus = "APPROVED" | "REJECTED";
 
-type TeacherUpdateInput = {
-  bio?: string;
-  headline?: string;
-  hourlyRate?: number;
+export type TeacherUpdateInput = {
+  bio?: string | null;
+  headline?: string | null;
+  hourlyRate?: number | null;
 };
 
 const mapVerificationAccess = <T extends { id: string }>(verification: T) => ({
@@ -250,25 +251,31 @@ const normalizeTeacherExtendedProfileInput = (
   ),
 });
 
-const normalizeTeacherProfileUpdateData = (
+export const normalizeTeacherProfileUpdateData = (
   data: TeacherUpdateInput,
 ): Prisma.TeacherProfileUpdateInput => {
   const updateData: Prisma.TeacherProfileUpdateInput = {};
 
   if (data.bio !== undefined) {
-    updateData.bio = normalizeOptionalTeacherText(data.bio);
+    updateData.bio =
+      data.bio === null
+        ? null
+        : (normalizeOptionalTeacherText(data.bio, MAX_BIO_TEXT_LENGTH) ?? null);
   }
   if (data.headline !== undefined) {
-    updateData.headline = normalizeOptionalTeacherText(
-      data.headline,
-      MAX_SHORT_TEXT_LENGTH,
-    );
+    updateData.headline =
+      data.headline === null
+        ? null
+        : (normalizeOptionalTeacherText(
+            data.headline,
+            MAX_SHORT_TEXT_LENGTH,
+          ) ?? null);
   }
   if (data.hourlyRate !== undefined) {
-    updateData.hourlyRate = normalizeNonNegativeNumber(
-      data.hourlyRate,
-      "Hourly rate",
-    );
+    updateData.hourlyRate =
+      data.hourlyRate === null
+        ? null
+        : normalizeNonNegativeNumber(data.hourlyRate, "Hourly rate");
   }
 
   if (Object.keys(updateData).length === 0) {

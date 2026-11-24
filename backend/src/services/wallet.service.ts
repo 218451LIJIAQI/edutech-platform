@@ -7,9 +7,9 @@ import notificationService from "./notification.service";
 import { sanitizeUserPlainText } from "../utils/sanitize-user-content";
 import { normalizeOffsetPagination } from "./shared/pagination";
 import {
+  allocateOrderItemAmounts,
   calculateTeacherNetEarning,
   roundMoney,
-  toNumber,
 } from "./shared/payment-utils";
 import {
   isUniqueConstraintError,
@@ -314,29 +314,13 @@ const calculateActiveRefundHoldForTeacher = async (
     const refundAmount = roundMoney(refund.amount);
     if (refundAmount <= 0 || !refund.order?.items?.length) continue;
 
-    const totalItemsAmount = roundMoney(
-      refund.order.items.reduce(
-        (sum, item) => sum + Math.max(0, toNumber(item.finalPrice)),
-        0,
-      ),
-    );
-    const proportionalBase =
-      totalItemsAmount > 0
-        ? totalItemsAmount
-        : roundMoney(refund.order.totalAmount);
-    if (proportionalBase <= 0) continue;
-
-    let allocatedRefundAmount = 0;
-    refund.order.items.forEach((item, index) => {
-      const isLastItem = index === refund.order.items.length - 1;
-      const itemPrice = roundMoney(Math.max(0, toNumber(item.finalPrice)));
-      const itemPortion = isLastItem
-        ? roundMoney(refundAmount - allocatedRefundAmount)
-        : roundMoney((itemPrice / proportionalBase) * refundAmount);
-      allocatedRefundAmount = roundMoney(allocatedRefundAmount + itemPortion);
-
+    for (const { item, allocatedAmount: itemPortion } of allocateOrderItemAmounts(
+      refund.order.items,
+      refundAmount,
+      { fallbackBase: refund.order.totalAmount },
+    )) {
       const teacherProfile = item.package?.course?.teacherProfile;
-      if (!teacherProfile || teacherProfile.userId !== userId) return;
+      if (!teacherProfile || teacherProfile.userId !== userId) continue;
 
       const teacherShare = roundMoney(
         calculateTeacherNetEarning(
@@ -348,7 +332,7 @@ const calculateActiveRefundHoldForTeacher = async (
       if (teacherShare > 0) {
         totalHold = roundMoney(totalHold + teacherShare);
       }
-    });
+    }
   }
 
   return totalHold;

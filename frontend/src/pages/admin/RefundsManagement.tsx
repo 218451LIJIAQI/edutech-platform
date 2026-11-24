@@ -19,10 +19,6 @@ import { Refund } from '@/types';
 import { useOverlayAccessibility, usePageTitle } from '@/hooks';
 import { extractErrorMessage } from '@/utils/error-handler';
 
-/**
- * Refunds Management Page Component
- * Admin can view, approve, reject, and process refunds
- */
 const RefundsManagement = () => {
   usePageTitle('Refund Management');
   const [refunds, setRefunds] = useState<Refund[]>([]);
@@ -42,22 +38,23 @@ const RefundsManagement = () => {
     completedRefundAmount: number;
   } | null>(null);
 
-  // Modal state
   const [showApproveModal, setShowApproveModal] = useState(false);
   const [showRejectModal, setShowRejectModal] = useState(false);
   const [approvalNotes, setApprovalNotes] = useState('');
   const [rejectionReason, setRejectionReason] = useState('');
+  const [rejectError, setRejectError] = useState<string | null>(null);
   const refundDetailModalRef = useRef<HTMLDivElement | null>(null);
   const refundDetailCloseButtonRef = useRef<HTMLButtonElement | null>(null);
   const approveModalRef = useRef<HTMLDivElement | null>(null);
   const approveNotesRef = useRef<HTMLTextAreaElement | null>(null);
   const rejectModalRef = useRef<HTMLDivElement | null>(null);
   const rejectReasonRef = useRef<HTMLTextAreaElement | null>(null);
+  const requestIdRef = useRef(0);
 
-  /**
-   * Load refunds and stats
-   */
+  const hasActiveFilters = filter !== 'ALL' || Boolean(searchQuery.trim());
+
   const loadData = useCallback(async () => {
+    const requestId = ++requestIdRef.current;
     setLoading(true);
     setLoadError(null);
     try {
@@ -65,14 +62,22 @@ const RefundsManagement = () => {
         adminRefundService.getAllRefunds(filter === 'ALL' ? undefined : filter),
         adminRefundService.getStats(),
       ]);
+      if (requestId !== requestIdRef.current) {
+        return;
+      }
       setRefunds(refundsData.refunds);
       setStats(statsData);
     } catch (e) {
+      if (requestId !== requestIdRef.current) {
+        return;
+      }
       const message = extractErrorMessage(e, 'Failed to load refunds');
       setLoadError(message);
       toast.error(message);
     } finally {
-      setLoading(false);
+      if (requestId === requestIdRef.current) {
+        setLoading(false);
+      }
     }
   }, [filter]);
 
@@ -94,7 +99,10 @@ const RefundsManagement = () => {
   }, [refunds, searchQuery]);
 
   useEffect(() => {
-    loadData();
+    void loadData();
+    return () => {
+      requestIdRef.current += 1;
+    };
   }, [loadData]);
 
   const closeRefundDetails = useCallback(() => {
@@ -106,6 +114,7 @@ const RefundsManagement = () => {
     setShowRejectModal(false);
     setApprovalNotes('');
     setRejectionReason('');
+    setRejectError(null);
   }, [working]);
 
   const closeApproveModal = useCallback(() => {
@@ -122,6 +131,7 @@ const RefundsManagement = () => {
     }
     setShowRejectModal(false);
     setRejectionReason('');
+    setRejectError(null);
   }, [working]);
 
   useOverlayAccessibility({
@@ -151,11 +161,8 @@ const RefundsManagement = () => {
     lockBodyScroll: true,
   });
 
-  /**
-   * Approve refund
-   */
   const handleApprove = async () => {
-    if (!selectedRefund) return;
+    if (!selectedRefund || working) return;
     setWorking(true);
     try {
       await adminRefundService.approveRefund(selectedRefund.id, approvalNotes);
@@ -171,14 +178,13 @@ const RefundsManagement = () => {
     }
   };
 
-  /**
-   * Reject refund
-   */
   const handleReject = async () => {
-    if (!selectedRefund || !rejectionReason.trim()) {
-      toast.error('Please provide a rejection reason');
+    if (!selectedRefund || working) return;
+    if (!rejectionReason.trim()) {
+      setRejectError('Please provide a rejection reason.');
       return;
     }
+    setRejectError(null);
     setWorking(true);
     try {
       await adminRefundService.rejectRefund(selectedRefund.id, rejectionReason);
@@ -188,17 +194,16 @@ const RefundsManagement = () => {
       setSelectedRefund(null);
       await loadData();
     } catch (e) {
-      toast.error(extractErrorMessage(e, 'Failed to reject refund'));
+      const message = extractErrorMessage(e, 'Failed to reject refund');
+      setRejectError(message);
+      toast.error(message);
     } finally {
       setWorking(false);
     }
   };
 
-  /**
-   * Mark as processing
-   */
   const handleMarkProcessing = async () => {
-    if (!selectedRefund) return;
+    if (!selectedRefund || working) return;
     setWorking(true);
     try {
       await adminRefundService.markAsProcessing(selectedRefund.id);
@@ -212,11 +217,8 @@ const RefundsManagement = () => {
     }
   };
 
-  /**
-   * Complete refund
-   */
   const handleComplete = async () => {
-    if (!selectedRefund) return;
+    if (!selectedRefund || working) return;
     setWorking(true);
     try {
       await adminRefundService.completeRefund(selectedRefund.id);
@@ -230,21 +232,18 @@ const RefundsManagement = () => {
     }
   };
 
-  /**
-   * Get status badge color
-   */
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'PENDING':
-        return 'bg-yellow-100 text-yellow-700';
+        return 'bg-yellow-100 text-yellow-800';
       case 'APPROVED':
-        return 'bg-blue-100 text-blue-700';
+        return 'bg-blue-100 text-blue-800';
       case 'PROCESSING':
-        return 'bg-purple-100 text-purple-700';
+        return 'bg-purple-100 text-purple-800';
       case 'COMPLETED':
-        return 'bg-green-100 text-green-700';
+        return 'bg-green-100 text-green-800';
       case 'REJECTED':
-        return 'bg-red-100 text-red-700';
+        return 'bg-red-100 text-red-800';
       default:
         return 'bg-gray-100 text-gray-700';
     }
@@ -284,11 +283,9 @@ const RefundsManagement = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-primary-50/10 to-indigo-50/20 relative">
-      {/* Background Pattern */}
       <div className="absolute inset-0 bg-[linear-gradient(rgba(0,0,0,0.015)_1px,transparent_1px),linear-gradient(90deg,rgba(0,0,0,0.015)_1px,transparent_1px)] bg-[size:32px_32px] pointer-events-none"></div>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 relative">
-        {/* Header */}
         <div className="mb-10">
           <div className="flex flex-col sm:flex-row sm:items-center gap-4 mb-3">
             <div className="w-14 h-14 bg-gradient-to-br from-amber-500 via-amber-600 to-orange-600 rounded-2xl flex items-center justify-center shadow-xl shadow-amber-500/25 ring-4 ring-white">
@@ -303,83 +300,33 @@ const RefundsManagement = () => {
           </div>
         </div>
 
-        {/* Statistics - Clickable to filter */}
         {stats && (
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-5 mb-8">
-            <button
-              type="button"
-              onClick={() => setFilter('PENDING')}
-              className={`group bg-white/95 backdrop-blur-sm rounded-2xl p-5 shadow-card hover:shadow-card-hover transition-all duration-300 hover:-translate-y-1 border relative overflow-hidden text-left ${filter === 'PENDING' ? 'border-yellow-400 ring-2 ring-yellow-200' : 'border-yellow-100'}`}
-            >
-              <div className="absolute top-0 right-0 w-16 h-16 bg-gradient-to-br from-yellow-100/50 to-transparent rounded-full -translate-y-1/2 translate-x-1/2"></div>
-              <div className="flex items-center gap-3 mb-3">
-                <div className="p-2.5 bg-yellow-100 rounded-xl group-hover:scale-110 transition-transform">
-                  <Clock className="w-5 h-5 text-yellow-600" />
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-5 mb-8 tabular-nums">
+            {[
+              { key: 'PENDING', label: 'Pending', value: stats.pending, Icon: Clock, active: 'border-yellow-400 ring-2 ring-yellow-200', idle: 'border-yellow-100', badge: 'bg-yellow-100', text: 'text-yellow-700' },
+              { key: 'APPROVED', label: 'Approved', value: stats.approved, Icon: CheckCircle, active: 'border-blue-400 ring-2 ring-blue-200', idle: 'border-blue-100', badge: 'bg-blue-100', text: 'text-blue-700' },
+              { key: 'PROCESSING', label: 'Processing', value: stats.processing, Icon: Loader2, active: 'border-purple-400 ring-2 ring-purple-200', idle: 'border-purple-100', badge: 'bg-purple-100', text: 'text-purple-700' },
+              { key: 'COMPLETED', label: 'Completed', value: stats.completed, Icon: Check, active: 'border-green-400 ring-2 ring-green-200', idle: 'border-green-100', badge: 'bg-green-100', text: 'text-green-700' },
+              { key: 'REJECTED', label: 'Rejected', value: stats.rejected, Icon: XCircle, active: 'border-red-400 ring-2 ring-red-200', idle: 'border-red-100', badge: 'bg-red-100', text: 'text-red-700' },
+            ].map((card) => (
+              <button
+                key={card.key}
+                type="button"
+                onClick={() => setFilter(card.key)}
+                className={`group bg-white/95 backdrop-blur-sm rounded-2xl p-5 shadow-card hover:shadow-card-hover transition-all duration-300 hover:-translate-y-1 border relative overflow-hidden text-left ${filter === card.key ? card.active : card.idle}`}
+              >
+                <div className="flex items-center gap-3 mb-3">
+                  <div className={`p-2.5 ${card.badge} rounded-xl`}>
+                    <card.Icon className={`w-5 h-5 ${card.text}`} />
+                  </div>
+                  <span className={`text-xs font-bold ${card.text} uppercase`}>{card.label}</span>
                 </div>
-                <span className="text-xs font-bold text-yellow-600 uppercase">Pending</span>
-              </div>
-              <div className="text-3xl font-bold text-gray-900">{stats.pending}</div>
-            </button>
-            <button
-              type="button"
-              onClick={() => setFilter('APPROVED')}
-              className={`group bg-white/95 backdrop-blur-sm rounded-2xl p-5 shadow-card hover:shadow-card-hover transition-all duration-300 hover:-translate-y-1 border relative overflow-hidden text-left ${filter === 'APPROVED' ? 'border-blue-400 ring-2 ring-blue-200' : 'border-blue-100'}`}
-            >
-              <div className="absolute top-0 right-0 w-16 h-16 bg-gradient-to-br from-blue-100/50 to-transparent rounded-full -translate-y-1/2 translate-x-1/2"></div>
-              <div className="flex items-center gap-3 mb-3">
-                <div className="p-2.5 bg-blue-100 rounded-xl group-hover:scale-110 transition-transform">
-                  <CheckCircle className="w-5 h-5 text-blue-600" />
-                </div>
-                <span className="text-xs font-bold text-blue-600 uppercase">Approved</span>
-              </div>
-              <div className="text-3xl font-bold text-gray-900">{stats.approved}</div>
-            </button>
-            <button
-              type="button"
-              onClick={() => setFilter('PROCESSING')}
-              className={`group bg-white/95 backdrop-blur-sm rounded-2xl p-5 shadow-card hover:shadow-card-hover transition-all duration-300 hover:-translate-y-1 border relative overflow-hidden text-left ${filter === 'PROCESSING' ? 'border-purple-400 ring-2 ring-purple-200' : 'border-purple-100'}`}
-            >
-              <div className="absolute top-0 right-0 w-16 h-16 bg-gradient-to-br from-purple-100/50 to-transparent rounded-full -translate-y-1/2 translate-x-1/2"></div>
-              <div className="flex items-center gap-3 mb-3">
-                <div className="p-2.5 bg-purple-100 rounded-xl group-hover:scale-110 transition-transform">
-                  <Loader2 className="w-5 h-5 text-purple-600" />
-                </div>
-                <span className="text-xs font-bold text-purple-600 uppercase">Processing</span>
-              </div>
-              <div className="text-3xl font-bold text-gray-900">{stats.processing}</div>
-            </button>
-            <button
-              type="button"
-              onClick={() => setFilter('COMPLETED')}
-              className={`group bg-white/95 backdrop-blur-sm rounded-2xl p-5 shadow-card hover:shadow-card-hover transition-all duration-300 hover:-translate-y-1 border relative overflow-hidden text-left ${filter === 'COMPLETED' ? 'border-green-400 ring-2 ring-green-200' : 'border-green-100'}`}
-            >
-              <div className="absolute top-0 right-0 w-16 h-16 bg-gradient-to-br from-green-100/50 to-transparent rounded-full -translate-y-1/2 translate-x-1/2"></div>
-              <div className="flex items-center gap-3 mb-3">
-                <div className="p-2.5 bg-green-100 rounded-xl group-hover:scale-110 transition-transform">
-                  <Check className="w-5 h-5 text-green-600" />
-                </div>
-                <span className="text-xs font-bold text-green-600 uppercase">Completed</span>
-              </div>
-              <div className="text-3xl font-bold text-gray-900">{stats.completed}</div>
-            </button>
-            <button
-              type="button"
-              onClick={() => setFilter('REJECTED')}
-              className={`group bg-white/95 backdrop-blur-sm rounded-2xl p-5 shadow-card hover:shadow-card-hover transition-all duration-300 hover:-translate-y-1 border relative overflow-hidden text-left ${filter === 'REJECTED' ? 'border-red-400 ring-2 ring-red-200' : 'border-red-100'}`}
-            >
-              <div className="absolute top-0 right-0 w-16 h-16 bg-gradient-to-br from-red-100/50 to-transparent rounded-full -translate-y-1/2 translate-x-1/2"></div>
-              <div className="flex items-center gap-3 mb-3">
-                <div className="p-2.5 bg-red-100 rounded-xl group-hover:scale-110 transition-transform">
-                  <XCircle className="w-5 h-5 text-red-600" />
-                </div>
-                <span className="text-xs font-bold text-red-600 uppercase">Rejected</span>
-              </div>
-              <div className="text-3xl font-bold text-gray-900">{stats.rejected}</div>
-            </button>
+                <div className="text-3xl font-bold text-gray-900">{card.value}</div>
+              </button>
+            ))}
           </div>
         )}
 
-        {/* Filter Buttons */}
         <div className="bg-white/80 backdrop-blur-sm rounded-2xl p-4 shadow-card border border-gray-100 mb-8">
           <div className="flex flex-wrap gap-2">
             {['ALL', 'PENDING', 'APPROVED', 'PROCESSING', 'COMPLETED', 'REJECTED'].map((status) => (
@@ -399,8 +346,12 @@ const RefundsManagement = () => {
           </div>
           <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
             <div className="relative flex-1 min-w-[240px] max-w-md">
+              <label htmlFor="refund-search-input" className="sr-only">
+                Search refund requests
+              </label>
               <Search className="w-4 h-4 text-gray-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
               <input
+                id="refund-search-input"
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
@@ -408,25 +359,38 @@ const RefundsManagement = () => {
                 className="input pl-10 py-2 text-sm"
               />
             </div>
-            <p className="text-sm text-gray-500 tabular-nums">
-              Showing {filteredRefunds.length} {getFilterLabel(filter)} refund request(s).
-            </p>
+            <div className="flex items-center gap-3">
+              {hasActiveFilters && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setFilter('ALL');
+                    setSearchQuery('');
+                  }}
+                  className="btn-secondary btn-sm"
+                >
+                  Clear Filters
+                </button>
+              )}
+              <p className="text-sm text-gray-500 tabular-nums">
+                Showing {filteredRefunds.length} {getFilterLabel(filter)} refund request(s).
+              </p>
+            </div>
           </div>
         </div>
 
-        {/* Refunds Table */}
         <div className="bg-white/95 backdrop-blur-sm rounded-2xl shadow-card border border-gray-100 overflow-hidden">
           {loading ? (
             <div className="flex flex-col items-center justify-center py-16">
-              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-primary-500 to-indigo-600 animate-pulse flex items-center justify-center mb-4">
-                <RefreshCcw className="w-6 h-6 text-white animate-spin" />
+              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-primary-500 to-indigo-600 animate-pulse motion-reduce:animate-none flex items-center justify-center mb-4">
+                <RefreshCcw className="w-6 h-6 text-white animate-spin motion-reduce:animate-none" />
               </div>
               <p className="text-gray-500 font-medium">Loading refunds...</p>
             </div>
           ) : loadError ? (
-            <div className="p-12 text-center space-y-3">
+            <div role="alert" className="p-12 text-center space-y-3">
               <AlertCircle className="w-12 h-12 text-red-500 mx-auto" />
-              <p className="text-gray-900 font-bold">Unable to load refund requests</p>
+              <h2 className="text-lg font-bold text-gray-900">Unable to load refund requests</h2>
               <p className="text-sm text-gray-600">{loadError}</p>
               <button
                 type="button"
@@ -438,40 +402,44 @@ const RefundsManagement = () => {
               </button>
             </div>
           ) : filteredRefunds.length === 0 ? (
-            <div className="p-12 text-center">
-              <div className="w-16 h-16 bg-gray-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
+            <div className="p-12 text-center space-y-3">
+              <div className="w-16 h-16 bg-gray-100 rounded-2xl flex items-center justify-center mx-auto mb-2">
                 <AlertCircle className="w-8 h-8 text-gray-400" />
               </div>
-              <p className="text-gray-700 font-medium">
-                No {getFilterLabel(filter)} refund requests found.
+              <h2 className="text-lg font-bold text-gray-900">
+                {hasActiveFilters
+                  ? `No ${getFilterLabel(filter)} refund requests match your filters`
+                  : 'No refund requests submitted yet'}
+              </h2>
+              <p className="text-sm text-gray-500">
+                {hasActiveFilters
+                  ? 'Try clearing your search query or switching to All.'
+                  : 'Student refund requests will appear here when submitted.'}
               </p>
-              <p className="text-sm text-gray-500 mt-2">
-                Try another filter to review refunds in a different state.
-              </p>
+              {hasActiveFilters && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setFilter('ALL');
+                    setSearchQuery('');
+                  }}
+                  className="btn-secondary btn-sm"
+                >
+                  Reset Filters
+                </button>
+              )}
             </div>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full">
                 <thead className="bg-gradient-to-r from-gray-50 to-gray-100 border-b border-gray-200">
                   <tr>
-                    <th className="px-6 py-4 text-left text-xs font-bold text-gray-600 uppercase">
-                      Order
-                    </th>
-                    <th className="px-6 py-4 text-left text-xs font-bold text-gray-600 uppercase">
-                      Customer
-                    </th>
-                    <th className="px-6 py-4 text-left text-xs font-bold text-gray-600 uppercase">
-                      Amount
-                    </th>
-                    <th className="px-6 py-4 text-left text-xs font-bold text-gray-600 uppercase">
-                      Reason
-                    </th>
-                    <th className="px-6 py-4 text-left text-xs font-bold text-gray-600 uppercase">
-                      Status
-                    </th>
-                    <th className="px-6 py-4 text-left text-xs font-bold text-gray-600 uppercase">
-                      Action
-                    </th>
+                    <th className="px-6 py-4 text-left text-xs font-bold text-gray-600 uppercase">Order</th>
+                    <th className="px-6 py-4 text-left text-xs font-bold text-gray-600 uppercase">Customer</th>
+                    <th className="px-6 py-4 text-right text-xs font-bold text-gray-600 uppercase">Amount</th>
+                    <th className="px-6 py-4 text-left text-xs font-bold text-gray-600 uppercase">Reason</th>
+                    <th className="px-6 py-4 text-left text-xs font-bold text-gray-600 uppercase">Status</th>
+                    <th className="px-6 py-4 text-left text-xs font-bold text-gray-600 uppercase">Action</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
@@ -481,7 +449,7 @@ const RefundsManagement = () => {
                       className="hover:bg-gradient-to-r hover:from-gray-50 hover:to-transparent cursor-pointer transition-all duration-200"
                       onClick={() => setSelectedRefund(refund)}
                     >
-                      <td className="px-6 py-4">
+                      <td className="px-6 py-4 tabular-nums">
                         <div className="flex items-center gap-3">
                           <div className="p-2 bg-gray-100 rounded-lg">
                             <FileText className="w-4 h-4 text-gray-600" />
@@ -501,8 +469,8 @@ const RefundsManagement = () => {
                           </span>
                         </div>
                       </td>
-                      <td className="px-6 py-4">
-                        <div className="flex items-center gap-2">
+                      <td className="px-6 py-4 text-right tabular-nums">
+                        <div className="inline-flex items-center justify-end gap-1">
                           <DollarSign className="w-4 h-4 text-green-600" />
                           <span className="font-bold text-gray-900">{refund.amount.toFixed(2)}</span>
                         </div>
@@ -522,7 +490,7 @@ const RefundsManagement = () => {
                             e.stopPropagation();
                             setSelectedRefund(refund);
                           }}
-                          className="inline-flex items-center gap-2 px-3 py-1.5 bg-primary-50 text-primary-600 rounded-lg font-semibold text-sm hover:bg-primary-100 transition-colors"
+                          className="inline-flex items-center gap-2 px-3 py-1.5 bg-primary-50 text-primary-700 rounded-lg font-semibold text-sm hover:bg-primary-100 transition-colors"
                         >
                           <Eye className="w-4 h-4" />
                           View
@@ -535,7 +503,6 @@ const RefundsManagement = () => {
             </div>
           )}
         </div>
-
       </div>
 
       {/* Refund Detail Modal */}
@@ -558,14 +525,13 @@ const RefundsManagement = () => {
             aria-describedby="refund-detail-modal-description"
             className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto"
           >
-            {/* Header */}
             <div className="bg-gradient-to-r from-amber-500 via-amber-600 to-orange-600 text-white p-6 flex items-center justify-between sticky top-0 z-10">
               <div className="flex items-center gap-4">
                 <div className="p-3 bg-white/20 rounded-xl">
                   <RefreshCcw className="w-6 h-6" />
                 </div>
                 <div>
-                  <h3 id="refund-detail-modal-title" className="text-2xl font-bold">Refund Details</h3>
+                  <h2 id="refund-detail-modal-title" className="text-2xl font-bold text-white">Refund Details</h2>
                   <p className="text-sm text-amber-100 font-mono">{selectedRefund.id.slice(0, 8)}...</p>
                 </div>
               </div>
@@ -580,18 +546,16 @@ const RefundsManagement = () => {
               </button>
             </div>
 
-            {/* Content */}
             <div className="p-6 space-y-6">
               <p id="refund-detail-modal-description" className="sr-only">
                 Review this refund request, its order details, status history, and available admin actions.
               </p>
-              {/* Order Info */}
               <div className="bg-gray-50 p-4 rounded-lg">
-                <h4 className="font-bold text-gray-900 mb-3">Order Information</h4>
+                <h3 className="font-bold text-gray-900 mb-3 text-base">Order Information</h3>
                 <div className="space-y-2 text-sm">
                   <div className="flex justify-between">
                     <span className="text-gray-600">Order Number:</span>
-                    <span className="font-semibold text-gray-900">
+                    <span className="font-semibold text-gray-900 tabular-nums">
                       {selectedRefund.order?.orderNo}
                     </span>
                   </div>
@@ -612,13 +576,12 @@ const RefundsManagement = () => {
                 </div>
               </div>
 
-              {/* Refund Details */}
               <div className="bg-blue-50 p-4 rounded-lg border-2 border-blue-200">
-                <h4 className="font-bold text-gray-900 mb-3">Refund Details</h4>
+                <h3 className="font-bold text-gray-900 mb-3 text-base">Refund Details</h3>
                 <div className="space-y-2 text-sm">
                   <div className="flex justify-between">
                     <span className="text-gray-600">Amount:</span>
-                    <span className="font-bold text-lg text-blue-600">
+                    <span className="font-bold text-lg text-blue-700 tabular-nums">
                       ${selectedRefund.amount.toFixed(2)}
                     </span>
                   </div>
@@ -645,26 +608,23 @@ const RefundsManagement = () => {
                 </div>
               </div>
 
-              {/* Reason */}
               {selectedRefund.reason && (
                 <div>
-                  <h4 className="font-bold text-gray-900 mb-2">Reason</h4>
+                  <h3 className="font-bold text-gray-900 mb-2 text-base">Reason</h3>
                   <p className="text-gray-700 bg-gray-50 p-4 rounded-lg">{selectedRefund.reason}</p>
                 </div>
               )}
 
-              {/* Notes */}
               {selectedRefund.notes && (
                 <div>
-                  <h4 className="font-bold text-gray-900 mb-2">Notes</h4>
+                  <h3 className="font-bold text-gray-900 mb-2 text-base">Notes</h3>
                   <p className="text-gray-700 bg-gray-50 p-4 rounded-lg">{selectedRefund.notes}</p>
                 </div>
               )}
 
-              {/* Timeline */}
               <div>
-                <h4 className="font-bold text-gray-900 mb-3">Timeline</h4>
-                <div className="space-y-2 text-sm">
+                <h3 className="font-bold text-gray-900 mb-3 text-base">Timeline</h3>
+                <div className="space-y-2 text-sm tabular-nums">
                   <div className="flex items-center gap-3">
                     <span className="w-2 h-2 rounded-full bg-gray-400"></span>
                     <span className="text-gray-600">
@@ -690,7 +650,6 @@ const RefundsManagement = () => {
                 </div>
               </div>
 
-              {/* Actions */}
               {selectedRefund.status === 'PENDING' && (
                 <div className="flex gap-3 pt-4 border-t border-gray-100">
                   <button
@@ -704,7 +663,10 @@ const RefundsManagement = () => {
                   </button>
                   <button
                     type="button"
-                    onClick={() => setShowRejectModal(true)}
+                    onClick={() => {
+                      setRejectError(null);
+                      setShowRejectModal(true);
+                    }}
                     className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-3 bg-white border-2 border-red-200 text-red-600 rounded-xl font-semibold hover:bg-red-50 transition-all"
                     disabled={working}
                   >
@@ -717,7 +679,7 @@ const RefundsManagement = () => {
               {selectedRefund.status === 'APPROVED' && (
                 <button
                   type="button"
-                  onClick={handleMarkProcessing}
+                  onClick={() => void handleMarkProcessing()}
                   className="w-full inline-flex items-center justify-center gap-2 px-4 py-3 bg-gradient-to-r from-purple-500 to-purple-600 text-white rounded-xl font-semibold hover:from-purple-600 hover:to-purple-700 transition-all shadow-lg shadow-purple-500/25"
                   disabled={working}
                 >
@@ -729,7 +691,7 @@ const RefundsManagement = () => {
               {selectedRefund.status === 'PROCESSING' && (
                 <button
                   type="button"
-                  onClick={handleComplete}
+                  onClick={() => void handleComplete()}
                   className="w-full inline-flex items-center justify-center gap-2 px-4 py-3 bg-gradient-to-r from-green-500 to-green-600 text-white rounded-xl font-semibold hover:from-green-600 hover:to-green-700 transition-all shadow-lg shadow-green-500/25"
                   disabled={working}
                 >
@@ -765,13 +727,17 @@ const RefundsManagement = () => {
               <div className="p-2 bg-white/20 rounded-lg">
                 <CheckCircle className="w-5 h-5 text-white" />
               </div>
-              <h3 id="approve-refund-modal-title" className="text-xl font-bold text-white">Approve Refund</h3>
+              <h2 id="approve-refund-modal-title" className="text-xl font-bold text-white">Approve Refund</h2>
             </div>
             <div className="p-6">
               <p id="approve-refund-modal-description" className="sr-only">
                 Add optional approval notes before approving this refund request.
               </p>
+              <label htmlFor="refund-approve-notes" className="block text-sm font-semibold text-gray-700 mb-2">
+                Approval notes (optional)
+              </label>
               <textarea
+                id="refund-approve-notes"
                 ref={approveNotesRef}
                 value={approvalNotes}
                 onChange={(e) => setApprovalNotes(e.target.value)}
@@ -791,7 +757,7 @@ const RefundsManagement = () => {
                 </button>
                 <button
                   type="button"
-                  onClick={handleApprove}
+                  onClick={() => void handleApprove()}
                   className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-3 bg-gradient-to-r from-green-500 to-green-600 text-white rounded-xl font-semibold hover:from-green-600 hover:to-green-700 transition-all"
                   disabled={working}
                 >
@@ -827,16 +793,28 @@ const RefundsManagement = () => {
               <div className="p-2 bg-white/20 rounded-lg">
                 <XCircle className="w-5 h-5 text-white" />
               </div>
-              <h3 id="reject-refund-modal-title" className="text-xl font-bold text-white">Reject Refund</h3>
+              <h2 id="reject-refund-modal-title" className="text-xl font-bold text-white">Reject Refund</h2>
             </div>
             <div className="p-6">
               <p id="reject-refund-modal-description" className="sr-only">
                 Provide a rejection reason before declining this refund request.
               </p>
+              {rejectError && (
+                <div role="alert" className="mb-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-medium text-red-700">
+                  {rejectError}
+                </div>
+              )}
+              <label htmlFor="refund-reject-reason" className="block text-sm font-semibold text-gray-700 mb-2">
+                Rejection reason <span className="text-red-600">*</span>
+              </label>
               <textarea
+                id="refund-reject-reason"
                 ref={rejectReasonRef}
                 value={rejectionReason}
-                onChange={(e) => setRejectionReason(e.target.value)}
+                onChange={(e) => {
+                  setRejectionReason(e.target.value);
+                  setRejectError(null);
+                }}
                 placeholder="Please provide a reason for rejection..."
                 maxLength={500}
                 className="w-full h-24 px-4 py-3 border border-gray-200 rounded-xl resize-none focus:ring-2 focus:ring-red-500 focus:border-transparent transition-all"
@@ -853,7 +831,7 @@ const RefundsManagement = () => {
                 </button>
                 <button
                   type="button"
-                  onClick={handleReject}
+                  onClick={() => void handleReject()}
                   className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-3 bg-gradient-to-r from-red-500 to-red-600 text-white rounded-xl font-semibold hover:from-red-600 hover:to-red-700 transition-all"
                   disabled={working}
                 >

@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import clientLogger from '@/utils/logger';
 import { Link, useNavigate } from 'react-router-dom';
 import { AlertCircle, RefreshCcw, ShoppingCart, Trash2 } from 'lucide-react';
@@ -17,30 +17,46 @@ const CartPage = () => {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [working, setWorking] = useState(false);
+  const [removingPackageId, setRemovingPackageId] = useState<string | null>(null);
   const [showClearCartModal, setShowClearCartModal] = useState(false);
+  const requestIdRef = useRef(0);
 
   const load = useCallback(async () => {
+    const requestId = ++requestIdRef.current;
     setLoading(true);
     setLoadError(null);
     try {
       const data = await cartService.getCart();
+      if (requestId !== requestIdRef.current) {
+        return;
+      }
       setCart(data);
     } catch (e) {
+      if (requestId !== requestIdRef.current) {
+        return;
+      }
       clientLogger.error('Failed to load cart:', e);
       const message = extractErrorMessage(e, 'Failed to load cart');
       setLoadError(message);
       toast.error(message);
     } finally {
-      setLoading(false);
+      if (requestId === requestIdRef.current) {
+        setLoading(false);
+      }
     }
   }, []);
 
   useEffect(() => {
     void load();
+    return () => {
+      requestIdRef.current += 1;
+    };
   }, [load]);
 
   const handleRemove = async (packageId: string) => {
+    if (working) return;
     setWorking(true);
+    setRemovingPackageId(packageId);
     try {
       await cartService.removeItem(packageId);
       toast.success('Removed from cart');
@@ -50,10 +66,12 @@ const CartPage = () => {
       toast.error(extractErrorMessage(e, 'Failed to remove'));
     } finally {
       setWorking(false);
+      setRemovingPackageId(null);
     }
   };
 
   const handleClear = async () => {
+    if (working) return;
     setWorking(true);
     try {
       await cartService.clear();
@@ -72,7 +90,7 @@ const CartPage = () => {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-primary-50/10 to-indigo-50/20">
         <div className="flex flex-col items-center space-y-4">
-          <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-primary-500 to-indigo-600 animate-pulse flex items-center justify-center">
+          <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-primary-500 to-indigo-600 animate-pulse motion-reduce:animate-none flex items-center justify-center">
             <ShoppingCart className="w-8 h-8 text-white" />
           </div>
           <p className="text-slate-600 font-medium">Loading your cart...</p>
@@ -107,7 +125,7 @@ const CartPage = () => {
         </div>
 
         {loadError ? (
-          <div className="card max-w-lg mx-auto text-center space-y-4 py-12">
+          <div role="alert" className="card max-w-lg mx-auto text-center space-y-4 py-12">
             <AlertCircle className="w-12 h-12 text-red-500 mx-auto" />
             <h2 className="text-xl font-bold text-slate-900">Unable to load cart</h2>
             <p className="text-sm text-slate-600">{loadError}</p>
@@ -125,7 +143,7 @@ const CartPage = () => {
             <div className="w-20 h-20 bg-primary-50 rounded-2xl flex items-center justify-center mx-auto mb-6">
               <ShoppingCart className="w-10 h-10 text-primary-600" />
             </div>
-            <h3 className="text-2xl font-bold text-slate-900 mb-2">Your cart is empty</h3>
+            <h2 className="text-2xl font-bold text-slate-900 mb-2">Your cart is empty</h2>
             <p className="text-slate-600 mb-6">
               Browse structured recorded, live, and hybrid courses to get started.
             </p>
@@ -142,6 +160,7 @@ const CartPage = () => {
             <div className="lg:col-span-2 space-y-4">
               {items.map((it) => {
                 const courseId = it.package?.course?.id;
+                const isRemovingThis = removingPackageId === it.packageId;
                 return (
                   <div key={it.id} className="card card-smooth">
                     <div className="flex items-center justify-between gap-6">
@@ -180,7 +199,7 @@ const CartPage = () => {
                           onClick={() => void handleRemove(it.packageId)}
                         >
                           <Trash2 className="w-3.5 h-3.5" />
-                          Remove
+                          {isRemovingThis ? 'Removing...' : 'Remove'}
                         </button>
                       </div>
                     </div>

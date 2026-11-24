@@ -243,7 +243,7 @@ const RefundModal = ({
           <div className="flex items-center gap-3">
             <Wallet className="h-7 w-7 text-blue-100" aria-hidden="true" />
             <div>
-              <h2 id="refund-modal-title" className="text-2xl font-bold">
+              <h2 id="refund-modal-title" className="text-2xl font-bold text-white">
                 Request Refund
               </h2>
               <p className="text-sm text-blue-100">Order: {order.orderNo}</p>

@@ -24,6 +24,7 @@ import {
   normalizeOptionalUrlOrPath,
 } from "../utils/url-or-path";
 import { sanitizeUserPlainText } from "../utils/sanitize-user-content";
+import { isPrismaErrorCode, isUniqueConstraintError } from "./shared/service-helpers";
 
 interface RegisterData {
   email: string;
@@ -74,13 +75,8 @@ const PASSWORD_RESET_CODE_FORMAT = /^\d{6}$/;
 const AVATAR_URL_ERROR =
   "Avatar must be an external URL or use the /uploads/avatars/ folder";
 
-const isUniqueConstraintError = (error: unknown) =>
-  error instanceof Prisma.PrismaClientKnownRequestError &&
-  error.code === "P2002";
-
 const isRecordNotFoundError = (error: unknown) =>
-  error instanceof Prisma.PrismaClientKnownRequestError &&
-  error.code === "P2025";
+  isPrismaErrorCode(error, "P2025");
 
 const normalizeAvatarUrl = (
   value: string | null | undefined,

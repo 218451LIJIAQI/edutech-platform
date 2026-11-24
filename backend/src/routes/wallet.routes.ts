@@ -3,6 +3,8 @@ import {
   PayoutMethodType,
   PayoutRequestStatus,
   UserRole,
+  WalletTransactionSource,
+  WalletTransactionType,
 } from "@prisma/client";
 import { body, query } from "express-validator";
 import walletController from "../controllers/wallet.controller";
@@ -23,11 +25,21 @@ const transactionQueryValidation = [
   query("type")
     .optional({ values: "falsy" })
     .isString()
-    .withMessage("type must be a string"),
+    .withMessage("type must be a string")
+    .bail()
+    .trim()
+    .toUpperCase()
+    .isIn(Object.values(WalletTransactionType))
+    .withMessage("Invalid wallet transaction type"),
   query("source")
     .optional({ values: "falsy" })
     .isString()
-    .withMessage("source must be a string"),
+    .withMessage("source must be a string")
+    .bail()
+    .trim()
+    .toUpperCase()
+    .isIn(Object.values(WalletTransactionSource))
+    .withMessage("Invalid wallet transaction source"),
 ];
 
 const payoutQueryValidation = [

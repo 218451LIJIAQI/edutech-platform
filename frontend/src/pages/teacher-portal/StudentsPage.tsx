@@ -11,15 +11,16 @@ import { buildCsvContent, downloadCsvFile } from '@/utils/download';
 import { getCourseLessonCount } from '@/utils/course-counts';
 import { usePageTitle } from '@/hooks';
 
-// Extended Enrollment type with user data (as returned by backend)
 interface EnrollmentWithUser extends Enrollment {
   user?: User;
 }
 
-/**
- * Students Management Page
- * Teacher interface for viewing and managing course students
- */
+const EMPTY_STATS = {
+  totalStudents: 0,
+  averageProgress: 0,
+  completionRate: 0,
+};
+
 const StudentsPage = () => {
   usePageTitle('Course Students');
   const { courseId } = useParams<{ courseId?: string }>();
@@ -28,21 +29,24 @@ const StudentsPage = () => {
   const [courses, setCourses] = useState<Course[]>([]);
   const [selectedCourse, setSelectedCourse] = useState<Course | null>(null);
   const [students, setStudents] = useState<EnrollmentWithUser[]>([]);
-  const [stats, setStats] = useState({
-    totalStudents: 0,
-    averageProgress: 0,
-    completionRate: 0,
-  });
+  const [stats, setStats] = useState(EMPTY_STATS);
   const [isLoading, setIsLoading] = useState(true);
+  const [isRosterLoading, setIsRosterLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [rosterError, setRosterError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const coursesRequestRef = useRef(0);
   const courseRosterRequestRef = useRef(0);
 
   const fetchTeacherCourses = useCallback(async () => {
+    const requestId = ++coursesRequestRef.current;
     setIsLoading(true);
     setLoadError(null);
     try {
       const coursesList = await courseService.getMyCourses();
+      if (requestId !== coursesRequestRef.current) {
+        return;
+      }
       setCourses(coursesList);
 
       if (courseId) {
@@ -54,17 +58,26 @@ const StudentsPage = () => {
         setSelectedCourse(null);
       }
     } catch (error) {
+      if (requestId !== coursesRequestRef.current) {
+        return;
+      }
       clientLogger.error('Failed to fetch courses:', error);
       const message = extractErrorMessage(error, 'Failed to load courses');
       setLoadError(message);
       toast.error(message);
     } finally {
-      setIsLoading(false);
+      if (requestId === coursesRequestRef.current) {
+        setIsLoading(false);
+      }
     }
   }, [courseId]);
 
   const loadSelectedCourseRoster = useCallback(async (targetCourseId: string) => {
     const requestId = ++courseRosterRequestRef.current;
+    setIsRosterLoading(true);
+    setRosterError(null);
+    setStudents([]);
+    setStats(EMPTY_STATS);
     try {
       const [studentItems, courseStats] = await Promise.all([
         enrollmentService.getCourseStudents(targetCourseId),
@@ -75,26 +88,41 @@ const StudentsPage = () => {
       setStats(courseStats);
     } catch (error) {
       if (requestId !== courseRosterRequestRef.current) return;
+      const message = extractErrorMessage(error, 'Failed to load course roster');
       clientLogger.error('Failed to fetch course roster:', error);
-      toast.error(extractErrorMessage(error, 'Failed to load course roster'));
+      setRosterError(message);
+      toast.error(message);
+    } finally {
+      if (requestId === courseRosterRequestRef.current) {
+        setIsRosterLoading(false);
+      }
     }
   }, []);
 
   useEffect(() => {
     void fetchTeacherCourses();
+    return () => {
+      coursesRequestRef.current += 1;
+      courseRosterRequestRef.current += 1;
+    };
   }, [fetchTeacherCourses]);
 
   useEffect(() => {
     if (selectedCourse?.id) {
       void loadSelectedCourseRoster(selectedCourse.id);
+    } else {
+      setStudents([]);
+      setStats(EMPTY_STATS);
+      setRosterError(null);
     }
   }, [selectedCourse?.id, loadSelectedCourseRoster]);
 
   const filteredStudents = useMemo(() => {
-    const query = searchQuery.toLowerCase();
+    const query = searchQuery.trim().toLowerCase();
     return students.filter((enrollment) => {
       const student = enrollment.user;
       if (!student) return false;
+      if (!query) return true;
 
       const fullName = `${student.firstName} ${student.lastName}`.toLowerCase();
       const email = student.email.toLowerCase();
@@ -133,10 +161,10 @@ const StudentsPage = () => {
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-primary-50/10 to-indigo-50/20">
         <div className="flex flex-col items-center space-y-4">
           <div className="relative">
-            <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-primary-500 to-indigo-600 animate-pulse flex items-center justify-center">
+            <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-primary-500 to-indigo-600 animate-pulse motion-reduce:animate-none flex items-center justify-center">
               <Users className="w-8 h-8 text-white" />
             </div>
-            <div className="absolute inset-0 rounded-2xl bg-primary-500/20 animate-ping"></div>
+            <div className="absolute inset-0 rounded-2xl bg-primary-500/20 animate-ping motion-reduce:animate-none"></div>
           </div>
           <p className="text-gray-600 font-medium">Loading students...</p>
         </div>
@@ -148,7 +176,6 @@ const StudentsPage = () => {
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-primary-50/10 to-indigo-50/20 py-8 relative">
       <div className="absolute inset-0 bg-[linear-gradient(rgba(0,0,0,0.015)_1px,transparent_1px),linear-gradient(90deg,rgba(0,0,0,0.015)_1px,transparent_1px)] bg-[size:32px_32px] pointer-events-none"></div>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative">
-        {/* Header */}
         <div className="mb-8 flex flex-wrap items-center justify-between gap-3">
           <button type="button" onClick={() => navigate('/teacher')} className="btn-outline">
             <ArrowLeft className="w-4 h-4 mr-2" />
@@ -173,7 +200,7 @@ const StudentsPage = () => {
         </div>
 
         {loadError && (
-          <div className="card mb-8 bg-red-50 border border-red-200 flex items-center justify-between gap-4 text-sm text-red-800">
+          <div role="alert" className="card mb-8 bg-red-50 border border-red-200 flex items-center justify-between gap-4 text-sm text-red-800">
             <div className="flex items-center gap-2">
               <AlertCircle className="w-5 h-5 text-red-600 shrink-0" />
               <span>{loadError}</span>
@@ -189,13 +216,13 @@ const StudentsPage = () => {
           </div>
         )}
 
-        {/* Course Selector */}
         {courses.length > 0 && (
           <div className="card mb-8 shadow-lg">
-            <label className="block text-sm font-semibold text-gray-700 mb-3">
+            <label htmlFor="course-student-select" className="block text-sm font-semibold text-gray-700 mb-3">
               Select Course
             </label>
             <select
+              id="course-student-select"
               value={selectedCourse?.id || ''}
               onChange={(e) => {
                 const course = courses.find((c) => c.id === e.target.value);
@@ -215,19 +242,21 @@ const StudentsPage = () => {
         {!selectedCourse ? (
           <div className="card text-center py-16 shadow-lg max-w-md mx-auto">
             <Users className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-            <h3 className="text-xl font-bold text-gray-900 mb-2">No courses found</h3>
-            <p className="text-gray-600">Create a course first.</p>
+            <h2 className="text-xl font-bold text-gray-900 mb-2">No courses found</h2>
+            <p className="text-gray-600 mb-6">Create a course first to start enrolling students.</p>
+            <Link to="/teacher/courses/new" className="btn-primary">
+              Create Course
+            </Link>
           </div>
         ) : (
           <>
-            {/* Stats Cards */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
               <div className="card bg-gradient-to-br from-blue-500 to-blue-600 text-white shadow-lg">
                 <div className="flex items-center justify-between mb-3">
                   <div className="p-2 bg-white bg-opacity-20 rounded-lg">
                     <Users className="w-8 h-8" />
                   </div>
-                  <span className="text-4xl font-bold">{stats.totalStudents}</span>
+                  <span className="text-4xl font-bold tabular-nums">{stats.totalStudents}</span>
                 </div>
                 <p className="text-blue-100 font-semibold">Total Students</p>
               </div>
@@ -237,7 +266,7 @@ const StudentsPage = () => {
                   <div className="p-2 bg-white bg-opacity-20 rounded-lg">
                     <TrendingUp className="w-8 h-8" />
                   </div>
-                  <span className="text-4xl font-bold">{stats.averageProgress}%</span>
+                  <span className="text-4xl font-bold tabular-nums">{stats.averageProgress}%</span>
                 </div>
                 <p className="text-green-100 font-semibold">Avg. Progress</p>
               </div>
@@ -247,23 +276,25 @@ const StudentsPage = () => {
                   <div className="p-2 bg-white bg-opacity-20 rounded-lg">
                     <Calendar className="w-8 h-8" />
                   </div>
-                  <span className="text-4xl font-bold">{stats.completionRate}%</span>
+                  <span className="text-4xl font-bold tabular-nums">{stats.completionRate}%</span>
                 </div>
                 <p className="text-purple-100 font-semibold">Completion Rate</p>
               </div>
             </div>
 
-            {/* Students Table */}
             <div className="card shadow-xl border border-gray-100 rounded-2xl">
-              <div className="flex items-center justify-between mb-8">
+              <div className="flex flex-wrap items-center justify-between gap-4 mb-8">
                 <h2 className="text-2xl font-bold text-gray-900">Student List</h2>
-                <div className="flex items-center space-x-4">
-                  {/* Search */}
+                <div className="flex flex-wrap items-center gap-3">
                   <div className="relative">
+                    <label htmlFor="student-roster-search" className="sr-only">
+                      Search students by name or email
+                    </label>
                     <div className="absolute left-3 top-1/2 transform -translate-y-1/2">
                       <Search className="w-5 h-5 text-gray-400" />
                     </div>
                     <input
+                      id="student-roster-search"
                       type="text"
                       placeholder="Search students..."
                       value={searchQuery}
@@ -271,49 +302,69 @@ const StudentsPage = () => {
                       className="input pl-10 w-64"
                     />
                   </div>
-                  {/* Export */}
-                  <button type="button" onClick={exportToCSV} className="btn-outline">
+                  <button
+                    type="button"
+                    onClick={exportToCSV}
+                    disabled={filteredStudents.length === 0}
+                    className="btn-outline"
+                  >
                     <Download className="w-4 h-4 mr-2" />
                     Export CSV
                   </button>
                 </div>
               </div>
 
-              {filteredStudents.length === 0 ? (
+              {isRosterLoading ? (
+                <div className="flex items-center justify-center py-16">
+                  <div className="spinner mr-3"></div>
+                  <span className="text-sm font-medium text-slate-600">Loading course roster...</span>
+                </div>
+              ) : rosterError ? (
+                <div role="alert" className="rounded-2xl border border-red-200 bg-red-50 p-6 text-center space-y-3">
+                  <AlertCircle className="w-10 h-10 text-red-600 mx-auto" />
+                  <h3 className="text-lg font-bold text-red-900">Unable to load course roster</h3>
+                  <p className="text-sm text-red-700">{rosterError}</p>
+                  <button
+                    type="button"
+                    onClick={() => void loadSelectedCourseRoster(selectedCourse.id)}
+                    className="btn-primary btn-sm inline-flex items-center gap-1.5"
+                  >
+                    <RefreshCcw className="w-3.5 h-3.5" />
+                    Retry
+                  </button>
+                </div>
+              ) : filteredStudents.length === 0 ? (
                 <div className="text-center py-16">
                   <Users className="w-16 h-16 text-gray-300 mx-auto mb-4" />
                   <h3 className="text-xl font-bold text-gray-900 mb-2">
-                    {searchQuery ? 'No students found' : 'No students enrolled yet'}
+                    {searchQuery.trim() ? 'No matching students' : 'No students enrolled yet'}
                   </h3>
-                  <p className="text-gray-600">
-                    {searchQuery
-                      ? 'Try adjusting your search terms'
-                      : 'Students will appear here once they enroll'}
+                  <p className="text-gray-600 mb-5">
+                    {searchQuery.trim()
+                      ? 'Try adjusting or clearing your search query.'
+                      : 'Students will appear here once they enroll in this course.'}
                   </p>
+                  {searchQuery.trim() ? (
+                    <button
+                      type="button"
+                      onClick={() => setSearchQuery('')}
+                      className="btn-secondary btn-sm"
+                    >
+                      Clear Search
+                    </button>
+                  ) : null}
                 </div>
               ) : (
                 <div className="overflow-x-auto">
                   <table className="w-full">
                     <thead>
                       <tr className="border-b-2 border-gray-200">
-                        <th className="text-left py-4 px-4 font-bold text-gray-900">
-                          Student
-                        </th>
-                        <th className="text-left py-4 px-4 font-bold text-gray-900">
-                          Package
-                        </th>
-                        <th className="text-left py-4 px-4 font-bold text-gray-900">
-                          Enrolled Date
-                        </th>
-                        <th className="text-left py-4 px-4 font-bold text-gray-900">
-                          Progress
-                        </th>
-                        <th className="text-left py-4 px-4 font-bold text-gray-900">
-                          Lessons
-                        </th>
-                        <th className="text-left py-4 px-4 font-bold text-gray-900">
-                          Actions
-                        </th>
+                        <th className="text-left py-4 px-4 font-bold text-gray-900">Student</th>
+                        <th className="text-left py-4 px-4 font-bold text-gray-900">Package</th>
+                        <th className="text-left py-4 px-4 font-bold text-gray-900">Enrolled Date</th>
+                        <th className="text-left py-4 px-4 font-bold text-gray-900">Progress</th>
+                        <th className="text-left py-4 px-4 font-bold text-gray-900">Lessons</th>
+                        <th className="text-left py-4 px-4 font-bold text-gray-900">Actions</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -325,7 +376,7 @@ const StudentsPage = () => {
                                 <img
                                   src={enrollment.user.avatar}
                                   alt={`${enrollment.user?.firstName || 'Student'} ${enrollment.user?.lastName || ''}`.trim()}
-                                  className="w-12 h-12 rounded-full shadow-md"
+                                  className="w-12 h-12 rounded-full shadow-md object-cover"
                                 />
                               ) : (
                                 <div className="w-12 h-12 rounded-full bg-gradient-to-br from-primary-600 to-primary-700 flex items-center justify-center shadow-md">
@@ -348,15 +399,15 @@ const StudentsPage = () => {
                           <td className="py-5 px-4">
                             <span className="text-sm font-medium text-gray-700">{enrollment.package?.name}</span>
                           </td>
-                          <td className="py-5 px-4">
+                          <td className="py-5 px-4 tabular-nums">
                             <span className="text-sm text-gray-600">
                               {new Date(enrollment.enrolledAt).toLocaleDateString()}
                             </span>
                           </td>
-                          <td className="py-5 px-4">
+                          <td className="py-5 px-4 tabular-nums">
                             <div className="flex items-center space-x-3">
                               <div className="flex-1 max-w-[120px]">
-                                <div className="w-full bg-gray-300 rounded-full h-3">
+                                <div className="w-full bg-gray-200 rounded-full h-3">
                                   <div
                                     className="bg-gradient-to-r from-primary-600 to-primary-700 h-3 rounded-full transition-all duration-500"
                                     style={{ width: `${enrollment.progress}%` }}
@@ -368,7 +419,7 @@ const StudentsPage = () => {
                               </span>
                             </div>
                           </td>
-                          <td className="py-5 px-4">
+                          <td className="py-5 px-4 tabular-nums">
                             <span className="text-sm font-medium text-gray-700">
                               {enrollment.completedLessons} / {selectedCourseLessonCount}
                             </span>

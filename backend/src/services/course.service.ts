@@ -18,6 +18,7 @@ import notificationService from "./notification.service";
 import { broadcastLiveSessionStatusChange } from "../socket/live-session.handler";
 import { buildPaginationMeta, normalizePagination } from "./shared/pagination";
 import { buildCurrentEnrollmentWhere } from "./shared/enrollment-access";
+import { isUniqueConstraintError } from "./shared/service-helpers";
 import {
   buildCourseListOrderBy,
   buildLessonUpdateData,
@@ -76,14 +77,11 @@ export const COURSE_FIELD_LIMITS = {
   LIVE_SESSION_DESCRIPTION_MAX: 2000,
   MAX_PRICE: 99999999.99,
   MAX_DURATION_MINUTES: 60 * 24 * 365,
+  MAX_PACKAGE_DURATION_DAYS: 3650,
   MAX_FILE_SIZE_BYTES: 1024 * 1024 * 1024 * 5,
 } as const;
 
 const LESSON_ORDER_RETRY_ATTEMPTS = 3;
-
-const isUniqueConstraintError = (error: unknown) =>
-  error instanceof Prisma.PrismaClientKnownRequestError &&
-  error.code === "P2002";
 
 const withLessonOrderRetry = async <T>(operation: () => Promise<T>) => {
   let attempt = 0;
@@ -527,7 +525,7 @@ const normalizePackageCreateData = (data: {
     discount,
     finalPrice: calculateFinalPrice(price, discount),
     duration: normalizePositiveInteger(data.duration, "Package duration", {
-      max: COURSE_FIELD_LIMITS.MAX_DURATION_MINUTES,
+      max: COURSE_FIELD_LIMITS.MAX_PACKAGE_DURATION_DAYS,
     }),
     maxStudents: normalizePositiveInteger(data.maxStudents, "Maximum students"),
     features: data.features,
@@ -599,7 +597,7 @@ const normalizePackageUpdateData = (
     updateData.duration = normalizeNullablePositiveInteger(
       data.duration,
       "Package duration",
-      { max: COURSE_FIELD_LIMITS.MAX_DURATION_MINUTES },
+      { max: COURSE_FIELD_LIMITS.MAX_PACKAGE_DURATION_DAYS },
     );
   }
 
@@ -1784,12 +1782,6 @@ class CourseService {
       throw new NotFoundError("Material not found");
     }
 
-    if (!material.isDownloadable) {
-      throw new AuthorizationError(
-        "This material is not available for download",
-      );
-    }
-
     const requester = await prisma.user.findUnique({
       where: { id: normalizedUserId },
       select: {
@@ -1809,6 +1801,12 @@ class CourseService {
       requester.teacherProfile?.id === material.course.teacherProfileId;
 
     if (!isCourseOwnerOrAdmin) {
+      if (!material.isDownloadable) {
+        throw new AuthorizationError(
+          "This material is not available for download",
+        );
+      }
+
       const enrollment = await prisma.enrollment.findFirst({
         where: buildCurrentEnrollmentWhere(
           {

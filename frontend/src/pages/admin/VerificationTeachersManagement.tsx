@@ -1,10 +1,11 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import clientLogger from '@/utils/logger';
-import { CheckCircle, XCircle, Clock, Eye, AlertCircle, Loader, UserPlus, X, Zap, Shield } from 'lucide-react';
+import { CheckCircle, XCircle, Clock, Eye, AlertCircle, Loader, UserPlus, X, Zap, Shield, RefreshCcw } from 'lucide-react';
 import teacherService from '@/services/teacher.service';
 import adminService, { type AutoVerificationStats } from '@/services/admin.service';
 import { TeacherProfile, VerificationStatus, RegistrationStatus, TeacherVerification } from '@/types';
 import { extractErrorMessage } from '@/utils/error-handler';
+import { formatDate, parseStringArray } from '@/utils/helpers';
 import { useOverlayAccessibility, usePageTitle, useTimeoutManager } from '@/hooks';
 import {
   buildTeacherCertificateAssetAccessUrl,
@@ -19,10 +20,6 @@ type ReviewRegistrationStatus =
   | RegistrationStatus.APPROVED
   | RegistrationStatus.REJECTED;
 
-/**
- * Verification Teachers Management Page
- * Admin panel for reviewing teacher registrations, extended profiles, and certificate documents.
- */
 const VerificationTeachersManagement = () => {
   usePageTitle('Teacher Verification Management');
   const { setManagedTimeout, clearAllManagedTimeouts } = useTimeoutManager();
@@ -32,6 +29,11 @@ const VerificationTeachersManagement = () => {
   const registrationRejectNotesRef = useRef<HTMLTextAreaElement | null>(null);
   const certificateRejectModalRef = useRef<HTMLDivElement | null>(null);
   const certificateRejectNotesRef = useRef<HTMLTextAreaElement | null>(null);
+  const regRequestRef = useRef(0);
+  const profRequestRef = useRef(0);
+  const certRequestRef = useRef(0);
+  const autoStatsRequestRef = useRef(0);
+
   const [activeTab, setActiveTab] = useState<'registrations' | 'profiles' | 'certificates'>('registrations');
 
   // Registrations
@@ -39,18 +41,27 @@ const VerificationTeachersManagement = () => {
   const [regPage, setRegPage] = useState(1);
   const [regTotalPages, setRegTotalPages] = useState(1);
   const [isLoadingRegistrations, setIsLoadingRegistrations] = useState(true);
-  const [regSubmittingId, setRegSubmittingId] = useState<string | null>(null);
+  const [regLoadError, setRegLoadError] = useState<string | null>(null);
+  const [regSubmittingAction, setRegSubmittingAction] = useState<{
+    id: string;
+    status: ReviewRegistrationStatus;
+  } | null>(null);
 
   // Profiles (extended profile verifications)
   const [pendingProfiles, setPendingProfiles] = useState<TeacherProfile[]>([]);
   const [profPage, setProfPage] = useState(1);
   const [profTotalPages, setProfTotalPages] = useState(1);
   const [isLoadingProfiles, setIsLoadingProfiles] = useState(true);
+  const [profLoadError, setProfLoadError] = useState<string | null>(null);
 
   // Certificates (document verifications)
   const [pendingCertificates, setPendingCertificates] = useState<TeacherVerification[]>([]);
   const [isLoadingCertificates, setIsLoadingCertificates] = useState(true);
-  const [certSubmittingId, setCertSubmittingId] = useState<string | null>(null);
+  const [certLoadError, setCertLoadError] = useState<string | null>(null);
+  const [certSubmittingAction, setCertSubmittingAction] = useState<{
+    id: string;
+    status: ReviewVerificationStatus;
+  } | null>(null);
 
   // Auto-verification stats
   const [autoVerificationStats, setAutoVerificationStats] = useState<AutoVerificationStats | null>(null);
@@ -84,11 +95,15 @@ const VerificationTeachersManagement = () => {
     setManagedTimeout(() => setErrorMessage(''), 5000);
   }, [clearAllManagedTimeouts, setManagedTimeout]);
 
-  // Fetch pending teacher registrations
   const fetchPendingRegistrations = useCallback(async () => {
+    const requestId = ++regRequestRef.current;
     setIsLoadingRegistrations(true);
+    setRegLoadError(null);
     try {
       const result = await teacherService.getPendingRegistrations({ page: regPage, limit: 10 });
+      if (requestId !== regRequestRef.current) {
+        return;
+      }
       const totalPages = Math.max(1, result.pagination?.totalPages || 1);
       if ((result.teachers || []).length === 0 && regPage > totalPages) {
         setRegPage(totalPages);
@@ -97,18 +112,29 @@ const VerificationTeachersManagement = () => {
       setPendingRegistrations(result.teachers || []);
       setRegTotalPages(totalPages);
     } catch (error) {
+      if (requestId !== regRequestRef.current) {
+        return;
+      }
       clientLogger.error('Failed to fetch pending registrations:', error);
-      showTemporaryError(extractErrorMessage(error, 'Failed to load pending teacher registrations.'));
+      const message = extractErrorMessage(error, 'Failed to load pending teacher registrations.');
+      setRegLoadError(message);
+      showTemporaryError(message);
     } finally {
-      setIsLoadingRegistrations(false);
+      if (requestId === regRequestRef.current) {
+        setIsLoadingRegistrations(false);
+      }
     }
   }, [regPage, showTemporaryError]);
 
-  // Fetch pending extended profiles
   const fetchPendingProfiles = useCallback(async () => {
+    const requestId = ++profRequestRef.current;
     setIsLoadingProfiles(true);
+    setProfLoadError(null);
     try {
       const result = await teacherService.getPendingProfileVerifications({ page: profPage, limit: 10 });
+      if (requestId !== profRequestRef.current) {
+        return;
+      }
       const totalPages = Math.max(1, result.pagination?.totalPages || 1);
       if ((result.teachers || []).length === 0 && profPage > totalPages) {
         setProfPage(totalPages);
@@ -117,31 +143,52 @@ const VerificationTeachersManagement = () => {
       setPendingProfiles(result.teachers || []);
       setProfTotalPages(totalPages);
     } catch (error) {
+      if (requestId !== profRequestRef.current) {
+        return;
+      }
       clientLogger.error('Failed to fetch pending profiles:', error);
-      showTemporaryError(extractErrorMessage(error, 'Failed to load pending profile verifications.'));
+      const message = extractErrorMessage(error, 'Failed to load pending profile verifications.');
+      setProfLoadError(message);
+      showTemporaryError(message);
     } finally {
-      setIsLoadingProfiles(false);
+      if (requestId === profRequestRef.current) {
+        setIsLoadingProfiles(false);
+      }
     }
   }, [profPage, showTemporaryError]);
 
-  // Fetch pending certificates
   const fetchPendingCertificates = useCallback(async () => {
+    const requestId = ++certRequestRef.current;
     setIsLoadingCertificates(true);
+    setCertLoadError(null);
     try {
       const result = await teacherService.getPendingCertificateVerifications();
+      if (requestId !== certRequestRef.current) {
+        return;
+      }
       setPendingCertificates(result || []);
     } catch (error) {
+      if (requestId !== certRequestRef.current) {
+        return;
+      }
       clientLogger.error('Failed to fetch pending certificates:', error);
-      showTemporaryError(extractErrorMessage(error, 'Failed to load pending certificate verifications.'));
+      const message = extractErrorMessage(error, 'Failed to load pending certificate verifications.');
+      setCertLoadError(message);
+      showTemporaryError(message);
     } finally {
-      setIsLoadingCertificates(false);
+      if (requestId === certRequestRef.current) {
+        setIsLoadingCertificates(false);
+      }
     }
   }, [showTemporaryError]);
 
-  // Fetch auto-verification stats
   const fetchAutoVerificationStats = useCallback(async () => {
+    const requestId = ++autoStatsRequestRef.current;
     try {
       const stats = await adminService.getAutoVerificationStats();
+      if (requestId !== autoStatsRequestRef.current) {
+        return;
+      }
       setAutoVerificationStats(stats);
     } catch (error) {
       clientLogger.error('Failed to fetch auto-verification stats:', error);
@@ -168,23 +215,32 @@ const VerificationTeachersManagement = () => {
     }
   }, [activeTab, regPage, profPage, fetchPendingRegistrations, fetchPendingProfiles, fetchPendingCertificates, fetchAutoVerificationStats]);
 
-  // Approve/Reject Certificate
+  useEffect(() => {
+    return () => {
+      regRequestRef.current += 1;
+      profRequestRef.current += 1;
+      certRequestRef.current += 1;
+      autoStatsRequestRef.current += 1;
+    };
+  }, []);
+
   const handleReviewCertificate = async (
     verificationId: string,
     status: ReviewVerificationStatus,
     reviewNotes?: string
   ): Promise<boolean> => {
-    setCertSubmittingId(verificationId);
+    if (certSubmittingAction) return false;
+    setCertSubmittingAction({ id: verificationId, status });
     try {
       await teacherService.reviewCertificateVerification(verificationId, status, reviewNotes);
-      showTemporarySuccess(`Certificate ${status === VerificationStatus.APPROVED ? 'approved' : 'rejected'} successfully.`);
+      showTemporarySuccess(`Certificate ${status === VerificationStatus.APPROVED ? 'approved' : 'rejected'}.`);
       await fetchPendingCertificates();
       return true;
     } catch (error) {
       showTemporaryError(extractErrorMessage(error, 'Failed to review certificate.'));
       return false;
     } finally {
-      setCertSubmittingId(null);
+      setCertSubmittingAction(null);
     }
   };
 
@@ -193,11 +249,11 @@ const VerificationTeachersManagement = () => {
     setCertificateRejectNotes('');
   };
 
-  const closeCertificateRejectModal = () => {
-    if (certSubmittingId) return;
+  const closeCertificateRejectModal = useCallback(() => {
+    if (certSubmittingAction) return;
     setCertificateRejectTarget(null);
     setCertificateRejectNotes('');
-  };
+  }, [certSubmittingAction]);
 
   const submitCertificateReject = async () => {
     if (!certificateRejectTarget) {
@@ -216,27 +272,28 @@ const VerificationTeachersManagement = () => {
       notes
     );
     if (succeeded) {
-      closeCertificateRejectModal();
+      setCertificateRejectTarget(null);
+      setCertificateRejectNotes('');
     }
   };
 
-  // Approve/Reject Registration
   const handleReviewRegistration = async (
     teacherProfileId: string,
     status: ReviewRegistrationStatus,
     reviewNotes?: string
   ): Promise<boolean> => {
-    setRegSubmittingId(teacherProfileId);
+    if (regSubmittingAction) return false;
+    setRegSubmittingAction({ id: teacherProfileId, status });
     try {
       await teacherService.reviewRegistration(teacherProfileId, status, reviewNotes);
-      showTemporarySuccess(`Registration ${status === RegistrationStatus.APPROVED ? 'approved' : 'rejected'} successfully.`);
+      showTemporarySuccess(`Registration ${status === RegistrationStatus.APPROVED ? 'approved' : 'rejected'}.`);
       await fetchPendingRegistrations();
       return true;
     } catch (error) {
       showTemporaryError(extractErrorMessage(error, 'Failed to review registration.'));
       return false;
     } finally {
-      setRegSubmittingId(null);
+      setRegSubmittingAction(null);
     }
   };
 
@@ -245,11 +302,11 @@ const VerificationTeachersManagement = () => {
     setRegistrationRejectNotes('');
   };
 
-  const closeRegistrationRejectModal = () => {
-    if (regSubmittingId) return;
+  const closeRegistrationRejectModal = useCallback(() => {
+    if (regSubmittingAction) return;
     setRegistrationRejectTarget(null);
     setRegistrationRejectNotes('');
-  };
+  }, [regSubmittingAction]);
 
   const submitRegistrationReject = async () => {
     if (!registrationRejectTarget) {
@@ -257,7 +314,6 @@ const VerificationTeachersManagement = () => {
     }
 
     const notes = registrationRejectNotes.trim();
-
     if (!notes) {
       showTemporaryError('Review notes are required when rejecting a registration.');
       return;
@@ -269,11 +325,11 @@ const VerificationTeachersManagement = () => {
       notes
     );
     if (succeeded) {
-      closeRegistrationRejectModal();
+      setRegistrationRejectTarget(null);
+      setRegistrationRejectNotes('');
     }
   };
 
-  // Open Profile Review Modal
   const openProfileReviewModal = (teacher: TeacherProfile) => {
     setSelectedTeacher(teacher);
     setProfileReviewStatus(VerificationStatus.APPROVED);
@@ -281,9 +337,8 @@ const VerificationTeachersManagement = () => {
     setIsProfileReviewModalOpen(true);
   };
 
-  // Submit Profile Review
   const submitProfileReview = async () => {
-    if (!selectedTeacher) return;
+    if (!selectedTeacher || isSubmittingProfileReview) return;
 
     const trimmedNotes = profileReviewNotes.trim();
     if (profileReviewStatus === VerificationStatus.REJECTED && !trimmedNotes) {
@@ -298,7 +353,7 @@ const VerificationTeachersManagement = () => {
         profileReviewStatus,
         trimmedNotes || undefined
       );
-      showTemporarySuccess(`Profile ${profileReviewStatus === VerificationStatus.APPROVED ? 'approved' : 'rejected'} successfully.`);
+      showTemporarySuccess(`Profile ${profileReviewStatus === VerificationStatus.APPROVED ? 'approved' : 'rejected'}.`);
       setIsProfileReviewModalOpen(false);
       await fetchPendingProfiles();
     } catch (error) {
@@ -308,92 +363,21 @@ const VerificationTeachersManagement = () => {
     }
   };
 
-  // Helpers
-  const parseField = useCallback((field: string | string[] | undefined): string[] => {
-    if (!field) return [];
-    if (typeof field === 'string') {
-      try {
-        const parsed = JSON.parse(field);
-        return Array.isArray(parsed) ? parsed : [];
-      } catch {
-        return [];
-      }
-    }
-    return Array.isArray(field) ? field : [];
-  }, []);
-
-  const parseAssetList = useCallback((field: string | string[] | undefined): string[] => {
-    if (!field) {
-      return [];
-    }
-
-    if (Array.isArray(field)) {
-      return field
-        .map((item) => item.trim())
-        .filter(Boolean);
-    }
-
-    const trimmedField = field.trim();
-    if (!trimmedField) {
-      return [];
-    }
-
-    if (/^[\[{]/.test(trimmedField)) {
-      try {
-        const parsed = JSON.parse(trimmedField);
-        return Array.isArray(parsed)
-          ? parsed
-              .filter((item): item is string => typeof item === 'string')
-              .map((item) => item.trim())
-              .filter(Boolean)
-          : [];
-      } catch {
-        return [];
-      }
-    }
-
-    return [trimmedField];
-  }, []);
-
-  const selectedTeacherCertificatePhotos = parseAssetList(selectedTeacher?.certificatePhotos);
+  const selectedTeacherCertificatePhotos = parseStringArray(
+    selectedTeacher?.certificatePhotos,
+    { allowSingleStringFallback: true }
+  );
   const selectedTeacherDisplayPhoto = selectedTeacher
     ? getTeacherDisplayPhoto(selectedTeacher)
     : undefined;
-
-  const formatDate = useCallback((date: string | Date | undefined): string => {
-    if (!date) return 'N/A';
-    try {
-      const dateObj = typeof date === 'string' ? new Date(date) : date;
-      if (isNaN(dateObj.getTime())) return 'N/A';
-      return dateObj.toLocaleDateString();
-    } catch {
-      return 'N/A';
-    }
-  }, []);
+  const selectedTeacherSpecialties = parseStringArray(selectedTeacher?.specialties);
+  const selectedTeacherLanguages = parseStringArray(selectedTeacher?.languages);
 
   const closeProfileReviewModal = useCallback(() => {
     if (!isSubmittingProfileReview) {
       setIsProfileReviewModalOpen(false);
     }
   }, [isSubmittingProfileReview]);
-
-  const handleBackdropClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
-    if (e.target === e.currentTarget) {
-      closeProfileReviewModal();
-    }
-  }, [closeProfileReviewModal]);
-
-  const handleRegistrationRejectBackdropClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
-    if (e.target === e.currentTarget) {
-      closeRegistrationRejectModal();
-    }
-  }, []);
-
-  const handleCertificateRejectBackdropClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
-    if (e.target === e.currentTarget) {
-      closeCertificateRejectModal();
-    }
-  }, []);
 
   const handleOpenCertificateDocument = useCallback(async (assetUrl: string) => {
     try {
@@ -451,7 +435,6 @@ const VerificationTeachersManagement = () => {
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-primary-50/10 to-indigo-50/20 py-8 relative">
       <div className="absolute inset-0 bg-[linear-gradient(rgba(0,0,0,0.015)_1px,transparent_1px),linear-gradient(90deg,rgba(0,0,0,0.015)_1px,transparent_1px)] bg-[size:32px_32px] pointer-events-none"></div>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative">
-        {/* Header */}
         <div className="mb-8 flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="flex items-center gap-3">
             <div className="w-12 h-12 bg-gradient-to-br from-green-500 to-emerald-600 rounded-2xl flex items-center justify-center shadow-lg shadow-green-500/25">
@@ -461,13 +444,13 @@ const VerificationTeachersManagement = () => {
               <h1 className="text-3xl font-extrabold text-gray-900">
                 Teacher <span className="bg-gradient-to-r from-green-600 to-emerald-600 bg-clip-text text-transparent">Verification</span>
               </h1>
-              <p className="text-gray-500 font-medium">Review teacher registrations and profiles</p>
+              <p className="text-gray-500 font-medium">Review teacher registrations, extended profiles, and credentials</p>
             </div>
           </div>
         </div>
 
         {/* Tabs */}
-        <div className="flex items-center gap-2 mb-6">
+        <div className="flex flex-wrap items-center gap-2 mb-6">
           <button
             type="button"
             className={`px-4 py-2 rounded-lg font-semibold transition-all ${activeTab === 'registrations' ? 'bg-primary-600 text-white' : 'bg-white border border-gray-200 text-gray-700 hover:bg-gray-100'}`}
@@ -484,22 +467,21 @@ const VerificationTeachersManagement = () => {
           </button>
           <button
             type="button"
-            className={`px-4 py-2 rounded-lg font-semibold transition-all ${activeTab === 'certificates' ? 'bg-primary-600 text-white' : 'bg-white border border-gray-200 text-gray-700 hover:bg-gray-100'}`}
+            className={`px-4 py-2 rounded-lg font-semibold transition-all tabular-nums ${activeTab === 'certificates' ? 'bg-primary-600 text-white' : 'bg-white border border-gray-200 text-gray-700 hover:bg-gray-100'}`}
             onClick={() => setActiveTab('certificates')}
           >
             Certificates ({pendingCertificates.length})
           </button>
         </div>
 
-        {/* Messages */}
         {successMessage && (
-          <div className="mb-6 p-4 bg-green-50 border border-green-200 rounded-lg flex items-start space-x-3">
+          <div role="status" className="mb-6 p-4 bg-green-50 border border-green-200 rounded-lg flex items-start space-x-3">
             <CheckCircle className="w-6 h-6 text-green-600 flex-shrink-0 mt-0.5" />
             <p className="text-green-800">{successMessage}</p>
           </div>
         )}
         {errorMessage && (
-          <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg flex items-start space-x-3">
+          <div role="alert" className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg flex items-start space-x-3">
             <AlertCircle className="w-6 h-6 text-red-600 flex-shrink-0 mt-0.5" />
             <p className="text-red-800">{errorMessage}</p>
           </div>
@@ -515,6 +497,20 @@ const VerificationTeachersManagement = () => {
                   <p className="text-gray-600 font-medium">Loading pending registrations...</p>
                 </div>
               </div>
+            ) : regLoadError ? (
+              <div role="alert" className="card text-center py-14 space-y-3 border border-red-200 bg-red-50">
+                <AlertCircle className="w-12 h-12 text-red-600 mx-auto" />
+                <h2 className="text-xl font-bold text-red-900">Unable to load pending registrations</h2>
+                <p className="text-sm text-red-800">{regLoadError}</p>
+                <button
+                  type="button"
+                  onClick={() => void fetchPendingRegistrations()}
+                  className="btn-primary btn-sm inline-flex items-center gap-1.5"
+                >
+                  <RefreshCcw className="w-4 h-4" />
+                  Retry
+                </button>
+              </div>
             ) : pendingRegistrations.length > 0 ? (
               <div className="card shadow-xl border border-gray-100 rounded-2xl overflow-hidden">
                 <div className="overflow-x-auto">
@@ -528,66 +524,75 @@ const VerificationTeachersManagement = () => {
                       </tr>
                     </thead>
                     <tbody>
-                      {pendingRegistrations.map((t) => (
-                        <tr key={t.id} className="border-b border-gray-200 hover:bg-gray-50 transition-colors">
-                          <td className="px-6 py-4">
-                            <div className="flex items-center space-x-3">
-                              {t.user?.avatar ? (
-                                <img src={t.user.avatar} alt={`${t.user.firstName} ${t.user.lastName}`} className="w-10 h-10 rounded-full object-cover" />
-                              ) : (
-                                <div className="w-10 h-10 bg-primary-600 text-white rounded-full flex items-center justify-center font-bold">
-                                  {t.user?.firstName?.[0]}{t.user?.lastName?.[0]}
+                      {pendingRegistrations.map((t) => {
+                        const isApproving =
+                          regSubmittingAction?.id === t.id &&
+                          regSubmittingAction.status === RegistrationStatus.APPROVED;
+                        const isRejecting =
+                          regSubmittingAction?.id === t.id &&
+                          regSubmittingAction.status === RegistrationStatus.REJECTED;
+                        const isRowBusy = regSubmittingAction?.id === t.id;
+
+                        return (
+                          <tr key={t.id} className="border-b border-gray-200 hover:bg-gray-50 transition-colors">
+                            <td className="px-6 py-4">
+                              <div className="flex items-center space-x-3">
+                                {t.user?.avatar ? (
+                                  <img src={t.user.avatar} alt={`${t.user.firstName} ${t.user.lastName}`} className="w-10 h-10 rounded-full object-cover" />
+                                ) : (
+                                  <div className="w-10 h-10 bg-primary-600 text-white rounded-full flex items-center justify-center font-bold">
+                                    {t.user?.firstName?.[0]}{t.user?.lastName?.[0]}
+                                  </div>
+                                )}
+                                <div>
+                                  <p className="font-semibold text-gray-900">{t.user?.firstName} {t.user?.lastName}</p>
                                 </div>
-                              )}
-                              <div>
-                                <p className="font-semibold text-gray-900">{t.user?.firstName} {t.user?.lastName}</p>
                               </div>
-                            </div>
-                          </td>
-                          <td className="px-6 py-4 text-sm text-gray-600">{t.user?.email}</td>
-                          <td className="px-6 py-4 text-sm text-gray-600">{formatDate(t.createdAt)}</td>
-                          <td className="px-6 py-4">
-                            <div className="flex items-center gap-2">
-                              <button
-                                disabled={regSubmittingId === t.id}
-                                onClick={() => void handleReviewRegistration(t.id, RegistrationStatus.APPROVED)}
-                                className="px-3 py-2 rounded-lg bg-green-600 text-white hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 transition-colors"
-                                type="button"
-                                aria-label="Approve registration"
-                              >
-                                {regSubmittingId === t.id ? <Loader className="w-4 h-4 animate-spin" /> : <UserPlus className="w-4 h-4" />}
-                                Approve
-                              </button>
-                              <button
-                                disabled={regSubmittingId === t.id}
-                                onClick={() => openRegistrationRejectModal(t)}
-                                className="px-3 py-2 rounded-lg bg-red-600 text-white hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 transition-colors"
-                                type="button"
-                                aria-label="Reject registration"
-                              >
-                                {regSubmittingId === t.id ? <Loader className="w-4 h-4 animate-spin" /> : <XCircle className="w-4 h-4" />}
-                                Reject
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
+                            </td>
+                            <td className="px-6 py-4 text-sm text-gray-600">{t.user?.email}</td>
+                            <td className="px-6 py-4 text-sm text-gray-600 tabular-nums">{formatDate(t.createdAt)}</td>
+                            <td className="px-6 py-4">
+                              <div className="flex items-center gap-2">
+                                <button
+                                  disabled={isRowBusy}
+                                  onClick={() => void handleReviewRegistration(t.id, RegistrationStatus.APPROVED)}
+                                  className="px-3 py-2 rounded-lg bg-green-600 text-white hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 transition-colors"
+                                  type="button"
+                                  aria-label={`Approve registration for ${t.user?.firstName ?? ''} ${t.user?.lastName ?? ''}`.trim()}
+                                >
+                                  {isApproving ? <Loader className="w-4 h-4 animate-spin" /> : <UserPlus className="w-4 h-4" />}
+                                  Approve
+                                </button>
+                                <button
+                                  disabled={isRowBusy}
+                                  onClick={() => openRegistrationRejectModal(t)}
+                                  className="px-3 py-2 rounded-lg bg-red-600 text-white hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 transition-colors"
+                                  type="button"
+                                  aria-label={`Reject registration for ${t.user?.firstName ?? ''} ${t.user?.lastName ?? ''}`.trim()}
+                                >
+                                  {isRejecting ? <Loader className="w-4 h-4 animate-spin" /> : <XCircle className="w-4 h-4" />}
+                                  Reject
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>
-                {/* Pagination */}
-                <div className="px-6 py-4 border-t border-gray-200 flex items-center justify-between">
+                <div className="px-6 py-4 border-t border-gray-200 flex items-center justify-between tabular-nums">
                   <p className="text-sm text-gray-600">Page {regPage} of {regTotalPages}</p>
                   <div className="flex gap-2">
-                    <button type="button" onClick={() => setRegPage(Math.max(1, regPage - 1))} disabled={regPage === 1} className="btn-outline">Previous</button>
-                    <button type="button" onClick={() => setRegPage(Math.min(regTotalPages, regPage + 1))} disabled={regPage === regTotalPages} className="btn-outline">Next</button>
+                    <button type="button" onClick={() => setRegPage(Math.max(1, regPage - 1))} disabled={regPage === 1} className="btn-outline btn-sm">Previous</button>
+                    <button type="button" onClick={() => setRegPage(Math.min(regTotalPages, regPage + 1))} disabled={regPage === regTotalPages} className="btn-outline btn-sm">Next</button>
                   </div>
                 </div>
               </div>
             ) : (
               <div className="card text-center py-16 shadow-xl border border-gray-100 rounded-2xl">
                 <Clock className="w-16 h-16 text-yellow-600 mx-auto mb-4" />
-                <h3 className="text-2xl font-bold text-gray-900 mb-2">No pending registrations</h3>
+                <h2 className="text-2xl font-bold text-gray-900 mb-2">No pending registrations</h2>
                 <p className="text-gray-600">New teacher registrations will appear here.</p>
               </div>
             )}
@@ -603,6 +608,20 @@ const VerificationTeachersManagement = () => {
                   <div className="spinner" />
                   <p className="text-gray-600 font-medium">Loading pending profiles...</p>
                 </div>
+              </div>
+            ) : profLoadError ? (
+              <div role="alert" className="card text-center py-14 space-y-3 border border-red-200 bg-red-50">
+                <AlertCircle className="w-12 h-12 text-red-600 mx-auto" />
+                <h2 className="text-xl font-bold text-red-900">Unable to load pending profiles</h2>
+                <p className="text-sm text-red-800">{profLoadError}</p>
+                <button
+                  type="button"
+                  onClick={() => void fetchPendingProfiles()}
+                  className="btn-primary btn-sm inline-flex items-center gap-1.5"
+                >
+                  <RefreshCcw className="w-4 h-4" />
+                  Retry
+                </button>
               </div>
             ) : pendingProfiles.length > 0 ? (
               <div className="card shadow-xl border border-gray-100 rounded-2xl overflow-hidden">
@@ -621,7 +640,7 @@ const VerificationTeachersManagement = () => {
                     <tbody>
                       {pendingProfiles.map((teacher) => {
                         const displayPhoto = getTeacherDisplayPhoto(teacher);
-                        const specialties = parseField(teacher.specialties);
+                        const specialties = parseStringArray(teacher.specialties);
 
                         return (
                           <tr key={teacher.id} className="border-b border-gray-200 hover:bg-gray-50 transition-colors">
@@ -646,23 +665,23 @@ const VerificationTeachersManagement = () => {
                                   <span key={idx} className="px-2 py-1 bg-primary-100 text-primary-800 rounded-full text-xs font-medium">{spec}</span>
                                 ))}
                                 {specialties.length > 2 && (
-                                  <span className="text-xs text-gray-600">+{specialties.length - 2} more</span>
+                                  <span className="text-xs text-gray-600 tabular-nums">+{specialties.length - 2} more</span>
                                 )}
                               </div>
                             </td>
-                            <td className="px-6 py-4 text-sm text-gray-600">{formatDate(teacher.profileSubmittedAt)}</td>
+                            <td className="px-6 py-4 text-sm text-gray-600 tabular-nums">{formatDate(teacher.profileSubmittedAt)}</td>
                             <td className="px-6 py-4">
                               <div className="flex items-center space-x-2">
                                 <Clock className="w-4 h-4 text-yellow-600" />
-                                <span className="text-sm font-medium text-yellow-600">Pending</span>
+                                <span className="text-sm font-medium text-yellow-700">Pending</span>
                               </div>
                             </td>
                             <td className="px-6 py-4">
                               <button
                                 onClick={() => openProfileReviewModal(teacher)}
-                                className="btn-primary flex items-center gap-2 text-sm"
+                                className="btn-primary btn-sm flex items-center gap-2"
                                 type="button"
-                                aria-label="Review profile"
+                                aria-label={`Review profile for ${teacher.user?.firstName ?? ''} ${teacher.user?.lastName ?? ''}`.trim()}
                               >
                                 <Eye className="w-4 h-4" /> Review
                               </button>
@@ -673,19 +692,18 @@ const VerificationTeachersManagement = () => {
                     </tbody>
                   </table>
                 </div>
-                {/* Pagination */}
-                <div className="px-6 py-4 border-t border-gray-200 flex items-center justify-between">
+                <div className="px-6 py-4 border-t border-gray-200 flex items-center justify-between tabular-nums">
                   <p className="text-sm text-gray-600">Page {profPage} of {profTotalPages}</p>
                   <div className="flex gap-2">
-                    <button type="button" onClick={() => setProfPage(Math.max(1, profPage - 1))} disabled={profPage === 1} className="btn-outline">Previous</button>
-                    <button type="button" onClick={() => setProfPage(Math.min(profTotalPages, profPage + 1))} disabled={profPage === profTotalPages} className="btn-outline">Next</button>
+                    <button type="button" onClick={() => setProfPage(Math.max(1, profPage - 1))} disabled={profPage === 1} className="btn-outline btn-sm">Previous</button>
+                    <button type="button" onClick={() => setProfPage(Math.min(profTotalPages, profPage + 1))} disabled={profPage === profTotalPages} className="btn-outline btn-sm">Next</button>
                   </div>
                 </div>
               </div>
             ) : (
               <div className="card text-center py-16 shadow-xl border border-gray-100 rounded-2xl">
                 <Clock className="w-16 h-16 text-yellow-600 mx-auto mb-4" />
-                <h3 className="text-2xl font-bold text-gray-900 mb-2">No pending profiles</h3>
+                <h2 className="text-2xl font-bold text-gray-900 mb-2">No pending profiles</h2>
                 <p className="text-gray-600">Teacher profile submissions awaiting review will appear here.</p>
               </div>
             )}
@@ -695,9 +713,8 @@ const VerificationTeachersManagement = () => {
         {/* Certificates Tab */}
         {activeTab === 'certificates' && (
           <>
-            {/* Auto-Verification Stats Banner */}
             {autoVerificationStats && (
-              <div className="mb-6 grid grid-cols-1 md:grid-cols-4 gap-4">
+              <div className="mb-6 grid grid-cols-1 md:grid-cols-4 gap-4 tabular-nums">
                 <div className="bg-gradient-to-br from-blue-50 to-blue-100 border border-blue-200 rounded-xl p-4">
                   <div className="flex items-center gap-2 mb-1">
                     <Shield className="w-4 h-4 text-blue-600" />
@@ -729,7 +746,6 @@ const VerificationTeachersManagement = () => {
               </div>
             )}
 
-            {/* Filter Toggle */}
             <div className="mb-4 flex items-center gap-3">
               <button
                 type="button"
@@ -762,6 +778,20 @@ const VerificationTeachersManagement = () => {
                   <p className="text-gray-600 font-medium">Loading pending certificates...</p>
                 </div>
               </div>
+            ) : certLoadError ? (
+              <div role="alert" className="card text-center py-14 space-y-3 border border-red-200 bg-red-50">
+                <AlertCircle className="w-12 h-12 text-red-600 mx-auto" />
+                <h2 className="text-xl font-bold text-red-900">Unable to load pending certificates</h2>
+                <p className="text-sm text-red-800">{certLoadError}</p>
+                <button
+                  type="button"
+                  onClick={() => void fetchPendingCertificates()}
+                  className="btn-primary btn-sm inline-flex items-center gap-1.5"
+                >
+                  <RefreshCcw className="w-4 h-4" />
+                  Retry
+                </button>
+              </div>
             ) : (() => {
               const filteredCertificates = certFilter === 'needs_review'
                 ? pendingCertificates.filter((c) => c.verificationMethod === 'AUTO')
@@ -784,6 +814,13 @@ const VerificationTeachersManagement = () => {
                       <tbody>
                         {filteredCertificates.map((cert) => {
                           const documentAccessUrl = cert.accessUrl ?? cert.documentUrl;
+                          const isApproving =
+                            certSubmittingAction?.id === cert.id &&
+                            certSubmittingAction.status === VerificationStatus.APPROVED;
+                          const isRejecting =
+                            certSubmittingAction?.id === cert.id &&
+                            certSubmittingAction.status === VerificationStatus.REJECTED;
+                          const isRowBusy = certSubmittingAction?.id === cert.id;
 
                           return (
                             <tr key={cert.id} className="border-b border-gray-200 hover:bg-gray-50 transition-colors">
@@ -822,7 +859,7 @@ const VerificationTeachersManagement = () => {
                                   <button
                                     type="button"
                                     onClick={() => void handleOpenCertificateDocument(documentAccessUrl)}
-                                    className="text-primary-600 hover:underline flex items-center gap-1"
+                                    className="text-primary-600 hover:underline flex items-center gap-1 font-medium text-sm"
                                   >
                                     <Eye className="w-4 h-4" /> View Document
                                   </button>
@@ -832,25 +869,25 @@ const VerificationTeachersManagement = () => {
                                   </span>
                                 )}
                               </td>
-                              <td className="px-6 py-4 text-sm text-gray-600">{formatDate(cert.submittedAt)}</td>
+                              <td className="px-6 py-4 text-sm text-gray-600 tabular-nums">{formatDate(cert.submittedAt)}</td>
                               <td className="px-6 py-4">
                                 <div className="flex items-center gap-2">
                                   <button
-                                    disabled={certSubmittingId === cert.id}
+                                    disabled={isRowBusy}
                                     onClick={() => void handleReviewCertificate(cert.id, VerificationStatus.APPROVED)}
                                     className="px-3 py-2 rounded-lg bg-green-600 text-white hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 transition-colors"
                                     type="button"
                                   >
-                                    {certSubmittingId === cert.id ? <Loader className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
+                                    {isApproving ? <Loader className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
                                     Approve
                                   </button>
                                   <button
-                                    disabled={certSubmittingId === cert.id}
+                                    disabled={isRowBusy}
                                     onClick={() => openCertificateRejectModal(cert)}
                                     className="px-3 py-2 rounded-lg bg-red-600 text-white hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 transition-colors"
                                     type="button"
                                   >
-                                    {certSubmittingId === cert.id ? <Loader className="w-4 h-4 animate-spin" /> : <XCircle className="w-4 h-4" />}
+                                    {isRejecting ? <Loader className="w-4 h-4 animate-spin" /> : <XCircle className="w-4 h-4" />}
                                     Reject
                                   </button>
                                 </div>
@@ -863,10 +900,27 @@ const VerificationTeachersManagement = () => {
                   </div>
                 </div>
               ) : (
-                <div className="card text-center py-16 shadow-xl border border-gray-100 rounded-2xl">
-                  <Clock className="w-16 h-16 text-yellow-600 mx-auto mb-4" />
-                  <h3 className="text-2xl font-bold text-gray-900 mb-2">No pending certificates</h3>
-                  <p className="text-gray-600">Certificate submissions awaiting review will appear here.</p>
+                <div className="card text-center py-16 shadow-xl border border-gray-100 rounded-2xl space-y-3">
+                  <Clock className="w-16 h-16 text-yellow-600 mx-auto mb-2" />
+                  <h2 className="text-2xl font-bold text-gray-900">
+                    {pendingCertificates.length > 0 && certFilter === 'needs_review'
+                      ? 'No auto-flagged certificates'
+                      : 'No pending certificates'}
+                  </h2>
+                  <p className="text-gray-600">
+                    {pendingCertificates.length > 0 && certFilter === 'needs_review'
+                      ? 'All remaining pending certificates were submitted for standard manual review.'
+                      : 'Certificate submissions awaiting review will appear here.'}
+                  </p>
+                  {pendingCertificates.length > 0 && certFilter === 'needs_review' && (
+                    <button
+                      type="button"
+                      onClick={() => setCertFilter('all')}
+                      className="btn-secondary btn-sm"
+                    >
+                      Show All Pending Certificates
+                    </button>
+                  )}
                 </div>
               );
             })()}
@@ -877,8 +931,12 @@ const VerificationTeachersManagement = () => {
       {/* Registration Rejection Modal */}
       {registrationRejectTarget && (
         <div
-          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
-          onMouseDown={handleRegistrationRejectBackdropClick}
+          className="fixed inset-0 bg-slate-950/55 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget) {
+              closeRegistrationRejectModal();
+            }
+          }}
           role="dialog"
           tabIndex={-1}
           aria-modal="true"
@@ -887,10 +945,10 @@ const VerificationTeachersManagement = () => {
           <div
             ref={registrationRejectModalRef}
             tabIndex={-1}
-            className="bg-white rounded-lg shadow-xl max-w-lg w-full overflow-hidden"
+            className="bg-white rounded-2xl shadow-xl max-w-lg w-full overflow-hidden"
           >
             <div className="bg-gradient-to-r from-red-600 to-red-700 text-white px-6 py-4 flex items-center justify-between">
-              <h2 id="registration-reject-title" className="text-xl font-bold">Reject Registration</h2>
+              <h2 id="registration-reject-title" className="text-xl font-bold text-white">Reject Registration</h2>
               <button
                 type="button"
                 onClick={closeRegistrationRejectModal}
@@ -923,7 +981,7 @@ const VerificationTeachersManagement = () => {
                   maxLength={500}
                   placeholder="Explain what the teacher needs to fix before registering again."
                 />
-                <div className="mt-1 flex items-center justify-between text-xs text-gray-500">
+                <div className="mt-1 flex items-center justify-between text-xs text-gray-500 tabular-nums">
                   <span>Required for rejected registrations.</span>
                   <span>{registrationRejectNotes.length}/500</span>
                 </div>
@@ -943,11 +1001,11 @@ const VerificationTeachersManagement = () => {
                 className="px-4 py-2 rounded-lg bg-red-600 text-white hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                 onClick={() => void submitRegistrationReject()}
                 disabled={
-                  regSubmittingId === registrationRejectTarget.id ||
+                  regSubmittingAction?.id === registrationRejectTarget.id ||
                   registrationRejectNotes.trim().length === 0
                 }
               >
-                {regSubmittingId === registrationRejectTarget.id ? (
+                {regSubmittingAction?.id === registrationRejectTarget.id ? (
                   <>
                     <Loader className="w-4 h-4 animate-spin" /> Rejecting...
                   </>
@@ -965,8 +1023,12 @@ const VerificationTeachersManagement = () => {
       {/* Certificate Rejection Modal */}
       {certificateRejectTarget && (
         <div
-          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
-          onMouseDown={handleCertificateRejectBackdropClick}
+          className="fixed inset-0 bg-slate-950/55 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget) {
+              closeCertificateRejectModal();
+            }
+          }}
           role="dialog"
           tabIndex={-1}
           aria-modal="true"
@@ -975,10 +1037,10 @@ const VerificationTeachersManagement = () => {
           <div
             ref={certificateRejectModalRef}
             tabIndex={-1}
-            className="bg-white rounded-lg shadow-xl max-w-lg w-full overflow-hidden"
+            className="bg-white rounded-2xl shadow-xl max-w-lg w-full overflow-hidden"
           >
             <div className="bg-gradient-to-r from-red-600 to-red-700 text-white px-6 py-4 flex items-center justify-between">
-              <h2 id="certificate-reject-title" className="text-xl font-bold">Reject Certificate</h2>
+              <h2 id="certificate-reject-title" className="text-xl font-bold text-white">Reject Certificate</h2>
               <button
                 type="button"
                 onClick={closeCertificateRejectModal}
@@ -995,7 +1057,7 @@ const VerificationTeachersManagement = () => {
                 <p className="font-semibold text-gray-900">
                   {certificateRejectTarget.teacherProfile?.user?.firstName} {certificateRejectTarget.teacherProfile?.user?.lastName}
                 </p>
-                <p className="text-sm text-gray-600">{certificateRejectTarget.documentType}</p>
+                <p className="text-sm text-gray-600 capitalize">{certificateRejectTarget.documentType.replace(/_/g, ' ')}</p>
               </div>
 
               <div>
@@ -1011,7 +1073,7 @@ const VerificationTeachersManagement = () => {
                   maxLength={500}
                   placeholder="Explain why this document was rejected so the teacher can upload a valid replacement."
                 />
-                <div className="mt-1 flex items-center justify-between text-xs text-gray-500">
+                <div className="mt-1 flex items-center justify-between text-xs text-gray-500 tabular-nums">
                   <span>Required for rejected certificates.</span>
                   <span>{certificateRejectNotes.length}/500</span>
                 </div>
@@ -1031,11 +1093,11 @@ const VerificationTeachersManagement = () => {
                 className="px-4 py-2 rounded-lg bg-red-600 text-white hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                 onClick={() => void submitCertificateReject()}
                 disabled={
-                  certSubmittingId === certificateRejectTarget.id ||
+                  certSubmittingAction?.id === certificateRejectTarget.id ||
                   certificateRejectNotes.trim().length === 0
                 }
               >
-                {certSubmittingId === certificateRejectTarget.id ? (
+                {certSubmittingAction?.id === certificateRejectTarget.id ? (
                   <>
                     <Loader className="w-4 h-4 animate-spin" /> Rejecting...
                   </>
@@ -1053,8 +1115,12 @@ const VerificationTeachersManagement = () => {
       {/* Profile Review Modal */}
       {isProfileReviewModalOpen && selectedTeacher && (
         <div
-          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
-          onMouseDown={handleBackdropClick}
+          className="fixed inset-0 bg-slate-950/55 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget) {
+              closeProfileReviewModal();
+            }
+          }}
           role="dialog"
           tabIndex={-1}
           aria-modal="true"
@@ -1064,11 +1130,10 @@ const VerificationTeachersManagement = () => {
           <div
             ref={profileReviewModalRef}
             tabIndex={-1}
-            className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto"
+            className="bg-white rounded-2xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto"
           >
-            {/* Modal Header */}
             <div className="sticky top-0 bg-gradient-to-r from-primary-600 to-primary-700 text-white px-6 py-4 flex items-center justify-between">
-              <h2 id="profile-review-title" className="text-2xl font-bold">Review Teacher Profile</h2>
+              <h2 id="profile-review-title" className="text-2xl font-bold text-white">Review Teacher Profile</h2>
               <button
                 onClick={closeProfileReviewModal}
                 disabled={isSubmittingProfileReview}
@@ -1080,7 +1145,6 @@ const VerificationTeachersManagement = () => {
               </button>
             </div>
 
-            {/* Modal Content */}
             <div className="p-6 space-y-6">
               <p id="profile-review-description" className="sr-only">
                 Review the teacher profile details and choose whether to approve or reject the submission.
@@ -1115,7 +1179,6 @@ const VerificationTeachersManagement = () => {
                 </div>
               )}
 
-              {/* Teacher Info */}
               <div className="bg-gray-50 rounded-lg p-4">
                 <h3 className="font-bold text-gray-900 mb-3">Teacher Information</h3>
                 <div className="grid grid-cols-2 gap-4">
@@ -1130,7 +1193,6 @@ const VerificationTeachersManagement = () => {
                 </div>
               </div>
 
-              {/* Profile Details */}
               {selectedTeacher.selfIntroduction && (
                 <div>
                   <h3 className="font-bold text-gray-900 mb-2">Self Introduction</h3>
@@ -1152,24 +1214,22 @@ const VerificationTeachersManagement = () => {
                 </div>
               )}
 
-              {/* Specialties */}
-              {parseField(selectedTeacher.specialties).length > 0 && (
+              {selectedTeacherSpecialties.length > 0 && (
                 <div>
                   <h3 className="font-bold text-gray-900 mb-2">Specialties</h3>
                   <div className="flex flex-wrap gap-2">
-                    {parseField(selectedTeacher.specialties).map((spec: string, idx: number) => (
+                    {selectedTeacherSpecialties.map((spec: string, idx: number) => (
                       <span key={idx} className="px-2 py-1 bg-primary-100 text-primary-800 rounded-full text-sm font-medium">{spec}</span>
                     ))}
                   </div>
                 </div>
               )}
 
-              {/* Languages */}
-              {parseField(selectedTeacher.languages).length > 0 && (
+              {selectedTeacherLanguages.length > 0 && (
                 <div>
                   <h3 className="font-bold text-gray-900 mb-2">Languages</h3>
                   <div className="flex flex-wrap gap-2">
-                    {parseField(selectedTeacher.languages).map((lang: string, idx: number) => (
+                    {selectedTeacherLanguages.map((lang: string, idx: number) => (
                       <span key={idx} className="px-2 py-1 bg-primary-100 text-primary-800 rounded-full text-sm font-medium">{lang}</span>
                     ))}
                   </div>
@@ -1177,7 +1237,6 @@ const VerificationTeachersManagement = () => {
               )}
             </div>
 
-            {/* Modal Footer */}
             <div className="sticky bottom-0 bg-gray-50 border-t border-gray-200 px-6 py-4 space-y-4">
               <div className="flex gap-4">
                 <label htmlFor="review-status" className="flex items-center gap-2 text-sm font-medium text-gray-700">
@@ -1228,17 +1287,13 @@ const VerificationTeachersManagement = () => {
                     <>
                       <Loader className="w-4 h-4 animate-spin" /> Submitting...
                     </>
+                  ) : profileReviewStatus === VerificationStatus.APPROVED ? (
+                    <>
+                      <CheckCircle className="w-4 h-4" /> Approve
+                    </>
                   ) : (
                     <>
-                      {profileReviewStatus === VerificationStatus.APPROVED ? (
-                        <>
-                          <CheckCircle className="w-4 h-4" /> Approve
-                        </>
-                      ) : (
-                        <>
-                          <XCircle className="w-4 h-4" /> Reject
-                        </>
-                      )}
+                      <XCircle className="w-4 h-4" /> Reject
                     </>
                   )}
                 </button>

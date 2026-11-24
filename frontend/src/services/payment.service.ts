@@ -129,15 +129,25 @@ const paymentService = {
       recentPayments: PaymentWithDetails[];
     }>>('/payments/teacher/earnings-by-course');
     const result = extractData(response);
+    const rawCourseEarnings = Array.isArray(result?.courseEarnings)
+      ? result.courseEarnings
+      : [];
+    const rawRecentPayments = Array.isArray(result?.recentPayments)
+      ? result.recentPayments
+      : [];
     return {
       ...result,
-      totalEarnings: toFiniteNumber(result.totalEarnings),
-      courseEarnings: result.courseEarnings.map((course) => ({
+      totalEarnings: toFiniteNumber(result?.totalEarnings),
+      totalCourses: toFiniteNumber(result?.totalCourses),
+      totalStudents: toFiniteNumber(result?.totalStudents),
+      courseEarnings: rawCourseEarnings.map((course) => ({
         ...course,
         totalEarnings: toFiniteNumber(course.totalEarnings),
-        payments: course.payments.map(normalizePayment),
+        payments: (Array.isArray(course.payments) ? course.payments : []).map(
+          normalizePayment
+        ),
       })),
-      recentPayments: result.recentPayments.map(normalizePayment),
+      recentPayments: rawRecentPayments.map(normalizePayment),
     };
   },
 };

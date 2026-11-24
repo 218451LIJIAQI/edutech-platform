@@ -5,6 +5,7 @@ import type {
   TeacherVerification,
 } from "@prisma/client";
 import { NotFoundError, ValidationError } from "../../utils/errors";
+import notificationService from "../notification.service";
 import { buildCurrentEnrollmentWhere } from "../shared/enrollment-access";
 
 const publicTeacherUserSelect = {
@@ -229,11 +230,9 @@ export const createTeacherNotification = async (params: {
   message: string;
   type: string;
 }) =>
-  prisma.notification.create({
-    data: {
-      userId: ensureRequiredIdentifier(params.userId, "User ID"),
-      title: ensureRequiredIdentifier(params.title, "Notification title"),
-      message: ensureRequiredIdentifier(params.message, "Notification message"),
-      type: ensureRequiredIdentifier(params.type, "Notification type"),
-    },
-  });
+  notificationService.createNotification(
+    params.userId,
+    params.title,
+    params.message,
+    params.type,
+  );

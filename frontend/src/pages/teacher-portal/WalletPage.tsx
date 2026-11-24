@@ -32,7 +32,7 @@ import type {
   WalletTransactionListResponse,
 } from '@/services/wallet.service';
 import { extractErrorMessage } from '@/utils/error-handler';
-import { resolveWalletDisputeSummary } from '@/utils/enrollment';
+import { getTransactionAmountPresentation, resolveWalletDisputeSummary } from '@/utils/enrollment';
 import { formatCurrency, roundCurrency } from '@/utils/helpers';
 import ConfirmationModal from '@/components/common/ConfirmationModal';
 
@@ -54,31 +54,6 @@ const emptyPayouts: WalletPayoutListResponse = {
 const typeOptions = Object.values(WalletTransactionType);
 const sourceOptions = Object.values(WalletTransactionSource);
 const emptyMethodDetails: PayoutMethodDetails = {};
-
-const getTransactionAmountPresentation = (
-  type: WalletTransactionType
-): { amountPrefix: '+' | '-'; amountClassName: string } => {
-  switch (type) {
-    case WalletTransactionType.CREDIT:
-    case WalletTransactionType.UNFREEZE:
-    case WalletTransactionType.ADJUSTMENT:
-      return {
-        amountPrefix: '+',
-        amountClassName: 'text-emerald-700',
-      };
-    case WalletTransactionType.DEBIT:
-    case WalletTransactionType.FREEZE:
-      return {
-        amountPrefix: '-',
-        amountClassName: 'text-red-600',
-      };
-    default:
-      return {
-        amountPrefix: '+',
-        amountClassName: 'text-slate-700',
-      };
-  }
-};
 
 const getPayoutStatusBadgeClass = (status: PayoutRequestStatus) => {
   switch (status) {
@@ -138,10 +113,12 @@ const WalletPage = () => {
   const [methodLabel, setMethodLabel] = useState('');
   const [methodDetails, setMethodDetails] = useState<PayoutMethodDetails>(emptyMethodDetails);
   const [methodIsDefault, setMethodIsDefault] = useState(false);
+  const [methodFormError, setMethodFormError] = useState<string | null>(null);
 
   const [payoutAmountInput, setPayoutAmountInput] = useState<string>('');
   const [payoutMethodId, setPayoutMethodId] = useState<string>('');
   const [payoutNote, setPayoutNote] = useState<string>('');
+  const [payoutFormError, setPayoutFormError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isMethodActionLoading, setIsMethodActionLoading] = useState(false);
   const [methodPendingDelete, setMethodPendingDelete] = useState<PayoutMethod | null>(null);
@@ -158,6 +135,7 @@ const WalletPage = () => {
   const hasWithdrawableBalance = withdrawableBalance > 0;
 
   const updateMethodDetails = (field: string, value: string) => {
+    setMethodFormError(null);
     setMethodDetails((details) => ({ ...details, [field]: value }));
   };
 
@@ -171,6 +149,7 @@ const WalletPage = () => {
     setMethodLabel('');
     setMethodDetails(emptyMethodDetails);
     setMethodIsDefault(false);
+    setMethodFormError(null);
   };
 
   const openMethodModal = () => {
@@ -188,6 +167,7 @@ const WalletPage = () => {
     setPayoutAmountInput('');
     setPayoutMethodId('');
     setPayoutNote('');
+    setPayoutFormError(null);
   };
 
   const openPayoutModal = () => {
@@ -203,28 +183,28 @@ const WalletPage = () => {
 
   const validateMethodForm = () => {
     if (!methodLabel.trim()) {
-      toast.error('Please provide a label');
+      setMethodFormError('Please provide a method label.');
       return false;
     }
 
     if (methodType === PayoutMethodType.BANK_TRANSFER) {
       if (!getMethodDetailValue('bankName').trim()) {
-        toast.error('Please provide the bank name');
+        setMethodFormError('Please provide the bank name.');
         return false;
       }
       if (!getMethodDetailValue('accountName').trim()) {
-        toast.error('Please provide the account name');
+        setMethodFormError('Please provide the account holder name.');
         return false;
       }
       if (!getMethodDetailValue('accountNo').trim()) {
-        toast.error('Please provide the account number');
+        setMethodFormError('Please provide the bank account number.');
         return false;
       }
       return true;
     }
 
     if (!getMethodDetailValue('walletId').trim()) {
-      toast.error('Please provide the wallet ID or destination handle');
+      setMethodFormError('Please provide the wallet ID or destination handle.');
       return false;
     }
 
@@ -311,38 +291,37 @@ const WalletPage = () => {
   const submitPayout = async () => {
     if (!summary) return;
     if (methods.length === 0) {
-      toast.error('Add a payout method before requesting a payout');
+      setPayoutFormError('Add a payout method before requesting a payout.');
       return;
     }
 
     const parsedAmount = Number(payoutAmountInput);
     if (!Number.isFinite(parsedAmount)) {
-      toast.error('Enter a valid payout amount greater than $0.00');
+      setPayoutFormError('Enter a valid payout amount greater than $0.00.');
       return;
     }
     const roundedAmount = roundCurrency(parsedAmount);
     if (roundedAmount < 0.01) {
-      toast.error('Minimum payout amount is $0.01');
+      setPayoutFormError('Minimum payout amount is $0.01.');
       return;
     }
 
     if (roundedAmount > withdrawableBalance) {
-      if (reservedForRefunds > 0) {
-        toast.error(
-          `Amount exceeds withdrawable balance (${currency(
-            withdrawableBalance,
-            summary.currency
-          )} available after ${currency(
-            reservedForRefunds,
-            summary.currency
-          )} refund dispute hold)`
-        );
-      } else {
-        toast.error('Amount exceeds withdrawable balance');
-      }
+      const msg =
+        reservedForRefunds > 0
+          ? `Amount exceeds withdrawable balance (${currency(
+              withdrawableBalance,
+              summary.currency
+            )} available after ${currency(
+              reservedForRefunds,
+              summary.currency
+            )} refund dispute hold).`
+          : 'Amount exceeds withdrawable balance.';
+      setPayoutFormError(msg);
       return;
     }
 
+    setPayoutFormError(null);
     setIsSubmitting(true);
     try {
       await walletService.requestPayout({
@@ -356,7 +335,9 @@ const WalletPage = () => {
       setReloadKey((currentKey) => currentKey + 1);
     } catch (error: unknown) {
       clientLogger.error('Failed to request payout:', error);
-      toast.error(extractErrorMessage(error, 'Failed to request payout'));
+      const message = extractErrorMessage(error, 'Failed to request payout');
+      setPayoutFormError(message);
+      toast.error(message);
     } finally {
       setIsSubmitting(false);
     }
@@ -366,6 +347,7 @@ const WalletPage = () => {
     if (isSubmitting || !validateMethodForm()) {
       return;
     }
+    setMethodFormError(null);
     setIsSubmitting(true);
     const cleanedDetails: PayoutMethodDetails =
       methodType === PayoutMethodType.BANK_TRANSFER
@@ -393,7 +375,9 @@ const WalletPage = () => {
       setReloadKey((currentKey) => currentKey + 1);
     } catch (error: unknown) {
       clientLogger.error('Failed to add payout method:', error);
-      toast.error(extractErrorMessage(error, 'Failed to add method'));
+      const message = extractErrorMessage(error, 'Failed to add method');
+      setMethodFormError(message);
+      toast.error(message);
     } finally {
       setIsSubmitting(false);
     }
@@ -438,7 +422,7 @@ const WalletPage = () => {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-primary-50/10 to-indigo-50/20">
         <div className="flex flex-col items-center space-y-4">
-          <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 animate-pulse flex items-center justify-center">
+          <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 animate-pulse motion-reduce:animate-none flex items-center justify-center">
             <WalletIcon className="w-8 h-8 text-white" />
           </div>
           <p className="text-slate-600 font-medium">Loading wallet...</p>
@@ -486,7 +470,7 @@ const WalletPage = () => {
         </div>
 
         {loadError && (
-          <div className="mb-6 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800 flex items-center justify-between gap-4">
+          <div role="alert" className="mb-6 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800 flex items-center justify-between gap-4">
             <span>{loadError}</span>
             <button
               type="button"
@@ -791,7 +775,7 @@ const WalletPage = () => {
                     setTxnOffset(0);
                   }}
                 >
-                  Clear
+                  Clear Filters
                 </button>
               )}
             </div>
@@ -799,9 +783,24 @@ const WalletPage = () => {
 
           {txns.items.length === 0 ? (
             <div className="text-sm text-slate-600 py-8 text-center">
-              {txnType || txnSource
-                ? 'No ledger transactions match the selected filters.'
-                : 'No wallet ledger transactions recorded yet.'}
+              {txnType || txnSource ? (
+                <div className="space-y-3">
+                  <p>No ledger transactions match the selected filters.</p>
+                  <button
+                    type="button"
+                    className="btn-outline btn-sm"
+                    onClick={() => {
+                      setTxnType('');
+                      setTxnSource('');
+                      setTxnOffset(0);
+                    }}
+                  >
+                    Reset Filters
+                  </button>
+                </div>
+              ) : (
+                'No wallet ledger transactions recorded yet.'
+              )}
             </div>
           ) : (
             <div className="overflow-x-auto">
@@ -816,7 +815,7 @@ const WalletPage = () => {
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {txns.items.map((i) => {
-                    const presentation = getTransactionAmountPresentation(i.type);
+                    const presentation = getTransactionAmountPresentation(i.type, i.amount);
                     return (
                       <tr key={i.id} className="hover:bg-slate-50/80 transition-colors">
                         <td className="px-4 py-3 text-sm text-slate-600 tabular-nums">
@@ -828,7 +827,7 @@ const WalletPage = () => {
                           className={`px-4 py-3 font-bold text-right tabular-nums ${presentation.amountClassName}`}
                         >
                           {presentation.amountPrefix}
-                          {currency(i.amount, summary?.currency)}
+                          {currency(Math.abs(i.amount), summary?.currency)}
                         </td>
                       </tr>
                     );
@@ -902,16 +901,26 @@ const WalletPage = () => {
               <p id="wallet-method-modal-description" className="sr-only">
                 Add a payout destination for future wallet withdrawals.
               </p>
+
+              {methodFormError && (
+                <div role="alert" className="rounded-xl border border-red-200 bg-red-50 px-3.5 py-2.5 text-sm text-red-700">
+                  {methodFormError}
+                </div>
+              )}
+
               <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-1.5">Type</label>
+                <label htmlFor="wallet-method-type" className="block text-sm font-semibold text-slate-700 mb-1.5">
+                  Type <span className="text-red-600">*</span>
+                </label>
                 <select
+                  id="wallet-method-type"
                   value={methodType}
                   onChange={(e) => {
                     setMethodType(e.target.value as PayoutMethodType);
                     setMethodDetails(emptyMethodDetails);
+                    setMethodFormError(null);
                   }}
                   className="input"
-                  aria-label="Payout method type"
                 >
                   {Object.values(PayoutMethodType).map((t) => (
                     <option key={t} value={t}>
@@ -921,51 +930,87 @@ const WalletPage = () => {
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-1.5">Label</label>
+                <label htmlFor="wallet-method-label" className="block text-sm font-semibold text-slate-700 mb-1.5">
+                  Label <span className="text-red-600">*</span>
+                </label>
                 <input
+                  id="wallet-method-label"
                   ref={methodLabelInputRef}
                   className="input"
                   value={methodLabel}
-                  onChange={(e) => setMethodLabel(e.target.value)}
+                  onChange={(e) => {
+                    setMethodLabel(e.target.value);
+                    setMethodFormError(null);
+                  }}
                   placeholder="e.g. Primary Maybank Account, GrabPay Wallet"
                 />
               </div>
 
               {methodType === PayoutMethodType.BANK_TRANSFER ? (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  <input
-                    className="input"
-                    value={getMethodDetailValue('bankName')}
-                    placeholder="Bank name"
-                    onChange={(e) => updateMethodDetails('bankName', e.target.value)}
-                  />
-                  <input
-                    className="input"
-                    value={getMethodDetailValue('accountName')}
-                    placeholder="Account holder name"
-                    onChange={(e) => updateMethodDetails('accountName', e.target.value)}
-                  />
-                  <input
-                    className="input md:col-span-2"
-                    value={getMethodDetailValue('accountNo')}
-                    placeholder="Account number"
-                    onChange={(e) => updateMethodDetails('accountNo', e.target.value)}
-                  />
+                  <div>
+                    <label htmlFor="wallet-bank-name" className="block text-xs font-semibold text-slate-700 mb-1">
+                      Bank Name <span className="text-red-600">*</span>
+                    </label>
+                    <input
+                      id="wallet-bank-name"
+                      className="input"
+                      value={getMethodDetailValue('bankName')}
+                      placeholder="e.g. Maybank"
+                      onChange={(e) => updateMethodDetails('bankName', e.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <label htmlFor="wallet-account-name" className="block text-xs font-semibold text-slate-700 mb-1">
+                      Account Holder <span className="text-red-600">*</span>
+                    </label>
+                    <input
+                      id="wallet-account-name"
+                      className="input"
+                      value={getMethodDetailValue('accountName')}
+                      placeholder="Full legal name"
+                      onChange={(e) => updateMethodDetails('accountName', e.target.value)}
+                    />
+                  </div>
+                  <div className="md:col-span-2">
+                    <label htmlFor="wallet-account-no" className="block text-xs font-semibold text-slate-700 mb-1">
+                      Account Number <span className="text-red-600">*</span>
+                    </label>
+                    <input
+                      id="wallet-account-no"
+                      className="input tabular-nums"
+                      value={getMethodDetailValue('accountNo')}
+                      placeholder="Account number"
+                      onChange={(e) => updateMethodDetails('accountNo', e.target.value)}
+                    />
+                  </div>
                 </div>
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  <input
-                    className="input"
-                    value={getMethodDetailValue('walletId')}
-                    placeholder="Wallet ID or destination handle"
-                    onChange={(e) => updateMethodDetails('walletId', e.target.value)}
-                  />
-                  <input
-                    className="input"
-                    value={getMethodDetailValue('holder')}
-                    placeholder="Holder name (optional)"
-                    onChange={(e) => updateMethodDetails('holder', e.target.value)}
-                  />
+                  <div>
+                    <label htmlFor="wallet-id-input" className="block text-xs font-semibold text-slate-700 mb-1">
+                      Wallet ID / Handle <span className="text-red-600">*</span>
+                    </label>
+                    <input
+                      id="wallet-id-input"
+                      className="input"
+                      value={getMethodDetailValue('walletId')}
+                      placeholder="Phone, email, or handle"
+                      onChange={(e) => updateMethodDetails('walletId', e.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <label htmlFor="wallet-holder-input" className="block text-xs font-semibold text-slate-700 mb-1">
+                      Holder Name (optional)
+                    </label>
+                    <input
+                      id="wallet-holder-input"
+                      className="input"
+                      value={getMethodDetailValue('holder')}
+                      placeholder="Account holder"
+                      onChange={(e) => updateMethodDetails('holder', e.target.value)}
+                    />
+                  </div>
                 </div>
               )}
 
@@ -1028,15 +1073,25 @@ const WalletPage = () => {
               <p id="wallet-payout-modal-description" className="sr-only">
                 Request a payout within your withdrawable balance after any active refund holds.
               </p>
+
+              {payoutFormError && (
+                <div role="alert" className="rounded-xl border border-red-200 bg-red-50 px-3.5 py-2.5 text-sm text-red-700">
+                  {payoutFormError}
+                </div>
+              )}
+
               <div>
                 <div className="flex items-center justify-between mb-1.5">
                   <label htmlFor="payout-amount-input" className="text-sm font-semibold text-slate-700">
-                    Withdrawal Amount ({summary?.currency || 'USD'})
+                    Withdrawal Amount ({summary?.currency || 'USD'}) <span className="text-red-600">*</span>
                   </label>
                   <button
                     type="button"
-                    onClick={() => setPayoutAmountInput(withdrawableBalance.toFixed(2))}
-                    className="text-xs font-semibold text-primary-700 hover:text-primary-800"
+                    onClick={() => {
+                      setPayoutAmountInput(withdrawableBalance.toFixed(2));
+                      setPayoutFormError(null);
+                    }}
+                    className="text-xs font-semibold text-primary-700 hover:text-primary-800 tabular-nums"
                   >
                     Max Withdrawable ({currency(withdrawableBalance, summary?.currency)})
                   </button>
@@ -1049,10 +1104,12 @@ const WalletPage = () => {
                   step="0.01"
                   max={withdrawableBalance}
                   value={payoutAmountInput}
-                  onChange={(e) => setPayoutAmountInput(e.target.value)}
+                  onChange={(e) => {
+                    setPayoutAmountInput(e.target.value);
+                    setPayoutFormError(null);
+                  }}
                   placeholder="0.00"
                   className="input tabular-nums"
-                  aria-label="Payout amount"
                 />
                 <p className="text-xs text-slate-600 mt-1.5 tabular-nums">
                   Withdrawable now: <strong>{currency(withdrawableBalance, summary?.currency)}</strong>
@@ -1062,14 +1119,14 @@ const WalletPage = () => {
                 </p>
               </div>
               <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-1.5">
+                <label htmlFor="payout-method-select" className="block text-sm font-semibold text-slate-700 mb-1.5">
                   Payout Method
                 </label>
                 <select
+                  id="payout-method-select"
                   value={payoutMethodId}
                   onChange={(e) => setPayoutMethodId(e.target.value)}
                   className="input"
-                  aria-label="Select payout method"
                 >
                   <option value="">Use current default method</option>
                   {methods.map((m) => (
@@ -1080,10 +1137,11 @@ const WalletPage = () => {
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-1.5">
+                <label htmlFor="payout-note-textarea" className="block text-sm font-semibold text-slate-700 mb-1.5">
                   Note (optional)
                 </label>
                 <textarea
+                  id="payout-note-textarea"
                   className="input"
                   rows={3}
                   placeholder="Optional note for the finance settlement team"

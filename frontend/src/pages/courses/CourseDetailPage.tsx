@@ -274,7 +274,7 @@ const CourseDetailPage = () => {
               )}
             </div>
             <div className="flex items-start justify-between mb-6">
-              <h1 className="text-5xl md:text-6xl font-bold leading-tight flex-1">{currentCourse.title}</h1>
+              <h1 className="text-4xl md:text-5xl font-bold leading-tight flex-1 text-white">{currentCourse.title}</h1>
               {isSessionReady && user?.role === 'STUDENT' && (
                 <button
                   type="button"

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import clientLogger from '@/utils/logger';
 import { Link, useNavigate } from 'react-router-dom';
 import { AlertCircle, Users, Search, Filter, Download, RefreshCcw, TrendingUp, Calendar, BookOpen, User, MessageSquare, Copy } from 'lucide-react';
@@ -23,7 +23,7 @@ interface AggregatedStudent {
     totalLessons: number;
   }>;
   totalCourses: number;
-  averageProgress: number; // across courses
+  averageProgress: number;
   lastEnrolledAt?: string;
 }
 
@@ -37,6 +37,7 @@ const TeacherStudentManagementPage = () => {
   const [filterCourseId, setFilterCourseId] = useState<string>('all');
   const [progressMin, setProgressMin] = useState(0);
   const [progressMax, setProgressMax] = useState(100);
+  const requestIdRef = useRef(0);
   const navigate = useNavigate();
 
   const hasActiveFilters = Boolean(
@@ -44,82 +45,97 @@ const TeacherStudentManagementPage = () => {
   );
 
   const loadStudentData = useCallback(async () => {
+    const requestId = ++requestIdRef.current;
     setIsLoading(true);
     setLoadError(null);
     try {
-        const myCourses = await courseService.getMyCourses();
-        setCourses(myCourses);
+      const myCourses = await courseService.getMyCourses();
+      if (requestId !== requestIdRef.current) {
+        return;
+      }
+      setCourses(myCourses);
 
-        const enrollmentResults = await Promise.allSettled(
-          myCourses.map(async (course) => ({
-            course,
-            enrollments: await enrollmentService.getCourseStudents(course.id),
-          }))
-        );
+      const enrollmentResults = await Promise.allSettled(
+        myCourses.map(async (course) => ({
+          course,
+          enrollments: await enrollmentService.getCourseStudents(course.id),
+        }))
+      );
+      if (requestId !== requestIdRef.current) {
+        return;
+      }
 
-        const allEnrollments: Array<{ course: Course; enrollments: Enrollment[] }> = [];
-        enrollmentResults.forEach((result, index) => {
-          if (result.status === 'fulfilled') {
-            allEnrollments.push(result.value);
-            return;
-          }
-
-          const failedCourse = myCourses[index];
-          clientLogger.error(`Failed to fetch students for course ${failedCourse.id}:`, result.reason);
-        });
-
-        const aggregatedStudents = new Map<string, AggregatedStudent>();
-        for (const entry of allEnrollments) {
-          const totalLessons = getCourseLessonCount(entry.course);
-
-          for (const enrollment of entry.enrollments as (Enrollment & { user?: AppUser })[]) {
-            if (!enrollment.user) {
-              continue;
-            }
-
-            const key = enrollment.user.id;
-            if (!aggregatedStudents.has(key)) {
-              aggregatedStudents.set(key, {
-                user: enrollment.user,
-                courses: [],
-                totalCourses: 0,
-                averageProgress: 0,
-                lastEnrolledAt: undefined,
-              });
-            }
-
-            const student = aggregatedStudents.get(key)!;
-            student.courses.push({
-              courseId: entry.course.id,
-              courseTitle: entry.course.title,
-              enrolledAt: enrollment.enrolledAt,
-              progress: enrollment.progress,
-              completedLessons: enrollment.completedLessons,
-              totalLessons,
-            });
-            student.totalCourses = student.courses.length;
-            student.averageProgress =
-              student.courses.reduce((accumulator, courseItem) => accumulator + courseItem.progress, 0) / student.courses.length;
-            student.lastEnrolledAt = student.courses
-              .map((courseItem) => courseItem.enrolledAt)
-              .sort()
-              .slice(-1)[0];
-          }
+      const allEnrollments: Array<{ course: Course; enrollments: Enrollment[] }> = [];
+      enrollmentResults.forEach((result, index) => {
+        if (result.status === 'fulfilled') {
+          allEnrollments.push(result.value);
+          return;
         }
 
-        setStudents(Array.from(aggregatedStudents.values()));
-      } catch (error) {
-        clientLogger.error('Failed to load students:', error);
-        const message = extractErrorMessage(error, 'Failed to load students');
-        setLoadError(message);
-        toast.error(message);
-      } finally {
+        const failedCourse = myCourses[index];
+        clientLogger.error(`Failed to fetch students for course ${failedCourse.id}:`, result.reason);
+      });
+
+      const aggregatedStudents = new Map<string, AggregatedStudent>();
+      for (const entry of allEnrollments) {
+        const totalLessons = getCourseLessonCount(entry.course);
+
+        for (const enrollment of entry.enrollments as (Enrollment & { user?: AppUser })[]) {
+          if (!enrollment.user) {
+            continue;
+          }
+
+          const key = enrollment.user.id;
+          if (!aggregatedStudents.has(key)) {
+            aggregatedStudents.set(key, {
+              user: enrollment.user,
+              courses: [],
+              totalCourses: 0,
+              averageProgress: 0,
+              lastEnrolledAt: undefined,
+            });
+          }
+
+          const student = aggregatedStudents.get(key)!;
+          student.courses.push({
+            courseId: entry.course.id,
+            courseTitle: entry.course.title,
+            enrolledAt: enrollment.enrolledAt,
+            progress: enrollment.progress,
+            completedLessons: enrollment.completedLessons,
+            totalLessons,
+          });
+          student.totalCourses = student.courses.length;
+          student.averageProgress =
+            student.courses.reduce((accumulator, courseItem) => accumulator + courseItem.progress, 0) / student.courses.length;
+          student.lastEnrolledAt = student.courses
+            .map((courseItem) => courseItem.enrolledAt)
+            .sort()
+            .slice(-1)[0];
+        }
+      }
+
+      setStudents(Array.from(aggregatedStudents.values()));
+    } catch (error) {
+      if (requestId !== requestIdRef.current) {
+        return;
+      }
+      clientLogger.error('Failed to load students:', error);
+      const message = extractErrorMessage(error, 'Failed to load students');
+      setLoadError(message);
+      toast.error(message);
+    } finally {
+      if (requestId === requestIdRef.current) {
         setIsLoading(false);
       }
+    }
   }, []);
 
   useEffect(() => {
     void loadStudentData();
+    return () => {
+      requestIdRef.current += 1;
+    };
   }, [loadStudentData]);
 
   const filtered = useMemo(() => {
@@ -194,22 +210,29 @@ const TeacherStudentManagementPage = () => {
           </Link>
         </div>
 
-        {/* Filters */}
         <div className="card mb-6 shadow-xl border border-gray-100 rounded-2xl">
-          <div className="flex flex-col md:flex-row md:items-center gap-4">
+          <div className="flex flex-col md:flex-row md:items-center gap-4 flex-wrap">
             <div className="relative">
+              <label htmlFor="student-dir-search" className="sr-only">
+                Search students by name or email
+              </label>
               <Search className="w-5 h-5 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
               <input
+                id="student-dir-search"
                 placeholder="Search by name or email"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                className="input pl-10 w-full md:w-80"
+                className="input pl-10 w-full md:w-72"
               />
             </div>
 
             <div className="flex items-center gap-2">
               <Filter className="w-5 h-5 text-gray-500" />
+              <label htmlFor="student-dir-course" className="sr-only">
+                Filter by course
+              </label>
               <select
+                id="student-dir-course"
                 className="input"
                 value={filterCourseId}
                 onChange={(e) => setFilterCourseId(e.target.value)}
@@ -221,7 +244,7 @@ const TeacherStudentManagementPage = () => {
               </select>
             </div>
 
-            <div className="flex flex-wrap items-center gap-3">
+            <div className="flex flex-wrap items-center gap-3 flex-1">
               <span className="text-sm text-gray-600">Progress (%)</span>
               <input
                 type="number"
@@ -274,12 +297,11 @@ const TeacherStudentManagementPage = () => {
           </div>
         </div>
 
-        {/* Table */}
         <div className="card shadow-xl border border-gray-100 rounded-2xl">
           {isLoading ? (
             <div className="py-12 text-center text-gray-600">Loading student directory...</div>
           ) : loadError ? (
-            <div className="py-12 text-center space-y-3">
+            <div role="alert" className="py-12 text-center space-y-3">
               <AlertCircle className="w-10 h-10 text-red-500 mx-auto" />
               <p className="text-sm font-medium text-red-800">{loadError}</p>
               <button
@@ -333,7 +355,7 @@ const TeacherStudentManagementPage = () => {
                             <img
                               src={s.user.avatar}
                               alt={`${s.user.firstName} ${s.user.lastName}`}
-                              className="w-10 h-10 rounded-full"
+                              className="w-10 h-10 rounded-full object-cover"
                             />
                           ) : (
                             <div className="w-10 h-10 rounded-full bg-primary-600 text-white flex items-center justify-center font-bold">
@@ -347,10 +369,10 @@ const TeacherStudentManagementPage = () => {
                           </div>
                         </div>
                       </td>
-                      <td className="py-5 px-4">
+                      <td className="py-5 px-4 tabular-nums">
                         <div className="text-sm text-gray-700 font-medium">{s.totalCourses}</div>
                       </td>
-                      <td className="py-5 px-4">
+                      <td className="py-5 px-4 tabular-nums">
                         <div className="flex items-center gap-3">
                           <div className="w-32 bg-gray-200 rounded-full h-2.5">
                             <div className="bg-primary-600 h-2.5 rounded-full" style={{ width: `${Math.round(s.averageProgress)}%` }} />
@@ -358,24 +380,24 @@ const TeacherStudentManagementPage = () => {
                           <span className="text-sm font-bold text-primary-700">{Math.round(s.averageProgress)}%</span>
                         </div>
                       </td>
-                      <td className="py-5 px-4">
+                      <td className="py-5 px-4 tabular-nums">
                         <span className="text-sm text-gray-700">{s.lastEnrolledAt ? new Date(s.lastEnrolledAt).toLocaleDateString() : '-'}</span>
                       </td>
                       <td className="py-5 px-4">
                         <details>
-                          <summary className="cursor-pointer text-primary-600 hover:underline">View</summary>
+                          <summary className="cursor-pointer text-primary-600 hover:underline font-medium">View</summary>
                           <div className="mt-3 p-4 bg-gray-50 rounded-lg space-y-3">
                             {s.courses.map((c) => (
-                              <div key={c.courseId} className="flex items-center justify-between">
-                                <div className="flex items-center gap-2">
-                                  <BookOpen className="w-4 h-4 text-gray-500" />
-                                  <span className="font-medium text-gray-800">{c.courseTitle}</span>
+                              <div key={c.courseId} className="flex items-center justify-between gap-4">
+                                <div className="flex items-center gap-2 min-w-0">
+                                  <BookOpen className="w-4 h-4 text-gray-500 shrink-0" />
+                                  <span className="font-medium text-gray-800 truncate">{c.courseTitle}</span>
                                 </div>
-                                <div className="flex items-center gap-4">
-                                  <div className="flex items-center gap-2 text-sm text-gray-600">
+                                <div className="flex items-center gap-4 shrink-0 tabular-nums">
+                                  <div className="flex items-center gap-1.5 text-sm text-gray-600">
                                     <TrendingUp className="w-4 h-4" /> {c.progress}%
                                   </div>
-                                  <div className="flex items-center gap-2 text-sm text-gray-600">
+                                  <div className="flex items-center gap-1.5 text-sm text-gray-600">
                                     <Calendar className="w-4 h-4" /> {new Date(c.enrolledAt).toLocaleDateString()}
                                   </div>
                                 </div>
@@ -396,7 +418,7 @@ const TeacherStudentManagementPage = () => {
                           </button>
                           <button
                             type="button"
-                            onClick={() => copyEmail(s.user.email)}
+                            onClick={() => void copyEmail(s.user.email)}
                             className="btn-outline btn-sm flex items-center gap-1"
                             title="Copy email"
                           >
@@ -419,16 +441,15 @@ const TeacherStudentManagementPage = () => {
           )}
         </div>
 
-        {/* Tips */}
         <div className="card mt-6 bg-gradient-to-r from-blue-50 to-blue-100 border-2 border-blue-200">
           <div className="flex items-center gap-3 mb-2">
             <User className="w-5 h-5 text-blue-700" />
-            <h3 className="font-bold text-blue-900">Quick Actions</h3>
+            <h2 className="font-bold text-blue-900 text-lg">Directory Actions</h2>
           </div>
           <ul className="text-sm text-blue-800 list-disc pl-6 space-y-1">
             <li>Search students by name or email</li>
             <li>Filter by a specific course and progress range</li>
-            <li>Click "View" to see per-course progress overview</li>
+            <li>Click &ldquo;View&rdquo; to inspect per-course progress overview</li>
             <li>Export the current list as CSV for offline analysis</li>
           </ul>
         </div>

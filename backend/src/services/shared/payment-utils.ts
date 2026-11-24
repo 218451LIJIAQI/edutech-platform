@@ -93,3 +93,71 @@ export const calculateExpirationDate = (
 
   return new Date(referenceDate.getTime() + durationDays * DAY_IN_MS);
 };
+
+export type AllocatedOrderItemAmount<T> = {
+  item: T;
+  itemPrice: number;
+  allocatedAmount: number;
+};
+
+/**
+ * Proportionally allocates `targetAmount` across order items based on `finalPrice`,
+ * assigning any cent rounding remainder to the final item so shares sum to `targetAmount`.
+ */
+export const allocateOrderItemAmounts = <T extends { finalPrice: unknown }>(
+  items: readonly T[],
+  targetAmount: unknown,
+  options?: { fallbackBase?: unknown; equalFallbackWhenZeroItemsTotal?: boolean },
+): AllocatedOrderItemAmount<T>[] => {
+  if (items.length === 0) {
+    return [];
+  }
+
+  const normalizedTarget = normalizeMoneyAmount(targetAmount);
+  const itemPrices = items.map((item) =>
+    roundMoney(Math.max(0, toNumber(item.finalPrice))),
+  );
+
+  if (normalizedTarget <= 0) {
+    return items.map((item, index) => ({
+      item,
+      itemPrice: itemPrices[index],
+      allocatedAmount: 0,
+    }));
+  }
+
+  const totalItemsPrice = roundMoney(
+    itemPrices.reduce((sum, price) => sum + price, 0),
+  );
+  const fallbackBase =
+    options?.fallbackBase !== undefined
+      ? normalizeMoneyAmount(options.fallbackBase)
+      : 0;
+  const proportionalBase = totalItemsPrice > 0 ? totalItemsPrice : fallbackBase;
+
+  if (proportionalBase <= 0 && !options?.equalFallbackWhenZeroItemsTotal) {
+    return items.map((item, index) => ({
+      item,
+      itemPrice: itemPrices[index],
+      allocatedAmount: 0,
+    }));
+  }
+
+  let allocatedSoFar = 0;
+  return items.map((item, index) => {
+    const itemPrice = itemPrices[index];
+    const isLastItem = index === items.length - 1;
+    const shareRatio =
+      proportionalBase > 0 ? itemPrice / proportionalBase : 1 / items.length;
+    const allocatedAmount = isLastItem
+      ? roundMoney(normalizedTarget - allocatedSoFar)
+      : roundMoney(normalizedTarget * shareRatio);
+    allocatedSoFar = roundMoney(allocatedSoFar + allocatedAmount);
+
+    return {
+      item,
+      itemPrice,
+      allocatedAmount,
+    };
+  });
+};

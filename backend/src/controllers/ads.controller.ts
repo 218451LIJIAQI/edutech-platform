@@ -152,11 +152,13 @@ function parseAdPayload(
   if (hasOwn(body, "name")) {
     updatePayload.name = parseOptionalString(body?.name, "name", {
       rejectBlank: true,
+      rejectNull: true,
     });
   }
   if (hasOwn(body, "title")) {
     updatePayload.title = parseOptionalString(body?.title, "title", {
       rejectBlank: true,
+      rejectNull: true,
     });
   }
   if (hasOwn(body, "badge")) {
@@ -166,7 +168,7 @@ function parseAdPayload(
     updatePayload.description = parseOptionalString(
       body?.description,
       "description",
-      { rejectBlank: true },
+      { rejectBlank: true, rejectNull: true },
     );
   }
   if (hasOwn(body, "supportingText")) {
@@ -187,22 +189,14 @@ function parseAdPayload(
   if (hasOwn(body, "ctaLabel")) {
     updatePayload.ctaLabel = parseOptionalString(body?.ctaLabel, "ctaLabel", {
       rejectBlank: true,
+      rejectNull: true,
     });
   }
   if (hasOwn(body, "ctaUrl")) {
-    const ctaUrl = parseOptionalString(body?.ctaUrl, "ctaUrl", {
+    updatePayload.ctaUrl = parseOptionalString(body?.ctaUrl, "ctaUrl", {
       rejectBlank: true,
+      rejectNull: true,
     });
-    if (
-      ctaUrl &&
-      destinationType === AdDestinationType.EXTERNAL &&
-      !isHttpUrl(ctaUrl)
-    ) {
-      throw new ValidationError(
-        "ctaUrl must be a valid HTTP or HTTPS URL for external ads",
-      );
-    }
-    updatePayload.ctaUrl = ctaUrl;
   }
   if (hasOwn(body, "destinationType") && destinationType !== undefined) {
     updatePayload.destinationType = destinationType;

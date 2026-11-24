@@ -1,8 +1,19 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { LessonType } from '@/types';
+import { LessonType, WalletTransactionType } from '@/types';
+import {
+  getHomePathForRole,
+  hasStrongPasswordComplexity,
+  isValidEmail,
+  parseStringArray,
+} from '@/utils/helpers';
+import {
+  isApprovedTeacherProfileStatus,
+  isPendingTeacherProfileStatus,
+} from '@/utils/teacher-profile';
 import {
   deriveInitialCompletedLessonIds,
+  getTransactionAmountPresentation,
   resolveWalletDisputeSummary,
 } from '@/utils/enrollment';
 import {
@@ -119,5 +130,59 @@ describe('teacher wallet dispute hold & withdrawable balance calculation', () =>
       reservedForRefunds: 75,
       withdrawableBalance: 0,
     });
+  });
+
+  it('formats signed ADJUSTMENT wallet transactions accurately alongside CREDIT/DEBIT', () => {
+    assert.deepEqual(
+      getTransactionAmountPresentation(WalletTransactionType.ADJUSTMENT, -25),
+      { amountPrefix: '-', amountClassName: 'text-red-600' }
+    );
+    assert.deepEqual(
+      getTransactionAmountPresentation(WalletTransactionType.ADJUSTMENT, 40),
+      { amountPrefix: '+', amountClassName: 'text-emerald-700' }
+    );
+    assert.deepEqual(
+      getTransactionAmountPresentation(WalletTransactionType.DEBIT, 50),
+      { amountPrefix: '-', amountClassName: 'text-red-600' }
+    );
+    assert.deepEqual(
+      getTransactionAmountPresentation(WalletTransactionType.CREDIT, 100),
+      { amountPrefix: '+', amountClassName: 'text-emerald-700' }
+    );
+  });
+});
+
+describe('shared frontend parsing, teacher status, and form validation helpers', () => {
+  it('parses string arrays from native arrays, JSON strings, and optional single-string fallbacks', () => {
+    assert.deepEqual(parseStringArray(['  Math ', '', 'Physics  ']), [
+      'Math',
+      'Physics',
+    ]);
+    assert.deepEqual(parseStringArray('["Algorithms", "  Systems "]'), [
+      'Algorithms',
+      'Systems',
+    ]);
+    assert.deepEqual(parseStringArray('legacy-cert.pdf'), []);
+    assert.deepEqual(
+      parseStringArray('legacy-cert.pdf', { allowSingleStringFallback: true }),
+      ['legacy-cert.pdf']
+    );
+  });
+
+  it('evaluates teacher profile status predicates and auth form validators consistently', () => {
+    assert.equal(isApprovedTeacherProfileStatus('APPROVED'), true);
+    assert.equal(isApprovedTeacherProfileStatus('COMPLETE'), true);
+    assert.equal(isApprovedTeacherProfileStatus('PENDING_REVIEW'), false);
+    assert.equal(isPendingTeacherProfileStatus('PENDING_REVIEW'), true);
+    assert.equal(isPendingTeacherProfileStatus(null), false);
+
+    assert.equal(isValidEmail('  student@flexilearn.edu '), true);
+    assert.equal(isValidEmail('invalid-email'), false);
+    assert.equal(hasStrongPasswordComplexity('StrongPass1'), true);
+    assert.equal(hasStrongPasswordComplexity('weakpass1'), false);
+    assert.equal(getHomePathForRole('ADMIN'), '/admin');
+    assert.equal(getHomePathForRole('TEACHER'), '/teacher');
+    assert.equal(getHomePathForRole('STUDENT'), '/student');
+    assert.equal(getHomePathForRole(undefined), '/');
   });
 });

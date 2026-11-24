@@ -7,12 +7,23 @@ import type { Request } from "express";
 
 process.env.UPLOAD_DIR ||= path.join(os.tmpdir(), "flexilearn-test-uploads");
 
+import config from "../config/env";
+import prisma from "../config/database";
 import { buildCurrentEnrollmentWhere } from "../services/shared/enrollment-access";
 import {
   assertQuizGateForLessonCompletion,
   calculateProgressFromLessons,
+  summarizeCourseEnrollmentStats,
 } from "../services/enrollment.service";
-import { sanitizeStudentEnrollmentCourse } from "../services/course/course-service-helpers";
+import {
+  mapCourseDetailResponse,
+  sanitizeStudentEnrollmentCourse,
+} from "../services/course/course-service-helpers";
+import { buildCourseListOrderBy } from "../services/course/course-helpers";
+import courseService, { COURSE_FIELD_LIMITS } from "../services/course.service";
+import notificationService from "../services/notification.service";
+import { normalizeTeacherProfileUpdateData } from "../services/teacher.service";
+import { parseNumber, parseOptionalString } from "../utils/http";
 import {
   cleanupTrackedRequestUploads,
   isMimeCompatibleWithExtension,
@@ -103,6 +114,8 @@ describe("enrollment access, quiz gate, and student course sanitization", () => 
       lessons: [
         {
           id: "l-1",
+          isFree: false,
+          videoUrl: "/uploads/videos/l1.mp4",
           quiz: {
             questions: [
               {
@@ -118,7 +131,6 @@ describe("enrollment access, quiz gate, and student course sanitization", () => 
       materials: [
         {
           id: "mat-1",
-          title: "Slides",
           fileUrl: "/uploads/documents/secret-internal-name.pdf",
           isDownloadable: true,
         },
@@ -133,9 +145,12 @@ describe("enrollment access, quiz gate, and student course sanitization", () => 
         },
       ],
     });
-    assert.equal(sanitized?.materials?.[0]?.fileUrl, undefined);
     assert.equal(
-      sanitized?.materials?.[0]?.accessUrl,
+      (sanitized?.materials?.[0] as { fileUrl?: string } | undefined)?.fileUrl,
+      undefined,
+    );
+    assert.equal(
+      (sanitized?.materials?.[0] as { accessUrl?: string } | undefined)?.accessUrl,
       "/api/v1/courses/materials/mat-1/download",
     );
   });
@@ -375,5 +390,229 @@ describe("post-refund net teacher earnings, admin settlements, and wallet refund
         ),
       /insufficient for refund debit/i,
     );
+  });
+
+  it("sanitizes single-user notifications and skips inactive recipients in createNotification", async () => {
+    const prismaAny = prisma as unknown as Record<string, unknown>;
+    const origUser = prismaAny.user;
+    const origNotification = prismaAny.notification;
+    const createdPayloads: Array<Record<string, unknown>> = [];
+
+    prismaAny.user = {
+      findFirst: async ({ where }: { where: { id: string; isActive?: boolean } }) =>
+        where.id === "u-active" && where.isActive === true
+          ? { id: "u-active" }
+          : null,
+    };
+    prismaAny.notification = {
+      create: async ({ data }: { data: Record<string, unknown> }) => {
+        createdPayloads.push(data);
+        return { id: "notif-created", ...data };
+      },
+    };
+
+    try {
+      const created = await notificationService.createNotification(
+        "u-active",
+        "  <b>Refund Decision</b>  ",
+        "  Your refund <script>alert(1)</script>was reviewed.  ",
+        "  refund  ",
+      );
+      assert.ok(created);
+      assert.equal(createdPayloads.length, 1);
+      assert.equal(createdPayloads[0]?.title, "Refund Decision");
+      assert.equal(createdPayloads[0]?.message, "Your refund was reviewed.");
+      assert.equal(createdPayloads[0]?.type, "refund");
+
+      const skipped = await notificationService.createNotification(
+        "u-inactive",
+        "Payout Settled",
+        "Paid",
+        "payout",
+      );
+      assert.equal(skipped, null);
+      assert.equal(createdPayloads.length, 1);
+    } finally {
+      prismaAny.user = origUser;
+      prismaAny.notification = origNotification;
+    }
+  });
+
+  it("grants owning teacher and admin access to non-downloadable course materials while blocking students", async () => {
+    const sampleCourse = {
+      id: "course-1",
+      lessons: [],
+      materials: [
+        {
+          id: "mat-view-only",
+          title: "Instructor Reference Sheet",
+          fileUrl: "/uploads/documents/ref-sheet.pdf",
+          isDownloadable: false,
+        },
+      ],
+    } as never;
+
+    const studentView = mapCourseDetailResponse(sampleCourse, {
+      isEnrolled: true,
+      canViewQuizAnswers: false,
+      canManageMaterials: false,
+    });
+    assert.equal(studentView.materials[0]?.fileUrl, undefined);
+    assert.equal(studentView.materials[0]?.accessUrl, undefined);
+
+    const ownerView = mapCourseDetailResponse(sampleCourse, {
+      isEnrolled: false,
+      canViewQuizAnswers: true,
+      canManageMaterials: true,
+    });
+    assert.equal(ownerView.materials[0]?.fileUrl, "/uploads/documents/ref-sheet.pdf");
+    assert.equal(
+      ownerView.materials[0]?.accessUrl,
+      "/api/v1/courses/materials/mat-view-only/download",
+    );
+
+    const origUploadDir = config.UPLOAD_DIR;
+    const tempUploadRoot = fs.mkdtempSync(
+      path.join(os.tmpdir(), "flexilearn-material-uploads-"),
+    );
+    config.UPLOAD_DIR = tempUploadRoot;
+    const docDir = path.join(tempUploadRoot, "documents");
+    fs.mkdirSync(docDir, { recursive: true });
+    const samplePdf = path.join(docDir, "ref-sheet.pdf");
+    fs.writeFileSync(samplePdf, "%PDF-1.4 test");
+
+    const prismaAny = prisma as unknown as Record<string, unknown>;
+    const origMaterial = prismaAny.material;
+    const origUser = prismaAny.user;
+
+    prismaAny.material = {
+      findUnique: async () => ({
+        id: "mat-view-only",
+        title: "Instructor Reference Sheet",
+        fileUrl: "/uploads/documents/ref-sheet.pdf",
+        isDownloadable: false,
+        course: { id: "course-1", teacherProfileId: "tp-owner" },
+      }),
+    };
+    prismaAny.user = {
+      findUnique: async ({ where }: { where: { id: string } }) => {
+        if (where.id === "u-owner") {
+          return { role: "TEACHER", teacherProfile: { id: "tp-owner" } };
+        }
+        if (where.id === "u-admin") {
+          return { role: "ADMIN", teacherProfile: null };
+        }
+        return { role: "STUDENT", teacherProfile: null };
+      },
+    };
+
+    try {
+      await assert.rejects(
+        () => courseService.getMaterialDownloadAsset("u-student", "mat-view-only"),
+        /not available for download/i,
+      );
+
+      const ownerAsset = await courseService.getMaterialDownloadAsset(
+        "u-owner",
+        "mat-view-only",
+      );
+      assert.equal(ownerAsset.absolutePath, samplePdf);
+
+      const adminAsset = await courseService.getMaterialDownloadAsset(
+        "u-admin",
+        "mat-view-only",
+      );
+      assert.equal(adminAsset.absolutePath, samplePdf);
+    } finally {
+      config.UPLOAD_DIR = origUploadDir;
+      prismaAny.material = origMaterial;
+      prismaAny.user = origUser;
+      fs.rmSync(tempUploadRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("deduplicates multi-package student enrollments and resolves current curriculum progress in summarizeCourseEnrollmentStats", () => {
+    const stats = summarizeCourseEnrollmentStats(
+      [
+        {
+          userId: "student-1",
+          progress: 25,
+          completedLessons: 1,
+          completedLessonIds: ["l-1"],
+          enrolledAt: "2026-11-01T00:00:00.000Z",
+        },
+        {
+          userId: "student-1",
+          progress: 100,
+          completedLessons: 3,
+          completedLessonIds: ["l-1", "l-2", "deleted-lesson"],
+          enrolledAt: "2026-11-10T00:00:00.000Z",
+        },
+        {
+          userId: "student-2",
+          progress: 50,
+          completedLessons: 1,
+          completedLessonIds: ["l-2"],
+          enrolledAt: "2026-11-05T00:00:00.000Z",
+        },
+      ],
+      ["l-1", "l-2"],
+    );
+
+    assert.deepEqual(stats, {
+      totalStudents: 2,
+      totalLessons: 2,
+      averageProgress: 75,
+      completionRate: 50,
+      totalCompletedLessons: 3,
+    });
+  });
+
+  it("distinguishes undefined, null, empty string, and zero across partial updates and course list sorting", () => {
+    assert.deepEqual(
+      normalizeTeacherProfileUpdateData({
+        bio: "",
+        headline: null,
+        hourlyRate: 0,
+      }),
+      {
+        bio: null,
+        headline: null,
+        hourlyRate: 0,
+      },
+    );
+    assert.deepEqual(
+      normalizeTeacherProfileUpdateData({ hourlyRate: null }),
+      { hourlyRate: null },
+    );
+    assert.throws(
+      () => normalizeTeacherProfileUpdateData({}),
+      /at least one profile field/i,
+    );
+
+    assert.equal(
+      parseOptionalString(undefined, "title", { rejectNull: true, rejectBlank: true }),
+      undefined,
+    );
+    assert.throws(
+      () => parseOptionalString(null, "title", { rejectNull: true }),
+      /title cannot be null/i,
+    );
+    assert.throws(
+      () => parseNumber(null, "price", { rejectNull: true }),
+      /price cannot be null/i,
+    );
+
+    assert.deepEqual(buildCourseListOrderBy("RATING", "asc"), [
+      { teacherProfile: { averageRating: "asc" } },
+      { createdAt: "desc" },
+      { id: "desc" },
+    ]);
+    assert.deepEqual(buildCourseListOrderBy("POPULARITY", "asc"), [
+      { teacherProfile: { totalStudents: "asc" } },
+      { createdAt: "desc" },
+      { id: "desc" },
+    ]);
+    assert.equal(COURSE_FIELD_LIMITS.MAX_PACKAGE_DURATION_DAYS, 3650);
   });
 });

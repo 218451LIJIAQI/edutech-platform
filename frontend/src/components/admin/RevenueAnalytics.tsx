@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Calendar } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { AlertCircle, Calendar, RefreshCcw } from 'lucide-react';
 import toast from 'react-hot-toast';
 import {
   Bar,
@@ -54,16 +54,12 @@ const EmptyChartState = ({ message }: { message: string }) => (
   </div>
 );
 
-/**
- * RevenueAnalytics
- *
- * Displays admin revenue analytics with filterable revenue trends,
- * top earning teachers, top selling courses, and revenue breakdown by course type.
- */
 const RevenueAnalytics = () => {
   const [data, setData] = useState<RevenueAnalyticsData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [filters, setFilters] = useState<RevenueFilters>(DEFAULT_FILTERS);
+  const requestIdRef = useRef(0);
 
   const revenueTrend = data?.revenueTrend ?? [];
   const topTeachers = data?.topTeachers ?? [];
@@ -89,7 +85,9 @@ const RevenueAnalytics = () => {
   };
 
   const loadAnalytics = useCallback(async (selectedFilters: RevenueFilters) => {
+    const requestId = ++requestIdRef.current;
     setLoading(true);
+    setLoadError(null);
 
     try {
       const analyticsData = await adminService.getRevenueAnalytics({
@@ -97,18 +95,31 @@ const RevenueAnalytics = () => {
         endDate: selectedFilters.endDate || undefined,
         groupBy: selectedFilters.groupBy,
       });
+      if (requestId !== requestIdRef.current) {
+        return;
+      }
 
       setData(analyticsData);
     } catch (error: unknown) {
+      if (requestId !== requestIdRef.current) {
+        return;
+      }
       clientLogger.error('Error loading revenue analytics data:', error);
-      toast.error(extractErrorMessage(error, 'Failed to load analytics data'));
+      const message = extractErrorMessage(error, 'Failed to load analytics data');
+      setLoadError(message);
+      toast.error(message);
     } finally {
-      setLoading(false);
+      if (requestId === requestIdRef.current) {
+        setLoading(false);
+      }
     }
   }, []);
 
   useEffect(() => {
     void loadAnalytics(DEFAULT_FILTERS);
+    return () => {
+      requestIdRef.current += 1;
+    };
   }, [loadAnalytics]);
 
   const handleApplyFilters = () => {
@@ -135,7 +146,6 @@ const RevenueAnalytics = () => {
 
   return (
     <div className="space-y-6" aria-busy={loading}>
-      {/* Filters */}
       <div className="card flex flex-col gap-4 rounded-2xl border border-gray-100 shadow-xl md:flex-row md:items-end">
         <div className="flex-1">
           <label
@@ -154,7 +164,7 @@ const RevenueAnalytics = () => {
               onChange={(event) =>
                 updateFilter('startDate', event.target.value)
               }
-              className="input py-2"
+              className="input py-2 tabular-nums"
             />
           </div>
         </div>
@@ -174,7 +184,7 @@ const RevenueAnalytics = () => {
               type="date"
               value={filters.endDate}
               onChange={(event) => updateFilter('endDate', event.target.value)}
-              className={`input py-2 ${
+              className={`input py-2 tabular-nums ${
                 hasDateRangeError ? 'border-red-500 focus:ring-red-500' : ''
               }`}
               aria-invalid={hasDateRangeError}
@@ -231,127 +241,141 @@ const RevenueAnalytics = () => {
         </div>
       </div>
 
-      {/* Revenue Trend */}
-      <div className="card rounded-2xl border border-gray-100 shadow-xl">
-        <h3 className="mb-4 text-xl font-bold">Revenue Trend</h3>
-
-        {revenueTrend.length === 0 ? (
-          <EmptyChartState message="No revenue trend data available for the selected filters." />
-        ) : (
-          <ResponsiveContainer width="100%" height={400}>
-            <LineChart data={revenueTrend}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="date" minTickGap={20} />
-              <YAxis tickFormatter={formatMoney} />
-              <Tooltip formatter={formatTooltipValue} />
-              <Legend />
-              <Line
-                type="monotone"
-                dataKey="totalRevenue"
-                stroke="#0284c7"
-                strokeWidth={2}
-                name="Total Revenue"
-              />
-              <Line
-                type="monotone"
-                dataKey="platformEarnings"
-                stroke="#0ea5e9"
-                strokeWidth={2}
-                name="Platform Earnings"
-              />
-              <Line
-                type="monotone"
-                dataKey="teacherEarnings"
-                stroke="#38bdf8"
-                strokeWidth={2}
-                name="Teacher Earnings"
-              />
-            </LineChart>
-          </ResponsiveContainer>
-        )}
-      </div>
-
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-        {/* Top Teachers */}
-        <div className="card rounded-2xl border border-gray-100 shadow-xl lg:col-span-1">
-          <h3 className="mb-4 text-xl font-bold">Top Earning Teachers</h3>
-
-          {topTeachers.length === 0 ? (
-            <EmptyChartState message="No teacher earnings data available." />
-          ) : (
-            <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={topTeachers} layout="vertical">
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis type="number" tickFormatter={formatMoney} />
-                <YAxis type="category" dataKey="name" width={110} />
-                <Tooltip formatter={formatTooltipValue} />
-                <Bar dataKey="earnings" fill="#0284c7" name="Earnings" />
-              </BarChart>
-            </ResponsiveContainer>
-          )}
+      {loadError ? (
+        <div role="alert" className="card rounded-2xl border border-red-200 bg-red-50 p-6 text-center space-y-3">
+          <AlertCircle className="h-10 w-10 text-red-600 mx-auto" />
+          <h3 className="text-lg font-bold text-red-900">Unable to load revenue analytics</h3>
+          <p className="text-sm text-red-800">{loadError}</p>
+          <button
+            type="button"
+            onClick={() => void loadAnalytics(filters)}
+            className="btn-primary btn-sm inline-flex items-center gap-1.5"
+          >
+            <RefreshCcw className="h-4 w-4" />
+            Retry
+          </button>
         </div>
+      ) : (
+        <>
+          <div className="card rounded-2xl border border-gray-100 shadow-xl">
+            <h3 className="mb-4 text-xl font-bold">Revenue Trend</h3>
 
-        {/* Top Courses */}
-        <div className="card rounded-2xl border border-gray-100 shadow-xl lg:col-span-2">
-          <h3 className="mb-4 text-xl font-bold">Top Selling Courses</h3>
+            {revenueTrend.length === 0 ? (
+              <EmptyChartState message="No revenue trend data available for the selected filters." />
+            ) : (
+              <ResponsiveContainer width="100%" height={400}>
+                <LineChart data={revenueTrend}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="date" minTickGap={20} />
+                  <YAxis tickFormatter={formatMoney} />
+                  <Tooltip formatter={formatTooltipValue} />
+                  <Legend />
+                  <Line
+                    type="monotone"
+                    dataKey="totalRevenue"
+                    stroke="#0284c7"
+                    strokeWidth={2}
+                    name="Total Revenue"
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey="platformEarnings"
+                    stroke="#0ea5e9"
+                    strokeWidth={2}
+                    name="Platform Earnings"
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey="teacherEarnings"
+                    stroke="#38bdf8"
+                    strokeWidth={2}
+                    name="Teacher Earnings"
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            )}
+          </div>
 
-          {topCourses.length === 0 ? (
-            <EmptyChartState message="No course revenue data available." />
-          ) : (
-            <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={topCourses}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis
-                  dataKey="title"
-                  interval={0}
-                  angle={-15}
-                  textAnchor="end"
-                  height={70}
-                />
-                <YAxis tickFormatter={formatMoney} />
-                <Tooltip formatter={formatTooltipValue} />
-                <Bar dataKey="revenue" fill="#0ea5e9" name="Revenue" />
-              </BarChart>
-            </ResponsiveContainer>
-          )}
-        </div>
-      </div>
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+            <div className="card rounded-2xl border border-gray-100 shadow-xl lg:col-span-1">
+              <h3 className="mb-4 text-xl font-bold">Top Earning Teachers</h3>
 
-      {/* Revenue Breakdown */}
-      <div className="card rounded-2xl border border-gray-100 shadow-xl">
-        <h3 className="mb-4 text-xl font-bold">
-          Revenue Breakdown by Course Type
-        </h3>
+              {topTeachers.length === 0 ? (
+                <EmptyChartState message="No teacher earnings data available." />
+              ) : (
+                <ResponsiveContainer width="100%" height={300}>
+                  <BarChart data={topTeachers} layout="vertical">
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis type="number" tickFormatter={formatMoney} />
+                    <YAxis type="category" dataKey="name" width={110} />
+                    <Tooltip formatter={formatTooltipValue} />
+                    <Bar dataKey="earnings" fill="#0284c7" name="Earnings" />
+                  </BarChart>
+                </ResponsiveContainer>
+              )}
+            </div>
 
-        {revenueBreakdown.length === 0 ? (
-          <EmptyChartState message="No revenue breakdown data available." />
-        ) : (
-          <ResponsiveContainer width="100%" height={300}>
-            <PieChart>
-              <Pie
-                data={revenueBreakdown}
-                dataKey="revenue"
-                nameKey="type"
-                cx="50%"
-                cy="50%"
-                outerRadius={100}
-                label
-              >
-                {revenueBreakdown.map(
-                  (_entry: RevenueBreakdownPoint, index: number) => (
-                    <Cell
-                      key={`revenue-breakdown-${index}`}
-                      fill={CHART_COLORS[index % CHART_COLORS.length]}
+            <div className="card rounded-2xl border border-gray-100 shadow-xl lg:col-span-2">
+              <h3 className="mb-4 text-xl font-bold">Top Selling Courses</h3>
+
+              {topCourses.length === 0 ? (
+                <EmptyChartState message="No course revenue data available." />
+              ) : (
+                <ResponsiveContainer width="100%" height={300}>
+                  <BarChart data={topCourses}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis
+                      dataKey="title"
+                      interval={0}
+                      angle={-15}
+                      textAnchor="end"
+                      height={70}
                     />
-                  )
-                )}
-              </Pie>
-              <Tooltip formatter={formatTooltipValue} />
-              <Legend />
-            </PieChart>
-          </ResponsiveContainer>
-        )}
-      </div>
+                    <YAxis tickFormatter={formatMoney} />
+                    <Tooltip formatter={formatTooltipValue} />
+                    <Bar dataKey="revenue" fill="#0ea5e9" name="Revenue" />
+                  </BarChart>
+                </ResponsiveContainer>
+              )}
+            </div>
+          </div>
+
+          <div className="card rounded-2xl border border-gray-100 shadow-xl">
+            <h3 className="mb-4 text-xl font-bold">
+              Revenue Breakdown by Course Type
+            </h3>
+
+            {revenueBreakdown.length === 0 ? (
+              <EmptyChartState message="No revenue breakdown data available." />
+            ) : (
+              <ResponsiveContainer width="100%" height={300}>
+                <PieChart>
+                  <Pie
+                    data={revenueBreakdown}
+                    dataKey="revenue"
+                    nameKey="type"
+                    cx="50%"
+                    cy="50%"
+                    outerRadius={100}
+                    label
+                  >
+                    {revenueBreakdown.map(
+                      (_entry: RevenueBreakdownPoint, index: number) => (
+                        <Cell
+                          key={`revenue-breakdown-${index}`}
+                          fill={CHART_COLORS[index % CHART_COLORS.length]}
+                        />
+                      )
+                    )}
+                  </Pie>
+                  <Tooltip formatter={formatTooltipValue} />
+                  <Legend />
+                </PieChart>
+              </ResponsiveContainer>
+            )}
+          </div>
+        </>
+      )}
     </div>
   );
 };

@@ -394,7 +394,7 @@ export const ensureCommissionRateInRange = (commissionRate: number | null) => {
   }
 };
 
-export const normalizeEmail = (email: string) => {
+const normalizeEmail = (email: string) => {
   const normalizedEmail = normalizeCanonicalEmail(email);
 
   if (!normalizedEmail) {

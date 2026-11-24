@@ -253,6 +253,52 @@ class NotificationService {
   }
 
   /**
+   * Create a single notification for an existing active user.
+   * Returns null if the target user does not exist or is inactive.
+   */
+  async createNotification(
+    userId: string,
+    title: string,
+    message: string,
+    type: string = DEFAULT_NOTIFICATION_TYPE,
+  ): Promise<Notification | null> {
+    const normalizedUserId = normalizeRequiredId(userId, "User ID");
+    const normalizedTitle = normalizeRequiredText(
+      title,
+      "Notification title",
+      MAX_NOTIFICATION_TITLE_LENGTH,
+    );
+    const normalizedMessage = normalizeRequiredText(
+      message,
+      "Notification message",
+      MAX_NOTIFICATION_MESSAGE_LENGTH,
+      true,
+    );
+    const normalizedType = normalizeNotificationType(type);
+
+    const activeUser = await prisma.user.findFirst({
+      where: {
+        id: normalizedUserId,
+        isActive: true,
+      },
+      select: { id: true },
+    });
+
+    if (!activeUser) {
+      return null;
+    }
+
+    return prisma.notification.create({
+      data: {
+        userId: activeUser.id,
+        title: normalizedTitle,
+        message: normalizedMessage,
+        type: normalizedType,
+      },
+    });
+  }
+
+  /**
    * Create notifications for multiple existing active users.
    * Invalid or inactive user IDs are skipped to prevent foreign-key failures.
    */

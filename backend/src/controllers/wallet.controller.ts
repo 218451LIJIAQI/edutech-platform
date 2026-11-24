@@ -1,6 +1,7 @@
 import { Request, Response } from "express";
 import {
   PayoutMethodType,
+  PayoutRequestStatus,
   WalletTransactionSource,
   WalletTransactionType,
 } from "@prisma/client";
@@ -8,7 +9,6 @@ import asyncHandler from "../utils/async-handler";
 import walletService from "../services/wallet.service";
 import { BadRequestError } from "../utils/errors";
 import {
-  getQueryString,
   parseOptionalBoolean,
   parseOptionalEnum,
   parseOptionalString,
@@ -133,7 +133,7 @@ class WalletController {
         fallback: 0,
         max: MAX_OFFSET,
       }),
-      status: getQueryString(req.query.status),
+      status: parseOptionalEnum(req.query.status, PayoutRequestStatus, "status"),
     });
     sendSuccess(res, data);
   });

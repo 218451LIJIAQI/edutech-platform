@@ -129,7 +129,7 @@ const AdminDashboard = () => {
             <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-primary-500 to-indigo-600 animate-pulse flex items-center justify-center">
               <Activity className="w-8 h-8 text-white" />
             </div>
-            <div className="absolute inset-0 rounded-2xl bg-primary-500/20 animate-ping"></div>
+            <div className="absolute inset-0 rounded-2xl bg-primary-500/20 animate-ping motion-reduce:animate-none"></div>
           </div>
           <p className="text-gray-600 font-medium">Loading dashboard...</p>
         </div>
@@ -358,7 +358,7 @@ const AdminDashboard = () => {
                       <p className="text-sm font-medium text-gray-900">
                         {activity.description}
                       </p>
-                      <p className="text-xs text-gray-500 mt-2">
+                      <p className="text-xs text-gray-500 mt-2 tabular-nums">
                         {new Date(activity.createdAt).toLocaleString()}
                       </p>
                     </div>
@@ -375,7 +375,7 @@ const AdminDashboard = () => {
 
           {activitiesPagination && activitiesPagination.totalPages > 1 && (
             <div className="mt-6 pt-4 border-t flex items-center justify-between">
-              <div className="text-sm text-gray-700">
+              <div className="text-sm text-gray-700 tabular-nums">
                 Showing page {activitiesPagination.page} of {activitiesPagination.totalPages}
               </div>
               <div className="flex items-center gap-2">
@@ -444,13 +444,13 @@ const AdminDashboard = () => {
                 <h3 className={`text-sm font-bold ${dist.text} uppercase`}>{dist.label}</h3>
                 <dist.Icon className={`w-5 h-5 ${dist.value}`} />
               </div>
-              <p className={`text-4xl font-bold ${dist.value} mb-2`}>{dist.count}</p>
+              <p className={`text-4xl font-bold ${dist.value} mb-2 tabular-nums`}>{dist.count}</p>
               <ProgressBar
                 percentage={dist.pct}
                 containerClassName={`w-full ${dist.track} rounded-full h-2 overflow-hidden`}
                 barClassName={`bg-gradient-to-r ${dist.bar} h-2 rounded-full transition-all duration-500`}
               />
-              <p className={`text-sm ${dist.text} mt-3 font-medium`}>
+              <p className={`text-sm ${dist.text} mt-3 font-medium tabular-nums`}>
                 {dist.pct}% {dist.suffix}
               </p>
             </div>

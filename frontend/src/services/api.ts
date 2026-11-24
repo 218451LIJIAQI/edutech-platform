@@ -12,11 +12,8 @@ import {
 import {
   getApiBaseUrl,
   normalizeRequestPath,
-  resolveApiRequestUrl,
   shouldAttachAuthHeader,
 } from '@/utils/runtime';
-
-export { normalizeRequestPath, resolveApiRequestUrl, shouldAttachAuthHeader };
 
 const API_URL = getApiBaseUrl();
 const AUTH_REFRESH_EXEMPT_PATHS = new Set([

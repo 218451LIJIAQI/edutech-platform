@@ -10,9 +10,8 @@ import { useOverlayAccessibility, usePageTitle } from '@/hooks';
 import { extractErrorMessage } from '@/utils/error-handler';
 import ConfirmationModal from '@/components/common/ConfirmationModal';
 import { normalizeSafeHttpUrl } from '@/utils/safe-url';
+import { hasStrongPasswordComplexity } from '@/utils/helpers';
 import { toStorableBackendAssetPath } from '@/utils/runtime';
-
-const PASSWORD_COMPLEXITY = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).+$/;
 
 const getPasswordValidationError = (password: string, confirmation: string) => {
   if (!password) {
@@ -23,7 +22,7 @@ const getPasswordValidationError = (password: string, confirmation: string) => {
     return 'Password must be at least 8 characters';
   }
 
-  if (!PASSWORD_COMPLEXITY.test(password)) {
+  if (!hasStrongPasswordComplexity(password)) {
     return 'Password must contain uppercase, lowercase, and a number';
   }
 
@@ -288,6 +287,7 @@ const ProfilePage = () => {
                     <div className="flex items-center gap-2">
                       <input
                         type="text"
+                        aria-label="Avatar image URL"
                         value={avatarUrlInput}
                         onChange={(e) => setAvatarUrlInput(e.target.value)}
                         placeholder="Paste image URL"
@@ -336,7 +336,10 @@ const ProfilePage = () => {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 {/* First Name */}
                 <div>
-                  <label className="block text-sm font-bold text-gray-700 mb-3 flex items-center space-x-2">
+                  <label
+                    htmlFor={isEditing ? 'profile-first-name' : undefined}
+                    className="block text-sm font-bold text-gray-700 mb-3 flex items-center space-x-2"
+                  >
                     <div className="p-2 bg-primary-100 rounded-lg">
                       <User className="w-4 h-4 text-primary-600" />
                     </div>
@@ -344,6 +347,7 @@ const ProfilePage = () => {
                   </label>
                   {isEditing ? (
                     <input
+                      id="profile-first-name"
                       type="text"
                       name="firstName"
                       value={formData.firstName}
@@ -358,7 +362,10 @@ const ProfilePage = () => {
 
                 {/* Last Name */}
                 <div>
-                  <label className="block text-sm font-bold text-gray-700 mb-3 flex items-center space-x-2">
+                  <label
+                    htmlFor={isEditing ? 'profile-last-name' : undefined}
+                    className="block text-sm font-bold text-gray-700 mb-3 flex items-center space-x-2"
+                  >
                     <div className="p-2 bg-primary-100 rounded-lg">
                       <User className="w-4 h-4 text-primary-600" />
                     </div>
@@ -366,6 +373,7 @@ const ProfilePage = () => {
                   </label>
                   {isEditing ? (
                     <input
+                      id="profile-last-name"
                       type="text"
                       name="lastName"
                       value={formData.lastName}
@@ -457,7 +465,7 @@ const ProfilePage = () => {
               <div className="flex items-center justify-between p-4 bg-gradient-to-r from-gray-50 to-gray-100 rounded-xl border border-gray-200">
               <div>
                   <p className="font-bold text-gray-900">Account Created</p>
-                  <p className="text-sm text-gray-600 mt-1">
+                  <p className="text-sm text-gray-600 mt-1 tabular-nums">
                   {user?.createdAt ? new Date(user.createdAt).toLocaleString() : 'N/A'}
                 </p>
               </div>
@@ -519,8 +527,9 @@ const ProfilePage = () => {
           </p>
           <div className="space-y-3">
             <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-2">Current Password</label>
+              <label htmlFor="profile-current-password" className="block text-sm font-semibold text-gray-700 mb-2">Current Password</label>
               <input
+                id="profile-current-password"
                 ref={currentPasswordInputRef}
                 type="password"
                 className="input"
@@ -530,8 +539,9 @@ const ProfilePage = () => {
               />
             </div>
             <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-2">New Password</label>
+              <label htmlFor="profile-new-password" className="block text-sm font-semibold text-gray-700 mb-2">New Password</label>
               <input
+                id="profile-new-password"
                 type="password"
                 className="input"
                 value={newPassword}
@@ -540,8 +550,9 @@ const ProfilePage = () => {
               />
             </div>
             <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-2">Confirm New Password</label>
+              <label htmlFor="profile-confirm-password" className="block text-sm font-semibold text-gray-700 mb-2">Confirm New Password</label>
               <input
+                id="profile-confirm-password"
                 type="password"
                 className="input"
                 value={confirmPassword}

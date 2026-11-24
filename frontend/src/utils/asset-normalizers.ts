@@ -24,10 +24,7 @@ import {
   resolveBackendAssetUrl,
   toStorableBackendAssetPath,
 } from './runtime';
-import {
-  LEGACY_PROFILE_STATUS_COMPLETE,
-  PROFILE_STATUS_APPROVED,
-} from './teacher-profile';
+import { normalizeTeacherProfileCompletionStatus } from './teacher-profile';
 
 const NON_HTTP_SCHEME_PATTERN = /^[a-z][a-z0-9+.-]*:/i;
 const SUPPORT_ATTACHMENT_UPLOAD_PATH = '/uploads/support-attachments/';
@@ -35,9 +32,7 @@ const SUPPORT_ATTACHMENT_UPLOAD_PATH = '/uploads/support-attachments/';
 const normalizeOptionalTeacherProfileStatus = (
   status?: string
 ): string | undefined =>
-  status === LEGACY_PROFILE_STATUS_COMPLETE
-    ? PROFILE_STATUS_APPROVED
-    : status;
+  status ? normalizeTeacherProfileCompletionStatus(status) : status;
 
 export const toFiniteNumber = (value: unknown, fallback = 0): number => {
   if (typeof value === 'number') {

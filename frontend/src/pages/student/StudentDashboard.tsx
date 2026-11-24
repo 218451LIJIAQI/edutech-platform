@@ -1,7 +1,7 @@
-import { useEffect, useState, useCallback, useMemo } from 'react';
+import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import clientLogger from '@/utils/logger';
 import { Link } from 'react-router-dom';
-import { AlertCircle, BookOpen, Clock, Award, TrendingUp, ArrowRight, PlayCircle, RefreshCcw, Sparkles, Target, GraduationCap } from 'lucide-react';
+import { AlertCircle, BookOpen, CheckCircle2, Award, TrendingUp, ArrowRight, PlayCircle, RefreshCcw, Sparkles, Target, GraduationCap } from 'lucide-react';
 import { Enrollment } from '@/types';
 import enrollmentService from '@/services/enrollment.service';
 import toast from 'react-hot-toast';
@@ -21,8 +21,8 @@ const StudentDashboard = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const { user } = useAuthStore();
+  const requestIdRef = useRef(0);
 
-  // Smooth loading transition
   const { showSkeleton, contentClass } = useSmoothLoading(isLoading);
 
   const preferredEnrollments = useMemo(
@@ -37,44 +37,53 @@ const StudentDashboard = () => {
         ? preferredEnrollments.reduce((sum: number, e: Enrollment) => sum + e.progress, 0) / total
         : 0;
     const completed = preferredEnrollments.filter((e: Enrollment) => e.progress === 100).length;
-
-    // Calculate estimated hours based on completed lessons
-    const estimatedHours = preferredEnrollments.reduce((sum: number, e: Enrollment) => {
-      return sum + e.completedLessons;
-    }, 0);
+    const completedLessons = preferredEnrollments.reduce(
+      (sum: number, e: Enrollment) => sum + e.completedLessons,
+      0
+    );
 
     return {
       totalCourses: total,
       averageProgress: Math.round(avgProgress),
       completedCourses: completed,
-      hoursLearned: estimatedHours,
+      completedLessons,
     };
   }, [preferredEnrollments]);
 
   const fetchDashboardData = useCallback(async () => {
+    const requestId = ++requestIdRef.current;
     setIsLoading(true);
     setLoadError(null);
     try {
       const enrollmentsData = await enrollmentService.getMyCourses();
+      if (requestId !== requestIdRef.current) {
+        return;
+      }
       setEnrollments(enrollmentsData);
     } catch (error) {
+      if (requestId !== requestIdRef.current) {
+        return;
+      }
       const errorMessage = extractErrorMessage(error, 'Failed to load dashboard data');
       clientLogger.error('Failed to fetch dashboard data:', error);
       setLoadError(errorMessage);
       toast.error(errorMessage);
     } finally {
-      setIsLoading(false);
+      if (requestId === requestIdRef.current) {
+        setIsLoading(false);
+      }
     }
   }, []);
 
   useEffect(() => {
-    fetchDashboardData();
+    void fetchDashboardData();
+    return () => {
+      requestIdRef.current += 1;
+    };
   }, [fetchDashboardData]);
 
-  // Skeleton - soft breathing effect
   const renderSkeleton = () => (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      {/* Loading Header */}
       <div className="mb-10">
         <div className="flex items-center gap-4 mb-6">
           <div className="w-14 h-14 bg-gray-200/60 rounded-2xl skeleton-breathe"></div>
@@ -85,7 +94,6 @@ const StudentDashboard = () => {
         </div>
       </div>
 
-      {/* Loading Stats */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 mb-10">
         {[1, 2, 3, 4].map((i) => (
           <div key={i} className="skeleton-breathe">
@@ -94,7 +102,6 @@ const StudentDashboard = () => {
         ))}
       </div>
 
-      {/* Loading Content */}
       <div className="space-y-4">
         {[1, 2, 3].map((i) => (
           <div key={i} className="h-24 bg-gray-200/60 rounded-2xl skeleton-breathe"></div>
@@ -105,17 +112,13 @@ const StudentDashboard = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-primary-50/10 to-indigo-50/20 relative">
-      {/* Background Pattern */}
       <div className="absolute inset-0 bg-[linear-gradient(rgba(0,0,0,0.015)_1px,transparent_1px),linear-gradient(90deg,rgba(0,0,0,0.015)_1px,transparent_1px)] bg-[size:32px_32px] pointer-events-none"></div>
 
-      {/* Decorative Elements */}
       <div className="absolute top-20 right-[10%] w-72 h-72 bg-primary-400/10 rounded-full blur-3xl pointer-events-none"></div>
       <div className="absolute bottom-40 left-[5%] w-80 h-80 bg-indigo-400/10 rounded-full blur-3xl pointer-events-none"></div>
 
-      {/* Skeleton or content - smooth transition */}
       {showSkeleton ? renderSkeleton() : (
       <div className={`max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 relative ${contentClass}`}>
-        {/* Header */}
         <div className="mb-10">
           <div className="flex flex-col sm:flex-row sm:items-center gap-4 mb-3">
             <div className="w-14 h-14 bg-gradient-to-br from-primary-500 via-primary-600 to-indigo-600 rounded-2xl flex items-center justify-center shadow-xl shadow-primary-500/25 ring-4 ring-white">
@@ -131,7 +134,7 @@ const StudentDashboard = () => {
         </div>
 
         {loadError && (
-          <div className="mb-8 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-800 flex items-center justify-between gap-4">
+          <div role="alert" className="mb-8 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-800 flex items-center justify-between gap-4">
             <div className="flex items-center gap-2.5">
               <AlertCircle className="w-5 h-5 text-red-600 shrink-0" />
               <span>{loadError}</span>
@@ -149,13 +152,12 @@ const StudentDashboard = () => {
 
         {/* Stats Cards */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 mb-10">
-          {/* Total Courses */}
           <div className="group bg-white/95 backdrop-blur-sm rounded-2xl p-6 shadow-card hover:shadow-card-hover transition-all duration-300 hover:-translate-y-1 border border-gray-100/60 relative overflow-hidden">
             <div className="absolute top-0 right-0 w-20 h-20 bg-gradient-to-br from-primary-500/10 to-indigo-500/5 rounded-full -translate-y-1/2 translate-x-1/2"></div>
             <div className="flex items-center justify-between relative">
               <div>
                 <p className="text-xs text-gray-500 font-semibold uppercase">Total Courses</p>
-                <p className="text-3xl font-extrabold text-gray-900 mt-1">{stats.totalCourses}</p>
+                <p className="text-3xl font-extrabold text-gray-900 mt-1 tabular-nums">{stats.totalCourses}</p>
               </div>
               <div className="w-12 h-12 bg-gradient-to-br from-primary-500 to-indigo-600 rounded-xl flex items-center justify-center shadow-lg shadow-primary-500/25 group-hover:scale-110 group-hover:rotate-3 transition-all duration-300">
                 <BookOpen className="w-6 h-6 text-white" />
@@ -168,13 +170,12 @@ const StudentDashboard = () => {
             </div>
           </div>
 
-          {/* Average Progress */}
           <div className="group bg-white/95 backdrop-blur-sm rounded-2xl p-6 shadow-card hover:shadow-card-hover transition-all duration-300 hover:-translate-y-1 border border-gray-100/60 relative overflow-hidden">
             <div className="absolute top-0 right-0 w-20 h-20 bg-gradient-to-br from-success-500/10 to-green-500/5 rounded-full -translate-y-1/2 translate-x-1/2"></div>
             <div className="flex items-center justify-between relative">
               <div>
                 <p className="text-xs text-gray-500 font-semibold uppercase">Avg Progress</p>
-                <p className="text-3xl font-extrabold text-gray-900 mt-1">{stats.averageProgress}%</p>
+                <p className="text-3xl font-extrabold text-gray-900 mt-1 tabular-nums">{stats.averageProgress}%</p>
               </div>
               <div className="w-12 h-12 bg-gradient-to-br from-success-500 to-green-600 rounded-xl flex items-center justify-center shadow-lg shadow-success-500/25 group-hover:scale-110 group-hover:rotate-3 transition-all duration-300">
                 <TrendingUp className="w-6 h-6 text-white" />
@@ -187,13 +188,12 @@ const StudentDashboard = () => {
             </div>
           </div>
 
-          {/* Completed */}
           <div className="group bg-white/95 backdrop-blur-sm rounded-2xl p-6 shadow-card hover:shadow-card-hover transition-all duration-300 hover:-translate-y-1 border border-gray-100/60 relative overflow-hidden">
             <div className="absolute top-0 right-0 w-20 h-20 bg-gradient-to-br from-warning-500/10 to-orange-500/5 rounded-full -translate-y-1/2 translate-x-1/2"></div>
             <div className="flex items-center justify-between relative">
               <div>
                 <p className="text-xs text-gray-500 font-semibold uppercase">Completed</p>
-                <p className="text-3xl font-extrabold text-gray-900 mt-1">{stats.completedCourses}</p>
+                <p className="text-3xl font-extrabold text-gray-900 mt-1 tabular-nums">{stats.completedCourses}</p>
               </div>
               <div className="w-12 h-12 bg-gradient-to-br from-warning-500 to-orange-600 rounded-xl flex items-center justify-center shadow-lg shadow-warning-500/25 group-hover:scale-110 group-hover:rotate-3 transition-all duration-300">
                 <Award className="w-6 h-6 text-white" />
@@ -206,21 +206,20 @@ const StudentDashboard = () => {
             </div>
           </div>
 
-          {/* Hours Learned */}
           <div className="group bg-white/95 backdrop-blur-sm rounded-2xl p-6 shadow-card hover:shadow-card-hover transition-all duration-300 hover:-translate-y-1 border border-gray-100/60 relative overflow-hidden">
             <div className="absolute top-0 right-0 w-20 h-20 bg-gradient-to-br from-accent-500/10 to-purple-500/5 rounded-full -translate-y-1/2 translate-x-1/2"></div>
             <div className="flex items-center justify-between relative">
               <div>
-                <p className="text-xs text-gray-500 font-semibold uppercase">Hours Learned</p>
-                <p className="text-3xl font-extrabold text-gray-900 mt-1">{stats.hoursLearned}</p>
+                <p className="text-xs text-gray-500 font-semibold uppercase">Lessons Completed</p>
+                <p className="text-3xl font-extrabold text-gray-900 mt-1 tabular-nums">{stats.completedLessons}</p>
               </div>
               <div className="w-12 h-12 bg-gradient-to-br from-accent-500 to-purple-600 rounded-xl flex items-center justify-center shadow-lg shadow-accent-500/25 group-hover:scale-110 group-hover:rotate-3 transition-all duration-300">
-                <Clock className="w-6 h-6 text-white" />
+                <CheckCircle2 className="w-6 h-6 text-white" />
               </div>
             </div>
             <div className="mt-4 pt-3 border-t border-gray-100/80">
               <span className="text-xs font-semibold text-accent-600 bg-accent-50 px-2.5 py-1 rounded-full inline-flex items-center gap-1">
-                <PlayCircle className="w-3 h-3" /> Time invested
+                <PlayCircle className="w-3 h-3" /> Lessons finished
               </span>
             </div>
           </div>
@@ -253,7 +252,6 @@ const StudentDashboard = () => {
                     to={`/courses/${course.id}/learn`}
                     className="group bg-white/95 backdrop-blur-sm rounded-2xl p-6 shadow-card hover:shadow-card-hover transition-all duration-300 hover:-translate-y-1 border border-gray-100/60 flex flex-col"
                   >
-                    {/* Course Info */}
                     <div className="mb-5">
                       <div className="flex items-start justify-between mb-3">
                         <h3 className="font-bold text-lg text-gray-900 group-hover:text-primary-600 transition-colors line-clamp-2">{course.title}</h3>
@@ -270,11 +268,10 @@ const StudentDashboard = () => {
                       </p>
                     </div>
 
-                    {/* Progress Bar */}
                     <div className="mb-4">
                       <div className="flex items-center justify-between text-sm mb-2">
                         <span className="text-gray-500 font-medium">Progress</span>
-                        <span className="font-bold text-primary-600">
+                        <span className="font-bold text-primary-600 tabular-nums">
                           {enrollment.progress}%
                         </span>
                       </div>
@@ -286,13 +283,11 @@ const StudentDashboard = () => {
                       </div>
                     </div>
 
-                    {/* Lessons Completed */}
-                    <div className="text-sm text-gray-500 font-medium mb-5 flex items-center gap-2">
+                    <div className="text-sm text-gray-500 font-medium mb-5 flex items-center gap-2 tabular-nums">
                       <BookOpen className="w-4 h-4 text-primary-500" />
                       {enrollment.completedLessons} lessons completed
                     </div>
 
-                    {/* Continue Button */}
                     <span className="w-full py-3 px-4 bg-gradient-to-r from-primary-500 to-primary-600 text-white font-semibold rounded-xl shadow-lg shadow-primary-500/20 hover:shadow-xl hover:shadow-primary-500/30 hover:from-primary-600 hover:to-primary-700 transition-all duration-300 mt-auto flex items-center justify-center gap-2 group/btn">
                       <PlayCircle className="w-5 h-5" />
                       Continue Learning

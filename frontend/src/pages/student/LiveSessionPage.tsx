@@ -255,7 +255,16 @@ const LiveSessionPage = () => {
   }, [fetchProfile, navigate, sessionId]);
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    if (messages.length === 0) {
+      return;
+    }
+    const prefersReducedMotion =
+      typeof window !== 'undefined' &&
+      Boolean(window.matchMedia?.('(prefers-reduced-motion: reduce)').matches);
+    messagesEndRef.current?.scrollIntoView({
+      behavior: prefersReducedMotion ? 'auto' : 'smooth',
+      block: 'nearest',
+    });
   }, [messages]);
 
   const handleStartSession = () => {
@@ -321,7 +330,7 @@ const LiveSessionPage = () => {
                 <button
                   type="button"
                   onClick={handleEndSession}
-                  className="inline-flex items-center gap-2 rounded-xl bg-red-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-red-700"
+                  className="btn-danger inline-flex items-center gap-2"
                 >
                   <Square className="w-4 h-4" />
                   End Live Session
@@ -348,14 +357,13 @@ const LiveSessionPage = () => {
         )}
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Video Area */}
           <div className="lg:col-span-2">
             <div className="card bg-black aspect-video flex items-center justify-center shadow-2xl border border-gray-800 rounded-2xl overflow-hidden">
               <div className="text-center px-6">
-                <div className="w-20 h-20 bg-red-600 rounded-full flex items-center justify-center mx-auto mb-4 animate-pulse">
+                <div className="w-20 h-20 bg-red-600 rounded-full flex items-center justify-center mx-auto mb-4 animate-pulse motion-reduce:animate-none">
                   <span className="text-white text-2xl font-bold">LIVE</span>
                 </div>
-                <p className="text-white text-xl font-semibold">{session?.title || 'Live Session Video'}</p>
+                <h1 className="text-white text-xl md:text-2xl font-semibold">{session?.title || 'Live Session Classroom'}</h1>
                 {session?.description ? (
                   <p className="text-gray-300 text-sm mt-2 max-w-xl mx-auto">{session.description}</p>
                 ) : null}
@@ -403,19 +411,17 @@ const LiveSessionPage = () => {
             </div>
           </div>
 
-          {/* Chat Sidebar */}
           <div className="card flex flex-col h-[600px] shadow-xl border border-gray-100 rounded-2xl">
-            <div className="border-b-2 border-gray-200 pb-4 mb-4">
-              <h3 className="font-bold text-lg text-gray-900 flex items-center">
+            <div className="border-b border-gray-200 pb-4 mb-4">
+              <h2 className="font-bold text-lg text-gray-900 flex items-center">
                 <div className="p-2 bg-primary-100 rounded-lg mr-3">
                   <Users className="w-5 h-5 text-primary-600" />
                 </div>
                 Live Chat
-              </h3>
+              </h2>
             </div>
 
-            {/* Messages */}
-            <div className="flex-1 overflow-y-auto space-y-3 mb-4 pr-2">
+            <div className="flex-1 overflow-y-auto space-y-3 mb-4 pr-2" aria-live="polite">
               {messages.length === 0 ? (
                 <div className="text-center py-8 text-gray-500">
                   <p>No messages yet. Start the conversation!</p>
@@ -426,25 +432,29 @@ const LiveSessionPage = () => {
                     <p className="text-xs font-bold text-primary-600 mb-1">
                       {[msg.user?.firstName, msg.user?.lastName].filter(Boolean).join(' ') || 'Participant'}
                     </p>
-                    <p className="text-sm text-gray-900">{msg.message}</p>
+                    <p className="text-sm text-gray-900 break-words">{msg.message}</p>
                   </div>
                 ))
               )}
               <div ref={messagesEndRef} />
             </div>
 
-            {/* Input */}
             <div className="flex space-x-2 pt-4 border-t border-gray-200">
               <button
                 type="button"
                 onClick={raiseHand}
                 className="btn-outline p-3 rounded-xl disabled:cursor-not-allowed disabled:opacity-50"
                 title="Raise hand"
+                aria-label="Raise hand"
                 disabled={!isJoined || session?.status !== 'ONGOING'}
               >
                 <Hand className="w-5 h-5" />
               </button>
+              <label htmlFor="live-chat-input" className="sr-only">
+                Live chat message
+              </label>
               <input
+                id="live-chat-input"
                 type="text"
                 value={message}
                 onChange={(e) => setMessage(e.target.value)}

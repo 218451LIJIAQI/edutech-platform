@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import clientLogger from '@/utils/logger';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { AlertCircle, Heart, Bookmark, RefreshCcw, Share2, MessageCircle, Flag, User, Tag, Loader2 } from 'lucide-react';
@@ -37,12 +37,17 @@ const PostDetailPage = () => {
   const [commentInput, setCommentInput] = useState('');
   const [isSubmittingComment, setIsSubmittingComment] = useState(false);
   const [isReportModalOpen, setIsReportModalOpen] = useState(false);
+  const requestIdRef = useRef(0);
   const canReportPost = Boolean(user && post && post.authorId !== user.id);
 
   usePageTitle(post?.title ? `${post.title}` : 'Community Post');
 
   const load = useCallback(async () => {
-    if (!id) return;
+    if (!id) {
+      setIsLoading(false);
+      return;
+    }
+    const requestId = ++requestIdRef.current;
     setIsLoading(true);
     setLoadError(null);
     try {
@@ -50,20 +55,31 @@ const PostDetailPage = () => {
         communityService.getPostById(id),
         communityService.getComments(id),
       ]);
+      if (requestId !== requestIdRef.current) {
+        return;
+      }
       setPost(loadedPost);
       setComments(loadedComments);
     } catch (error) {
+      if (requestId !== requestIdRef.current) {
+        return;
+      }
       clientLogger.error('Failed to load post:', error);
       const message = extractErrorMessage(error, 'Failed to load post');
       setLoadError(message);
       toast.error(message);
     } finally {
-      setIsLoading(false);
+      if (requestId === requestIdRef.current) {
+        setIsLoading(false);
+      }
     }
   }, [id]);
 
   useEffect(() => {
     void load();
+    return () => {
+      requestIdRef.current += 1;
+    };
   }, [load]);
 
   const onShare = async () => {
@@ -204,7 +220,7 @@ const PostDetailPage = () => {
                   <Link to={`/community/user/${post.authorId}`} className="font-bold text-gray-900 hover:underline">
                     {authorName}
                   </Link>
-                  <p className="text-xs text-gray-500">{new Date(post.createdAt).toLocaleString()}</p>
+                  <p className="text-xs text-gray-500 tabular-nums">{new Date(post.createdAt).toLocaleString()}</p>
                 </div>
                 {canReportPost && (
                   <button type="button" onClick={() => setIsReportModalOpen(true)} className="btn-outline btn-sm inline-flex items-center gap-1"><Flag className="w-4 h-4" aria-label="flag" /> Report</button>
@@ -248,23 +264,34 @@ const PostDetailPage = () => {
             )}
           </div>
 
-          <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center justify-between mb-6 tabular-nums">
             <div className="flex items-center gap-3">
-              <button type="button" onClick={toggleLike} className={`px-3 py-1 rounded-lg border text-sm inline-flex items-center gap-1 ${post.hasLiked ? 'bg-red-50 border-red-200 text-red-600' : 'bg-white border-gray-200 hover:bg-gray-50'}`}>
+              <button
+                type="button"
+                disabled={isTogglingAction}
+                onClick={() => void toggleLike()}
+                className={`px-3 py-1 rounded-lg border text-sm inline-flex items-center gap-1 disabled:opacity-50 ${post.hasLiked ? 'bg-red-50 border-red-200 text-red-600' : 'bg-white border-gray-200 hover:bg-gray-50'}`}
+              >
                 <Heart className={`w-4 h-4 ${post.hasLiked ? 'fill-red-500 text-red-500' : ''}`} aria-label="like" /> {post.likes}
               </button>
-              <button type="button" onClick={toggleBookmark} className={`px-3 py-1 rounded-lg border text-sm inline-flex items-center gap-1 ${post.hasBookmarked ? 'bg-yellow-50 border-yellow-200 text-yellow-700' : 'bg-white border-gray-200 hover:bg-gray-50'}`}>
+              <button
+                type="button"
+                disabled={isTogglingAction}
+                onClick={() => void toggleBookmark()}
+                className={`px-3 py-1 rounded-lg border text-sm inline-flex items-center gap-1 disabled:opacity-50 ${post.hasBookmarked ? 'bg-yellow-50 border-yellow-200 text-yellow-700' : 'bg-white border-gray-200 hover:bg-gray-50'}`}
+              >
                 <Bookmark className={`w-4 h-4 ${post.hasBookmarked ? 'fill-yellow-500 text-yellow-600' : ''}`} aria-label="bookmark" /> {post.bookmarks}
               </button>
             </div>
-            <button type="button" onClick={onShare} className="px-3 py-1 rounded-lg border text-sm inline-flex items-center gap-1 bg-white border-gray-200 hover:bg-gray-50">
+            <button type="button" onClick={() => void onShare()} className="px-3 py-1 rounded-lg border text-sm inline-flex items-center gap-1 bg-white border-gray-200 hover:bg-gray-50">
               <Share2 className="w-4 h-4" aria-label="share" /> Share
             </button>
           </div>
 
-          {/* Comments */}
           <div className="border-t pt-4">
-            <h3 className="text-lg font-bold text-gray-900 mb-3 inline-flex items-center gap-2"><MessageCircle className="w-4 h-4" /> Comments {comments.length}</h3>
+            <h2 className="text-lg font-bold text-gray-900 mb-3 inline-flex items-center gap-2 tabular-nums">
+              <MessageCircle className="w-4 h-4" /> Comments ({comments.length})
+            </h2>
             <div className="space-y-3">
               {comments.length === 0 ? (
                 <p className="text-sm text-gray-500">No comments yet.</p>
@@ -277,29 +304,47 @@ const PostDetailPage = () => {
                     >
                       {getDisplayUserName(c.author)}
                     </Link>
-                    <div className="text-xs text-gray-500">{new Date(c.createdAt).toLocaleString()}</div>
+                    <div className="text-xs text-gray-500 tabular-nums">{new Date(c.createdAt).toLocaleString()}</div>
                   </div>
                   <div className="text-sm text-gray-800 whitespace-pre-wrap">{c.content}</div>
                 </div>
               ))}
             </div>
 
-            <div className="mt-3 flex items-center gap-2">
-              <input
-                value={commentInput}
-                onChange={(e) => setCommentInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !e.shiftKey) {
-                    e.preventDefault();
-                    void addComment();
-                  }
-                }}
-                className="input flex-1"
-                maxLength={1000}
-                placeholder="Write your comment..."
-              />
-              <button type="button" onClick={() => void addComment()} className="btn-primary btn-sm">Post</button>
-            </div>
+            {user ? (
+              <div className="mt-3 flex items-center gap-2">
+                <label htmlFor="post-comment-input" className="sr-only">
+                  Write a comment
+                </label>
+                <input
+                  id="post-comment-input"
+                  value={commentInput}
+                  onChange={(e) => setCommentInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault();
+                      void addComment();
+                    }
+                  }}
+                  className="input flex-1"
+                  maxLength={1000}
+                  disabled={isSubmittingComment}
+                  placeholder="Write your comment..."
+                />
+                <button
+                  type="button"
+                  disabled={isSubmittingComment || !commentInput.trim()}
+                  onClick={() => void addComment()}
+                  className="btn-primary btn-sm"
+                >
+                  {isSubmittingComment ? 'Posting...' : 'Post'}
+                </button>
+              </div>
+            ) : (
+              <p className="mt-3 text-xs text-slate-500">
+                Sign in to join the discussion.
+              </p>
+            )}
           </div>
         </div>
       </div>

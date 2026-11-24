@@ -237,6 +237,9 @@ export const updateProfileValidation = [
   optionalTextBody("bio", ERROR_MESSAGES.BIO_STRING, ERROR_MESSAGES.BIO_LENGTH, 1000),
   optionalTextBody("headline", ERROR_MESSAGES.HEADLINE_STRING, ERROR_MESSAGES.HEADLINE_LENGTH, 200),
   body("hourlyRate")
+    .customSanitizer((value: unknown) =>
+      typeof value === "string" && value.trim() === "" ? null : value,
+    )
     .optional({ nullable: true })
     .custom(validateHourlyRate)
     .bail()

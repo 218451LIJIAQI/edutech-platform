@@ -278,7 +278,7 @@ const boundedStringField = (
   },
 ): ValidationChain => {
   const base = options.optional
-    ? body(field).optional({ nullable: true })
+    ? body(field).optional({ values: "undefined" })
     : body(field);
 
   return base
@@ -505,8 +505,33 @@ const packageSharedFields = [
     .custom(validateDiscountNotAbovePrice)
     .bail()
     .toFloat(),
-  optionalPositiveIntField("duration", ERROR_MESSAGES.DURATION_INTEGER),
+  body("duration")
+    .customSanitizer((value: unknown) =>
+      typeof value === "string" && value.trim() === "" ? null : value,
+    )
+    .optional({ nullable: true })
+    .isInt({ min: 1, max: COURSE_FIELD_LIMITS.MAX_PACKAGE_DURATION_DAYS })
+    .withMessage(
+      `Package duration must be between 1 and ${COURSE_FIELD_LIMITS.MAX_PACKAGE_DURATION_DAYS} days`,
+    )
+    .bail()
+    .toInt(),
   optionalPositiveIntField("maxStudents", ERROR_MESSAGES.MAX_STUDENTS_INTEGER),
+  body("features")
+    .optional({ nullable: true })
+    .isArray({ max: 30 })
+    .withMessage("Features must be an array with at most 30 items"),
+  body("features.*")
+    .optional({ values: "undefined" })
+    .isString()
+    .withMessage("Each feature must be a string")
+    .bail()
+    .trim()
+    .notEmpty()
+    .withMessage("Package features cannot contain empty values")
+    .bail()
+    .isLength({ max: 200 })
+    .withMessage("Each feature must not exceed 200 characters"),
 ];
 
 export const createPackageValidation = [
@@ -537,7 +562,7 @@ export const updatePackageValidation = [
     max: COURSE_FIELD_LIMITS.PACKAGE_NAME_MAX,
   }),
   body("price")
-    .optional({ nullable: true })
+    .optional({ values: "undefined" })
     .custom(validateMoneyValue(ERROR_MESSAGES.PRICE_RANGE))
     .bail()
     .toFloat(),
@@ -616,7 +641,7 @@ export const updateMaterialValidation = [
     max: COURSE_FIELD_LIMITS.MATERIAL_FILE_TYPE_MAX,
   }),
   body("fileSize")
-    .optional({ nullable: true })
+    .optional({ values: "undefined" })
     .isInt({ min: 0 })
     .withMessage(ERROR_MESSAGES.FILE_SIZE_INTEGER)
     .bail()
@@ -709,4 +734,40 @@ export const getCoursesValidation = [
     .isIn([...SORT_ORDER_VALUES])
     .withMessage(ERROR_MESSAGES.SORT_ORDER_INVALID),
   ...paginationQueryValidators(100),
+];
+
+export const createLiveSessionValidation = [
+  boundedStringField("title", {
+    stringMsg: ERROR_MESSAGES.TITLE_STRING,
+    requiredMsg: ERROR_MESSAGES.TITLE_REQUIRED,
+    lengthMsg: `Live session title must be between ${COURSE_FIELD_LIMITS.LIVE_SESSION_TITLE_MIN} and ${COURSE_FIELD_LIMITS.LIVE_SESSION_TITLE_MAX} characters`,
+    min: COURSE_FIELD_LIMITS.LIVE_SESSION_TITLE_MIN,
+    max: COURSE_FIELD_LIMITS.LIVE_SESSION_TITLE_MAX,
+  }),
+  optionalMaxStringField(
+    "description",
+    ERROR_MESSAGES.DESCRIPTION_STRING,
+    `Description must not exceed ${COURSE_FIELD_LIMITS.LIVE_SESSION_DESCRIPTION_MAX} characters`,
+    COURSE_FIELD_LIMITS.LIVE_SESSION_DESCRIPTION_MAX,
+  ),
+  body("scheduledAt")
+    .isString()
+    .withMessage("scheduledAt is required")
+    .bail()
+    .trim()
+    .notEmpty()
+    .withMessage("scheduledAt is required")
+    .bail()
+    .isISO8601()
+    .withMessage("scheduledAt must be a valid ISO-8601 date"),
+  optionalPositiveIntField("duration", ERROR_MESSAGES.DURATION_INTEGER),
+  optionalPositiveIntField("maxParticipants", "Max participants must be a positive integer"),
+  body("meetingUrl")
+    .optional({ nullable: true, checkFalsy: true })
+    .isString()
+    .withMessage("Meeting URL must be a string")
+    .bail()
+    .trim()
+    .isURL({ protocols: ["http", "https"], require_protocol: true })
+    .withMessage("Meeting URL must be a valid HTTP or HTTPS URL"),
 ];

@@ -7,6 +7,7 @@ import {
   ValidationError,
 } from "../utils/errors";
 import { sanitizeUserPlainText } from "../utils/sanitize-user-content";
+import { isUniqueConstraintError } from "./shared/service-helpers";
 
 export const MAX_MESSAGE_LENGTH = 5000;
 export const DEFAULT_MESSAGE_LIMIT = 20;
@@ -31,10 +32,6 @@ const contactSelect = {
   avatar: true,
   role: true,
 } satisfies Prisma.UserSelect;
-
-const isUniqueConstraintError = (error: unknown): boolean =>
-  error instanceof Prisma.PrismaClientKnownRequestError &&
-  error.code === "P2002";
 
 /**
  * Generates a canonical participant key for one-to-one message threads.

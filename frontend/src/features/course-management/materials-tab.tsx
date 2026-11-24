@@ -30,13 +30,13 @@ export default function CourseManagementMaterialsTab({
           <span>Course Study Materials</span>
         </h3>
         <p className="text-sm text-emerald-900">
-          Review downloadable resources attached to this course. Use &ldquo;Edit Course Content&rdquo; above to upload new files or update download permissions.
+          Review study resources attached to this course. Use &ldquo;Edit Course Content&rdquo; above to upload new files or update student download permissions.
         </p>
       </div>
 
       <div className="bg-slate-50 p-6 rounded-xl border border-slate-200">
         <div className="flex items-center justify-between mb-4">
-          <h4 className="font-bold text-slate-900">
+          <h4 className="font-bold text-slate-900 tabular-nums">
             Uploaded Materials ({materials.length})
           </h4>
         </div>
@@ -62,7 +62,7 @@ export default function CourseManagementMaterialsTab({
                             material.isDownloadable ? 'badge-success' : 'badge-warning'
                           }
                         >
-                          {material.isDownloadable ? 'Downloadable' : 'Restricted'}
+                          {material.isDownloadable ? 'Student Downloadable' : 'Instructor Only'}
                         </span>
                       </div>
                       {material.description ? (
@@ -75,7 +75,7 @@ export default function CourseManagementMaterialsTab({
                     </div>
                   </div>
 
-                  {targetUrl && material.isDownloadable ? (
+                  {targetUrl ? (
                     <button
                       type="button"
                       onClick={() => void handleDownload(targetUrl, material.title)}

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   MessageCircle,
   Clock,
@@ -15,10 +15,6 @@ import clientLogger from '@/utils/logger';
 import supportService, { type SupportStats } from '@/services/support.service';
 import { extractErrorMessage } from '@/utils/error-handler';
 
-/**
- * Customer Support Widget Component
- * Displays support statistics and provides quick access to the support inbox.
- */
 interface CustomerSupportWidgetProps {
   onOpenChat: () => void;
 }
@@ -32,18 +28,23 @@ const CustomerSupportWidget = ({ onOpenChat }: CustomerSupportWidgetProps) => {
   const [stats, setStats] = useState<SupportStats | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const requestIdRef = useRef(0);
 
-  /**
-   * Load support statistics from the support service.
-   */
   const loadStats = useCallback(async () => {
+    const requestId = ++requestIdRef.current;
     try {
       setIsLoading(true);
       setErrorMessage(null);
 
       const data = await supportService.getStats();
+      if (requestId !== requestIdRef.current) {
+        return;
+      }
       setStats(data);
     } catch (error) {
+      if (requestId !== requestIdRef.current) {
+        return;
+      }
       const message = extractErrorMessage(error, 'Failed to load support statistics');
 
       clientLogger.error('Failed to load support stats:', error);
@@ -51,12 +52,17 @@ const CustomerSupportWidget = ({ onOpenChat }: CustomerSupportWidgetProps) => {
       setStats(null);
       toast.error(message);
     } finally {
-      setIsLoading(false);
+      if (requestId === requestIdRef.current) {
+        setIsLoading(false);
+      }
     }
   }, []);
 
   useEffect(() => {
-    loadStats();
+    void loadStats();
+    return () => {
+      requestIdRef.current += 1;
+    };
   }, [loadStats]);
 
   const calculatedStats = useMemo(() => {
@@ -106,12 +112,12 @@ const CustomerSupportWidget = ({ onOpenChat }: CustomerSupportWidgetProps) => {
   if (errorMessage || !stats) {
     return (
       <div className="card p-6">
-        <div className="flex flex-col items-center justify-center rounded-lg border border-red-200 bg-red-50 p-6 text-center">
+        <div role="alert" className="flex flex-col items-center justify-center rounded-lg border border-red-200 bg-red-50 p-6 text-center">
           <AlertCircle className="mb-3 h-8 w-8 text-red-600" aria-hidden="true" />
 
-          <h3 className="text-base font-semibold text-gray-900">
+          <h2 className="text-base font-semibold text-gray-900">
             Unable to Load Support Statistics
-          </h3>
+          </h2>
 
           <p className="mt-2 text-sm text-gray-600">
             {errorMessage ?? 'Support statistics are currently unavailable.'}
@@ -119,7 +125,7 @@ const CustomerSupportWidget = ({ onOpenChat }: CustomerSupportWidgetProps) => {
 
           <button
             type="button"
-            onClick={loadStats}
+            onClick={() => void loadStats()}
             className="mt-4 inline-flex items-center gap-2 rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-primary-700"
           >
             <RefreshCw className="h-4 w-4" aria-hidden="true" />
@@ -132,7 +138,6 @@ const CustomerSupportWidget = ({ onOpenChat }: CustomerSupportWidgetProps) => {
 
   return (
     <div className="card p-6 transition-shadow hover:shadow-lg">
-      {/* Header */}
       <div className="mb-6 flex items-center justify-between">
         <div className="flex items-center space-x-3">
           <div className="rounded-lg bg-blue-100 p-3">
@@ -140,7 +145,7 @@ const CustomerSupportWidget = ({ onOpenChat }: CustomerSupportWidgetProps) => {
           </div>
 
           <div>
-            <h3 className="text-lg font-bold text-gray-900">Customer Support</h3>
+            <h2 className="text-lg font-bold text-gray-900">Customer Support</h2>
             <p className="text-sm text-gray-600">
               Open or track a support ticket
             </p>
@@ -157,8 +162,7 @@ const CustomerSupportWidget = ({ onOpenChat }: CustomerSupportWidgetProps) => {
         </button>
       </div>
 
-      {/* Stats Grid */}
-      <div className="mb-6 grid grid-cols-2 gap-4">
+      <div className="mb-6 grid grid-cols-2 gap-4 tabular-nums">
         <div className="rounded-lg border border-blue-200 bg-gradient-to-br from-blue-50 to-blue-100 p-4">
           <div className="mb-2 flex items-center justify-between">
             <span className="text-sm font-medium text-gray-700">Total Tickets</span>
@@ -211,8 +215,7 @@ const CustomerSupportWidget = ({ onOpenChat }: CustomerSupportWidgetProps) => {
         </div>
       </div>
 
-      {/* Satisfaction Rating */}
-      <div className="mb-6 rounded-lg border border-yellow-200 bg-gradient-to-r from-yellow-50 to-yellow-100 p-4">
+      <div className="mb-6 rounded-lg border border-yellow-200 bg-gradient-to-r from-yellow-50 to-yellow-100 p-4 tabular-nums">
         <p className="mb-1 text-sm font-medium text-gray-700">
           Customer Satisfaction
         </p>
@@ -239,7 +242,6 @@ const CustomerSupportWidget = ({ onOpenChat }: CustomerSupportWidgetProps) => {
         </div>
       </div>
 
-      {/* CTA Button */}
       <button
         type="button"
         onClick={onOpenChat}

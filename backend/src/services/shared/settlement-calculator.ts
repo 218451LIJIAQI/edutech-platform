@@ -1,7 +1,9 @@
 import { buildPaginationMeta, normalizePagination } from "./pagination";
 import {
+  allocateOrderItemAmounts,
   calculatePlatformCommission,
   calculateTeacherNetEarning,
+  roundMoney,
   toNumber,
 } from "./payment-utils";
 
@@ -78,7 +80,7 @@ export interface SettlementPendingPayoutRecord {
 }
 
 export const roundCurrency = (value: number): number =>
-  Math.round((Number.isFinite(value) ? value : 0) * 100) / 100;
+  roundMoney(Number.isFinite(value) ? value : 0);
 
 export const resolvePaymentCommissionBreakdown = (
   payment: {
@@ -136,29 +138,19 @@ export const resolveRefundCommissionBreakdown = (
     );
   }
 
-  const orderItemsTotal = roundCurrency(
-    items.reduce((sum, item) => sum + Math.max(0, toNumber(item.finalPrice)), 0),
-  );
-
-  let allocatedGross = 0;
   let totalTeacherShare = 0;
 
-  items.forEach((item, index) => {
-    const isLastItem = index === items.length - 1;
-    const itemPrice = roundCurrency(Math.max(0, toNumber(item.finalPrice)));
-    const shareRatio =
-      orderItemsTotal > 0 ? itemPrice / orderItemsTotal : 1 / items.length;
-    const itemRefundGross = isLastItem
-      ? roundCurrency(refundAmount - allocatedGross)
-      : roundCurrency(refundAmount * shareRatio);
-    allocatedGross = roundCurrency(allocatedGross + itemRefundGross);
-
+  for (const { item, allocatedAmount: itemRefundGross } of allocateOrderItemAmounts(
+    items,
+    refundAmount,
+    { equalFallbackWhenZeroItemsTotal: true },
+  )) {
     const teacherProfile = item.package?.course?.teacherProfile ?? null;
     const itemTeacherShare = roundCurrency(
       calculateTeacherNetEarning(itemRefundGross, teacherProfile, fallbackRate),
     );
     totalTeacherShare = roundCurrency(totalTeacherShare + itemTeacherShare);
-  });
+  }
 
   const clampedTeacherShare = Math.min(refundAmount, totalTeacherShare);
   return {
@@ -273,26 +265,14 @@ export const computeTeacherSettlementsSummary = (params: {
       continue;
     }
 
-    const orderItemsTotal = roundCurrency(
-      items.reduce((sum, item) => sum + Math.max(0, toNumber(item.finalPrice)), 0),
-    );
-
-    let allocatedRefundAmount = 0;
-    items.forEach((item, index) => {
-      const isLastItem = index === items.length - 1;
-      const itemPrice = roundCurrency(Math.max(0, toNumber(item.finalPrice)));
-      const shareRatio =
-        orderItemsTotal > 0 ? itemPrice / orderItemsTotal : 1 / items.length;
-      const itemRefundGross = isLastItem
-        ? roundCurrency(refundAmount - allocatedRefundAmount)
-        : roundCurrency(refundAmount * shareRatio);
-      allocatedRefundAmount = roundCurrency(
-        allocatedRefundAmount + itemRefundGross,
-      );
-
+    for (const { item, allocatedAmount: itemRefundGross } of allocateOrderItemAmounts(
+      items,
+      refundAmount,
+      { equalFallbackWhenZeroItemsTotal: true },
+    )) {
       const teacherProfileId = item.package?.course?.teacherProfileId;
       if (!teacherProfileId || !teacherById.has(teacherProfileId)) {
-        return;
+        continue;
       }
 
       const profile = teacherById.get(teacherProfileId)!;
@@ -309,7 +289,7 @@ export const computeTeacherSettlementsSummary = (params: {
         (refundDeductionsByProfileId.get(teacherProfileId) ?? 0) +
           itemRefundTeacherShare,
       );
-    });
+    }
   }
 
   for (const payout of pendingPayouts) {

@@ -131,6 +131,9 @@ export default function AdsManagement() {
 
   useEffect(() => {
     void fetchAds();
+    return () => {
+      latestFetchIdRef.current += 1;
+    };
   }, [debouncedSearch, statusFilter, roleFilter]);
 
   const stats = useMemo(() => {
@@ -262,19 +265,19 @@ export default function AdsManagement() {
         <div className="mb-6 grid gap-4 md:grid-cols-4">
           <div className="card shadow-xl border border-gray-100 rounded-2xl">
             <p className="text-sm font-medium text-gray-500">Loaded ads</p>
-            <p className="mt-2 text-3xl font-bold text-gray-900">{stats.total}</p>
+            <p className="mt-2 text-3xl font-bold text-gray-900 tabular-nums">{stats.total}</p>
           </div>
           <div className="card shadow-xl border border-gray-100 rounded-2xl">
             <p className="text-sm font-medium text-gray-500">Active ads</p>
-            <p className="mt-2 text-3xl font-bold text-emerald-600">{stats.active}</p>
+            <p className="mt-2 text-3xl font-bold text-emerald-600 tabular-nums">{stats.active}</p>
           </div>
           <div className="card shadow-xl border border-gray-100 rounded-2xl">
             <p className="text-sm font-medium text-gray-500">Live now</p>
-            <p className="mt-2 text-3xl font-bold text-primary-600">{stats.live}</p>
+            <p className="mt-2 text-3xl font-bold text-primary-600 tabular-nums">{stats.live}</p>
           </div>
           <div className="card shadow-xl border border-gray-100 rounded-2xl">
             <p className="text-sm font-medium text-gray-500">External redirects</p>
-            <p className="mt-2 text-3xl font-bold text-violet-600">{stats.external}</p>
+            <p className="mt-2 text-3xl font-bold text-violet-600 tabular-nums">{stats.external}</p>
           </div>
         </div>
 
@@ -282,12 +285,14 @@ export default function AdsManagement() {
           <div className="grid gap-4 lg:grid-cols-[2fr,1fr,1fr]">
             <input
               type="text"
+              aria-label="Search ad campaigns"
               className="input"
               value={search}
               onChange={(event) => setSearch(event.target.value)}
               placeholder="Search by name, title, sponsor, or description"
             />
             <select
+              aria-label="Filter by campaign status"
               className="input"
               value={statusFilter}
               onChange={(event) => setStatusFilter(event.target.value as AdStatus | '')}
@@ -299,6 +304,7 @@ export default function AdsManagement() {
               ))}
             </select>
             <select
+              aria-label="Filter by target role"
               className="input"
               value={roleFilter}
               onChange={(event) => setRoleFilter(event.target.value as UserRole | '')}
@@ -379,7 +385,7 @@ export default function AdsManagement() {
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
                         <h3 className="text-lg font-bold text-gray-900">{ad.title}</h3>
-                        <span className="rounded-full bg-gray-100 px-2.5 py-1 text-xs font-medium text-gray-700">#{ad.displayOrder}</span>
+                        <span className="rounded-full bg-gray-100 px-2.5 py-1 text-xs font-medium text-gray-700 tabular-nums">#{ad.displayOrder}</span>
                         <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${
                           ad.status === AdStatus.ACTIVE
                             ? 'bg-emerald-100 text-emerald-700'
@@ -428,10 +434,22 @@ export default function AdsManagement() {
                       <PauseCircle className="mr-2 h-4 w-4" />
                       {ad.status === AdStatus.ACTIVE ? 'Pause' : 'Activate'}
                     </button>
-                    <button type="button" onClick={() => void handleMove(ad.id, 'up')} disabled={busyAdId !== null || hasActiveScopedFilters || index === 0} className="btn-outline disabled:opacity-50">
+                    <button
+                      type="button"
+                      aria-label={`Move ${ad.title} up`}
+                      onClick={() => void handleMove(ad.id, 'up')}
+                      disabled={busyAdId !== null || hasActiveScopedFilters || index === 0}
+                      className="btn-outline disabled:opacity-50"
+                    >
                       <ArrowUp className="h-4 w-4" />
                     </button>
-                    <button type="button" onClick={() => void handleMove(ad.id, 'down')} disabled={busyAdId !== null || hasActiveScopedFilters || index === ads.length - 1} className="btn-outline disabled:opacity-50">
+                    <button
+                      type="button"
+                      aria-label={`Move ${ad.title} down`}
+                      onClick={() => void handleMove(ad.id, 'down')}
+                      disabled={busyAdId !== null || hasActiveScopedFilters || index === ads.length - 1}
+                      className="btn-outline disabled:opacity-50"
+                    >
                       <ArrowDown className="h-4 w-4" />
                     </button>
                     <button type="button" onClick={() => setAdToDelete(ad)} className="inline-flex items-center rounded-xl px-3 py-2 text-sm font-medium text-red-600 hover:bg-red-50">

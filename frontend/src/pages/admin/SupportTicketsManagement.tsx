@@ -33,10 +33,6 @@ import {
 import { openProtectedAsset } from '@/utils/protected-assets';
 import { toStorableBackendAssetPath } from '@/utils/runtime';
 
-/**
- * Support Tickets Management Page Component
- * Admin can view, assign, respond to, and resolve support tickets
- */
 type PendingAttachment = {
   readonly name: string;
   readonly url: string;
@@ -71,9 +67,16 @@ const SupportTicketsManagement = () => {
   const ticketModalRef = useRef<HTMLDivElement | null>(null);
   const ticketModalCloseButtonRef = useRef<HTMLButtonElement | null>(null);
   const responseAttachmentInputRef = useRef<HTMLInputElement | null>(null);
+  const listRequestRef = useRef(0);
+  const detailRequestRef = useRef(0);
+
+  const hasActiveFilters =
+    filterStatus !== 'ALL' || Boolean(filterPriority) || Boolean(searchQuery.trim());
+
   const conversationEntries = buildSupportConversationEntries(selectedTicket);
 
   const loadData = useCallback(async () => {
+    const requestId = ++listRequestRef.current;
     setLoading(true);
     setLoadError(null);
     try {
@@ -84,20 +87,32 @@ const SupportTicketsManagement = () => {
         ),
         adminSupportService.getStats(),
       ]);
+      if (requestId !== listRequestRef.current) {
+        return;
+      }
       setTickets(ticketsData.tickets);
       setStats(statsData);
     } catch (error) {
+      if (requestId !== listRequestRef.current) {
+        return;
+      }
       clientLogger.error('Failed to load support tickets:', error);
       const message = extractErrorMessage(error, 'Failed to load tickets');
       setLoadError(message);
       toast.error(message);
     } finally {
-      setLoading(false);
+      if (requestId === listRequestRef.current) {
+        setLoading(false);
+      }
     }
   }, [filterStatus, filterPriority]);
 
   useEffect(() => {
     void loadData();
+    return () => {
+      listRequestRef.current += 1;
+      detailRequestRef.current += 1;
+    };
   }, [loadData]);
 
   const filteredTickets = useMemo(() => {
@@ -121,6 +136,7 @@ const SupportTicketsManagement = () => {
     if (working || isUploadingResponseAttachment) {
       return;
     }
+    detailRequestRef.current += 1;
     setIsTicketModalOpen(false);
     setSelectedTicket(null);
     setSelectedTicketId(null);
@@ -140,6 +156,7 @@ const SupportTicketsManagement = () => {
   });
 
   const openTicketDetails = useCallback(async (ticketId: string) => {
+    const requestId = ++detailRequestRef.current;
     setIsTicketModalOpen(true);
     setIsTicketLoading(true);
     setTicketLoadError(null);
@@ -149,19 +166,27 @@ const SupportTicketsManagement = () => {
 
     try {
       const ticket = await adminSupportService.getTicketById(ticketId);
+      if (requestId !== detailRequestRef.current) {
+        return;
+      }
       setSelectedTicket(ticket);
     } catch (error) {
+      if (requestId !== detailRequestRef.current) {
+        return;
+      }
       clientLogger.error(`Failed to load support ticket ${ticketId}:`, error);
       const errorMessage = extractErrorMessage(error, 'Failed to load ticket details');
       setTicketLoadError(errorMessage);
       toast.error(errorMessage);
     } finally {
-      setIsTicketLoading(false);
+      if (requestId === detailRequestRef.current) {
+        setIsTicketLoading(false);
+      }
     }
   }, []);
 
   const handleAssign = async () => {
-    if (!selectedTicket) return;
+    if (!selectedTicket || working) return;
     setWorking(true);
     try {
       await adminSupportService.assignTicket(selectedTicket.id);
@@ -179,7 +204,7 @@ const SupportTicketsManagement = () => {
   };
 
   const handleAddResponse = async () => {
-    if (!selectedTicket || !responseMessage.trim()) {
+    if (!selectedTicket || working || !responseMessage.trim()) {
       toast.error('Please enter a message');
       return;
     }
@@ -246,7 +271,7 @@ const SupportTicketsManagement = () => {
   };
 
   const handleResolve = async () => {
-    if (!selectedTicket || !resolutionText.trim()) {
+    if (!selectedTicket || working || !resolutionText.trim()) {
       toast.error('Please enter a resolution');
       return;
     }
@@ -268,7 +293,7 @@ const SupportTicketsManagement = () => {
   };
 
   const handleClose = async () => {
-    if (!selectedTicket) return;
+    if (!selectedTicket || working) return;
     setWorking(true);
     try {
       await adminSupportService.closeTicket(selectedTicket.id);
@@ -287,13 +312,12 @@ const SupportTicketsManagement = () => {
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'OPEN':
-        return 'bg-blue-100 text-blue-700';
+        return 'bg-blue-100 text-blue-800';
       case 'IN_PROGRESS':
-        return 'bg-yellow-100 text-yellow-700';
+        return 'bg-yellow-100 text-yellow-800';
       case 'RESOLVED':
-        return 'bg-green-100 text-green-700';
+        return 'bg-green-100 text-green-800';
       case 'CLOSED':
-        return 'bg-gray-100 text-gray-700';
       default:
         return 'bg-gray-100 text-gray-700';
     }
@@ -304,11 +328,11 @@ const SupportTicketsManagement = () => {
       case 'LOW':
         return 'bg-gray-100 text-gray-700';
       case 'MEDIUM':
-        return 'bg-blue-100 text-blue-700';
+        return 'bg-blue-100 text-blue-800';
       case 'HIGH':
-        return 'bg-orange-100 text-orange-700';
+        return 'bg-orange-100 text-orange-800';
       case 'URGENT':
-        return 'bg-red-100 text-red-700';
+        return 'bg-red-100 text-red-800';
       default:
         return 'bg-gray-100 text-gray-700';
     }
@@ -316,11 +340,9 @@ const SupportTicketsManagement = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-primary-50/10 to-indigo-50/20 relative">
-      {/* Background Pattern */}
       <div className="absolute inset-0 bg-[linear-gradient(rgba(0,0,0,0.015)_1px,transparent_1px),linear-gradient(90deg,rgba(0,0,0,0.015)_1px,transparent_1px)] bg-[size:32px_32px] pointer-events-none"></div>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 relative">
-        {/* Header */}
         <div className="mb-10">
           <div className="flex flex-col sm:flex-row sm:items-center gap-4 mb-3">
             <div className="w-14 h-14 bg-gradient-to-br from-indigo-500 via-indigo-600 to-purple-600 rounded-2xl flex items-center justify-center shadow-xl shadow-indigo-500/25 ring-4 ring-white">
@@ -335,20 +357,18 @@ const SupportTicketsManagement = () => {
           </div>
         </div>
 
-        {/* Statistics - Clickable to filter */}
         {stats && (
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-5 mb-8">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-5 mb-8 tabular-nums">
             <button
               type="button"
               onClick={() => setFilterStatus('OPEN')}
               className={`group bg-white/95 backdrop-blur-sm rounded-2xl p-5 shadow-card hover:shadow-card-hover transition-all duration-300 hover:-translate-y-1 border relative overflow-hidden text-left ${filterStatus === 'OPEN' ? 'border-blue-400 ring-2 ring-blue-200' : 'border-blue-100'}`}
             >
-              <div className="absolute top-0 right-0 w-16 h-16 bg-gradient-to-br from-blue-100/50 to-transparent rounded-full -translate-y-1/2 translate-x-1/2"></div>
               <div className="flex items-center gap-3 mb-3">
-                <div className="p-2.5 bg-blue-100 rounded-xl group-hover:scale-110 transition-transform">
-                  <MessageSquare className="w-5 h-5 text-blue-600" />
+                <div className="p-2.5 bg-blue-100 rounded-xl">
+                  <MessageSquare className="w-5 h-5 text-blue-700" />
                 </div>
-                <span className="text-xs font-bold text-blue-600 uppercase">Open</span>
+                <span className="text-xs font-bold text-blue-700 uppercase">Open</span>
               </div>
               <div className="text-3xl font-bold text-gray-900">{stats.open}</div>
             </button>
@@ -357,12 +377,11 @@ const SupportTicketsManagement = () => {
               onClick={() => setFilterStatus('IN_PROGRESS')}
               className={`group bg-white/95 backdrop-blur-sm rounded-2xl p-5 shadow-card hover:shadow-card-hover transition-all duration-300 hover:-translate-y-1 border relative overflow-hidden text-left ${filterStatus === 'IN_PROGRESS' ? 'border-yellow-400 ring-2 ring-yellow-200' : 'border-yellow-100'}`}
             >
-              <div className="absolute top-0 right-0 w-16 h-16 bg-gradient-to-br from-yellow-100/50 to-transparent rounded-full -translate-y-1/2 translate-x-1/2"></div>
               <div className="flex items-center gap-3 mb-3">
-                <div className="p-2.5 bg-yellow-100 rounded-xl group-hover:scale-110 transition-transform">
-                  <Clock className="w-5 h-5 text-yellow-600" />
+                <div className="p-2.5 bg-yellow-100 rounded-xl">
+                  <Clock className="w-5 h-5 text-yellow-700" />
                 </div>
-                <span className="text-xs font-bold text-yellow-600 uppercase">In Progress</span>
+                <span className="text-xs font-bold text-yellow-700 uppercase">In Progress</span>
               </div>
               <div className="text-3xl font-bold text-gray-900">{stats.inProgress}</div>
             </button>
@@ -371,12 +390,11 @@ const SupportTicketsManagement = () => {
               onClick={() => setFilterStatus('RESOLVED')}
               className={`group bg-white/95 backdrop-blur-sm rounded-2xl p-5 shadow-card hover:shadow-card-hover transition-all duration-300 hover:-translate-y-1 border relative overflow-hidden text-left ${filterStatus === 'RESOLVED' ? 'border-green-400 ring-2 ring-green-200' : 'border-green-100'}`}
             >
-              <div className="absolute top-0 right-0 w-16 h-16 bg-gradient-to-br from-green-100/50 to-transparent rounded-full -translate-y-1/2 translate-x-1/2"></div>
               <div className="flex items-center gap-3 mb-3">
-                <div className="p-2.5 bg-green-100 rounded-xl group-hover:scale-110 transition-transform">
-                  <CheckCircle className="w-5 h-5 text-green-600" />
+                <div className="p-2.5 bg-green-100 rounded-xl">
+                  <CheckCircle className="w-5 h-5 text-green-700" />
                 </div>
-                <span className="text-xs font-bold text-green-600 uppercase">Resolved</span>
+                <span className="text-xs font-bold text-green-700 uppercase">Resolved</span>
               </div>
               <div className="text-3xl font-bold text-gray-900">{stats.resolved}</div>
             </button>
@@ -385,28 +403,28 @@ const SupportTicketsManagement = () => {
               onClick={() => setFilterStatus('ALL')}
               className={`group bg-white/95 backdrop-blur-sm rounded-2xl p-5 shadow-card hover:shadow-card-hover transition-all duration-300 hover:-translate-y-1 border relative overflow-hidden text-left ${filterStatus === 'ALL' ? 'border-gray-400 ring-2 ring-gray-200' : 'border-gray-200'}`}
             >
-              <div className="absolute top-0 right-0 w-16 h-16 bg-gradient-to-br from-gray-100/50 to-transparent rounded-full -translate-y-1/2 translate-x-1/2"></div>
               <div className="flex items-center gap-3 mb-3">
-                <div className="p-2.5 bg-gray-100 rounded-xl group-hover:scale-110 transition-transform">
-                  <Headphones className="w-5 h-5 text-gray-600" />
+                <div className="p-2.5 bg-gray-100 rounded-xl">
+                  <Headphones className="w-5 h-5 text-gray-700" />
                 </div>
-                <span className="text-xs font-bold text-gray-600 uppercase">Total</span>
+                <span className="text-xs font-bold text-gray-700 uppercase">Total</span>
               </div>
               <div className="text-3xl font-bold text-gray-900">{stats.total}</div>
             </button>
           </div>
         )}
 
-        {/* Filters */}
         <div className="bg-white/80 backdrop-blur-sm rounded-2xl p-4 shadow-card border border-gray-100 mb-8">
-          <div className="flex flex-wrap gap-4">
+          <div className="flex flex-wrap items-end gap-4">
             <div>
-              <label className="text-xs font-bold text-gray-600 uppercase block mb-2">Status</label>
+              <label htmlFor="ticket-status-filter" className="text-xs font-bold text-gray-600 uppercase block mb-2">
+                Status
+              </label>
               <select
+                id="ticket-status-filter"
                 value={filterStatus}
                 onChange={(e) => setFilterStatus(e.target.value)}
                 className="px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-gray-700 font-medium focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
-                aria-label="Filter by status"
               >
                 <option value="ALL">All</option>
                 <option value="OPEN">Open</option>
@@ -416,12 +434,14 @@ const SupportTicketsManagement = () => {
               </select>
             </div>
             <div>
-              <label className="text-xs font-bold text-gray-600 uppercase block mb-2">Priority</label>
+              <label htmlFor="ticket-priority-filter" className="text-xs font-bold text-gray-600 uppercase block mb-2">
+                Priority
+              </label>
               <select
+                id="ticket-priority-filter"
                 value={filterPriority}
                 onChange={(e) => setFilterPriority(e.target.value)}
                 className="px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-gray-700 font-medium focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
-                aria-label="Filter by priority"
               >
                 <option value="">All Priorities</option>
                 <option value="LOW">Low</option>
@@ -431,10 +451,13 @@ const SupportTicketsManagement = () => {
               </select>
             </div>
             <div className="flex-1 min-w-[240px]">
-              <label className="text-xs font-bold text-gray-600 uppercase block mb-2">Search</label>
+              <label htmlFor="ticket-search-input" className="text-xs font-bold text-gray-600 uppercase block mb-2">
+                Search
+              </label>
               <div className="relative">
                 <Search className="w-4 h-4 text-gray-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
                 <input
+                  id="ticket-search-input"
                   type="text"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
@@ -443,22 +466,34 @@ const SupportTicketsManagement = () => {
                 />
               </div>
             </div>
+            {hasActiveFilters && (
+              <button
+                type="button"
+                onClick={() => {
+                  setFilterStatus('ALL');
+                  setFilterPriority('');
+                  setSearchQuery('');
+                }}
+                className="btn-secondary btn-sm py-2.5"
+              >
+                Clear Filters
+              </button>
+            )}
           </div>
         </div>
 
-        {/* Tickets Table */}
         <div className="bg-white/95 backdrop-blur-sm rounded-2xl shadow-card border border-gray-100 overflow-hidden">
           {loading ? (
             <div className="flex flex-col items-center justify-center py-16">
-              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 animate-pulse flex items-center justify-center mb-4">
-                <Headphones className="w-6 h-6 text-white animate-pulse" />
+              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 animate-pulse motion-reduce:animate-none flex items-center justify-center mb-4">
+                <Headphones className="w-6 h-6 text-white" />
               </div>
               <p className="text-gray-500 font-medium">Loading tickets...</p>
             </div>
           ) : loadError ? (
-            <div className="p-12 text-center space-y-3">
+            <div role="alert" className="p-12 text-center space-y-3">
               <AlertCircle className="w-12 h-12 text-red-500 mx-auto" />
-              <p className="text-gray-900 font-bold">Unable to load support tickets</p>
+              <h2 className="text-lg font-bold text-gray-900">Unable to load support tickets</h2>
               <p className="text-sm text-gray-600">{loadError}</p>
               <button
                 type="button"
@@ -470,35 +505,43 @@ const SupportTicketsManagement = () => {
               </button>
             </div>
           ) : filteredTickets.length === 0 ? (
-            <div className="p-12 text-center">
-              <div className="w-16 h-16 bg-gray-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
+            <div className="p-12 text-center space-y-3">
+              <div className="w-16 h-16 bg-gray-100 rounded-2xl flex items-center justify-center mx-auto mb-2">
                 <AlertCircle className="w-8 h-8 text-gray-400" />
               </div>
-              <p className="text-gray-500 font-medium">No tickets found</p>
+              <h2 className="text-lg font-bold text-gray-900">
+                {hasActiveFilters ? 'No tickets match your filters' : 'No support tickets yet'}
+              </h2>
+              <p className="text-sm text-gray-500">
+                {hasActiveFilters
+                  ? 'Try clearing your status, priority, or search filters.'
+                  : 'Incoming student and teacher support tickets will appear here.'}
+              </p>
+              {hasActiveFilters && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setFilterStatus('ALL');
+                    setFilterPriority('');
+                    setSearchQuery('');
+                  }}
+                  className="btn-secondary btn-sm"
+                >
+                  Reset Filters
+                </button>
+              )}
             </div>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full">
                 <thead className="bg-gradient-to-r from-gray-50 to-gray-100 border-b border-gray-200">
                   <tr>
-                    <th className="px-6 py-4 text-left text-xs font-bold text-gray-600 uppercase">
-                      Ticket
-                    </th>
-                    <th className="px-6 py-4 text-left text-xs font-bold text-gray-600 uppercase">
-                      Customer
-                    </th>
-                    <th className="px-6 py-4 text-left text-xs font-bold text-gray-600 uppercase">
-                      Category
-                    </th>
-                    <th className="px-6 py-4 text-left text-xs font-bold text-gray-600 uppercase">
-                      Priority
-                    </th>
-                    <th className="px-6 py-4 text-left text-xs font-bold text-gray-600 uppercase">
-                      Status
-                    </th>
-                    <th className="px-6 py-4 text-left text-xs font-bold text-gray-600 uppercase">
-                      Action
-                    </th>
+                    <th className="px-6 py-4 text-left text-xs font-bold text-gray-600 uppercase">Ticket</th>
+                    <th className="px-6 py-4 text-left text-xs font-bold text-gray-600 uppercase">Customer</th>
+                    <th className="px-6 py-4 text-left text-xs font-bold text-gray-600 uppercase">Category</th>
+                    <th className="px-6 py-4 text-left text-xs font-bold text-gray-600 uppercase">Priority</th>
+                    <th className="px-6 py-4 text-left text-xs font-bold text-gray-600 uppercase">Status</th>
+                    <th className="px-6 py-4 text-left text-xs font-bold text-gray-600 uppercase">Action</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
@@ -510,7 +553,7 @@ const SupportTicketsManagement = () => {
                         void openTicketDetails(ticket.id);
                       }}
                     >
-                      <td className="px-6 py-4">
+                      <td className="px-6 py-4 tabular-nums">
                         <div className="flex items-center gap-3">
                           <div className="p-2 bg-indigo-100 rounded-lg">
                             <MessageSquare className="w-4 h-4 text-indigo-600" />
@@ -553,7 +596,7 @@ const SupportTicketsManagement = () => {
                             e.stopPropagation();
                             void openTicketDetails(ticket.id);
                           }}
-                          className="inline-flex items-center gap-2 px-3 py-1.5 bg-indigo-50 text-indigo-600 rounded-lg font-semibold text-sm hover:bg-indigo-100 transition-colors"
+                          className="inline-flex items-center gap-2 px-3 py-1.5 bg-indigo-50 text-indigo-700 rounded-lg font-semibold text-sm hover:bg-indigo-100 transition-colors"
                         >
                           <Eye className="w-4 h-4" />
                           View
@@ -566,7 +609,6 @@ const SupportTicketsManagement = () => {
             </div>
           )}
         </div>
-
       </div>
 
       {/* Ticket Detail Modal */}
@@ -588,16 +630,15 @@ const SupportTicketsManagement = () => {
             aria-describedby="support-ticket-modal-description"
             className="bg-white rounded-2xl shadow-2xl max-w-3xl w-full max-h-[90vh] overflow-y-auto"
           >
-            {/* Header */}
             <div className="bg-gradient-to-r from-indigo-500 via-indigo-600 to-purple-600 text-white p-6 flex items-center justify-between sticky top-0 z-10">
               <div className="flex items-center gap-4">
                 <div className="p-3 bg-white/20 rounded-xl">
                   <Headphones className="w-6 h-6" />
                 </div>
                 <div>
-                  <h3 id="support-ticket-modal-title" className="text-2xl font-bold">
+                  <h2 id="support-ticket-modal-title" className="text-2xl font-bold text-white tabular-nums">
                     {selectedTicket?.ticketNo || 'Ticket Details'}
-                  </h3>
+                  </h2>
                   <p className="text-sm text-indigo-100">
                     {selectedTicket?.subject || 'Loading ticket information'}
                   </p>
@@ -614,7 +655,6 @@ const SupportTicketsManagement = () => {
               </button>
             </div>
 
-            {/* Content */}
             <div className="p-6 space-y-6">
               <p id="support-ticket-modal-description" className="sr-only">
                 Review support ticket details, respond to the customer, and resolve or close the ticket.
@@ -625,7 +665,7 @@ const SupportTicketsManagement = () => {
                   <p className="text-gray-600 font-medium">Loading ticket details...</p>
                 </div>
               ) : ticketLoadError ? (
-                <div className="text-center py-12">
+                <div role="alert" className="text-center py-12">
                   <AlertCircle className="w-10 h-10 text-red-500 mx-auto mb-4" />
                   <p className="text-gray-900 font-semibold mb-2">Unable to load ticket details</p>
                   <p className="text-gray-600 mb-4">{ticketLoadError}</p>
@@ -650,7 +690,6 @@ const SupportTicketsManagement = () => {
                 </div>
               ) : selectedTicket ? (
                 <>
-                  {/* Ticket Info */}
                   <div className="grid grid-cols-2 gap-4">
                     <div className="bg-gray-50 p-4 rounded-lg">
                       <div className="text-sm text-gray-600 mb-1">Customer</div>
@@ -679,9 +718,8 @@ const SupportTicketsManagement = () => {
                     </div>
                   </div>
 
-                  {/* Conversation */}
                   <div>
-                    <h4 className="font-bold text-gray-900 mb-3">Conversation</h4>
+                    <h3 className="font-bold text-gray-900 mb-3 text-base">Conversation</h3>
                     <div className="space-y-3 max-h-64 overflow-y-auto">
                       {conversationEntries.length > 0 ? (
                         conversationEntries.map((entry) => (
@@ -710,7 +748,7 @@ const SupportTicketsManagement = () => {
                                   </span>
                                 )}
                               </div>
-                              <span className="text-xs text-gray-500">
+                              <span className="text-xs text-gray-500 tabular-nums">
                                 {new Date(entry.createdAt).toLocaleString()}
                               </span>
                             </div>
@@ -738,14 +776,14 @@ const SupportTicketsManagement = () => {
                     </div>
                   </div>
 
-                  {/* Add Response */}
                   {selectedTicket.status !== 'CLOSED' && (
                     <div className="bg-gray-50 rounded-xl p-4">
-                      <h4 className="font-bold text-gray-900 mb-3 flex items-center gap-2">
+                      <label htmlFor="admin-ticket-response" className="font-bold text-gray-900 mb-3 flex items-center gap-2">
                         <Send className="w-4 h-4 text-indigo-600" />
                         Add Response
-                      </h4>
+                      </label>
                       <textarea
+                        id="admin-ticket-response"
                         value={responseMessage}
                         onChange={(e) => setResponseMessage(e.target.value)}
                         placeholder="Type your response..."
@@ -780,7 +818,7 @@ const SupportTicketsManagement = () => {
                             <button
                               type="button"
                               onClick={() => setResponseAttachment(null)}
-                              className="font-semibold text-indigo-500 hover:text-indigo-700"
+                              className="font-semibold text-indigo-600 hover:text-indigo-800"
                             >
                               Remove
                             </button>
@@ -790,7 +828,7 @@ const SupportTicketsManagement = () => {
                       <button
                         type="button"
                         onClick={() => void handleAddResponse()}
-                        className="mt-3 inline-flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-indigo-500 to-indigo-600 text-white rounded-xl font-semibold hover:from-indigo-600 hover:to-indigo-700 transition-all shadow-lg shadow-indigo-500/25"
+                        className="mt-3 inline-flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-indigo-500 to-indigo-600 text-white rounded-xl font-semibold hover:from-indigo-600 hover:to-indigo-700 transition-all shadow-lg shadow-indigo-500/25 disabled:opacity-50"
                         disabled={
                           working ||
                           isUploadingResponseAttachment ||
@@ -803,14 +841,14 @@ const SupportTicketsManagement = () => {
                     </div>
                   )}
 
-                  {/* Resolution */}
                   {selectedTicket.status === 'IN_PROGRESS' && (
                     <div className="bg-green-50 rounded-xl p-4 border border-green-100">
-                      <h4 className="font-bold text-gray-900 mb-3 flex items-center gap-2">
+                      <label htmlFor="admin-ticket-resolution" className="font-bold text-gray-900 mb-3 flex items-center gap-2">
                         <CheckCircle className="w-4 h-4 text-green-600" />
                         Resolve Ticket
-                      </h4>
+                      </label>
                       <textarea
+                        id="admin-ticket-resolution"
                         value={resolutionText}
                         onChange={(e) => setResolutionText(e.target.value)}
                         placeholder="Describe the resolution..."
@@ -820,8 +858,8 @@ const SupportTicketsManagement = () => {
                       <button
                         type="button"
                         onClick={() => void handleResolve()}
-                        className="mt-3 inline-flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-green-500 to-green-600 text-white rounded-xl font-semibold hover:from-green-600 hover:to-green-700 transition-all shadow-lg shadow-green-500/25"
-                        disabled={working}
+                        className="mt-3 inline-flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-green-500 to-green-600 text-white rounded-xl font-semibold hover:from-green-600 hover:to-green-700 transition-all shadow-lg shadow-green-500/25 disabled:opacity-50"
+                        disabled={working || !resolutionText.trim()}
                       >
                         {working ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
                         Mark as Resolved
@@ -829,7 +867,6 @@ const SupportTicketsManagement = () => {
                     </div>
                   )}
 
-                  {/* Actions */}
                   <div className="flex gap-3 pt-4 border-t border-gray-100">
                     {selectedTicket.status === 'OPEN' && (
                       <button

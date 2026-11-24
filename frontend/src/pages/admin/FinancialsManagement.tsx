@@ -318,109 +318,65 @@ const FinancialsManagement = () => {
               <p className="text-gray-500 font-medium">Platform financials, commissions and settlements</p>
             </div>
           </div>
-          {tab === 'payments' ? (
-            <button
-              type="button"
-              onClick={() => setPaymentsRequestKey((currentKey) => currentKey + 1)}
-              className="btn btn-outline flex items-center gap-2"
-              title="Refresh"
-            >
-              <RefreshCcw className="w-4 h-4" /> Refresh
-            </button>
-          ) : tab === 'commissions' ? (
-            <button
-              type="button"
-              onClick={() => setCommissionRequestKey((currentKey) => currentKey + 1)}
-              className="btn btn-outline flex items-center gap-2"
-              title="Refresh"
-            >
-              <RefreshCcw className="w-4 h-4" /> Refresh
-            </button>
-          ) : tab === 'settlements' ? (
-            <button
-              type="button"
-              onClick={() => setSettlementRequestKey((currentKey) => currentKey + 1)}
-              className="btn btn-outline flex items-center gap-2"
-              title="Refresh"
-            >
-              <RefreshCcw className="w-4 h-4" /> Refresh
-            </button>
-          ) : tab === 'payouts' ? (
-            <button
-              type="button"
-              onClick={() => setPayoutRequestKey((currentKey) => currentKey + 1)}
-              className="btn btn-outline flex items-center gap-2"
-              title="Refresh"
-            >
-              <RefreshCcw className="w-4 h-4" /> Refresh
-            </button>
-          ) : tab === 'auto-reports' ? (
+          {tab !== 'analytics' && (
             <div className="flex items-center gap-2">
+              {tab === 'auto-reports' && (
+                <button
+                  type="button"
+                  onClick={() => void handleAutoReportExport()}
+                  disabled={autoReportExporting}
+                  className="btn btn-outline flex items-center gap-2"
+                  title="Export CSV"
+                >
+                  <Download className="w-4 h-4" /> {autoReportExporting ? 'Exporting...' : 'Export CSV'}
+                </button>
+              )}
               <button
                 type="button"
-                onClick={() => void handleAutoReportExport()}
-                disabled={autoReportExporting}
-                className="btn btn-outline flex items-center gap-2"
-                title="Export CSV"
-              >
-                <Download className="w-4 h-4" /> {autoReportExporting ? 'Exporting...' : 'Export CSV'}
-              </button>
-              <button
-                type="button"
-                onClick={() => setAutoReportRequestKey((k) => k + 1)}
+                onClick={() => {
+                  if (tab === 'payments') setPaymentsRequestKey((k) => k + 1);
+                  else if (tab === 'commissions') setCommissionRequestKey((k) => k + 1);
+                  else if (tab === 'settlements') setSettlementRequestKey((k) => k + 1);
+                  else if (tab === 'payouts') setPayoutRequestKey((k) => k + 1);
+                  else if (tab === 'auto-reports') setAutoReportRequestKey((k) => k + 1);
+                }}
                 className="btn btn-outline flex items-center gap-2"
                 title="Refresh"
               >
                 <RefreshCcw className="w-4 h-4" /> Refresh
               </button>
             </div>
-          ) : null}
+          )}
         </div>
 
         {/* Tabs */}
         <div className="mb-6 flex flex-wrap items-center gap-2.5">
-          <button
-            type="button"
-            className={`px-4 py-2 rounded-lg font-semibold ${tab === 'payments' ? 'bg-primary-600 text-white' : 'bg-gray-100 text-gray-600'}`}
-            onClick={() => setTab('payments')}
-          >
-            Payments
-          </button>
-          <button
-            type="button"
-            className={`px-4 py-2 rounded-lg font-semibold ${tab === 'commissions' ? 'bg-primary-600 text-white' : 'bg-gray-100 text-gray-600'}`}
-            onClick={() => setTab('commissions')}
-          >
-            Commissions
-          </button>
-          <button
-            type="button"
-            className={`px-4 py-2 rounded-lg font-semibold ${tab === 'settlements' ? 'bg-primary-600 text-white' : 'bg-gray-100 text-gray-600'}`}
-            onClick={() => setTab('settlements')}
-          >
-            Settlements
-          </button>
-          <button
-            type="button"
-            className={`px-4 py-2 rounded-lg font-semibold ${tab === 'payouts' ? 'bg-primary-600 text-white' : 'bg-gray-100 text-gray-600'}`}
-            onClick={() => setTab('payouts')}
-          >
-            Payouts
-          </button>
-          <button
-            type="button"
-            className={`px-4 py-2 rounded-lg font-semibold ${tab === 'analytics' ? 'bg-primary-600 text-white' : 'bg-gray-100 text-gray-600'}`}
-            onClick={() => setTab('analytics')}
-          >
-            Analytics
-          </button>
-          <button
-            type="button"
-            className={`px-4 py-2 rounded-lg font-semibold flex items-center gap-1.5 ${tab === 'auto-reports' ? 'bg-gradient-to-r from-green-600 to-emerald-600 text-white shadow-md' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
-            onClick={() => setTab('auto-reports')}
-          >
-            <Zap className="w-4 h-4" /> Auto Reports
-          </button>
+          {(
+            [
+              { id: 'payments', label: 'Payments' },
+              { id: 'commissions', label: 'Commissions' },
+              { id: 'settlements', label: 'Settlements' },
+              { id: 'payouts', label: 'Payouts' },
+              { id: 'analytics', label: 'Analytics' },
+              { id: 'auto-reports', label: 'Auto Reports', isAuto: true },
+            ] as const
+          ).map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              onClick={() => setTab(item.id)}
+              className={`px-4 py-2 rounded-lg font-semibold flex items-center gap-1.5 ${
+                tab === item.id
+                  ? 'isAuto' in item
+                    ? 'bg-gradient-to-r from-green-600 to-emerald-600 text-white shadow-md'
+                    : 'bg-primary-600 text-white'
+                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+              }`}
+            >
+              {'isAuto' in item && <Zap className="w-4 h-4" />}
+              {item.label}
+            </button>
+          ))}
         </div>
 
         {tab === 'payments' ? (
@@ -517,34 +473,20 @@ const FinancialsManagement = () => {
             ) : (
               <>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-                  <div className="card bg-gradient-to-br from-green-500 to-green-600 text-white">
-                    <div className="flex items-center justify-between">
-                      <h3 className="text-sm font-semibold text-green-100">Total Revenue</h3>
-                      <DollarSign className="w-5 h-5 text-white/90" />
+                  {[
+                    { title: 'Total Revenue', value: formatMoney(stats?.totals.totalRevenue), Icon: DollarSign, bg: 'from-green-500 to-green-600', label: 'text-green-100' },
+                    { title: 'Platform Earnings', value: formatMoney(stats?.totals.platformEarnings), Icon: PieChart, bg: 'from-blue-500 to-blue-600', label: 'text-blue-100' },
+                    { title: 'Teacher Earnings', value: formatMoney(stats?.totals.teacherEarnings), Icon: TrendingUp, bg: 'from-purple-500 to-purple-600', label: 'text-purple-100' },
+                    { title: 'Transactions', value: String(stats?.totals.transactionCount ?? 0), Icon: Receipt, bg: 'from-orange-500 to-orange-600', label: 'text-orange-100' },
+                  ].map((kpi) => (
+                    <div key={kpi.title} className={`card bg-gradient-to-br ${kpi.bg} text-white`}>
+                      <div className="flex items-center justify-between">
+                        <h3 className={`text-sm font-semibold ${kpi.label}`}>{kpi.title}</h3>
+                        <kpi.Icon className="w-5 h-5 text-white/90" />
+                      </div>
+                      <p className="text-3xl font-bold mt-2 tabular-nums">{kpi.value}</p>
                     </div>
-                    <p className="text-3xl font-bold mt-2">{formatMoney(stats?.totals.totalRevenue)}</p>
-                  </div>
-                  <div className="card bg-gradient-to-br from-blue-500 to-blue-600 text-white">
-                    <div className="flex items-center justify-between">
-                      <h3 className="text-sm font-semibold text-blue-100">Platform Earnings</h3>
-                      <PieChart className="w-5 h-5 text-white/90" />
-                    </div>
-                    <p className="text-3xl font-bold mt-2">{formatMoney(stats?.totals.platformEarnings)}</p>
-                  </div>
-                  <div className="card bg-gradient-to-br from-purple-500 to-purple-600 text-white">
-                    <div className="flex items-center justify-between">
-                      <h3 className="text-sm font-semibold text-purple-100">Teacher Earnings</h3>
-                      <TrendingUp className="w-5 h-5 text-white/90" />
-                    </div>
-                    <p className="text-3xl font-bold mt-2">{formatMoney(stats?.totals.teacherEarnings)}</p>
-                  </div>
-                  <div className="card bg-gradient-to-br from-orange-500 to-orange-600 text-white">
-                    <div className="flex items-center justify-between">
-                      <h3 className="text-sm font-semibold text-orange-100">Transactions</h3>
-                      <Receipt className="w-5 h-5 text-white/90" />
-                    </div>
-                    <p className="text-3xl font-bold mt-2">{stats?.totals.transactionCount ?? 0}</p>
-                  </div>
+                  ))}
                 </div>
 
                 {/* Recent payments table */}
@@ -571,30 +513,52 @@ const FinancialsManagement = () => {
                   <table className="w-full">
                     <thead className="bg-gradient-to-r from-gray-50 to-gray-100 border-b-2 border-gray-200">
                       <tr>
-                        <th className="px-6 py-4 text-left font-bold text-gray-900">Paid At</th>
-                        <th className="px-6 py-4 text-left font-bold text-gray-900">User</th>
-                        <th className="px-6 py-4 text-left font-bold text-gray-900">Course</th>
-                        <th className="px-6 py-4 text-right font-bold text-gray-900">Amount</th>
-                        <th className="px-6 py-4 text-right font-bold text-gray-900">Platform</th>
-                        <th className="px-6 py-4 text-right font-bold text-gray-900">Teacher</th>
-                        <th className="px-6 py-4 text-left font-bold text-gray-900">Status</th>
+                        <th className="px-4 py-3.5 text-left font-bold text-gray-900">Paid At</th>
+                        <th className="px-4 py-3.5 text-left font-bold text-gray-900">User</th>
+                        <th className="px-4 py-3.5 text-left font-bold text-gray-900">Course</th>
+                        <th className="px-4 py-3.5 text-right font-bold text-gray-900">Amount</th>
+                        <th className="px-4 py-3.5 text-right font-bold text-gray-900">Platform</th>
+                        <th className="px-4 py-3.5 text-right font-bold text-gray-900">Teacher</th>
+                        <th className="px-4 py-3.5 text-left font-bold text-gray-900">Status</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100">
                       {visiblePayments.length === 0 ? (
                         <tr>
-                          <td colSpan={7} className="px-6 py-8 text-center text-gray-500">No payments in selected period</td>
+                          <td colSpan={7} className="px-6 py-8 text-center text-gray-500">
+                            {appliedStartDate || appliedEndDate ? (
+                              <div className="space-y-2">
+                                <p>No payments match the selected date range.</p>
+                                <button
+                                  type="button"
+                                  className="btn-secondary btn-sm"
+                                  onClick={() => {
+                                    setStartDate('');
+                                    setEndDate('');
+                                    setAppliedStartDate('');
+                                    setAppliedEndDate('');
+                                    setPage(1);
+                                    setPaymentsRequestKey((k) => k + 1);
+                                  }}
+                                >
+                                  Reset Date Range
+                                </button>
+                              </div>
+                            ) : (
+                              'No payments recorded yet'
+                            )}
+                          </td>
                         </tr>
                       ) : (
                         visiblePayments.map((p) => (
                           <tr key={p.id} className="hover:bg-gradient-to-r hover:from-gray-50 hover:to-gray-100 transition-all">
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{p.paidAt ? new Date(p.paidAt).toLocaleString() : '-'}</td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{p.user?.firstName} {p.user?.lastName}</td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{getPaymentCourseTitle(p)}</td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-right tabular-nums">{formatMoney(p.amount)}</td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-right tabular-nums">{formatMoney(p.platformCommission)}</td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-right tabular-nums">{formatMoney(p.teacherEarning)}</td>
-                            <td className={`px-6 py-4 whitespace-nowrap text-sm ${getPaymentStatusClass(p.status)}`}>
+                            <td className="px-4 py-3.5 whitespace-nowrap text-sm text-gray-700 tabular-nums">{p.paidAt ? new Date(p.paidAt).toLocaleString() : '-'}</td>
+                            <td className="px-4 py-3.5 whitespace-nowrap text-sm text-gray-700">{p.user?.firstName} {p.user?.lastName}</td>
+                            <td className="px-4 py-3.5 max-w-xs truncate text-sm text-gray-700" title={getPaymentCourseTitle(p)}>{getPaymentCourseTitle(p)}</td>
+                            <td className="px-4 py-3.5 whitespace-nowrap text-sm font-semibold text-right tabular-nums">{formatMoney(p.amount)}</td>
+                            <td className="px-4 py-3.5 whitespace-nowrap text-sm text-right tabular-nums">{formatMoney(p.platformCommission)}</td>
+                            <td className="px-4 py-3.5 whitespace-nowrap text-sm text-right tabular-nums">{formatMoney(p.teacherEarning)}</td>
+                            <td className={`px-4 py-3.5 whitespace-nowrap text-sm ${getPaymentStatusClass(p.status)}`}>
                               {p.status || 'COMPLETED'}
                             </td>
                           </tr>
@@ -606,7 +570,7 @@ const FinancialsManagement = () => {
                   {/* Pagination controls */}
                   {stats && stats.recentPayments && stats.recentPayments.length > 0 && (
                     <div className="px-6 py-4 border-t flex items-center justify-between">
-                      <div className="text-sm text-gray-700">Page {page} of {totalPages}</div>
+                      <div className="text-sm text-gray-700 tabular-nums">Page {page} of {totalPages}</div>
                       <div className="flex items-center gap-3">
                         <select
                           value={pageSize}
@@ -649,6 +613,7 @@ const FinancialsManagement = () => {
                 <Search className="w-4 h-4 text-gray-400" />
                 <input
                   type="text"
+                  aria-label="Search teachers by name or email"
                   placeholder="Search by name or email"
                   value={commissionSearch}
                   onChange={(e) => setCommissionSearch(e.target.value)}
@@ -739,7 +704,27 @@ const FinancialsManagement = () => {
                     </tr>
                   ) : commissionRows.length === 0 ? (
                     <tr>
-                      <td colSpan={7} className="px-6 py-8 text-center text-gray-500">No teachers found</td>
+                      <td colSpan={7} className="px-6 py-8 text-center text-gray-500">
+                        {appliedCommissionSearch ? (
+                          <div className="space-y-2">
+                            <p>No teachers match &ldquo;{appliedCommissionSearch}&rdquo;.</p>
+                            <button
+                              type="button"
+                              className="btn-secondary btn-sm"
+                              onClick={() => {
+                                setCommissionSearch('');
+                                setAppliedCommissionSearch('');
+                                setCommissionPage(1);
+                                setCommissionRequestKey((k) => k + 1);
+                              }}
+                            >
+                              Clear Search
+                            </button>
+                          </div>
+                        ) : (
+                          'No teachers registered yet'
+                        )}
+                      </td>
                     </tr>
                   ) : (
                     commissionRows.map((t) => {
@@ -760,13 +745,14 @@ const FinancialsManagement = () => {
                                 step="0.1"
                                 min={0}
                                 max={100}
+                                aria-label={`Commission rate for ${t.firstName} ${t.lastName}`}
                                 value={currentRate === null || currentRate === undefined ? '' : currentRate}
                                 onChange={(e) => {
                                   const v = e.target.value;
                                   setEditing((prev) => ({ ...prev, [key]: v === '' ? null : Number(v) }));
                                 }}
                                 placeholder="Default"
-                                className="w-28 px-2 py-1 border rounded-lg"
+                                className="w-28 px-2 py-1 border rounded-lg tabular-nums"
                               />
                               {currentRate !== null && currentRate !== undefined && (
                                 <button
@@ -829,7 +815,7 @@ const FinancialsManagement = () => {
               {/* Pagination */}
               {commissionPagination && commissionPagination.totalPages > 1 && (
                 <div className="px-6 py-4 border-t flex items-center justify-between">
-                  <div className="text-sm text-gray-700">Page {commissionPagination.page} of {commissionPagination.totalPages}</div>
+                  <div className="text-sm text-gray-700 tabular-nums">Page {commissionPagination.page} of {commissionPagination.totalPages}</div>
                   <div className="flex items-center gap-2">
                     <button
                       type="button"
@@ -954,7 +940,31 @@ const FinancialsManagement = () => {
                       </td>
                     </tr>
                   ) : settRows.length === 0 ? (
-                    <tr><td colSpan={6} className="px-6 py-8 text-center text-gray-500">No data</td></tr>
+                    <tr>
+                      <td colSpan={6} className="px-6 py-8 text-center text-gray-500">
+                        {appliedSettStart || appliedSettEnd ? (
+                          <div className="space-y-2">
+                            <p>No settlements match the selected date range.</p>
+                            <button
+                              type="button"
+                              className="btn-secondary btn-sm"
+                              onClick={() => {
+                                setSettStart('');
+                                setSettEnd('');
+                                setAppliedSettStart('');
+                                setAppliedSettEnd('');
+                                setSettPage(1);
+                                setSettlementRequestKey((k) => k + 1);
+                              }}
+                            >
+                              Reset Date Range
+                            </button>
+                          </div>
+                        ) : (
+                          'No settlement records available yet'
+                        )}
+                      </td>
+                    </tr>
                   ) : (
                     settRows.map((r) => (
                       <tr key={r.teacherUserId} className="hover:bg-gradient-to-r hover:from-gray-50 hover:to-gray-100 transition-all">
@@ -972,7 +982,7 @@ const FinancialsManagement = () => {
 
               {settPagination && settPagination.totalPages > 1 && (
                 <div className="px-6 py-4 border-t flex items-center justify-between">
-                  <div className="text-sm text-gray-700">Page {settPagination.page} of {settPagination.totalPages}</div>
+                  <div className="text-sm text-gray-700 tabular-nums">Page {settPagination.page} of {settPagination.totalPages}</div>
                   <div className="flex items-center gap-2">
                     <button type="button" className="btn-outline btn-sm" disabled={settPagination.page <= 1} onClick={() => setSettPage((p) => Math.max(1, p - 1))}>Previous</button>
                     <button type="button" className="btn-primary btn-sm" disabled={settPagination.page >= settPagination.totalPages} onClick={() => setSettPage((p) => Math.min(settPagination.totalPages, p + 1))}>Next</button>
@@ -1031,8 +1041,8 @@ const FinancialsManagement = () => {
                           <FileText className={`w-4 h-4 ${period.iconClass}`} />
                           <span className={`text-xs font-semibold ${period.labelClass} uppercase`}>{period.label}</span>
                         </div>
-                        <p className="text-xl font-bold text-gray-900">{formatMoney(period.data.totalRevenue)}</p>
-                        <div className="mt-2 grid grid-cols-2 gap-2 text-xs">
+                        <p className="text-xl font-bold text-gray-900 tabular-nums">{formatMoney(period.data.totalRevenue)}</p>
+                        <div className="mt-2 grid grid-cols-2 gap-2 text-xs tabular-nums">
                           <div>
                             <p className="text-gray-500">Platform</p>
                             <p className="font-semibold text-gray-700">{formatMoney(period.data.platformEarnings)}</p>
@@ -1050,7 +1060,7 @@ const FinancialsManagement = () => {
                             <p className="font-semibold text-green-700">{formatMoney(period.data.netRevenue)}</p>
                           </div>
                         </div>
-                        <div className="mt-2 text-xs text-gray-500">
+                        <div className="mt-2 text-xs text-gray-500 tabular-nums">
                           {period.data.transactionCount} transactions, {period.data.refundCount} refunds
                         </div>
                       </div>
@@ -1066,7 +1076,7 @@ const FinancialsManagement = () => {
                       <h3 className="text-lg font-bold text-gray-900">Auto-Computed Teacher Settlements</h3>
                     </div>
                     {autoReportSettlementsTotals && (
-                      <div className="flex items-center gap-4 text-sm">
+                      <div className="flex items-center gap-4 text-sm tabular-nums">
                         <span className="text-gray-500">Total Earnings: <strong className="text-gray-900">{formatMoney(autoReportSettlementsTotals.totalEarnings)}</strong></span>
                         <span className="text-gray-500">Deductions: <strong className="text-red-600">{formatMoney(autoReportSettlementsTotals.totalRefundDeductions)}</strong></span>
                         <span className="text-gray-500">Net: <strong className="text-green-700">{formatMoney(autoReportSettlementsTotals.totalNetSettlement)}</strong></span>

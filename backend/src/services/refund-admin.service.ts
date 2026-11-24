@@ -16,6 +16,7 @@ import walletService from "./wallet.service";
 import { countDistinctActiveStudentsForTeacherProfile } from "./shared/enrollment-access";
 import { normalizeOffsetPagination } from "./shared/pagination";
 import {
+  allocateOrderItemAmounts,
   calculateTeacherNetEarning,
   roundMoney,
   toNumber,
@@ -441,31 +442,17 @@ class RefundAdminService {
         }
       }
 
-      const totalItemsAmount = roundMoney(
-        refund.order.items.reduce(
-          (sum, item) => sum + Math.max(0, toNumber(item.finalPrice)),
-          0,
-        ),
-      );
-      const proportionalBase =
-        totalItemsAmount > 0 ? totalItemsAmount : orderTotal;
-
       const adjustments: TeacherRefundAdjustment[] = [];
       const teacherEarningsAdjustments = new Map<string, number>();
       const affectedTeacherProfileIds = new Set<string>();
-      let allocatedRefundAmount = 0;
 
-      refund.order.items.forEach((item, index) => {
-        const isLastItem = index === refund.order.items.length - 1;
-        const itemPrice = roundMoney(Math.max(0, toNumber(item.finalPrice)));
-        const itemPortion = isLastItem
-          ? roundMoney(refundAmount - allocatedRefundAmount)
-          : roundMoney((itemPrice / proportionalBase) * refundAmount);
-
-        allocatedRefundAmount = roundMoney(allocatedRefundAmount + itemPortion);
-
+      for (const { item, allocatedAmount: itemPortion } of allocateOrderItemAmounts(
+        refund.order.items,
+        refundAmount,
+        { fallbackBase: orderTotal },
+      )) {
         const teacherProfile = item.package?.course?.teacherProfile;
-        if (!teacherProfile) return;
+        if (!teacherProfile) continue;
 
         affectedTeacherProfileIds.add(teacherProfile.id);
 
@@ -477,7 +464,7 @@ class RefundAdminService {
           ),
         );
 
-        if (teacherNet <= 0) return;
+        if (teacherNet <= 0) continue;
 
         adjustments.push({
           teacherProfileId: teacherProfile.id,
@@ -493,7 +480,7 @@ class RefundAdminService {
               teacherNet,
           ),
         );
-      });
+      }
 
       for (const adjustment of adjustments) {
         await walletService.debitForRefundInTransaction(
