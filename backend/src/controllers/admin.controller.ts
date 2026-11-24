@@ -286,20 +286,32 @@ class AdminController {
       {
         firstName: parseOptionalString(req.body?.firstName, "firstName", {
           rejectBlank: true,
+          rejectNull: true,
         }),
         lastName: parseOptionalString(req.body?.lastName, "lastName", {
           rejectBlank: true,
+          rejectNull: true,
         }),
         email: parseOptionalString(req.body?.email, "email", {
           rejectBlank: true,
+          rejectNull: true,
         }),
         phone: parseNullableString(req.body?.phone, "phone"),
         address: parseNullableString(req.body?.address, "address"),
         department: parseNullableString(req.body?.department, "department"),
         avatar: parseNullableString(req.body?.avatar, "avatar"),
-        role: parseOptionalEnum(req.body?.role, UserRole, "role"),
-        isActive: parseOptionalBoolean(req.body?.isActive, "isActive"),
-        isLocked: parseOptionalBoolean(req.body?.isLocked, "isLocked"),
+        role: parseOptionalEnum(req.body?.role, UserRole, "role", {
+          rejectNull: true,
+          rejectBlank: true,
+        }),
+        isActive: parseOptionalBoolean(req.body?.isActive, "isActive", {
+          rejectNull: true,
+          rejectBlank: true,
+        }),
+        isLocked: parseOptionalBoolean(req.body?.isLocked, "isLocked", {
+          rejectNull: true,
+          rejectBlank: true,
+        }),
       },
       requireAuthUserId(req),
     );

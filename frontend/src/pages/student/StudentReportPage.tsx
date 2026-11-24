@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import clientLogger from '@/utils/logger';
 import { AlertCircle, CheckCircle, Clock, XCircle, ChevronRight, X } from 'lucide-react';
 import { Report, ReportStatus, ReportType } from '@/types';
@@ -282,9 +283,11 @@ const StudentReportPage = () => {
           </div>
         </div>
 
-        {selectedReport && (
-          <div
-            className="fixed inset-0 bg-slate-950/55 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+        {selectedReport &&
+          typeof document !== 'undefined' &&
+          createPortal(
+            <div
+              className="fixed inset-0 bg-slate-950/55 backdrop-blur-sm flex items-center justify-center z-modal p-4"
             onMouseDown={(event) => {
               if (event.target === event.currentTarget) {
                 closeReportModal();
@@ -389,8 +392,9 @@ const StudentReportPage = () => {
                 </div>
               </div>
             </div>
-          </div>
-        )}
+          </div>,
+            document.body
+          )}
       </div>
 
       <CustomerServiceModal

@@ -1,3 +1,4 @@
+import { isProtectedUploadAssetUrl } from '../utils/protected-assets';
 import assert from 'node:assert/strict';
 import { afterEach, describe, it } from 'node:test';
 import { normalizeErrorResponseData } from '@/services/api';
@@ -391,6 +392,31 @@ describe('shared helpers, asset normalizers, and structured API error preservati
     assert.equal(
       extractErrorMessage({ response: { data: normalizedBlob.normalizedData } }),
       'Please enter a valid email address; Password must be at least 8 characters'
+    );
+  });
+
+  it('recognizes case-insensitive /Uploads/ paths across protected-assets, support normalizer, and editor media-utils', () => {
+    setTestViteEnv({ VITE_API_URL: 'https://api.example.com/api/v1' });
+
+    assert.equal(isProtectedUploadAssetUrl('/Uploads/Documents/syllabus.pdf'), true);
+    assert.equal(
+      isProtectedUploadAssetUrl('https://api.example.com/Uploads/Verifications/id.pdf'),
+      true
+    );
+    assert.equal(isProtectedUploadAssetUrl('/uploads/thumbnails/cover.jpg'), false);
+
+    const mixedCaseSupport = normalizeSupportMessageAssets({
+      id: 'msg-upper',
+      ticketId: 'tkt-1',
+      senderId: 'u-1',
+      message: 'Mixed case upload path',
+      attachment: 'https://api.example.com/Uploads/Support-Attachments/log.txt',
+      isInternal: false,
+      createdAt: '2026-11-23T00:00:00.000Z',
+    });
+    assert.equal(
+      mixedCaseSupport.attachment,
+      'https://api.example.com/api/v1/support/messages/msg-upper/attachment?filename=log.txt'
     );
   });
 });

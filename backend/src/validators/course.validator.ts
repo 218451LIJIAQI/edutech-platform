@@ -327,7 +327,7 @@ const optionalPositiveIntField = (
 
 const optionalBoolField = (field: string, msg: string): ValidationChain =>
   body(field)
-    .optional({ nullable: true })
+    .optional({ values: "undefined" })
     .isBoolean()
     .withMessage(msg)
     .bail()
@@ -347,15 +347,7 @@ const optionalAssetField = (
     .trim()
     .custom(validateUrlOrUploadPathForFolders(invalidMsg, folders));
 
-const courseSharedFields = [
-  body("courseType")
-    .optional({ nullable: true, checkFalsy: true })
-    .isString()
-    .withMessage(ERROR_MESSAGES.COURSE_TYPE_STRING)
-    .bail()
-    .trim()
-    .isIn(COURSE_TYPES)
-    .withMessage(ERROR_MESSAGES.COURSE_TYPE_INVALID),
+const courseMediaFields = [
   optionalAssetField(
     "thumbnail",
     ERROR_MESSAGES.THUMBNAIL_STRING,
@@ -392,7 +384,15 @@ export const createCourseValidation = [
     min: COURSE_FIELD_LIMITS.COURSE_CATEGORY_MIN,
     max: COURSE_FIELD_LIMITS.COURSE_CATEGORY_MAX,
   }),
-  ...courseSharedFields,
+  body("courseType")
+    .optional({ nullable: true, checkFalsy: true })
+    .isString()
+    .withMessage(ERROR_MESSAGES.COURSE_TYPE_STRING)
+    .bail()
+    .trim()
+    .isIn(COURSE_TYPES)
+    .withMessage(ERROR_MESSAGES.COURSE_TYPE_INVALID),
+  ...courseMediaFields,
 ];
 
 export const updateCourseValidation = [
@@ -420,7 +420,15 @@ export const updateCourseValidation = [
     min: COURSE_FIELD_LIMITS.COURSE_CATEGORY_MIN,
     max: COURSE_FIELD_LIMITS.COURSE_CATEGORY_MAX,
   }),
-  ...courseSharedFields,
+  body("courseType")
+    .optional({ values: "undefined" })
+    .isString()
+    .withMessage(ERROR_MESSAGES.COURSE_TYPE_STRING)
+    .bail()
+    .trim()
+    .isIn(COURSE_TYPES)
+    .withMessage(ERROR_MESSAGES.COURSE_TYPE_INVALID),
+  ...courseMediaFields,
   optionalBoolField("isPublished", ERROR_MESSAGES.IS_PUBLISHED_BOOLEAN),
 ];
 
@@ -476,7 +484,7 @@ export const updateLessonValidation = [
     max: COURSE_FIELD_LIMITS.LESSON_TITLE_MAX,
   }),
   body("type")
-    .optional({ nullable: true, checkFalsy: true })
+    .optional({ values: "undefined" })
     .isString()
     .withMessage(ERROR_MESSAGES.LESSON_TYPE_STRING)
     .bail()
@@ -499,6 +507,9 @@ const packageSharedFields = [
     COURSE_FIELD_LIMITS.PACKAGE_DESCRIPTION_MAX,
   ),
   body("discount")
+    .customSanitizer((value: unknown) =>
+      typeof value === "string" && value.trim() === "" ? null : value,
+    )
     .optional({ nullable: true })
     .custom(validateMoneyValue(ERROR_MESSAGES.DISCOUNT_RANGE))
     .bail()
@@ -627,12 +638,20 @@ export const updateMaterialValidation = [
     min: COURSE_FIELD_LIMITS.MATERIAL_TITLE_MIN,
     max: COURSE_FIELD_LIMITS.MATERIAL_TITLE_MAX,
   }),
-  optionalAssetField(
-    "fileUrl",
-    ERROR_MESSAGES.FILE_URL_STRING,
-    ERROR_MESSAGES.FILE_URL_INVALID,
-    ["documents"],
-  ),
+  body("fileUrl")
+    .optional({ values: "undefined" })
+    .isString()
+    .withMessage(ERROR_MESSAGES.FILE_URL_STRING)
+    .bail()
+    .trim()
+    .notEmpty()
+    .withMessage(ERROR_MESSAGES.FILE_URL_REQUIRED)
+    .bail()
+    .custom(
+      validateUrlOrUploadPathForFolders(ERROR_MESSAGES.FILE_URL_INVALID, [
+        "documents",
+      ]),
+    ),
   boundedStringField("fileType", {
     optional: true,
     stringMsg: ERROR_MESSAGES.FILE_TYPE_STRING,

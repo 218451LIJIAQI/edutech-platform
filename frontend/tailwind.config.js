@@ -68,6 +68,19 @@ export default {
       fontSize: {
         '2xs': ['0.625rem', { lineHeight: '0.75rem' }],
       },
+      borderRadius: {
+        control: 'var(--radius-control)',
+        card: 'var(--radius-card)',
+        modal: 'var(--radius-modal)',
+      },
+      zIndex: {
+        sticky: '40',
+        navbar: '50',
+        dropdown: '70',
+        modal: '100',
+        confirm: '120',
+        toast: '140',
+      },
       boxShadow: {
         input: '0 1px 2px rgba(15, 23, 42, 0.04)',
         'input-focus': '0 0 0 4px rgba(90, 110, 242, 0.10)',

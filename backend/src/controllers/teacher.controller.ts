@@ -60,23 +60,26 @@ const parseExtendedProfilePayload = (body: Request["body"]) => ({
     "selfIntroduction",
     MAX_LONG_TEXT_LENGTH,
   ),
-  educationBackground: parseOptionalString(
+  educationBackground: parseNullableString(
     body?.educationBackground,
     "educationBackground",
     MAX_LONG_TEXT_LENGTH,
   ),
-  teachingExperience: parseOptionalString(
+  teachingExperience: parseNullableString(
     body?.teachingExperience,
     "teachingExperience",
     MAX_LONG_TEXT_LENGTH,
   ),
-  awards: parseStringArray(body?.awards, "awards", {
-    maxItems: MAX_ARRAY_ITEMS,
-  }),
+  awards:
+    body?.awards === null
+      ? []
+      : parseStringArray(body?.awards, "awards", {
+          maxItems: MAX_ARRAY_ITEMS,
+        }),
   specialties: parseStringArray(body?.specialties, "specialties", {
     maxItems: MAX_ARRAY_ITEMS,
   }),
-  teachingStyle: parseOptionalString(
+  teachingStyle: parseNullableString(
     body?.teachingStyle,
     "teachingStyle",
     MAX_LONG_TEXT_LENGTH,
@@ -89,16 +92,17 @@ const parseExtendedProfilePayload = (body: Request["body"]) => ({
     "yearsOfExperience",
     { min: 0, integer: true },
   ),
-  profilePhoto: parseOptionalString(
+  profilePhoto: parseNullableString(
     body?.profilePhoto,
     "profilePhoto",
     MAX_URL_LENGTH,
   ),
-  certificatePhotos: parseStringArray(
-    body?.certificatePhotos,
-    "certificatePhotos",
-    { maxItems: MAX_ARRAY_ITEMS },
-  ),
+  certificatePhotos:
+    body?.certificatePhotos === null
+      ? []
+      : parseStringArray(body?.certificatePhotos, "certificatePhotos", {
+          maxItems: MAX_ARRAY_ITEMS,
+        }),
 });
 
 class TeacherController {

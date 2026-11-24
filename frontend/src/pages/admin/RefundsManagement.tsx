@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useState, useCallback, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import toast from 'react-hot-toast';
 import {
   RefreshCcw,
   Clock,
   CheckCircle,
   XCircle,
-  DollarSign,
   FileText,
   X,
   Check,
@@ -18,6 +18,7 @@ import adminRefundService from '@/services/admin-refund.service';
 import { Refund } from '@/types';
 import { useOverlayAccessibility, usePageTitle } from '@/hooks';
 import { extractErrorMessage } from '@/utils/error-handler';
+import { formatCurrency } from '@/utils/helpers';
 
 const RefundsManagement = () => {
   usePageTitle('Refund Management');
@@ -470,10 +471,7 @@ const RefundsManagement = () => {
                         </div>
                       </td>
                       <td className="px-6 py-4 text-right tabular-nums">
-                        <div className="inline-flex items-center justify-end gap-1">
-                          <DollarSign className="w-4 h-4 text-green-600" />
-                          <span className="font-bold text-gray-900">{refund.amount.toFixed(2)}</span>
-                        </div>
+                        <span className="font-bold text-gray-900">{formatCurrency(refund.amount)}</span>
                       </td>
                       <td className="px-6 py-4 text-sm text-gray-600">
                         {refund.reasonCategory || 'N/A'}
@@ -506,9 +504,11 @@ const RefundsManagement = () => {
       </div>
 
       {/* Refund Detail Modal */}
-      {selectedRefund && (
-        <div
-          className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+      {selectedRefund &&
+        typeof document !== 'undefined' &&
+        createPortal(
+          <div
+            className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm z-modal flex items-center justify-center p-4"
           onMouseDown={(event) => {
             if (event.target === event.currentTarget && !working) {
               closeRefundDetails();
@@ -582,7 +582,7 @@ const RefundsManagement = () => {
                   <div className="flex justify-between">
                     <span className="text-gray-600">Amount:</span>
                     <span className="font-bold text-lg text-blue-700 tabular-nums">
-                      ${selectedRefund.amount.toFixed(2)}
+                      {formatCurrency(selectedRefund.amount)}
                     </span>
                   </div>
                   <div className="flex justify-between">
@@ -701,13 +701,17 @@ const RefundsManagement = () => {
               )}
             </div>
           </div>
-        </div>
-      )}
+        </div>,
+          document.body
+        )}
 
       {/* Approve Modal */}
-      {showApproveModal && selectedRefund && (
-        <div
-          className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+      {showApproveModal &&
+        selectedRefund &&
+        typeof document !== 'undefined' &&
+        createPortal(
+          <div
+            className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm z-confirm flex items-center justify-center p-4"
           onMouseDown={(event) => {
             if (event.target === event.currentTarget && !working) {
               closeApproveModal();
@@ -767,13 +771,17 @@ const RefundsManagement = () => {
               </div>
             </div>
           </div>
-        </div>
-      )}
+        </div>,
+          document.body
+        )}
 
       {/* Reject Modal */}
-      {showRejectModal && selectedRefund && (
-        <div
-          className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+      {showRejectModal &&
+        selectedRefund &&
+        typeof document !== 'undefined' &&
+        createPortal(
+          <div
+            className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm z-confirm flex items-center justify-center p-4"
           onMouseDown={(event) => {
             if (event.target === event.currentTarget && !working) {
               closeRejectModal();
@@ -841,8 +849,9 @@ const RefundsManagement = () => {
               </div>
             </div>
           </div>
-        </div>
-      )}
+        </div>,
+          document.body
+        )}
     </div>
   );
 };

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Wallet, X } from 'lucide-react';
 import toast from 'react-hot-toast';
 
@@ -219,11 +220,11 @@ const RefundModal = ({
     }
   };
 
-  if (!isOpen) return null;
+  if (!isOpen || typeof document === 'undefined') return null;
 
-  return (
+  return createPortal(
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/55 backdrop-blur-sm p-4"
+      className="fixed inset-0 z-modal flex items-center justify-center bg-slate-950/55 backdrop-blur-sm p-4"
       onMouseDown={(event) => {
         if (event.target === event.currentTarget && !working) {
           onClose();
@@ -583,7 +584,8 @@ const RefundModal = ({
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };
 

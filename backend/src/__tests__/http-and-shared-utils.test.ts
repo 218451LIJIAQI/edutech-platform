@@ -11,7 +11,12 @@ import {
   parseRequiredString,
   parseStringArray,
 } from "../utils/http";
-import { extractUploadPathFromUrlOrPath } from "../utils/url-or-path";
+import {
+  extractUploadPathFromUrlOrPath,
+  isTrustedLocalUploadCandidate,
+  validateUrlOrUploadPathForFolders,
+} from "../utils/url-or-path";
+import { buildProtectedAssetDescriptor } from "../utils/protected-asset";
 import {
   buildPaginationMeta,
   normalizeOffsetPagination,
@@ -71,6 +76,45 @@ describe("HTTP parsing and shared service utilities", () => {
     assert.equal(
       parseOptionalEnum("hot", ["hot", "new", "weekly"] as const, "tab"),
       "hot",
+    );
+    assert.equal(
+      parseOptionalBoolean(undefined, "isActive", {
+        rejectNull: true,
+        rejectBlank: true,
+      }),
+      undefined,
+    );
+    assert.throws(
+      () =>
+        parseOptionalBoolean(null, "isActive", {
+          rejectNull: true,
+          rejectBlank: true,
+        }),
+      /cannot be null/i,
+    );
+    assert.throws(
+      () =>
+        parseOptionalBoolean("   ", "isActive", {
+          rejectNull: true,
+          rejectBlank: true,
+        }),
+      /cannot be empty/i,
+    );
+    assert.throws(
+      () =>
+        parseOptionalEnum(null, ["LIVE", "RECORDED"] as const, "type", {
+          rejectNull: true,
+          rejectBlank: true,
+        }),
+      /cannot be null/i,
+    );
+    assert.throws(
+      () =>
+        parseOptionalEnum("", ["LIVE", "RECORDED"] as const, "type", {
+          rejectNull: true,
+          rejectBlank: true,
+        }),
+      /cannot be empty/i,
     );
     assert.deepEqual(
       parseStringArray([" math ", "math", "physics"], "tags"),
@@ -140,8 +184,42 @@ describe("HTTP parsing and shared service utilities", () => {
         null,
       );
       assert.equal(
+        extractUploadPathFromUrlOrPath("/Uploads/Materials/lecture.pdf"),
+        "materials/lecture.pdf",
+      );
+      assert.equal(
         extractUploadPathFromUrlOrPath("/uploads/materials/../secrets.txt"),
         null,
+      );
+      assert.equal(
+        isTrustedLocalUploadCandidate(
+          "http://localhost:3000/Uploads/verifications/secret.pdf",
+        ),
+        true,
+      );
+
+      const checkAvatars = validateUrlOrUploadPathForFolders(
+        "Invalid avatar URL",
+        ["avatars"],
+      );
+      assert.throws(
+        () =>
+          checkAvatars(
+            "http://localhost:3000/uploads/verifications/id-card.pdf",
+          ),
+        /Invalid avatar URL/,
+      );
+      assert.throws(
+        () => checkAvatars("/Uploads/verifications/id-card.pdf"),
+        /Invalid avatar URL/,
+      );
+      assert.throws(
+        () =>
+          buildProtectedAssetDescriptor(
+            "http://localhost:3000/uploads/avatars/../secrets.txt",
+            { allowedFolders: ["avatars"] },
+          ),
+        /Invalid upload file path/i,
       );
     } finally {
       if (prevApiUrl === undefined) {

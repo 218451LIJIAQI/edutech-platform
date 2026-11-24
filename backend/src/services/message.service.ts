@@ -260,7 +260,7 @@ class MessageService {
     const messagesDesc = await prisma.message.findMany({
       where: { threadId },
       include: { sender: { select: messageSenderSelect } },
-      orderBy: { createdAt: "desc" },
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
       take: limit,
       ...(cursor ? { skip: 1, cursor: { id: cursor } } : {}),
     });
@@ -332,7 +332,12 @@ class MessageService {
           })
         : Promise.resolve(null),
       prisma.messageThread.findMany({
-        where: { participants: { some: { id: userId } } },
+        where: {
+          participants: {
+            some: { id: userId },
+            every: { isActive: true },
+          },
+        },
         select: { id: true },
       }),
     ]);
@@ -351,6 +356,7 @@ class MessageService {
         where: {
           threadId: { in: userThreads.map((thread) => thread.id) },
           senderId: { not: userId },
+          sender: { isActive: true },
           isRead: false,
         },
         _count: { _all: true },
@@ -473,9 +479,13 @@ class MessageService {
     return prisma.message.count({
       where: {
         thread: {
-          participants: { some: { id: userId } },
+          participants: {
+            some: { id: userId },
+            every: { isActive: true },
+          },
         },
         senderId: { not: userId },
+        sender: { isActive: true },
         isRead: false,
       },
     });

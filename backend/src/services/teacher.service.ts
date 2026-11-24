@@ -80,7 +80,7 @@ const MAX_TEXT_LIST_ITEMS = 30;
 type ReviewVerificationStatus = "APPROVED" | "REJECTED";
 type ReviewRegistrationStatus = "APPROVED" | "REJECTED";
 
-export type TeacherUpdateInput = {
+type TeacherUpdateInput = {
   bio?: string | null;
   headline?: string | null;
   hourlyRate?: number | null;
@@ -97,7 +97,7 @@ const mapVerificationAccess = <T extends { id: string }>(verification: T) => ({
 });
 
 const isTeacherCertificateUploadPath = (uploadPath: string): boolean =>
-  uploadPath.split("/")[0] === TEACHER_CERTIFICATE_UPLOAD_FOLDER;
+  uploadPath.split("/")[0]?.toLowerCase() === TEACHER_CERTIFICATE_UPLOAD_FOLDER;
 
 const collectTeacherCertificateUploadPaths = (teacherProfile: {
   certificatePhotos: string | null;
@@ -149,6 +149,15 @@ const normalizeOptionalTeacherText = (
     );
   }
   return trimmedValue;
+};
+
+const normalizeNullableTeacherText = (
+  value?: string | null,
+  maxLength = MAX_LONG_TEXT_LENGTH,
+): string | null | undefined => {
+  if (value === undefined) return undefined;
+  if (value === null) return null;
+  return normalizeOptionalTeacherText(value, maxLength) ?? null;
 };
 
 const normalizeRequiredTeacherText = (
@@ -205,6 +214,21 @@ const normalizeTeacherAsset = (
     : undefined;
 };
 
+const normalizeNullableTeacherAsset = (
+  value: string | null | undefined,
+  allowedFolders: string[],
+  errorMessage: string,
+): string | null | undefined => {
+  if (value === undefined) return undefined;
+  const normalizedValue = normalizeOptionalUrlOrPath(value);
+  if (!normalizedValue) return null;
+  return ensureUrlOrUploadPathForFolders(
+    normalizedValue,
+    allowedFolders,
+    errorMessage,
+  );
+};
+
 const normalizeTeacherAssetList = (
   values: string[] | undefined,
   allowedFolders: string[],
@@ -224,11 +248,11 @@ const normalizeTeacherExtendedProfileInput = (
 ): TeacherExtendedProfileInput => ({
   ...data,
   selfIntroduction: normalizeOptionalTeacherText(data.selfIntroduction),
-  educationBackground: normalizeOptionalTeacherText(data.educationBackground),
-  teachingExperience: normalizeOptionalTeacherText(data.teachingExperience),
+  educationBackground: normalizeNullableTeacherText(data.educationBackground),
+  teachingExperience: normalizeNullableTeacherText(data.teachingExperience),
   awards: normalizeTeacherTextList(data.awards),
   specialties: normalizeTeacherTextList(data.specialties),
-  teachingStyle: normalizeOptionalTeacherText(data.teachingStyle),
+  teachingStyle: normalizeNullableTeacherText(data.teachingStyle),
   languages: normalizeTeacherTextList(data.languages),
   yearsOfExperience:
     data.yearsOfExperience === undefined
@@ -239,7 +263,7 @@ const normalizeTeacherExtendedProfileInput = (
             "Years of experience",
           ) ?? 0,
         ),
-  profilePhoto: normalizeTeacherAsset(
+  profilePhoto: normalizeNullableTeacherAsset(
     data.profilePhoto,
     ["teacher-profiles"],
     "Profile photo must be an external URL or use the /uploads/teacher-profiles/ folder",

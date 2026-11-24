@@ -423,10 +423,25 @@ export const parseBoundedInt = (
 export const parseOptionalBoolean = (
   value: unknown,
   fieldName = "Flag",
+  options?: { rejectNull?: boolean; rejectBlank?: boolean },
 ): boolean | undefined => {
   const raw = getFirstQueryValue(value);
 
-  if (raw === undefined || raw === null || raw === "") {
+  if (raw === undefined) {
+    return undefined;
+  }
+
+  if (raw === null) {
+    if (options?.rejectNull) {
+      throw new BadRequestError(`${fieldName} cannot be null`);
+    }
+    return undefined;
+  }
+
+  if (raw === "") {
+    if (options?.rejectBlank) {
+      throw new BadRequestError(`${fieldName} cannot be empty`);
+    }
     return undefined;
   }
 
@@ -436,6 +451,12 @@ export const parseOptionalBoolean = (
 
   if (typeof raw === "string") {
     const normalized = raw.trim().toLowerCase();
+    if (!normalized) {
+      if (options?.rejectBlank) {
+        throw new BadRequestError(`${fieldName} cannot be empty`);
+      }
+      return undefined;
+    }
     if (normalized === "true" || normalized === "1") {
       return true;
     }
@@ -537,9 +558,22 @@ export const parseOptionalEnum = <T extends string>(
   value: unknown,
   allowedOrEnum: readonly T[] | Record<string, T>,
   fieldName = "Value",
-  errorMessage?: string,
+  errorMessageOrOptions?:
+    | string
+    | {
+        errorMessage?: string;
+        rejectNull?: boolean;
+        rejectBlank?: boolean;
+      },
 ): T | undefined => {
-  const raw = parseOptionalString(value, fieldName);
+  const options =
+    typeof errorMessageOrOptions === "string"
+      ? { errorMessage: errorMessageOrOptions }
+      : errorMessageOrOptions;
+  const raw = parseOptionalString(value, fieldName, {
+    rejectNull: options?.rejectNull,
+    rejectBlank: options?.rejectBlank,
+  });
   if (!raw) {
     return undefined;
   }
@@ -547,7 +581,7 @@ export const parseOptionalEnum = <T extends string>(
   const allowedValues = resolveEnumValues(allowedOrEnum);
   if (!allowedValues.includes(raw as T)) {
     throw new BadRequestError(
-      errorMessage ??
+      options?.errorMessage ??
         `${fieldName} must be one of: ${allowedValues.join(", ")}`,
     );
   }

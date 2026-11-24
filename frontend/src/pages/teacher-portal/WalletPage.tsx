@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import clientLogger from '@/utils/logger';
 import {
   Wallet as WalletIcon,
@@ -870,9 +871,11 @@ const WalletPage = () => {
       </div>
 
       {/* Add Method Modal */}
-      {methodModalOpen && (
-        <div
-          className="fixed inset-0 bg-slate-950/55 flex items-center justify-center z-50 p-4 backdrop-blur-sm"
+      {methodModalOpen &&
+        typeof document !== 'undefined' &&
+        createPortal(
+          <div
+            className="fixed inset-0 bg-slate-950/55 flex items-center justify-center z-modal p-4 backdrop-blur-sm"
           onMouseDown={(event) => {
             if (event.target === event.currentTarget) {
               closeMethodModal();
@@ -1038,13 +1041,16 @@ const WalletPage = () => {
               </div>
             </div>
           </div>
-        </div>
-      )}
+        </div>,
+          document.body
+        )}
 
       {/* Payout Modal */}
-      {payoutModalOpen && (
-        <div
-          className="fixed inset-0 bg-slate-950/55 flex items-center justify-center z-50 p-4 backdrop-blur-sm"
+      {payoutModalOpen &&
+        typeof document !== 'undefined' &&
+        createPortal(
+          <div
+            className="fixed inset-0 bg-slate-950/55 flex items-center justify-center z-modal p-4 backdrop-blur-sm"
           onMouseDown={(event) => {
             if (event.target === event.currentTarget) {
               closePayoutModal();
@@ -1165,8 +1171,9 @@ const WalletPage = () => {
               </div>
             </div>
           </div>
-        </div>
-      )}
+        </div>,
+          document.body
+        )}
 
       <ConfirmationModal
         isOpen={Boolean(methodPendingDelete)}

@@ -94,7 +94,7 @@ export const calculateExpirationDate = (
   return new Date(referenceDate.getTime() + durationDays * DAY_IN_MS);
 };
 
-export type AllocatedOrderItemAmount<T> = {
+type AllocatedOrderItemAmount<T> = {
   item: T;
   itemPrice: number;
   allocatedAmount: number;

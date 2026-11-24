@@ -188,7 +188,7 @@ export default function CourseManagementLiveTab({
       const candidate = toStorableBackendAssetPath(recordingUrl.trim());
       const safe =
         normalizeSafeHttpUrl(candidate) ||
-        (candidate.startsWith('/uploads/') ? normalizeSafeInternalPath(candidate) : null);
+        (/^\/uploads\//i.test(candidate) ? normalizeSafeInternalPath(candidate) : null);
       if (!safe) {
         toast.error('Please enter a valid http(s) URL or /uploads/ video path');
         return;

@@ -235,11 +235,15 @@ const FileUpload = ({
     return <FileIcon className="h-8 w-8" aria-hidden="true" />;
   };
 
+  const accessibleLabel = label.trim() || 'Upload file';
+
   return (
     <div className="space-y-4">
-      <label htmlFor={inputId} className="mb-2 block text-sm font-medium text-gray-700">
-        {label}
-      </label>
+      {label.trim() ? (
+        <label htmlFor={inputId} className="mb-2 block text-sm font-medium text-gray-700">
+          {label}
+        </label>
+      ) : null}
 
       <input
         ref={fileInputRef}
@@ -249,7 +253,7 @@ const FileUpload = ({
         onChange={handleFileSelect}
         disabled={disabled}
         className="hidden"
-        aria-label={label}
+        aria-label={accessibleLabel}
       />
 
       {!selectedFile ? (
@@ -263,7 +267,7 @@ const FileUpload = ({
           }`}
           role="button"
           tabIndex={disabled ? -1 : 0}
-          aria-label={`${label}. Click to upload or drag and drop a file.`}
+          aria-label={`${accessibleLabel}. Click to upload or drag and drop a file.`}
           aria-disabled={disabled}
           onClick={openFilePicker}
           onDragOver={handleDragOver}

@@ -2,6 +2,10 @@ import { Prisma } from "@prisma/client";
 import prisma from "../config/database";
 import { BadRequestError, NotFoundError } from "../utils/errors";
 import { sanitizeUserPlainText } from "../utils/sanitize-user-content";
+import {
+  extractUploadPathFromUrlOrPath,
+  isTrustedLocalUploadCandidate,
+} from "../utils/url-or-path";
 import { buildPaginationMeta, normalizePagination } from "./shared/pagination";
 import { isPrismaErrorCode } from "./shared/service-helpers";
 
@@ -24,10 +28,7 @@ const RESTRICTED_POST_TERMS = ["politics", "violence", "hate", "porn"] as const;
 const IMAGE_URL_PATTERN =
   /\.(png|jpe?g|gif|webp|avif|bmp|svg|heic|heif)(\?.*)?$/i;
 const DIRECT_VIDEO_URL_PATTERN = /\.(mp4|webm|m3u8|mov|ogg)(\?.*)?$/i;
-const COMMUNITY_IMAGE_UPLOAD_PATH_PATTERN =
-  /^\/uploads\/community-images\/[a-z0-9/_-]+\.[a-z0-9]+(?:\?.*)?$/i;
-const COMMUNITY_VIDEO_UPLOAD_PATH_PATTERN =
-  /^\/uploads\/videos\/[a-z0-9/_-]+\.[a-z0-9]+(?:\?.*)?$/i;
+const UPLOAD_FILENAME_PATTERN = /^[a-z0-9._-]+$/i;
 const TAG_NAME_PATTERN = /^[\p{L}\p{N}][\p{L}\p{N}-]*$/u;
 
 const ALLOWED_VIDEO_HOSTS = new Set([
@@ -103,16 +104,6 @@ const containsRestrictedPostTerms = (
   );
 };
 
-const isRelativeUploadPath = (
-  type: CreatePostMediaInput["type"],
-  value: string,
-): boolean => {
-  if (!value.startsWith("/")) return false;
-  return type === "image"
-    ? COMMUNITY_IMAGE_UPLOAD_PATH_PATTERN.test(value)
-    : COMMUNITY_VIDEO_UPLOAD_PATH_PATTERN.test(value);
-};
-
 const normalizeHostname = (hostname: string): string =>
   hostname.trim().toLowerCase().replace(/^www\./, "");
 
@@ -161,10 +152,30 @@ const isAllowedCommunityMediaUrl = (
   const url = rawUrl.trim();
   if (!url) return false;
 
-  if (isRelativeUploadPath(type, url)) {
+  const uploadPath = extractUploadPathFromUrlOrPath(url);
+  if (uploadPath) {
+    const segments = uploadPath.split("/").filter(Boolean);
+    if (segments.length !== 2) {
+      return false;
+    }
+
+    const [folder, filename] = segments;
+    const expectedFolder = type === "image" ? "community-images" : "videos";
+    if (
+      folder !== expectedFolder ||
+      !filename ||
+      !UPLOAD_FILENAME_PATTERN.test(filename)
+    ) {
+      return false;
+    }
+
     return type === "image"
-      ? IMAGE_URL_PATTERN.test(url)
-      : DIRECT_VIDEO_URL_PATTERN.test(url);
+      ? IMAGE_URL_PATTERN.test(filename)
+      : DIRECT_VIDEO_URL_PATTERN.test(filename);
+  }
+
+  if (isTrustedLocalUploadCandidate(url)) {
+    return false;
   }
 
   let parsedUrl: URL;
@@ -179,7 +190,7 @@ const isAllowedCommunityMediaUrl = (
   }
 
   if (type === "image") {
-    return IMAGE_URL_PATTERN.test(url);
+    return IMAGE_URL_PATTERN.test(parsedUrl.pathname);
   }
 
   const normalizedHostname = normalizeHostname(parsedUrl.hostname);
@@ -197,7 +208,7 @@ const isAllowedCommunityMediaUrl = (
     return true;
   }
 
-  return DIRECT_VIDEO_URL_PATTERN.test(url);
+  return DIRECT_VIDEO_URL_PATTERN.test(parsedUrl.pathname);
 };
 
 const normalizePostMedia = (
@@ -368,7 +379,14 @@ const resolveLinkedCourse = async (
   }
 
   const course = await prisma.course.findFirst({
-    where: { id: normalizedCourseId, isPublished: true },
+    where: {
+      id: normalizedCourseId,
+      isPublished: true,
+      teacherProfile: {
+        registrationStatus: "APPROVED",
+        user: { isActive: true },
+      },
+    },
     select: { id: true, title: true },
   });
 
@@ -515,21 +533,25 @@ const togglePostReaction = async <K extends "likes" | "bookmarks">(
         : await tx.communityPostBookmark.findUnique({ where: compositeWhere });
 
       if (existing) {
-        if (isLike) {
-          await tx.communityPostLike.delete({ where: compositeWhere });
-        } else {
-          await tx.communityPostBookmark.delete({ where: compositeWhere });
-        }
+        const deleted = isLike
+          ? await tx.communityPostLike.deleteMany({
+              where: { postId: normalizedPostId, userId: normalizedUserId },
+            })
+          : await tx.communityPostBookmark.deleteMany({
+              where: { postId: normalizedPostId, userId: normalizedUserId },
+            });
 
-        await tx.communityPost.updateMany({
-          where: {
-            id: normalizedPostId,
-            [counterField]: { gt: 0 },
-          },
-          data: {
-            [counterField]: { decrement: 1 },
-          },
-        });
+        if (deleted.count > 0) {
+          await tx.communityPost.updateMany({
+            where: {
+              id: normalizedPostId,
+              [counterField]: { gt: 0 },
+            },
+            data: {
+              [counterField]: { decrement: 1 },
+            },
+          });
+        }
 
         return formatResult(await readCurrentCount(tx), false);
       }
@@ -583,7 +605,21 @@ const communityService = {
 
     if (existing) return existing;
 
-    return prisma.communityTag.create({ data: { name: normalized } });
+    try {
+      return await prisma.communityTag.create({ data: { name: normalized } });
+    } catch (error) {
+      if (!isPrismaErrorCode(error, "P2002")) {
+        throw error;
+      }
+
+      const racedTag = await prisma.communityTag.findFirst({
+        where: { name: { equals: normalized, mode: "insensitive" } },
+      });
+      if (!racedTag) {
+        throw error;
+      }
+      return racedTag;
+    }
   },
 
   async getFeed(
@@ -816,12 +852,7 @@ const communityService = {
 
     return {
       items,
-      pagination: {
-        total,
-        page: safePage,
-        limit: safeLimit,
-        totalPages: Math.ceil(total / safeLimit) || 1,
-      },
+      pagination: buildPaginationMeta(total, safePage, safeLimit),
     };
   },
 

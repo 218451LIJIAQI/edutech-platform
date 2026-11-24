@@ -1,3 +1,4 @@
+import { useId } from 'react';
 import { CheckCircle, Trash2, Video } from 'lucide-react';
 import type { VideoSourceType } from './types';
 
@@ -24,38 +25,48 @@ export default function LessonVideoSourceField({
   onClearExistingUpload,
   onVideoLinkChange,
 }: LessonVideoSourceFieldProps) {
-  return (
-    <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
-      <label className="block text-sm font-medium text-gray-700 mb-4">
-        Video (Optional)
-      </label>
+  const groupId = useId();
 
-      <div className="flex flex-col sm:flex-row gap-4 mb-6">
+  return (
+    <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
+      <span className="block text-sm font-medium text-slate-700 mb-4">
+        Video (Optional)
+      </span>
+
+      <div className="flex flex-col sm:flex-row gap-4 mb-6" role="radiogroup" aria-label="Lesson video source">
         <label
-          className="flex items-center space-x-3 cursor-pointer p-3 bg-white rounded-lg border-2 transition-all"
-          style={{ borderColor: videoType === 'upload' ? '#3b82f6' : '#e5e7eb' }}
+          className={`flex items-center space-x-3 cursor-pointer p-3 bg-white rounded-xl border-2 transition-all ${
+            videoType === 'upload'
+              ? 'border-primary-600 bg-primary-50/30'
+              : 'border-slate-200 hover:border-slate-300'
+          }`}
         >
           <input
             type="radio"
+            name={`${groupId}-video-source`}
             value="upload"
             checked={videoType === 'upload'}
             onChange={() => onVideoTypeChange('upload')}
             className="form-radio text-primary-600 w-4 h-4"
           />
-          <span className="text-sm font-medium">Upload Video File</span>
+          <span className="text-sm font-medium text-slate-800">Upload Video File</span>
         </label>
         <label
-          className="flex items-center space-x-3 cursor-pointer p-3 bg-white rounded-lg border-2 transition-all"
-          style={{ borderColor: videoType === 'link' ? '#3b82f6' : '#e5e7eb' }}
+          className={`flex items-center space-x-3 cursor-pointer p-3 bg-white rounded-xl border-2 transition-all ${
+            videoType === 'link'
+              ? 'border-primary-600 bg-primary-50/30'
+              : 'border-slate-200 hover:border-slate-300'
+          }`}
         >
           <input
             type="radio"
+            name={`${groupId}-video-source`}
             value="link"
             checked={videoType === 'link'}
             onChange={() => onVideoTypeChange('link')}
             className="form-radio text-primary-600 w-4 h-4"
           />
-          <span className="text-sm font-medium">Paste Video URL</span>
+          <span className="text-sm font-medium text-slate-800">Paste Video URL</span>
         </label>
       </div>
 
@@ -117,6 +128,7 @@ export default function LessonVideoSourceField({
         <div className="space-y-3">
           <input
             type="url"
+            aria-label="Lesson video URL"
             value={videoLink}
             onChange={(event) => onVideoLinkChange(event.target.value)}
             placeholder="https://www.youtube.com/watch?v=... or direct video link"

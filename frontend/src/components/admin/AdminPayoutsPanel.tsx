@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { CheckCircle, Clock, DollarSign, Download, XCircle, X } from 'lucide-react';
 import toast from 'react-hot-toast';
 import walletService, { AdminPayoutReviewAction } from '@/services/wallet.service';
@@ -504,9 +505,11 @@ export default function AdminPayoutsPanel({
         )}
       </div>
 
-      {modalAction && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/55 p-4 backdrop-blur-sm"
+      {modalAction &&
+        typeof document !== 'undefined' &&
+        createPortal(
+          <div
+            className="fixed inset-0 z-modal flex items-center justify-center bg-slate-950/55 p-4 backdrop-blur-sm"
           onMouseDown={(event) => {
             if (event.target === event.currentTarget) {
               closeModal();
@@ -636,8 +639,9 @@ export default function AdminPayoutsPanel({
               </button>
             </div>
           </div>
-        </div>
-      )}
+        </div>,
+          document.body
+        )}
     </div>
   );
 }

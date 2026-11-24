@@ -17,7 +17,6 @@ import {
   type TeacherSettlement,
 } from "./shared/settlement-calculator";
 
-
 interface DateRangeFilter {
   startDate?: string;
   endDate?: string;
@@ -49,27 +48,19 @@ const PAID_GROSS_STATUSES: PaymentStatus[] = [
 const resolveDefaultCommissionRate = (): number =>
   config.PLATFORM_COMMISSION_RATE ?? 10;
 
-const getStartOfDay = (date: Date): Date => {
-  const d = new Date(date);
-  d.setHours(0, 0, 0, 0);
-  return d;
+const getStartOfDayUtc = (date: Date): Date =>
+  new Date(
+    Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()),
+  );
+
+const getStartOfWeekUtc = (date: Date): Date => {
+  const day = date.getUTCDay();
+  const diff = date.getUTCDate() - day + (day === 0 ? -6 : 1);
+  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), diff));
 };
 
-const getStartOfWeek = (date: Date): Date => {
-  const d = new Date(date);
-  const day = d.getDay();
-  const diff = d.getDate() - day + (day === 0 ? -6 : 1);
-  d.setDate(diff);
-  d.setHours(0, 0, 0, 0);
-  return d;
-};
-
-const getStartOfMonth = (date: Date): Date => {
-  const d = new Date(date);
-  d.setDate(1);
-  d.setHours(0, 0, 0, 0);
-  return d;
-};
+const getStartOfMonthUtc = (date: Date): Date =>
+  new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), 1));
 
 const buildDateFilter = (
   filter?: DateRangeFilter,
@@ -129,9 +120,9 @@ class FinancialReportService {
   async getFinancialSummary(): Promise<FinancialReportSummary> {
     const now = new Date();
     const [daily, weekly, monthly, allTime] = await Promise.all([
-      this.computeSummaryForPeriod("Today", getStartOfDay(now)),
-      this.computeSummaryForPeriod("This Week", getStartOfWeek(now)),
-      this.computeSummaryForPeriod("This Month", getStartOfMonth(now)),
+      this.computeSummaryForPeriod("Today", getStartOfDayUtc(now)),
+      this.computeSummaryForPeriod("This Week", getStartOfWeekUtc(now)),
+      this.computeSummaryForPeriod("This Month", getStartOfMonthUtc(now)),
       this.computeSummaryForPeriod("All Time"),
     ]);
 

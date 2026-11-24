@@ -5,6 +5,8 @@ import { useAuthStore } from '@/store/auth-store';
 import { UserRole } from '@/types';
 import { usePageTitle } from '@/hooks';
 import { getAccessToken, hasRecoverableAuthState } from '@/utils/auth-storage';
+import { getHomePathForRole } from '@/utils/helpers';
+import { normalizeTeacherProfileCompletionStatus } from '@/utils/teacher-profile';
 
 /**
  * Home Page Component
@@ -26,19 +28,25 @@ const HomePage = () => {
   const isSessionReady = Boolean(isAuthenticated && user);
   const isRestoringSession = hasRecoverableSession && (!hasAccessToken || !user);
 
+  const isApprovedTeacher = useMemo(() => {
+    if (user?.role !== UserRole.TEACHER) return false;
+    return (
+      user.teacherProfile?.registrationStatus === 'APPROVED' &&
+      normalizeTeacherProfileCompletionStatus(
+        user.teacherProfile?.profileCompletionStatus
+      ) === 'APPROVED'
+    );
+  }, [user]);
+
   const dashboardLink = useMemo(() => {
     if (!user) return '/';
-    switch (user.role) {
-      case UserRole.STUDENT:
-        return '/student';
-      case UserRole.TEACHER:
-        return '/teacher';
-      case UserRole.ADMIN:
-        return '/admin';
-      default:
-        return '/';
+    if (user.role === UserRole.TEACHER && !isApprovedTeacher) {
+      return user.teacherProfile?.registrationStatus === 'APPROVED'
+        ? '/teacher/profile-completion'
+        : '/teacher/pending';
     }
-  }, [user]);
+    return getHomePathForRole(user.role);
+  }, [isApprovedTeacher, user]);
 
   const dashboardLabel = useMemo(() => {
     if (!user) return 'Dashboard';
@@ -114,8 +122,11 @@ const HomePage = () => {
                     </Link>
                   )}
                   {user?.role === UserRole.TEACHER && (
-                    <Link to="/teacher/courses/new" className="inline-flex items-center gap-2 bg-white/10 backdrop-blur-sm border-2 border-white/30 text-white px-8 py-4 rounded-2xl font-bold text-lg hover:bg-white/20 transition-all duration-300">
-                      Create New Course
+                    <Link
+                      to={isApprovedTeacher ? '/teacher/courses/new' : '/teacher/verification'}
+                      className="inline-flex items-center gap-2 bg-white/10 backdrop-blur-sm border-2 border-white/30 text-white px-8 py-4 rounded-2xl font-bold text-lg hover:bg-white/20 transition-all duration-300"
+                    >
+                      {isApprovedTeacher ? 'Create New Course' : 'Verification Center'}
                     </Link>
                   )}
                 </div>

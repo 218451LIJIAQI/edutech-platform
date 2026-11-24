@@ -2,6 +2,7 @@ import { randomInt } from "crypto";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import {
+  PayoutRequestStatus,
   Prisma,
   RegistrationStatus,
   UserRole,
@@ -24,6 +25,11 @@ import {
   normalizeOptionalUrlOrPath,
 } from "../utils/url-or-path";
 import { sanitizeUserPlainText } from "../utils/sanitize-user-content";
+import {
+  assertTeacherHasNoActiveStudents,
+  collectImpactedTeacherUserIdsForStudent,
+  recalculateTeacherStudentCounts,
+} from "./admin/admin-user-helpers";
 import { isPrismaErrorCode, isUniqueConstraintError } from "./shared/service-helpers";
 
 interface RegisterData {
@@ -122,6 +128,34 @@ class AuthService {
       return { message: "Account is already deactivated" };
     }
 
+    if (user.role === UserRole.TEACHER) {
+      await assertTeacherHasNoActiveStudents(userId);
+
+      const pendingPayoutCount = await prisma.payoutRequest.count({
+        where: {
+          wallet: { userId },
+          status: {
+            in: [
+              PayoutRequestStatus.PENDING,
+              PayoutRequestStatus.APPROVED,
+              PayoutRequestStatus.PROCESSING,
+            ],
+          },
+        },
+      });
+
+      if (pendingPayoutCount > 0) {
+        throw new ValidationError(
+          "Cannot deactivate teacher account while payout requests are pending",
+        );
+      }
+    }
+
+    const impactedTeacherUserIds =
+      user.role === UserRole.STUDENT
+        ? await collectImpactedTeacherUserIdsForStudent(userId)
+        : new Set<string>();
+
     await prisma.user.update({
       where: { id: userId },
       data: {
@@ -133,6 +167,8 @@ class AuthService {
         avatar: null,
       },
     });
+
+    await recalculateTeacherStudentCounts(impactedTeacherUserIds);
 
     return { message: "Account deactivated successfully" };
   }

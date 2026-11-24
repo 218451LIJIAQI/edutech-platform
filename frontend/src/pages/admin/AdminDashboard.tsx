@@ -260,7 +260,7 @@ const AdminDashboard = () => {
                   <stat.icon className="w-6 h-6" />
                 </div>
               </div>
-              <h3 className="text-3xl font-bold mb-2 text-gray-900 tabular-nums">{stat.value}</h3>
+              <h3 className="text-2xl xl:text-3xl font-bold mb-2 text-gray-900 tabular-nums break-words">{stat.value}</h3>
               <p className="text-gray-500 text-xs mb-3 font-semibold uppercase">{stat.title}</p>
               <p className="text-xs text-gray-600 bg-gray-50/80 px-3 py-1.5 rounded-lg inline-block font-medium">{stat.change}</p>
             </div>

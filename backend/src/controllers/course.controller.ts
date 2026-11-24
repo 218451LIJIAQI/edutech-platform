@@ -252,6 +252,7 @@ class CourseController {
           req.body?.courseType,
           CourseType,
           "courseType",
+          { rejectNull: true, rejectBlank: true },
         ),
         thumbnail: parseNullableString(
           req.body?.thumbnail,
@@ -263,7 +264,11 @@ class CourseController {
           "previewVideoUrl",
           MAX_URL_OR_PATH_LENGTH,
         ),
-        isPublished: parseOptionalBoolean(req.body?.isPublished, "isPublished"),
+        isPublished: parseOptionalBoolean(
+          req.body?.isPublished,
+          "isPublished",
+          { rejectNull: true, rejectBlank: true },
+        ),
       },
     );
 
@@ -302,7 +307,10 @@ class CourseController {
           MAX_URL_OR_PATH_LENGTH,
         ),
         quiz: parseQuiz(req.body?.quiz),
-        isFree: parseOptionalBoolean(req.body?.isFree, "isFree"),
+        isFree: parseOptionalBoolean(req.body?.isFree, "isFree", {
+          rejectNull: true,
+          rejectBlank: true,
+        }),
       },
     );
 
@@ -324,7 +332,10 @@ class CourseController {
           "description",
           COURSE_FIELD_LIMITS.LESSON_DESCRIPTION_MAX,
         ),
-        type: parseOptionalEnum(req.body?.type, LessonType, "type"),
+        type: parseOptionalEnum(req.body?.type, LessonType, "type", {
+          rejectNull: true,
+          rejectBlank: true,
+        }),
         duration: parseNullableNumber(req.body?.duration, "duration", {
           min: 1,
           integer: true,
@@ -335,7 +346,10 @@ class CourseController {
           MAX_URL_OR_PATH_LENGTH,
         ),
         quiz: parseQuiz(req.body?.quiz),
-        isFree: parseOptionalBoolean(req.body?.isFree, "isFree"),
+        isFree: parseOptionalBoolean(req.body?.isFree, "isFree", {
+          rejectNull: true,
+          rejectBlank: true,
+        }),
         orderIndex: parseNumber(req.body?.orderIndex, "orderIndex", {
           min: 1,
           integer: true,
@@ -517,7 +531,10 @@ class CourseController {
             : parseStringArray(req.body?.features, "features", {
                 maxItems: MAX_FEATURES,
               }),
-        isActive: parseOptionalBoolean(req.body?.isActive, "isActive"),
+        isActive: parseOptionalBoolean(req.body?.isActive, "isActive", {
+          rejectNull: true,
+          rejectBlank: true,
+        }),
       },
     );
 
@@ -562,6 +579,7 @@ class CourseController {
         isDownloadable: parseOptionalBoolean(
           req.body?.isDownloadable,
           "isDownloadable",
+          { rejectNull: true, rejectBlank: true },
         ),
       },
     );
@@ -602,6 +620,7 @@ class CourseController {
         isDownloadable: parseOptionalBoolean(
           req.body?.isDownloadable,
           "isDownloadable",
+          { rejectNull: true, rejectBlank: true },
         ),
       },
     );

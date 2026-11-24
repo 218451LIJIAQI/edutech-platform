@@ -1,4 +1,4 @@
-const UPLOADS_SEGMENT = "/uploads/";
+const UPLOADS_PREFIX_PATTERN = /^\/uploads(?:\/|$)/i;
 
 export const safeDecodeURIComponent = (value: string): string | null => {
   try {
@@ -17,7 +17,7 @@ const normalizePathSeparators = (value: string): string => {
 
 export const normalizeAllowedFolders = (allowedFolders: string[]): string[] => {
   return allowedFolders
-    .map((folder) => normalizePathSeparators(folder))
+    .map((folder) => normalizePathSeparators(folder).toLowerCase())
     .filter(Boolean);
 };
 
@@ -93,6 +93,37 @@ const isTrustedUploadUrlOrigin = (url: URL): boolean => {
   return trustedOrigins.has(url.origin.toLowerCase());
 };
 
+export const isTrustedLocalUploadCandidate = (value: string): boolean => {
+  const trimmedValue = value.trim();
+  if (!trimmedValue) {
+    return false;
+  }
+
+  if (isHttpUrl(trimmedValue)) {
+    const parsedUrl = new URL(trimmedValue);
+    if (!isTrustedUploadUrlOrigin(parsedUrl)) {
+      return false;
+    }
+    const decodedPathname =
+      safeDecodeURIComponent(parsedUrl.pathname) ?? parsedUrl.pathname;
+    return (
+      UPLOADS_PREFIX_PATTERN.test(parsedUrl.pathname) ||
+      UPLOADS_PREFIX_PATTERN.test(decodedPathname)
+    );
+  }
+
+  if (isRootRelativePath(trimmedValue)) {
+    const stripped = stripQueryAndHash(trimmedValue);
+    const decoded = safeDecodeURIComponent(stripped) ?? stripped;
+    return (
+      UPLOADS_PREFIX_PATTERN.test(stripped) ||
+      UPLOADS_PREFIX_PATTERN.test(decoded)
+    );
+  }
+
+  return false;
+};
+
 export const extractUploadPathFromUrlOrPath = (
   value: string,
 ): string | null => {
@@ -116,29 +147,38 @@ export const extractUploadPathFromUrlOrPath = (
     return null;
   }
 
-  if (!pathname.startsWith(UPLOADS_SEGMENT)) {
+  const decodedFullPathname = safeDecodeURIComponent(pathname);
+  if (!decodedFullPathname) {
     return null;
   }
 
-  const rawRelativePath = pathname.slice(UPLOADS_SEGMENT.length);
+  const normalizedLeadingPathname = decodedFullPathname.replace(/\\/g, "/");
+  if (!UPLOADS_PREFIX_PATTERN.test(normalizedLeadingPathname)) {
+    return null;
+  }
+
+  const rawRelativePath = normalizedLeadingPathname.replace(
+    /^\/uploads\/?/i,
+    "",
+  );
 
   if (!rawRelativePath) {
     return null;
   }
 
-  const decodedPath = safeDecodeURIComponent(rawRelativePath);
-
-  if (!decodedPath) {
-    return null;
-  }
-
-  const normalizedPath = normalizePathSeparators(decodedPath);
+  const normalizedPath = normalizePathSeparators(rawRelativePath);
 
   if (!normalizedPath || hasUnsafePathSegment(normalizedPath)) {
     return null;
   }
 
-  return normalizedPath;
+  const segments = normalizedPath.split("/").filter(Boolean);
+  if (segments.length < 2) {
+    return null;
+  }
+
+  const [folder, ...restSegments] = segments;
+  return [folder.toLowerCase(), ...restSegments].join("/");
 };
 
 const isUploadPathWithinFolders = (
@@ -157,9 +197,16 @@ const isUploadPathWithinFolders = (
     return false;
   }
 
-  const [folder] = normalizedUploadPath.split("/");
+  const segments = normalizedUploadPath.split("/").filter(Boolean);
+  if (segments.length < 2) {
+    return false;
+  }
 
-  return Boolean(folder) && normalizedAllowedFolders.includes(folder);
+  const [folder] = segments;
+
+  return (
+    Boolean(folder) && normalizedAllowedFolders.includes(folder.toLowerCase())
+  );
 };
 
 export const validateUrlOrUploadPathForFolders =
@@ -183,6 +230,9 @@ export const validateUrlOrUploadPathForFolders =
       const uploadPath = extractUploadPathFromUrlOrPath(trimmedValue);
 
       if (!uploadPath) {
+        if (isTrustedLocalUploadCandidate(trimmedValue)) {
+          throw new Error(errorMessage);
+        }
         return true;
       }
 

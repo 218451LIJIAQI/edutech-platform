@@ -8,7 +8,7 @@ import RefundModal from '@/components/common/RefundModal';
 import CustomerServiceModal from '@/components/common/CustomerServiceModal';
 import ConfirmationModal from '@/components/common/ConfirmationModal';
 import { extractErrorMessage } from '@/utils/error-handler';
-import { roundCurrency } from '@/utils/helpers';
+import { formatCurrency, roundCurrency } from '@/utils/helpers';
 import clientLogger from '@/utils/logger';
 import { usePageTitle } from '@/hooks';
 
@@ -285,7 +285,7 @@ const OrderDetailPage = () => {
                       </p>
                       {order.refundAmount != null && (
                         <p className="text-sm text-gray-700 mt-1">
-                          <span className="font-semibold">Amount:</span> ${order.refundAmount.toFixed(2)}
+                          <span className="font-semibold">Amount:</span> {formatCurrency(order.refundAmount)}
                         </p>
                       )}
                     </div>
@@ -318,15 +318,15 @@ const OrderDetailPage = () => {
                       </div>
                       <div className="text-right shrink-0 tabular-nums">
                         <div className="text-sm text-gray-600 mb-1">
-                          Price: ${item.price.toFixed(2)}
+                          Price: {formatCurrency(item.price)}
                         </div>
                         {item.discount != null && item.discount > 0 && (
                           <div className="text-sm text-green-700 font-semibold mb-1">
-                            Discount: -${item.discount.toFixed(2)}
+                            Discount: -{formatCurrency(item.discount)}
                           </div>
                         )}
                         <div className="font-bold text-lg text-primary-600">
-                          ${item.finalPrice.toFixed(2)}
+                          {formatCurrency(item.finalPrice)}
                         </div>
                       </div>
                     </div>
@@ -343,7 +343,7 @@ const OrderDetailPage = () => {
                   <h2 className="text-2xl font-bold text-gray-900">Refund History</h2>
                   <div className="text-sm text-right tabular-nums">
                     <div className="text-gray-600">Refunded so far</div>
-                    <div className="font-bold text-blue-700">${completedRefundAmount.toFixed(2)}</div>
+                    <div className="font-bold text-blue-700">{formatCurrency(completedRefundAmount)}</div>
                   </div>
                 </div>
                 <div className="space-y-4">
@@ -352,7 +352,7 @@ const OrderDetailPage = () => {
                       <div className="flex items-start justify-between gap-4 mb-3">
                         <div className="tabular-nums">
                           <div className="font-semibold text-gray-900">
-                            ${refund.amount.toFixed(2)}
+                            {formatCurrency(refund.amount)}
                           </div>
                           <div className="text-sm text-gray-600">
                             Requested: {new Date(refund.createdAt).toLocaleString()}
@@ -413,7 +413,7 @@ const OrderDetailPage = () => {
               <div className="flex items-center justify-between">
                 <span className="text-xl font-bold text-gray-900">Total</span>
                 <span className="text-3xl font-bold text-primary-600 tabular-nums">
-                  ${order.totalAmount.toFixed(2)}
+                  {formatCurrency(order.totalAmount)}
                 </span>
               </div>
             </div>
@@ -458,7 +458,7 @@ const OrderDetailPage = () => {
               <div className="card shadow-lg border-2 border-blue-200 bg-blue-50">
                 <h2 className="font-bold text-lg text-gray-900 mb-3">Request Refund</h2>
                 <p className="text-sm text-gray-600 mb-4 tabular-nums">
-                  Start a refund request for the remaining refundable balance of ${remainingRefundableAmount.toFixed(2)}.
+                  Start a refund request for the remaining refundable balance of {formatCurrency(remainingRefundableAmount)}.
                 </p>
                 <button
                   type="button"
@@ -491,7 +491,7 @@ const OrderDetailPage = () => {
               <div className="card shadow-lg border-2 border-green-200 bg-green-50">
                 <h2 className="font-bold text-lg text-gray-900 mb-2">Refund {activeRefund.status}</h2>
                 <p className="text-sm text-gray-700 tabular-nums">
-                  Amount: <span className="font-bold">${activeRefund.amount.toFixed(2)}</span>
+                  Amount: <span className="font-bold">{formatCurrency(activeRefund.amount)}</span>
                 </p>
                 <p className="text-xs text-green-700 mt-2">
                   Method: {getRefundMethodLabel(activeRefund.refundMethod)}
@@ -512,10 +512,10 @@ const OrderDetailPage = () => {
               <div className="card shadow-lg border-2 border-blue-200 bg-blue-50 tabular-nums">
                 <h2 className="font-bold text-lg text-gray-900 mb-2">Partial Refund Completed</h2>
                 <p className="text-sm text-gray-700">
-                  Refunded: <span className="font-bold">${completedRefundAmount.toFixed(2)}</span>
+                  Refunded: <span className="font-bold">{formatCurrency(completedRefundAmount)}</span>
                 </p>
                 <p className="text-sm text-gray-700">
-                  Remaining refundable: <span className="font-bold">${remainingRefundableAmount.toFixed(2)}</span>
+                  Remaining refundable: <span className="font-bold">{formatCurrency(remainingRefundableAmount)}</span>
                 </p>
               </div>
             )}

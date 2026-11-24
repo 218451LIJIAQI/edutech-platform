@@ -159,6 +159,7 @@ const HelpCenterPage = () => {
               </div>
               <input
                 type="text"
+                aria-label="Search help articles"
                 placeholder="Search for help..."
                 className="w-full pl-14 pr-5 py-4 bg-white/95 backdrop-blur-sm border border-gray-200/80 rounded-2xl text-gray-900 placeholder-gray-400 shadow-lg focus:outline-none focus:ring-4 focus:ring-primary-500/10 focus:border-primary-500 hover:border-gray-300 transition-all duration-200"
                 value={searchQuery}

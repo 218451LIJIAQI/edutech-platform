@@ -7,6 +7,7 @@ import SearchFilter from '@/components/common/SearchFilter';
 import { AlertCircle, BookOpen, ExternalLink, RefreshCcw } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { extractErrorMessage } from '@/utils/error-handler';
+import { resolveBackendAssetUrl } from '@/utils/runtime';
 import { useDebounce, usePageTitle } from '@/hooks';
 
 const CoursesManagement = () => {
@@ -230,7 +231,7 @@ const CoursesManagement = () => {
                       <td className="px-6 py-5">
                         <div className="flex items-center space-x-4">
                           {course.thumbnail && (
-                            <img src={course.thumbnail} className="w-20 h-12 object-cover rounded-lg shadow-md" alt={course.title} />
+                            <img src={resolveBackendAssetUrl(course.thumbnail)} className="w-20 h-12 object-cover rounded-lg shadow-md" alt={course.title} onError={(e) => { e.currentTarget.style.display = 'none'; }} />
                           )}
                           <Link
                             to={`/courses/${course.id}`}

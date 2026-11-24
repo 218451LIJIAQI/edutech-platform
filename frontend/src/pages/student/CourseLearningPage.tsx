@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import clientLogger from '@/utils/logger';
 import { Link, useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import {
@@ -30,7 +31,7 @@ import {
   writeStoredCompletedLessonIds,
 } from '@/utils/enrollment';
 import { useOverlayAccessibility, usePageTitle } from '@/hooks';
-import { downloadProtectedAsset } from '@/utils/protected-assets';
+import { downloadProtectedAsset, isProtectedUploadAssetUrl, openProtectedAsset } from '@/utils/protected-assets';
 
 const CourseLearningPage = () => {
   const { courseId } = useParams<{ courseId: string }>();
@@ -662,17 +663,34 @@ const CourseLearningPage = () => {
                           </span>
                         </div>
                         <p className="text-sm font-bold text-slate-900">{session.title}</p>
-                        {session.recordingUrl && (
-                          <a
-                            href={session.recordingUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="btn-outline btn-sm w-full"
-                          >
-                            <Video className="w-3.5 h-3.5" />
-                            Watch Session Replay
-                          </a>
-                        )}
+                        {session.recordingUrl &&
+                          (isProtectedUploadAssetUrl(session.recordingUrl) ? (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (!session.recordingUrl) return;
+                                void openProtectedAsset(session.recordingUrl).catch((error) => {
+                                  toast.error(
+                                    extractErrorMessage(error, 'Failed to open session replay')
+                                  );
+                                });
+                              }}
+                              className="btn-outline btn-sm w-full"
+                            >
+                              <Video className="w-3.5 h-3.5" />
+                              Watch Session Replay
+                            </button>
+                          ) : (
+                            <a
+                              href={session.recordingUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="btn-outline btn-sm w-full"
+                            >
+                              <Video className="w-3.5 h-3.5" />
+                              Watch Session Replay
+                            </a>
+                          ))}
                       </div>
                     ))}
                   </div>
@@ -708,9 +726,11 @@ const CourseLearningPage = () => {
         </div>
       </div>
 
-      {showReviewModal && (
-        <div
-          className="fixed inset-0 bg-slate-950/55 flex items-center justify-center z-50 p-4 backdrop-blur-sm"
+      {showReviewModal &&
+        typeof document !== 'undefined' &&
+        createPortal(
+          <div
+            className="fixed inset-0 bg-slate-950/55 flex items-center justify-center z-modal p-4 backdrop-blur-sm"
           onMouseDown={(event) => {
             if (event.target === event.currentTarget) {
               setShowReviewModal(false);
@@ -759,8 +779,9 @@ const CourseLearningPage = () => {
               </button>
             </div>
           </div>
-        </div>
-      )}
+        </div>,
+          document.body
+        )}
     </div>
   );
 };

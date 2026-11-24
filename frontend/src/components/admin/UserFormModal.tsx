@@ -1,3 +1,4 @@
+import { createPortal } from 'react-dom';
 import {
   useCallback,
   useEffect,
@@ -314,11 +315,11 @@ const UserFormModal = ({
     }
   };
 
-  if (!isOpen) return null;
+  if (!isOpen || typeof document === 'undefined') return null;
 
-  return (
+  return createPortal(
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 px-4"
+      className="fixed inset-0 z-modal flex items-center justify-center bg-slate-950/55 backdrop-blur-sm px-4"
       onMouseDown={handleBackdropMouseDown}
     >
       <div
@@ -586,7 +587,8 @@ const UserFormModal = ({
           </div>
         </form>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };
 

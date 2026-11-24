@@ -946,6 +946,25 @@ class PaymentService {
             return { kind: "already-processed" as const };
           }
 
+          const orderUpdate = await tx.order.updateMany({
+            where: { id: order.id, status: OrderStatus.PENDING },
+            data: {
+              status: OrderStatus.PAID,
+              paidAt: confirmationTime,
+            },
+          });
+
+          if (orderUpdate.count !== 1) {
+            await tx.payment.update({
+              where: { id: normalizedPaymentId },
+              data: {
+                status: PaymentStatus.FAILED,
+                paidAt: null,
+              },
+            });
+            return { kind: "order-not-payable" as const };
+          }
+
           const updatedPayment = await tx.payment.findUniqueOrThrow({
             where: { id: normalizedPaymentId },
           });
@@ -986,14 +1005,6 @@ class PaymentService {
               }
             }
           }
-
-          await tx.order.update({
-            where: { id: order.id },
-            data: {
-              status: OrderStatus.PAID,
-              paidAt: confirmationTime,
-            },
-          });
 
           await tx.cartItem.deleteMany({
             where: {

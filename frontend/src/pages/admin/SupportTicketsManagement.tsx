@@ -1,4 +1,5 @@
 import { type ChangeEvent, useEffect, useMemo, useState, useCallback, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import toast from 'react-hot-toast';
 import clientLogger from '@/utils/logger';
 import {
@@ -612,9 +613,11 @@ const SupportTicketsManagement = () => {
       </div>
 
       {/* Ticket Detail Modal */}
-      {isTicketModalOpen && (
-        <div
-          className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+      {isTicketModalOpen &&
+        typeof document !== 'undefined' &&
+        createPortal(
+          <div
+            className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm z-modal flex items-center justify-center p-4"
           onMouseDown={(event) => {
             if (event.target === event.currentTarget && !working) {
               closeTicketModal();
@@ -900,8 +903,9 @@ const SupportTicketsManagement = () => {
               )}
             </div>
           </div>
-        </div>
-      )}
+        </div>,
+          document.body
+        )}
 
       <ConfirmationModal
         isOpen={showCloseTicketModal}

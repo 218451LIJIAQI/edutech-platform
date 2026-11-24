@@ -6,6 +6,7 @@ import { BadRequestError, NotFoundError, ValidationError } from "./errors";
 import {
   extractUploadPathFromUrlOrPath,
   isHttpUrl,
+  isTrustedLocalUploadCandidate,
   normalizeAllowedFolders,
   safeDecodeURIComponent,
 } from "./url-or-path";
@@ -173,6 +174,10 @@ export const buildProtectedAssetDescriptor = (
   const uploadPath = extractUploadPathFromUrlOrPath(trimmedFileUrl);
 
   if (!uploadPath) {
+    if (isTrustedLocalUploadCandidate(trimmedFileUrl)) {
+      throw new ValidationError("Invalid upload file path");
+    }
+
     if (!isHttpUrl(trimmedFileUrl)) {
       throw new ValidationError(
         "File URL must be a valid HTTP URL or upload path",
@@ -190,9 +195,10 @@ export const buildProtectedAssetDescriptor = (
     .replace(/^\/+/, "")
     .trim();
 
-  const [folder] = normalizedUploadPath.split("/");
+  const segments = normalizedUploadPath.split("/").filter(Boolean);
+  const folder = segments[0]?.toLowerCase();
 
-  if (!folder || !allowedFolders.includes(folder)) {
+  if (!folder || segments.length < 2 || !allowedFolders.includes(folder)) {
     throw new ValidationError(
       "File URL points to an unsupported upload folder",
     );
@@ -207,7 +213,7 @@ export const buildProtectedAssetDescriptor = (
   const expectedPrefix = `${absoluteUploadDir}${path.sep}`;
 
   if (
-    absoluteFilePath !== absoluteUploadDir &&
+    absoluteFilePath === absoluteUploadDir ||
     !absoluteFilePath.startsWith(expectedPrefix)
   ) {
     throw new ValidationError("Invalid upload file path");
@@ -232,7 +238,7 @@ export const buildProtectedAssetDescriptor = (
   const realExpectedPrefix = `${realUploadDir}${path.sep}`;
 
   if (
-    realFilePath !== realUploadDir &&
+    realFilePath === realUploadDir ||
     !realFilePath.startsWith(realExpectedPrefix)
   ) {
     throw new ValidationError("Invalid upload file path");

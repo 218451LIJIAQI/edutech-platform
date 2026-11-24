@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import {
   Award,
   Briefcase,
@@ -127,11 +128,11 @@ const UserDetailsModal = ({ isOpen, user, onClose }: UserDetailsModalProps) => {
     lockBodyScroll: true,
   });
 
-  if (!isOpen || !user || !typedUser) return null;
+  if (!isOpen || !user || !typedUser || typeof document === 'undefined') return null;
 
-  return (
+  return createPortal(
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 px-4"
+      className="fixed inset-0 z-modal flex items-center justify-center bg-slate-950/55 backdrop-blur-sm px-4"
       onMouseDown={(event) => {
         if (event.target === event.currentTarget) {
           onClose();
@@ -342,7 +343,8 @@ const UserDetailsModal = ({ isOpen, user, onClose }: UserDetailsModalProps) => {
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };
 

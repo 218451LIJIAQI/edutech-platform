@@ -12,7 +12,9 @@ import {
   Pause,
   Volume2,
   VolumeX,
+  AlertTriangle,
   Maximize,
+  RotateCcw,
   SkipBack,
   SkipForward,
 } from 'lucide-react';
@@ -76,6 +78,7 @@ const VideoPlayer = ({
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [showControls, setShowControls] = useState(true);
   const [isLoading, setIsLoading] = useState(true);
+  const [playbackError, setPlaybackError] = useState(false);
 
   useEffect(() => {
     onProgressRef.current = onProgress;
@@ -123,6 +126,7 @@ const VideoPlayer = ({
 
     hasCompletedRef.current = false;
     setIsLoading(true);
+    setPlaybackError(false);
     setCurrentTime(0);
     setDuration(0);
     setIsPlaying(false);
@@ -174,10 +178,14 @@ const VideoPlayer = ({
     };
 
     const handleWaiting = () => setIsLoading(true);
-    const handleCanPlay = () => setIsLoading(false);
+    const handleCanPlay = () => {
+      setIsLoading(false);
+      setPlaybackError(false);
+    };
     const handleError = () => {
       setIsLoading(false);
       setIsPlaying(false);
+      setPlaybackError(true);
     };
 
     video.addEventListener('loadedmetadata', handleLoadedMetadata);
@@ -500,7 +508,33 @@ const VideoPlayer = ({
         </div>
       </div>
 
-      {!isPlaying && !isLoading && (
+      {playbackError && (
+        <div
+          role="alert"
+          className="absolute inset-0 z-30 flex flex-col items-center justify-center gap-3 bg-slate-950/85 px-6 text-center text-white"
+        >
+          <AlertTriangle className="h-10 w-10 text-amber-400" aria-hidden="true" />
+          <p className="max-w-md text-sm font-medium text-slate-200">
+            Unable to load this video stream. Check the media source or try reloading.
+          </p>
+          <button
+            type="button"
+            onClick={() => {
+              const video = videoRef.current;
+              if (!video) return;
+              setPlaybackError(false);
+              setIsLoading(true);
+              video.load();
+            }}
+            className="inline-flex items-center gap-2 rounded-xl bg-white px-4 py-2 text-xs font-semibold text-slate-900 shadow hover:bg-slate-100"
+          >
+            <RotateCcw className="h-3.5 w-3.5" aria-hidden="true" />
+            Retry Video
+          </button>
+        </div>
+      )}
+
+      {!isPlaying && !isLoading && !playbackError && (
         <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center">
           <button
             type="button"

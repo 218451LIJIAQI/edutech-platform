@@ -1,3 +1,4 @@
+import { createPortal } from 'react-dom';
 import {
   type ChangeEvent,
   useCallback,
@@ -449,9 +450,13 @@ const CustomerServiceModal = ({
     return null;
   }
 
-  return (
+  if (typeof document === 'undefined') {
+    return null;
+  }
+
+  return createPortal(
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/55 backdrop-blur-sm p-4"
+      className="fixed inset-0 z-modal flex items-center justify-center bg-slate-950/55 backdrop-blur-sm p-4"
       onMouseDown={(event) => {
         if (event.target === event.currentTarget) {
           handleClose();
@@ -893,7 +898,8 @@ const CustomerServiceModal = ({
         }}
         onConfirm={handleCloseTicket}
       />
-    </div>
+    </div>,
+    document.body
   );
 };
 

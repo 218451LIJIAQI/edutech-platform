@@ -278,9 +278,9 @@ class AdminService {
         orderBy,
       }),
       prisma.user.count({ where }),
-      prisma.user.count({ where: { ...where, isActive: true } }),
-      prisma.user.count({ where: { ...where, role: UserRole.TEACHER } }),
-      prisma.user.count({ where: { ...where, role: UserRole.STUDENT } }),
+      prisma.user.count({ where: { AND: [where, { isActive: true }] } }),
+      prisma.user.count({ where: { AND: [where, { role: UserRole.TEACHER }] } }),
+      prisma.user.count({ where: { AND: [where, { role: UserRole.STUDENT }] } }),
     ]);
 
     return {
@@ -395,6 +395,10 @@ class AdminService {
     const user = await requireUser(userId);
     ensureNotAdminUser(user, "Cannot delete admin user");
 
+    if (user.role === UserRole.TEACHER) {
+      await assertTeacherHasNoActiveStudents(userId);
+    }
+
     if (!options?.force) {
       return this.deactivateUserForDeletion(user, options?.adminId);
     }
@@ -404,10 +408,6 @@ class AdminService {
       throw new ValidationError(
         this.buildProtectedDependencyMessage(protectedCounts),
       );
-    }
-
-    if (user.role === UserRole.TEACHER) {
-      await assertTeacherHasNoActiveStudents(userId);
     }
 
     const impactedTeacherUserIds =

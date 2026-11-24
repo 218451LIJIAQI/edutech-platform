@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState, type FC } from 'react';
+import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 import { useForm } from 'react-hook-form';
 import toast from 'react-hot-toast';
 
 import clientLogger from '@/utils/logger';
 import { extractErrorMessage } from '@/utils/error-handler';
+import { formatCurrency } from '@/utils/helpers';
 import { useOverlayAccessibility } from '@/hooks';
 import courseService from '@/services/course.service';
 import type { LessonPackage } from '@/types';
@@ -149,9 +151,13 @@ const PackageModal: FC<PackageModalProps> = ({
     }
   };
 
-  return (
+  if (typeof document === 'undefined') {
+    return null;
+  }
+
+  return createPortal(
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/55 backdrop-blur-sm p-4"
+      className="fixed inset-0 z-modal flex items-center justify-center bg-slate-950/55 backdrop-blur-sm p-4"
       role="presentation"
       onMouseDown={(event) => {
         if (event.target === event.currentTarget && !isSubmitting) {
@@ -319,7 +325,7 @@ const PackageModal: FC<PackageModalProps> = ({
             <div className="flex items-center justify-between">
               <span className="text-sm font-medium text-gray-700">Final Price:</span>
               <span className="text-2xl font-bold text-primary-600">
-                ${finalPrice.toFixed(2)}
+                {formatCurrency(finalPrice)}
               </span>
             </div>
           </div>
@@ -435,7 +441,8 @@ const PackageModal: FC<PackageModalProps> = ({
           </div>
         </form>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };
 

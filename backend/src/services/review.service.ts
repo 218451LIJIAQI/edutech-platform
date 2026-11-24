@@ -5,6 +5,10 @@ import {
   ValidationError,
   AuthorizationError,
 } from "../utils/errors";
+import {
+  calculateProgressFromLessons,
+  resolveEnrollmentCompletedLessonIds,
+} from "./enrollment.service";
 import { isEnrollmentCurrentlyActive } from "./shared/enrollment-access";
 import { sanitizeUserPlainText } from "../utils/sanitize-user-content";
 import { isUniqueConstraintError } from "./shared/service-helpers";
@@ -188,6 +192,10 @@ class ReviewService {
             course: {
               include: {
                 teacherProfile: true,
+                lessons: {
+                  orderBy: { orderIndex: "asc" },
+                  select: { id: true },
+                },
               },
             },
           },
@@ -209,7 +217,23 @@ class ReviewService {
       );
     }
 
-    if (enrollment.progress < 100) {
+    const orderedCourseLessonIds = (
+      enrollment.package?.course?.lessons ?? []
+    ).map((lesson) => lesson.id);
+    const effectiveCompletedIds = resolveEnrollmentCompletedLessonIds({
+      storedCompletedLessonIds: enrollment.completedLessonIds,
+      completedLessonsCount: enrollment.completedLessons,
+      orderedCourseLessonIds,
+    });
+    const effectiveProgress = Math.max(
+      enrollment.progress,
+      calculateProgressFromLessons(
+        effectiveCompletedIds.length,
+        orderedCourseLessonIds.length,
+      ),
+    );
+
+    if (effectiveProgress < 100) {
       throw new ValidationError(
         "Course must be completed before it can be reviewed",
       );
@@ -242,6 +266,17 @@ class ReviewService {
 
         if (existingReview) {
           throw new ValidationError("You have already reviewed this course");
+        }
+
+        if (enrollment.progress < 100) {
+          await tx.enrollment.update({
+            where: { id: normalizedEnrollmentId },
+            data: {
+              progress: 100,
+              completedLessons: effectiveCompletedIds.length,
+              completedLessonIds: effectiveCompletedIds,
+            },
+          });
         }
 
         const review = await tx.review.create({

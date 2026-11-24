@@ -138,7 +138,7 @@ const normalizeUserAvatarOnly = (user?: User): User | undefined =>
 
 const isSupportAttachmentUploadPath = (value?: string): boolean => {
   const storable = toStorableBackendAssetPath(value);
-  return storable.startsWith(SUPPORT_ATTACHMENT_UPLOAD_PATH);
+  return storable.toLowerCase().startsWith(SUPPORT_ATTACHMENT_UPLOAD_PATH);
 };
 
 const getAttachmentFileName = (value: string): string | undefined => {

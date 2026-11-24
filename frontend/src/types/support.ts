@@ -12,6 +12,8 @@ export interface SupportTicketMessage {
   readonly senderId: string;
   readonly message: string;
   readonly attachment?: string;
+  readonly isStaff?: boolean;
+  readonly isInternal?: boolean;
   readonly createdAt: string;
   readonly sender?: User;
 }

@@ -266,6 +266,7 @@ app.get("/", (_req, res) => {
 if (isProduction && fs.existsSync(config.FRONTEND_DIST_DIR)) {
   app.get("*", (req, res, next) => {
     if (
+      req.path === "/api" ||
       req.path.startsWith("/api/") ||
       req.path.startsWith("/uploads") ||
       req.path.startsWith("/socket.io")

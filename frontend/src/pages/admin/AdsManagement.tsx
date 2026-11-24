@@ -11,7 +11,8 @@ import adsService, { AdCampaignPayload } from '@/services/ads.service';
 import ConfirmationModal from '@/components/common/ConfirmationModal';
 import AdEditorModal from '@/components/admin/AdEditorModal';
 import { extractErrorMessage } from '@/utils/error-handler';
-import { useDebounce } from '@/hooks';
+import { resolveBackendAssetUrl } from '@/utils/runtime';
+import { useDebounce, usePageTitle } from '@/hooks';
 import toast from 'react-hot-toast';
 import {
   AlertCircle,
@@ -26,7 +27,6 @@ import {
   RefreshCcw,
   Trash2,
 } from 'lucide-react';
-import { usePageTitle } from '@/hooks';
 
 const themePreviewClasses = {
   MIDNIGHT: 'from-slate-950 via-slate-900 to-indigo-950 text-white',
@@ -373,7 +373,14 @@ export default function AdsManagement() {
                     <div className={`relative h-28 w-40 shrink-0 overflow-hidden rounded-2xl bg-gradient-to-br ${themePreviewClasses[ad.theme]}`}>
                       {ad.imageUrl ? (
                         <>
-                          <img src={ad.imageUrl} alt={ad.title} className="absolute inset-0 h-full w-full object-cover" />
+                          <img
+                            src={resolveBackendAssetUrl(ad.imageUrl)}
+                            alt={ad.title}
+                            className="absolute inset-0 h-full w-full object-cover"
+                            onError={(e) => {
+                              e.currentTarget.style.display = 'none';
+                            }}
+                          />
                           <div className="absolute inset-0 bg-slate-950/40" />
                         </>
                       ) : null}

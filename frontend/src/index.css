@@ -12,9 +12,17 @@
     --surface-elevated: #ffffff;
     --surface-muted: #f1f5f9;
     --border-subtle: rgba(203, 213, 225, 0.85);
+    --space-section: 1.5rem;
+    --space-card: 1.5rem;
     --radius-control: 0.75rem;
     --radius-card: 1rem;
     --radius-modal: 1.25rem;
+    --z-sticky: 40;
+    --z-navbar: 50;
+    --z-dropdown: 70;
+    --z-modal: 100;
+    --z-confirm: 120;
+    --z-toast: 140;
     --focus-ring: 0 0 0 2px #ffffff, 0 0 0 4px #4f46e5;
   }
 
@@ -300,24 +308,6 @@
     box-shadow: 0 12px 32px rgba(15, 23, 42, 0.10);
     transform: translateY(-2px);
     border-color: rgba(79, 70, 229, 0.28);
-  }
-
-  .line-clamp-2 {
-    display: -webkit-box;
-    -webkit-line-clamp: 2;
-    -webkit-box-orient: vertical;
-    overflow: hidden;
-  }
-
-  .line-clamp-3 {
-    display: -webkit-box;
-    -webkit-line-clamp: 3;
-    -webkit-box-orient: vertical;
-    overflow: hidden;
-  }
-
-  .aspect-video {
-    aspect-ratio: 16 / 9;
   }
 }
 

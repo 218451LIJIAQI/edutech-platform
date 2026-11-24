@@ -397,6 +397,21 @@ class OrdersService {
 
     const order = await createOrderNoWithRetry((orderNo) =>
       prisma.$transaction(async (tx) => {
+        const deletedCart = await tx.cartItem.deleteMany({
+          where: {
+            id: {
+              in: normalizedItems.map((item) => item.cartItemId),
+            },
+            userId: normalizedUserId,
+          },
+        });
+
+        if (deletedCart.count !== normalizedItems.length) {
+          throw new ValidationError(
+            "Your cart changed while creating the order. Please review your cart and try again.",
+          );
+        }
+
         for (const item of cartItems) {
           await assertPackageHasAvailableCapacity(
             tx,
@@ -405,7 +420,7 @@ class OrdersService {
           );
         }
 
-        const createdOrder = await tx.order.create({
+        return tx.order.create({
           data: {
             orderNo,
             userId: normalizedUserId,
@@ -434,17 +449,6 @@ class OrdersService {
             refunds: true,
           },
         });
-
-        await tx.cartItem.deleteMany({
-          where: {
-            id: {
-              in: normalizedItems.map((item) => item.cartItemId),
-            },
-            userId: normalizedUserId,
-          },
-        });
-
-        return createdOrder;
       }),
     );
 
@@ -567,26 +571,35 @@ class OrdersService {
       throw new ValidationError("Only pending orders can be cancelled");
     }
 
+    const normalizedReason = normalizeOptionalText(
+      reason,
+      "Cancel reason",
+      MAX_CANCEL_REASON_LENGTH,
+    );
+
     const updated = await prisma.$transaction(async (tx) => {
       const canceledAt = new Date();
 
-      const nextOrder = await tx.order.update({
-        where: { id: order.id },
+      const claimedOrder = await tx.order.updateMany({
+        where: {
+          id: order.id,
+          userId: order.userId,
+          status: OrderStatus.PENDING,
+        },
         data: {
           status: OrderStatus.CANCELLED,
           canceledAt,
-          cancelReason: normalizeOptionalText(
-            reason,
-            "Cancel reason",
-            MAX_CANCEL_REASON_LENGTH,
-          ),
+          cancelReason: normalizedReason,
         },
-        include: orderDetailInclude,
       });
+
+      if (claimedOrder.count !== 1) {
+        throw new ValidationError("Only pending orders can be cancelled");
+      }
 
       await tx.payment.updateMany({
         where: {
-          orderId: nextOrder.id,
+          orderId: order.id,
           status: PaymentStatus.PENDING,
         },
         data: {
@@ -594,7 +607,10 @@ class OrdersService {
         },
       });
 
-      return nextOrder;
+      return tx.order.findUniqueOrThrow({
+        where: { id: order.id },
+        include: orderDetailInclude,
+      });
     });
 
     return normalizeOrderRefundState(updated);

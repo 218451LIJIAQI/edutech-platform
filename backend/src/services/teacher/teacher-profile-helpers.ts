@@ -157,14 +157,14 @@ export type PendingProfileVerificationResponse = Omit<
 
 export interface TeacherExtendedProfileInput {
   selfIntroduction?: string;
-  educationBackground?: string;
-  teachingExperience?: string;
+  educationBackground?: string | null;
+  teachingExperience?: string | null;
   awards?: string[];
   specialties?: string[];
-  teachingStyle?: string;
+  teachingStyle?: string | null;
   languages?: string[];
   yearsOfExperience?: number;
-  profilePhoto?: string;
+  profilePhoto?: string | null;
   certificatePhotos?: string[];
 }
 
@@ -317,21 +317,49 @@ const normalizeSubmissionDraft = (
 export const createTeacherProfileSubmissionPayload = (
   data: TeacherExtendedProfileInput,
 ): Prisma.InputJsonValue => ({
-  selfIntroduction: sanitizeOptionalString(data.selfIntroduction) ?? null,
-  educationBackground: sanitizeOptionalString(data.educationBackground) ?? null,
-  teachingExperience: sanitizeOptionalString(data.teachingExperience) ?? null,
-  awards: sanitizeStringArray(data.awards),
-  specialties: sanitizeStringArray(data.specialties),
-  teachingStyle: sanitizeOptionalString(data.teachingStyle) ?? null,
-  languages: sanitizeStringArray(data.languages),
-  yearsOfExperience:
-    typeof data.yearsOfExperience === "number" &&
-    Number.isFinite(data.yearsOfExperience) &&
-    data.yearsOfExperience >= 0
-      ? Math.floor(data.yearsOfExperience)
-      : null,
-  profilePhoto: sanitizeOptionalString(data.profilePhoto) ?? null,
-  certificatePhotos: sanitizeStringArray(data.certificatePhotos),
+  ...(data.selfIntroduction !== undefined
+    ? { selfIntroduction: sanitizeOptionalString(data.selfIntroduction) ?? null }
+    : {}),
+  ...(data.educationBackground !== undefined
+    ? {
+        educationBackground:
+          sanitizeNullableString(data.educationBackground) ?? null,
+      }
+    : {}),
+  ...(data.teachingExperience !== undefined
+    ? {
+        teachingExperience:
+          sanitizeNullableString(data.teachingExperience) ?? null,
+      }
+    : {}),
+  ...(data.awards !== undefined
+    ? { awards: sanitizeStringArray(data.awards) }
+    : {}),
+  ...(data.specialties !== undefined
+    ? { specialties: sanitizeStringArray(data.specialties) }
+    : {}),
+  ...(data.teachingStyle !== undefined
+    ? { teachingStyle: sanitizeNullableString(data.teachingStyle) ?? null }
+    : {}),
+  ...(data.languages !== undefined
+    ? { languages: sanitizeStringArray(data.languages) }
+    : {}),
+  ...(data.yearsOfExperience !== undefined
+    ? {
+        yearsOfExperience:
+          typeof data.yearsOfExperience === "number" &&
+          Number.isFinite(data.yearsOfExperience) &&
+          data.yearsOfExperience >= 0
+            ? Math.floor(data.yearsOfExperience)
+            : null,
+      }
+    : {}),
+  ...(data.profilePhoto !== undefined
+    ? { profilePhoto: sanitizeNullableString(data.profilePhoto) ?? null }
+    : {}),
+  ...(data.certificatePhotos !== undefined
+    ? { certificatePhotos: sanitizeStringArray(data.certificatePhotos) }
+    : {}),
 });
 
 export const mapTeacherByIdResponse = (

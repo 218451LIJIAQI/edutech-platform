@@ -1,4 +1,5 @@
 import { useCallback, useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import clientLogger from '@/utils/logger';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '@/store/auth-store';
@@ -501,9 +502,11 @@ const ProfilePage = () => {
     </div>
 
     {/* Change Password Modal */}
-    {showPwdModal && (
-      <div
-        className="fixed inset-0 bg-slate-950/55 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+    {showPwdModal &&
+      typeof document !== 'undefined' &&
+      createPortal(
+        <div
+          className="fixed inset-0 bg-slate-950/55 backdrop-blur-sm flex items-center justify-center z-modal p-4"
         onMouseDown={(event) => {
           if (event.target === event.currentTarget) {
             closePasswordModal();
@@ -604,8 +607,9 @@ const ProfilePage = () => {
             </p>
           ) : null}
         </div>
-      </div>
-    )}
+      </div>,
+        document.body
+      )}
 
     <ConfirmationModal
       isOpen={showDeleteAccountModal}

@@ -12,10 +12,6 @@ export interface Contact {
   unreadCount?: number;
 }
 
-export interface Thread {
-  id: string;
-}
-
 export interface Message {
   id: string;
   threadId: string;

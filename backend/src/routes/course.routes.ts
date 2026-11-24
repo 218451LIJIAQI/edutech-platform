@@ -4,6 +4,7 @@ import courseController from "../controllers/course.controller";
 import { authenticate, optionalAuth } from "../middleware/auth";
 import { approvedTeacherOnly, studentOnly } from "../middleware/teacher-access";
 import { validate } from "../middleware/validate";
+import { validateUrlOrUploadPathForFolders } from "../utils/url-or-path";
 import { uuidParam } from "../validators/common.validator";
 import {
   createCourseValidation,
@@ -33,7 +34,7 @@ const submitQuizValidation = [
     .isArray({ min: 1 })
     .withMessage("answers must be a non-empty array"),
   body("answers.*")
-    .optional({ values: "null" })
+    .optional({ values: "undefined" })
     .isInt({ min: 0 })
     .withMessage("Each answer must be a non-negative integer"),
 ];
@@ -41,16 +42,27 @@ const submitQuizValidation = [
 const updateLiveSessionStatusValidation = [
   liveSessionIdParam,
   body("status")
+    .isString()
+    .withMessage("status must be a string")
+    .bail()
     .trim()
     .notEmpty()
     .withMessage("status is required"),
   body("recordingUrl")
-    .optional({ values: "null" })
+    .optional({ nullable: true, checkFalsy: true })
     .isString()
     .withMessage("recordingUrl must be a string")
     .bail()
+    .trim()
     .isLength({ max: 2048 })
-    .withMessage("recordingUrl must not exceed 2048 characters"),
+    .withMessage("recordingUrl must not exceed 2048 characters")
+    .bail()
+    .custom(
+      validateUrlOrUploadPathForFolders(
+        "Recording URL must be an external URL or use the /uploads/videos/ folder",
+        ["videos"],
+      ),
+    ),
 ];
 
 router.get("/", validate(getCoursesValidation), courseController.getAllCourses);

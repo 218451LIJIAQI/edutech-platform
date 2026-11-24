@@ -58,6 +58,9 @@ const addPayoutMethodValidation = [
     .isIn(Object.values(PayoutMethodType))
     .withMessage("Invalid payout method type"),
   body("label")
+    .isString()
+    .withMessage("label must be a string")
+    .bail()
     .trim()
     .notEmpty()
     .withMessage("label is required")
@@ -71,7 +74,7 @@ const addPayoutMethodValidation = [
     .isObject()
     .withMessage("details must be an object"),
   body("isDefault")
-    .optional()
+    .optional({ values: "undefined" })
     .isBoolean()
     .withMessage("isDefault must be a boolean"),
 ];
@@ -91,16 +94,22 @@ const updatePayoutMethodValidation = [
     .exists()
     .withMessage("Payout method type cannot be changed"),
   body("label")
-    .optional({ values: "falsy" })
+    .optional({ values: "undefined" })
+    .isString()
+    .withMessage("label must be a string")
+    .bail()
     .trim()
+    .notEmpty()
+    .withMessage("label cannot be empty")
+    .bail()
     .isLength({ max: 100 })
     .withMessage("label too long"),
   body("details")
-    .optional()
+    .optional({ values: "undefined" })
     .isObject()
     .withMessage("details must be an object"),
   body("isDefault")
-    .optional()
+    .optional({ values: "undefined" })
     .isBoolean()
     .withMessage("isDefault must be a boolean"),
 ];
@@ -118,6 +127,9 @@ const requestPayoutValidation = [
     .withMessage("Invalid methodId"),
   body("note")
     .optional({ values: "falsy" })
+    .isString()
+    .withMessage("note must be a string")
+    .bail()
     .trim()
     .isLength({ max: 500 })
     .withMessage("note too long"),

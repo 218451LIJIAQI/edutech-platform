@@ -37,8 +37,8 @@ const validateJsonDetails = (value: unknown, required: boolean): unknown => {
     return undefined;
   }
 
-  if (value === null) {
-    throw new BadRequestError("details cannot be null");
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+    throw new BadRequestError("details must be a JSON object");
   }
 
   try {
@@ -86,7 +86,10 @@ class WalletController {
         maxLength: MAX_LABEL_LENGTH,
       }),
       details: validateJsonDetails(req.body?.details, true),
-      isDefault: parseOptionalBoolean(req.body?.isDefault, "isDefault"),
+      isDefault: parseOptionalBoolean(req.body?.isDefault, "isDefault", {
+        rejectNull: true,
+        rejectBlank: true,
+      }),
     });
     sendCreated(res, data, "Payout method added successfully");
   });
@@ -96,9 +99,16 @@ class WalletController {
       requireAuthUserId(req),
       parseRequiredParam(req.params.id, "Payout method ID"),
       {
-        label: parseOptionalString(req.body?.label, "label", MAX_LABEL_LENGTH),
+        label: parseOptionalString(req.body?.label, "label", {
+          maxLength: MAX_LABEL_LENGTH,
+          rejectBlank: true,
+          rejectNull: true,
+        }),
         details: validateJsonDetails(req.body?.details, false),
-        isDefault: parseOptionalBoolean(req.body?.isDefault, "isDefault"),
+        isDefault: parseOptionalBoolean(req.body?.isDefault, "isDefault", {
+          rejectNull: true,
+          rejectBlank: true,
+        }),
       },
     );
     sendSuccess(res, data, "Payout method updated successfully");

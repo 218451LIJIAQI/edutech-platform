@@ -3,7 +3,8 @@ import clientLogger from '@/utils/logger';
 import { useLocation } from 'react-router-dom';
 import { Send, Search, Pin, User, ShieldCheck, MessageSquare } from 'lucide-react';
 import { useAuthStore } from '@/store/auth-store';
-import messageService, { Contact, Message, Thread } from '@/services/message.service';
+import messageService, { Contact, Message } from '@/services/message.service';
+import { resolveBackendAssetUrl } from '@/utils/runtime';
 import { UserRole } from '@/types';
 import toast from 'react-hot-toast';
 import { usePageTitle } from '@/hooks';
@@ -45,12 +46,13 @@ const MessagesPage = () => {
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [searchText, setSearchText] = useState('');
   const [activeContact, setActiveContact] = useState<Contact | null>(null);
-  const [thread, setThread] = useState<Thread | null>(null);
+  const [threadId, setThreadId] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [loadingContacts, setLoadingContacts] = useState(true);
   const [contactsError, setContactsError] = useState<string | null>(null);
   const [loadingThread, setLoadingThread] = useState(false);
+  const [threadError, setThreadError] = useState<string | null>(null);
   const [isSending, setIsSending] = useState(false);
   const requestedContactId = query.get('contactId');
 
@@ -96,7 +98,8 @@ const MessagesPage = () => {
     const requestId = conversationRequestRef.current + 1;
     conversationRequestRef.current = requestId;
     setActiveContact(contact);
-    setThread(null);
+    setThreadId(null);
+    setThreadError(null);
     setMessages([]);
     setLoadingThread(true);
 
@@ -109,13 +112,12 @@ const MessagesPage = () => {
       if (!isMountedRef.current || requestId !== conversationRequestRef.current) {
         return;
       }
-      const t = data.threadId ? { id: data.threadId } : null;
-      setThread(t);
+      setThreadId(data.threadId ?? null);
       setMessages(data.items);
 
       // Mark messages as read and clear the contact badge locally without an extra HTTP round-trip
-      if (t?.id) {
-        await messageService.markMessagesAsRead(t.id);
+      if (data.threadId) {
+        await messageService.markMessagesAsRead(data.threadId);
         if (!isMountedRef.current || requestId !== conversationRequestRef.current) {
           return;
         }
@@ -130,7 +132,9 @@ const MessagesPage = () => {
     } catch (error) {
       if (isMountedRef.current && requestId === conversationRequestRef.current) {
         clientLogger.error('Failed to open conversation:', error);
-        toast.error(extractErrorMessage(error, 'Failed to open conversation'));
+        const message = extractErrorMessage(error, 'Failed to open conversation');
+        setThreadError(message);
+        toast.error(message);
       }
     } finally {
       if (isMountedRef.current && requestId === conversationRequestRef.current) {
@@ -197,7 +201,7 @@ const MessagesPage = () => {
     const optimisticId = `local-${Date.now()}-${Math.random().toString(36).slice(2)}`;
     const optimisticMessage: Message = {
       id: optimisticId,
-      threadId: thread?.id || `contact-${activeContact.id}`,
+      threadId: threadId || `contact-${activeContact.id}`,
       senderId: user.id,
       content: text,
       createdAt: new Date().toISOString(),
@@ -217,8 +221,8 @@ const MessagesPage = () => {
         if (!isMountedRef.current) {
           return;
         }
-        if (!thread?.id && msg.threadId) {
-          setThread({ id: msg.threadId });
+        if (!threadId && msg.threadId) {
+          setThreadId(msg.threadId);
         }
         setMessages((prev) =>
           prev.map((item) => (item.id === optimisticId ? msg : item))
@@ -268,6 +272,7 @@ const MessagesPage = () => {
               <div className="flex items-center gap-2 mb-4 px-4 py-3 bg-gradient-to-r from-primary-50 to-primary-100 rounded-xl border border-primary-200">
                 <Search className="w-5 h-5 text-primary-600" />
                 <input
+                  aria-label="Search contacts"
                   className="input w-full bg-transparent border-0 focus:ring-0 placeholder-gray-500 font-medium"
                   placeholder="Search contacts..."
                   value={searchText}
@@ -307,7 +312,11 @@ const MessagesPage = () => {
                       >
                         <div className="relative">
                           {c.avatar ? (
-                            <img src={c.avatar} alt={`${c.firstName} ${c.lastName}`} className="w-10 h-10 rounded-full" />
+                            <img
+                              src={resolveBackendAssetUrl(c.avatar)}
+                              alt={`${c.firstName} ${c.lastName}`}
+                              className="w-10 h-10 rounded-full object-cover"
+                            />
                           ) : (
                             <div className="w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center">
                               <User className="w-5 h-5 text-gray-500" />
@@ -351,7 +360,11 @@ const MessagesPage = () => {
                 <>
                   <div className="border-b pb-3 mb-3 flex items-center gap-3">
                     {activeContact.avatar ? (
-                      <img src={activeContact.avatar} alt={`${activeContact.firstName} ${activeContact.lastName}`} className="w-8 h-8 rounded-full" />
+                      <img
+                        src={resolveBackendAssetUrl(activeContact.avatar)}
+                        alt={`${activeContact.firstName} ${activeContact.lastName}`}
+                        className="w-8 h-8 rounded-full object-cover"
+                      />
                     ) : (
                       <div className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center">
                         <User className="w-4 h-4 text-gray-500" />
@@ -363,6 +376,17 @@ const MessagesPage = () => {
                   <div ref={listRef} className="flex-1 overflow-auto space-y-2 pr-1">
                     {loadingThread ? (
                       <div className="text-center text-gray-600 py-6">Loading conversation...</div>
+                    ) : threadError ? (
+                      <div role="alert" className="flex flex-col items-center justify-center gap-3 py-8 text-center">
+                        <p className="text-sm font-medium text-danger-700">{threadError}</p>
+                        <button
+                          type="button"
+                          onClick={() => void openConversation(activeContact)}
+                          className="btn-outline btn-sm"
+                        >
+                          Retry
+                        </button>
+                      </div>
                     ) : messages.length === 0 ? (
                       <div className="text-center text-gray-600 py-6">No messages yet</div>
                     ) : (
@@ -382,6 +406,7 @@ const MessagesPage = () => {
 
                   <div className="pt-3 mt-3 border-t flex items-center gap-2">
                     <input
+                      aria-label="Message content"
                       value={input}
                       onChange={(e) => setInput(e.target.value)}
                       placeholder="Type a message..."

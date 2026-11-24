@@ -16,6 +16,7 @@ import {
   DollarSign,
   Settings,
   Compass,
+  Flag,
   HelpCircle,
   Megaphone,
   type LucideIcon,
@@ -30,6 +31,7 @@ import clientLogger from '@/utils/logger';
 import { getAccessToken, hasRecoverableAuthState } from '@/utils/auth-storage';
 import { normalizeTeacherProfileCompletionStatus } from '@/utils/teacher-profile';
 import { getHomePathForRole } from '@/utils/helpers';
+import { resolveBackendAssetUrl } from '@/utils/runtime';
 
 type NavItem = {
   to: string;
@@ -52,6 +54,16 @@ const Navbar = () => {
 
   const [unreadMessageCount, setUnreadMessageCount] = useState(0);
   const [isScrolled, setIsScrolled] = useState(false);
+  const [avatarLoadFailed, setAvatarLoadFailed] = useState(false);
+
+  const resolvedAvatarUrl = useMemo(
+    () => (user?.avatar ? resolveBackendAssetUrl(user.avatar) : ''),
+    [user?.avatar]
+  );
+
+  useEffect(() => {
+    setAvatarLoadFailed(false);
+  }, [resolvedAvatarUrl]);
 
   const hasAccessToken = Boolean(getAccessToken());
   const hasRecoverableSession = hasRecoverableAuthState();
@@ -152,6 +164,7 @@ const Navbar = () => {
         { to: '/admin/financials', label: 'Finance', icon: DollarSign },
         { to: '/admin/refunds', label: 'Refunds', icon: Receipt },
         { to: '/admin/support', label: 'Support', icon: HelpCircle },
+        { to: '/admin/reports', label: 'Reports', icon: Flag },
         { to: '/admin/verification-teachers', label: 'Verify', icon: UserCheck },
         { to: '/admin/ads', label: 'Ads', icon: Megaphone },
       ];
@@ -252,7 +265,7 @@ const Navbar = () => {
     <nav
       aria-label="Main navigation"
       className={clsx(
-        'relative z-50 transition-all duration-300',
+        'relative z-navbar transition-all duration-300',
         isScrolled
           ? 'bg-white/95 backdrop-blur-xl shadow-lg border-b border-gray-100/50'
           : 'bg-white/80 backdrop-blur-lg border-b border-transparent'
@@ -410,15 +423,25 @@ const Navbar = () => {
                     aria-label="Profile settings"
                     className="flex items-center gap-2 rounded-xl p-1.5 pr-2.5 transition-all duration-200 hover:bg-gray-100"
                   >
-                    <div
-                      className={clsx(
-                        'flex h-8 w-8 items-center justify-center rounded-lg text-sm font-semibold text-white',
-                        `bg-gradient-to-br ${theme.gradient}`
-                      )}
-                      aria-hidden="true"
-                    >
-                      {userInitial}
-                    </div>
+                    {resolvedAvatarUrl && !avatarLoadFailed ? (
+                      <img
+                        src={resolvedAvatarUrl}
+                        alt=""
+                        aria-hidden="true"
+                        onError={() => setAvatarLoadFailed(true)}
+                        className="h-8 w-8 rounded-lg object-cover ring-1 ring-slate-200"
+                      />
+                    ) : (
+                      <div
+                        className={clsx(
+                          'flex h-8 w-8 items-center justify-center rounded-lg text-sm font-semibold text-white',
+                          `bg-gradient-to-br ${theme.gradient}`
+                        )}
+                        aria-hidden="true"
+                      >
+                        {userInitial}
+                      </div>
+                    )}
 
                     <span className="hidden text-sm font-medium text-gray-700 lg:block">
                       {user?.firstName || 'Profile'}

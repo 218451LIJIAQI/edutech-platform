@@ -351,7 +351,7 @@ export default function LoginPromotionModal() {
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[1200] flex items-center justify-center bg-slate-950/65 px-4 py-6 backdrop-blur-sm"
+      className="fixed inset-0 z-modal flex items-center justify-center bg-slate-950/65 px-4 py-6 backdrop-blur-sm"
       onMouseDown={(event) => {
         if (event.target === event.currentTarget) {
           handleClose();

@@ -103,11 +103,6 @@ function parseAdPayload(
   body: Request["body"],
   options: AdPayloadOptions = {},
 ): CreateAdCampaignInput | UpdateAdCampaignInput {
-  const destinationType = parseOptionalEnum(
-    body?.destinationType,
-    AdDestinationType,
-    "destinationType",
-  );
   const startsAt = parseNullableDate(body?.startsAt, "startsAt");
   const endsAt = parseNullableDate(body?.endsAt, "endsAt");
 
@@ -116,6 +111,11 @@ function parseAdPayload(
   }
 
   if (options.requireRequiredFields) {
+    const destinationType = parseOptionalEnum(
+      body?.destinationType,
+      AdDestinationType,
+      "destinationType",
+    );
     const ctaUrl = parseRequiredString(body?.ctaUrl, "ctaUrl");
     if (destinationType === AdDestinationType.EXTERNAL && !isHttpUrl(ctaUrl)) {
       throw new ValidationError(
@@ -198,39 +198,40 @@ function parseAdPayload(
       rejectNull: true,
     });
   }
-  if (hasOwn(body, "destinationType") && destinationType !== undefined) {
-    updatePayload.destinationType = destinationType;
+  if (hasOwn(body, "destinationType")) {
+    updatePayload.destinationType = parseOptionalEnum(
+      body?.destinationType,
+      AdDestinationType,
+      "destinationType",
+      { rejectNull: true, rejectBlank: true },
+    );
   }
   if (hasOwn(body, "openInNewTab")) {
-    const openInNewTab = parseOptionalBoolean(
+    updatePayload.openInNewTab = parseOptionalBoolean(
       body?.openInNewTab,
       "openInNewTab",
+      { rejectNull: true, rejectBlank: true },
     );
-    if (openInNewTab !== undefined) {
-      updatePayload.openInNewTab = openInNewTab;
-    }
   }
   if (hasOwn(body, "placement")) {
-    const placement = parseOptionalEnum(
+    updatePayload.placement = parseOptionalEnum(
       body?.placement,
       AdPlacement,
       "placement",
+      { rejectNull: true, rejectBlank: true },
     );
-    if (placement !== undefined) {
-      updatePayload.placement = placement;
-    }
   }
   if (hasOwn(body, "status")) {
-    const status = parseOptionalEnum(body?.status, AdStatus, "status");
-    if (status !== undefined) {
-      updatePayload.status = status;
-    }
+    updatePayload.status = parseOptionalEnum(body?.status, AdStatus, "status", {
+      rejectNull: true,
+      rejectBlank: true,
+    });
   }
   if (hasOwn(body, "theme")) {
-    const theme = parseOptionalEnum(body?.theme, AdTheme, "theme");
-    if (theme !== undefined) {
-      updatePayload.theme = theme;
-    }
+    updatePayload.theme = parseOptionalEnum(body?.theme, AdTheme, "theme", {
+      rejectNull: true,
+      rejectBlank: true,
+    });
   }
   if (hasOwn(body, "targetRoles")) {
     updatePayload.targetRoles = parseTargetRoles(body?.targetRoles, options);

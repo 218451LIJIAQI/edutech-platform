@@ -38,7 +38,7 @@ const normalizeOptionalMediaUrl = (
   }
 
   const storable = toStorableBackendAssetPath(trimmedValue);
-  if (storable.startsWith('/uploads/')) {
+  if (/^\/uploads\//i.test(storable)) {
     return storable;
   }
 

@@ -273,6 +273,7 @@ const ReportsManagement = () => {
                         <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full lg:w-auto">
                           <input
                             type="text"
+                            aria-label={`Resolution note for report ${report.id}`}
                             value={resolutionDrafts[report.id] ?? ''}
                             onChange={(e) =>
                               setResolutionDrafts((prev) => ({

@@ -1,3 +1,4 @@
+import { useId } from 'react';
 import { PlusCircle, Trash2 } from 'lucide-react';
 import type { EditableQuizQuestion } from './types';
 
@@ -28,6 +29,8 @@ export default function LessonQuizEditor({
   onAddOption,
   onRemoveOption,
 }: LessonQuizEditorProps) {
+  const quizIdPrefix = useId();
+
   return (
     <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
       <div className="flex items-center justify-between gap-4">
@@ -71,10 +74,14 @@ export default function LessonQuizEditor({
 
               <div className="space-y-4">
                 <div>
-                  <label className="mb-2 block text-sm font-medium text-gray-700">
+                  <label
+                    htmlFor={`${quizIdPrefix}-prompt-${questionIndex}`}
+                    className="mb-2 block text-sm font-medium text-gray-700"
+                  >
                     Prompt
                   </label>
                   <textarea
+                    id={`${quizIdPrefix}-prompt-${questionIndex}`}
                     value={question.question}
                     onChange={(event) =>
                       onQuestionFieldChange(questionIndex, 'question', event.target.value)
@@ -110,6 +117,7 @@ export default function LessonQuizEditor({
                         <label className="flex items-center gap-2 text-sm text-gray-700">
                           <input
                             type="radio"
+                            name={`${quizIdPrefix}-correct-${questionIndex}`}
                             checked={question.correctOptionIndex === optionIndex}
                             onChange={() =>
                               onQuestionFieldChange(
@@ -124,6 +132,7 @@ export default function LessonQuizEditor({
                         </label>
                         <input
                           type="text"
+                          aria-label={`Question ${questionIndex + 1} option ${optionIndex + 1}`}
                           value={option}
                           onChange={(event) =>
                             onOptionChange(questionIndex, optionIndex, event.target.value)
@@ -145,10 +154,14 @@ export default function LessonQuizEditor({
                 </div>
 
                 <div>
-                  <label className="mb-2 block text-sm font-medium text-gray-700">
+                  <label
+                    htmlFor={`${quizIdPrefix}-explanation-${questionIndex}`}
+                    className="mb-2 block text-sm font-medium text-gray-700"
+                  >
                     Explanation (optional)
                   </label>
                   <textarea
+                    id={`${quizIdPrefix}-explanation-${questionIndex}`}
                     value={question.explanation}
                     onChange={(event) =>
                       onQuestionFieldChange(questionIndex, 'explanation', event.target.value)

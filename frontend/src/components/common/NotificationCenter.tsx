@@ -66,6 +66,7 @@ const NotificationCenter = () => {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [isMarkingAllAsRead, setIsMarkingAllAsRead] = useState(false);
   const [activeNotificationActionId, setActiveNotificationActionId] = useState<string | null>(null);
 
@@ -94,13 +95,16 @@ const NotificationCenter = () => {
 
   const fetchNotifications = useCallback(async () => {
     setIsLoading(true);
+    setLoadError(null);
 
     try {
       const data = await notificationService.getNotifications({ limit: 10 });
       setNotifications(data.items ?? []);
     } catch (error) {
       clientLogger.error('Failed to fetch notifications:', error);
-      toast.error(extractErrorMessage(error, 'Failed to load notifications'));
+      const message = extractErrorMessage(error, 'Failed to load notifications');
+      setLoadError(message);
+      toast.error(message);
     } finally {
       setIsLoading(false);
     }
@@ -226,7 +230,7 @@ const NotificationCenter = () => {
 
         {unreadCount > 0 && (
           <span
-            className="absolute right-0 top-0 inline-flex -translate-y-1/2 translate-x-1/2 items-center justify-center rounded-full bg-red-500 px-2 py-1 text-xs font-bold leading-none text-white"
+            className="absolute -right-1 -top-1 flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white"
             aria-hidden="true"
           >
             {unreadCount > 99 ? '99+' : unreadCount}
@@ -238,7 +242,7 @@ const NotificationCenter = () => {
         <>
           <button
             type="button"
-            className="fixed inset-0 z-40 m-0 appearance-none border-0 bg-transparent p-0"
+            className="fixed inset-0 z-sticky m-0 appearance-none border-0 bg-transparent p-0"
             onClick={closePanel}
             tabIndex={-1}
             aria-label="Close notifications panel"
@@ -251,7 +255,7 @@ const NotificationCenter = () => {
             aria-modal="true"
             aria-labelledby={`${panelId}-title`}
             tabIndex={-1}
-            className="absolute right-0 z-50 mt-2 flex max-h-[600px] w-96 flex-col overflow-hidden rounded-lg border border-gray-200 bg-white shadow-xl focus:outline-none"
+            className="absolute right-0 z-dropdown mt-2 flex max-h-[600px] w-96 flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-dropdown focus:outline-none"
           >
             <div className="flex items-center justify-between border-b border-gray-200 p-4">
               <h3 id={`${panelId}-title`} className="text-lg font-semibold text-gray-900">
@@ -277,6 +281,18 @@ const NotificationCenter = () => {
                 <div className="flex items-center justify-center py-8" role="status">
                   <div className="spinner" aria-hidden="true" />
                   <span className="sr-only">Loading notifications...</span>
+                </div>
+              ) : loadError ? (
+                <div className="flex flex-col items-center justify-center gap-3 px-6 py-10 text-center" role="alert">
+                  <ShieldAlert className="h-10 w-10 text-danger-500" aria-hidden="true" />
+                  <p className="text-sm font-medium text-slate-700">{loadError}</p>
+                  <button
+                    type="button"
+                    onClick={() => void fetchNotifications()}
+                    className="btn-outline btn-sm"
+                  >
+                    Retry
+                  </button>
                 </div>
               ) : notifications.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-12 text-gray-500">

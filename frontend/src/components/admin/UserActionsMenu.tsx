@@ -1,4 +1,5 @@
-import { useCallback, useId, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import {
   Edit,
   Eye,
@@ -86,11 +87,72 @@ const UserActionsMenu = ({
   const [isOpen, setIsOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [pendingAction, setPendingAction] = useState<PendingAction>(null);
+  const [menuPosition, setMenuPosition] = useState<{ top: number; left: number }>({
+    top: 0,
+    left: 0,
+  });
 
   const fullName = `${user.firstName} ${user.lastName}`;
   const isLocked = user.isLocked ?? false;
   const isTeacher = user.role === UserRole.TEACHER;
   const isAdmin = user.role === UserRole.ADMIN;
+
+  const updateMenuPosition = useCallback(() => {
+    const trigger = triggerRef.current;
+    if (!trigger || typeof window === 'undefined') return;
+    const rect = trigger.getBoundingClientRect();
+    const menuWidth = menuRef.current?.offsetWidth || 208;
+    const measuredHeight =
+      menuRef.current?.offsetHeight || (isTeacher ? 242 : isAdmin ? 44 : 202);
+    const spaceBelow = window.innerHeight - rect.bottom;
+    const openUpward =
+      spaceBelow < measuredHeight + 10 && rect.top > measuredHeight + 10;
+    const top = openUpward
+      ? Math.max(8, rect.top - measuredHeight - 6)
+      : Math.max(8, Math.min(window.innerHeight - measuredHeight - 8, rect.bottom + 6));
+    const left = Math.min(
+      Math.max(8, rect.right - menuWidth),
+      window.innerWidth - menuWidth - 8
+    );
+    setMenuPosition({ top, left });
+  }, [isAdmin, isTeacher]);
+
+  const handleMenuKeyDown = useCallback((event: React.KeyboardEvent<HTMLDivElement>) => {
+    const container = menuRef.current;
+    if (!container) return;
+    const items = Array.from(
+      container.querySelectorAll<HTMLButtonElement>('button[role="menuitem"]:not(:disabled)')
+    );
+    if (items.length === 0) return;
+    const currentIndex = items.indexOf(document.activeElement as HTMLButtonElement);
+    if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      items[(currentIndex + 1 + items.length) % items.length]?.focus();
+    } else if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      items[(currentIndex - 1 + items.length) % items.length]?.focus();
+    } else if (event.key === 'Home') {
+      event.preventDefault();
+      items[0]?.focus();
+    } else if (event.key === 'End') {
+      event.preventDefault();
+      items[items.length - 1]?.focus();
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    updateMenuPosition();
+    const rafId = window.requestAnimationFrame(() => updateMenuPosition());
+    const handleViewportChange = () => updateMenuPosition();
+    window.addEventListener('resize', handleViewportChange);
+    window.addEventListener('scroll', handleViewportChange, true);
+    return () => {
+      window.cancelAnimationFrame(rafId);
+      window.removeEventListener('resize', handleViewportChange);
+      window.removeEventListener('scroll', handleViewportChange, true);
+    };
+  }, [isOpen, updateMenuPosition]);
 
   const closeMenu = useCallback(() => {
     if (!isLoading) {
@@ -315,24 +377,28 @@ const UserActionsMenu = ({
           <MoreVertical className="h-5 w-5 text-gray-600" />
         </button>
 
-        {isOpen && (
-          <>
-            <button
-              type="button"
-              className="fixed inset-0 z-30 cursor-default"
-              onClick={closeMenu}
-              tabIndex={-1}
-              aria-label="Close user actions menu"
-            />
+        {isOpen &&
+          typeof document !== 'undefined' &&
+          createPortal(
+            <>
+              <button
+                type="button"
+                className="fixed inset-0 z-sticky cursor-default"
+                onClick={closeMenu}
+                tabIndex={-1}
+                aria-label="Close user actions menu"
+              />
 
-            <div
-              ref={menuRef}
-              id={menuId}
-              role="menu"
-              tabIndex={-1}
-              aria-label={`Actions for ${fullName}`}
-              className="absolute right-0 z-40 mt-2 w-52 overflow-hidden rounded-lg border border-gray-200 bg-white shadow-lg"
-            >
+              <div
+                ref={menuRef}
+                id={menuId}
+                role="menu"
+                tabIndex={-1}
+                onKeyDown={handleMenuKeyDown}
+                aria-label={`Actions for ${fullName}`}
+                style={{ top: `${menuPosition.top}px`, left: `${menuPosition.left}px` }}
+                className="fixed z-dropdown w-52 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-dropdown"
+              >
               <button
                 ref={firstMenuItemRef}
                 type="button"
@@ -366,11 +432,7 @@ const UserActionsMenu = ({
                     <Key className="h-4 w-4" />
                     Reset Password
                   </button>
-                </>
-              )}
 
-              {!isAdmin && (
-                <>
                   <button
                     type="button"
                     role="menuitem"
@@ -417,9 +479,10 @@ const UserActionsMenu = ({
                   Force Delete
                 </button>
               )}
-            </div>
-          </>
-        )}
+              </div>
+            </>,
+            document.body
+          )}
       </div>
 
       {confirmationConfig && (

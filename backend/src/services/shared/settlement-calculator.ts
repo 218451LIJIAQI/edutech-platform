@@ -20,7 +20,7 @@ export interface TeacherSettlement {
   commissionRate: number | null;
 }
 
-export interface SettlementTeacherRecord {
+interface SettlementTeacherRecord {
   id: string;
   userId: string;
   commissionRate: unknown;
@@ -74,7 +74,7 @@ export interface SettlementRefundRecord {
   } | null;
 }
 
-export interface SettlementPendingPayoutRecord {
+interface SettlementPendingPayoutRecord {
   userId: string;
   amount: unknown;
 }

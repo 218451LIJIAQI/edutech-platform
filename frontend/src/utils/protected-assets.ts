@@ -86,7 +86,7 @@ const getUploadFolder = (assetUrl: string): string | undefined => {
   }
 
   const normalizedPathname = decodedPathname.replace(/\\/g, '/');
-  if (!normalizedPathname.startsWith(UPLOADS_PATH_PREFIX)) {
+  if (!/^\/uploads\//i.test(normalizedPathname)) {
     return undefined;
   }
 

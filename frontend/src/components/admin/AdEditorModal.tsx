@@ -1,4 +1,5 @@
 import type { ChangeEvent, FormEvent } from 'react';
+import { createPortal } from 'react-dom';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Upload } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -157,7 +158,7 @@ const getSafeImagePreviewUrl = (value: string) => {
   const storableImageUrl = toStorableBackendAssetPath(trimmed);
 
   if (storableImageUrl.startsWith('/')) {
-    return storableImageUrl.startsWith(ALLOWED_INTERNAL_AD_IMAGE_PREFIX)
+    return storableImageUrl.toLowerCase().startsWith(ALLOWED_INTERNAL_AD_IMAGE_PREFIX)
       ? resolveBackendAssetUrl(storableImageUrl)
       : '';
   }
@@ -385,9 +386,13 @@ export default function AdEditorModal({
     }
   };
 
-  return (
+  if (typeof document === 'undefined') {
+    return null;
+  }
+
+  return createPortal(
     <div
-      className="fixed inset-0 z-[130] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
+      className="fixed inset-0 z-modal flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm"
       onMouseDown={(event) => {
         if (event.target === event.currentTarget && !isBusy) {
           onClose();
@@ -789,6 +794,7 @@ export default function AdEditorModal({
           </form>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

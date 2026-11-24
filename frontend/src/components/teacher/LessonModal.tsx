@@ -255,7 +255,7 @@ const LessonModal: FC<LessonModalProps> = ({
 
   const modalContent = (
     <div
-      className="fixed inset-0 z-[9999] flex items-center justify-center overflow-y-auto bg-black bg-opacity-50 p-4"
+      className="fixed inset-0 z-modal flex items-center justify-center overflow-y-auto bg-slate-950/55 backdrop-blur-sm p-4"
       onMouseDown={handleBackdropClick}
     >
       <div
@@ -265,9 +265,9 @@ const LessonModal: FC<LessonModalProps> = ({
         aria-modal="true"
         aria-labelledby="lesson-modal-title"
         aria-describedby="lesson-modal-description"
-        className="z-[10000] my-8 w-full max-w-2xl rounded-lg bg-white shadow-xl"
+        className="my-8 w-full max-w-2xl rounded-2xl bg-white shadow-modal"
       >
-        <div className="sticky top-0 z-[10001] flex items-center justify-between border-b bg-white px-6 py-4">
+        <div className="sticky top-0 z-10 flex items-center justify-between rounded-t-2xl border-b bg-white px-6 py-4">
           <h2 id="lesson-modal-title" className="text-xl font-bold text-gray-900">
             {isEditMode ? 'Edit Lesson' : 'Create New Lesson'}
           </h2>

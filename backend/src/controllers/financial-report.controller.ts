@@ -5,19 +5,16 @@ import autoVerificationService from "../services/auto-verification.service";
 import {
   parseBoundedInt,
   parseOptionalString,
-  requireAdminUser,
   sendSuccess,
 } from "../utils/http";
 
 class FinancialReportController {
-  getSummary = asyncHandler(async (req: Request, res: Response) => {
-    requireAdminUser(req);
+  getSummary = asyncHandler(async (_req: Request, res: Response) => {
     const summary = await financialReportService.getFinancialSummary();
     sendSuccess(res, summary, "Financial summary generated successfully");
   });
 
   getTeacherSettlements = asyncHandler(async (req: Request, res: Response) => {
-    requireAdminUser(req);
     const result = await financialReportService.getTeacherSettlements({
       page: parseBoundedInt(req.query.page, 1, { min: 1, fieldName: "page" }),
       limit: parseBoundedInt(req.query.limit, 20, {
@@ -32,7 +29,6 @@ class FinancialReportController {
   });
 
   exportData = asyncHandler(async (req: Request, res: Response) => {
-    requireAdminUser(req);
     const data = await financialReportService.getExportData({
       startDate: parseOptionalString(req.query.startDate),
       endDate: parseOptionalString(req.query.endDate),
@@ -41,8 +37,7 @@ class FinancialReportController {
   });
 
   getAutoVerificationStats = asyncHandler(
-    async (req: Request, res: Response) => {
-      requireAdminUser(req);
+    async (_req: Request, res: Response) => {
       const stats = await autoVerificationService.getAutoVerificationStats();
       sendSuccess(res, stats);
     },

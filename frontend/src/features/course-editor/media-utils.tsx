@@ -19,7 +19,7 @@ export const isExternalMediaLink = (value: string | null | undefined): boolean =
   }
 
   const storable = toStorableBackendAssetPath(trimmed);
-  if (storable.startsWith('/uploads/')) {
+  if (/^\/uploads\//i.test(storable)) {
     return false;
   }
 

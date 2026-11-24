@@ -68,7 +68,7 @@ export const buildLessonSavePayload = async (params: {
     const trimmedLink = videoLink.trim();
     if (trimmedLink) {
       const storableLink = toStorableBackendAssetPath(trimmedLink);
-      if (storableLink.startsWith('/uploads/')) {
+      if (/^\/uploads\//i.test(storableLink)) {
         videoUrl = storableLink;
       } else {
         const safeVideoLink = normalizeSafeHttpUrl(storableLink);

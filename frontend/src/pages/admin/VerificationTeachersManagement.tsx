@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import clientLogger from '@/utils/logger';
 import { CheckCircle, XCircle, Clock, Eye, AlertCircle, Loader, UserPlus, X, Zap, Shield, RefreshCcw } from 'lucide-react';
 import teacherService from '@/services/teacher.service';
@@ -929,24 +930,25 @@ const VerificationTeachersManagement = () => {
       </div>
 
       {/* Registration Rejection Modal */}
-      {registrationRejectTarget && (
-        <div
-          className="fixed inset-0 bg-slate-950/55 backdrop-blur-sm flex items-center justify-center z-50 p-4"
-          onMouseDown={(e) => {
-            if (e.target === e.currentTarget) {
-              closeRegistrationRejectModal();
-            }
-          }}
-          role="dialog"
-          tabIndex={-1}
-          aria-modal="true"
-          aria-labelledby="registration-reject-title"
-        >
+      {registrationRejectTarget &&
+        typeof document !== 'undefined' &&
+        createPortal(
           <div
-            ref={registrationRejectModalRef}
-            tabIndex={-1}
-            className="bg-white rounded-2xl shadow-xl max-w-lg w-full overflow-hidden"
+            className="fixed inset-0 bg-slate-950/55 backdrop-blur-sm flex items-center justify-center z-modal p-4"
+            onMouseDown={(e) => {
+              if (e.target === e.currentTarget) {
+                closeRegistrationRejectModal();
+              }
+            }}
           >
+            <div
+              ref={registrationRejectModalRef}
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="registration-reject-title"
+              tabIndex={-1}
+              className="bg-white rounded-2xl shadow-modal max-w-lg w-full overflow-hidden"
+            >
             <div className="bg-gradient-to-r from-red-600 to-red-700 text-white px-6 py-4 flex items-center justify-between">
               <h2 id="registration-reject-title" className="text-xl font-bold text-white">Reject Registration</h2>
               <button
@@ -1017,28 +1019,30 @@ const VerificationTeachersManagement = () => {
               </button>
             </div>
           </div>
-        </div>
-      )}
+        </div>,
+          document.body
+        )}
 
       {/* Certificate Rejection Modal */}
-      {certificateRejectTarget && (
-        <div
-          className="fixed inset-0 bg-slate-950/55 backdrop-blur-sm flex items-center justify-center z-50 p-4"
-          onMouseDown={(e) => {
-            if (e.target === e.currentTarget) {
-              closeCertificateRejectModal();
-            }
-          }}
-          role="dialog"
-          tabIndex={-1}
-          aria-modal="true"
-          aria-labelledby="certificate-reject-title"
-        >
+      {certificateRejectTarget &&
+        typeof document !== 'undefined' &&
+        createPortal(
           <div
-            ref={certificateRejectModalRef}
-            tabIndex={-1}
-            className="bg-white rounded-2xl shadow-xl max-w-lg w-full overflow-hidden"
+            className="fixed inset-0 bg-slate-950/55 backdrop-blur-sm flex items-center justify-center z-modal p-4"
+            onMouseDown={(e) => {
+              if (e.target === e.currentTarget) {
+                closeCertificateRejectModal();
+              }
+            }}
           >
+            <div
+              ref={certificateRejectModalRef}
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="certificate-reject-title"
+              tabIndex={-1}
+              className="bg-white rounded-2xl shadow-modal max-w-lg w-full overflow-hidden"
+            >
             <div className="bg-gradient-to-r from-red-600 to-red-700 text-white px-6 py-4 flex items-center justify-between">
               <h2 id="certificate-reject-title" className="text-xl font-bold text-white">Reject Certificate</h2>
               <button
@@ -1109,29 +1113,32 @@ const VerificationTeachersManagement = () => {
               </button>
             </div>
           </div>
-        </div>
-      )}
+        </div>,
+          document.body
+        )}
 
       {/* Profile Review Modal */}
-      {isProfileReviewModalOpen && selectedTeacher && (
-        <div
-          className="fixed inset-0 bg-slate-950/55 backdrop-blur-sm flex items-center justify-center z-50 p-4"
-          onMouseDown={(e) => {
-            if (e.target === e.currentTarget) {
-              closeProfileReviewModal();
-            }
-          }}
-          role="dialog"
-          tabIndex={-1}
-          aria-modal="true"
-          aria-labelledby="profile-review-title"
-          aria-describedby="profile-review-description"
-        >
+      {isProfileReviewModalOpen &&
+        selectedTeacher &&
+        typeof document !== 'undefined' &&
+        createPortal(
           <div
-            ref={profileReviewModalRef}
-            tabIndex={-1}
-            className="bg-white rounded-2xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto"
+            className="fixed inset-0 bg-slate-950/55 backdrop-blur-sm flex items-center justify-center z-modal p-4"
+            onMouseDown={(e) => {
+              if (e.target === e.currentTarget) {
+                closeProfileReviewModal();
+              }
+            }}
           >
+            <div
+              ref={profileReviewModalRef}
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="profile-review-title"
+              aria-describedby="profile-review-description"
+              tabIndex={-1}
+              className="bg-white rounded-2xl shadow-modal max-w-2xl w-full max-h-[90vh] overflow-y-auto"
+            >
             <div className="sticky top-0 bg-gradient-to-r from-primary-600 to-primary-700 text-white px-6 py-4 flex items-center justify-between">
               <h2 id="profile-review-title" className="text-2xl font-bold text-white">Review Teacher Profile</h2>
               <button
@@ -1300,8 +1307,9 @@ const VerificationTeachersManagement = () => {
               </div>
             </div>
           </div>
-        </div>
-      )}
+        </div>,
+          document.body
+        )}
     </div>
   );
 };

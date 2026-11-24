@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Link, useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useCourseStore } from '@/store/course-store';
 import { useAuthStore } from '@/store/auth-store';
@@ -13,6 +14,8 @@ import reviewService from '@/services/review.service';
 import { extractErrorMessage } from '@/utils/error-handler';
 import { useOverlayAccessibility, usePageTitle } from '@/hooks';
 import { getAccessToken, hasRecoverableAuthState } from '@/utils/auth-storage';
+import { getTeacherDisplayPhoto } from '@/utils/asset-normalizers';
+import { resolveBackendAssetUrl } from '@/utils/runtime-url';
 
 /**
  * Course Detail Page
@@ -244,30 +247,30 @@ const CourseDetailPage = () => {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
           <div className="max-w-4xl">
             <div className="flex items-center flex-wrap gap-3 mb-6">
-              <span className="badge bg-primary-400 text-white font-semibold">{currentCourse.category}</span>
+              <span className="badge bg-white text-primary-800 font-semibold">{currentCourse.category}</span>
 
               {/* Course Type - Platform Feature */}
               {currentCourse.courseType === CourseType.LIVE && (
-                <span className="badge bg-red-500 text-white flex items-center gap-1 font-semibold">
+                <span className="badge bg-red-700 text-white flex items-center gap-1 font-semibold">
                   <Radio className="w-3 h-3" />
                   Live Sessions
                 </span>
               )}
               {currentCourse.courseType === CourseType.RECORDED && (
-                <span className="badge bg-blue-500 text-white flex items-center gap-1 font-semibold">
+                <span className="badge bg-blue-700 text-white flex items-center gap-1 font-semibold">
                   <Video className="w-3 h-3" />
                   Recorded Course
                 </span>
               )}
               {currentCourse.courseType === CourseType.HYBRID && (
-                <span className="badge bg-purple-500 text-white flex items-center gap-1 font-semibold">
+                <span className="badge bg-purple-700 text-white flex items-center gap-1 font-semibold">
                   <PlayCircle className="w-3 h-3" />
                   Hybrid (Live + Recorded)
                 </span>
               )}
 
               {isEnrolled && (
-                <span className="badge bg-green-500 text-white font-semibold inline-flex items-center gap-1">
+                <span className="badge bg-emerald-700 text-white font-semibold inline-flex items-center gap-1">
                   <CheckCircle className="w-3 h-3" />
                   <span>Enrolled</span>
                 </span>
@@ -279,7 +282,7 @@ const CourseDetailPage = () => {
                 <button
                   type="button"
                   onClick={() => setIsReportModalOpen(true)}
-                  className="ml-4 p-3 bg-red-500 hover:bg-red-600 text-white rounded-lg transition-colors flex items-center gap-2 whitespace-nowrap"
+                  className="ml-4 p-3 bg-red-700 hover:bg-red-800 text-white rounded-lg transition-colors flex items-center gap-2 whitespace-nowrap shadow-sm"
                   title="Report this course"
                 >
                   <AlertCircle className="w-5 h-5" />
@@ -291,8 +294,22 @@ const CourseDetailPage = () => {
 
             {/* Teacher Info */}
             <div className="flex items-center space-x-5 pt-6 border-t border-primary-400 border-opacity-30">
-              <div className="w-16 h-16 bg-gradient-to-br from-white to-primary-100 rounded-full flex items-center justify-center text-primary-700 font-bold text-xl shadow-lg">
-                {(teacher?.user?.firstName?.[0] || '')}{(teacher?.user?.lastName?.[0] || '')}
+              <div className="w-16 h-16 bg-gradient-to-br from-white to-primary-100 rounded-full flex items-center justify-center text-primary-700 font-bold text-xl shadow-lg overflow-hidden shrink-0">
+                {getTeacherDisplayPhoto(teacher) ? (
+                  <img
+                    src={resolveBackendAssetUrl(getTeacherDisplayPhoto(teacher))}
+                    alt={`${teacher?.user?.firstName ?? ''} ${teacher?.user?.lastName ?? ''}`.trim()}
+                    className="w-full h-full object-cover"
+                    onError={(e) => {
+                      e.currentTarget.style.display = 'none';
+                    }}
+                  />
+                ) : (
+                  <>
+                    {teacher?.user?.firstName?.[0] || ''}
+                    {teacher?.user?.lastName?.[0] || ''}
+                  </>
+                )}
               </div>
               <div>
                 {teacher?.id ? (
@@ -531,7 +548,7 @@ const CourseDetailPage = () => {
                               </>
                             ) : (
                               <span className="text-4xl font-bold text-primary-600">
-                                {formatCurrency(pkg.price)}
+                                {pkg.finalPrice === 0 ? 'Free' : formatCurrency(pkg.finalPrice)}
                               </span>
                             )}
                           </div>
@@ -635,9 +652,11 @@ const CourseDetailPage = () => {
         </div>
       </div>
 
-      {previewLesson && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 backdrop-blur-sm px-4 py-6"
+      {previewLesson &&
+        typeof document !== 'undefined' &&
+        createPortal(
+          <div
+            className="fixed inset-0 z-modal flex items-center justify-center bg-slate-950/70 backdrop-blur-sm px-4 py-6"
           onMouseDown={(event) => {
             if (event.target === event.currentTarget) {
               setPreviewLesson(null);
@@ -702,8 +721,9 @@ const CourseDetailPage = () => {
               </div>
             </div>
           </div>
-        </div>
-      )}
+        </div>,
+          document.body
+        )}
 
       {/* Report Modal */}
       {currentCourse.teacherProfile?.user && (

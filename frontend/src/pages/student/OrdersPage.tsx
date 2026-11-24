@@ -4,6 +4,7 @@ import { Order, OrderStatus } from '@/types';
 import { Link } from 'react-router-dom';
 import { usePageTitle } from '@/hooks';
 import { extractErrorMessage } from '@/utils/error-handler';
+import { formatCurrency } from '@/utils/helpers';
 import { AlertCircle, AlertTriangle, ArrowRight, CheckCircle2, Circle, Clock3, FileText, Package, RotateCcw, XCircle } from 'lucide-react';
 
 /**
@@ -208,7 +209,7 @@ const OrdersPage = () => {
                   <div className="hidden lg:block">
                     <div className="text-sm text-gray-600 mb-1">Amount</div>
                     <div className="text-2xl font-bold text-primary-700 tabular-nums">
-                      ${order.totalAmount.toFixed(2)}
+                      {formatCurrency(order.totalAmount)}
                     </div>
                   </div>
 
@@ -247,7 +248,7 @@ const OrdersPage = () => {
                     <div className="flex items-center gap-1">
                       <RotateCcw className="w-3.5 h-3.5 text-blue-600" />
                       <span>Refunded</span>
-                      <span>${order.refundAmount?.toFixed(2) || '0.00'}</span>
+                      <span>{formatCurrency(order.refundAmount ?? 0)}</span>
                     </div>
                   )}
 
